@@ -344,13 +344,13 @@ describe("PropertyDetailPanel occupancy regression coverage", () => {
   it("keeps canonical ledger navigation on lease-backed occupancy rows", async () => {
     renderPropertyDetail();
 
-    const ledgerLinks = await screen.findAllByRole("link", { name: "Ledger" });
+    const ledgerLinks = await screen.findAllByRole("link", { name: "Payment ledger" });
     expect(ledgerLinks.some((link) => link.getAttribute("href") === `/leases/${lifecycleContinuityIds.activeLeaseId}/ledger`)).toBe(true);
     expect(ledgerLinks.some((link) => link.getAttribute("href") === `/leases/${lifecycleContinuityIds.upcomingLeaseId}/ledger`)).toBe(true);
 
     const activeRow = screen.getAllByRole("link", { name: "John Smith" })[0].closest("td");
     expect(activeRow).toBeTruthy();
-    expect(within(activeRow as HTMLElement).getByRole("link", { name: "Ledger" })).toHaveAttribute(
+    expect(within(activeRow as HTMLElement).getByRole("link", { name: "Payment ledger" })).toHaveAttribute(
       "href",
       `/leases/${lifecycleContinuityIds.activeLeaseId}/ledger`,
     );

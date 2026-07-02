@@ -39,7 +39,7 @@ describe("decisionContext", () => {
   it("builds deterministic context links from available identifiers", () => {
     expect(buildDecisionContextLinks(decision, { includeAdminReviewLink: true })).toEqual([
       expect.objectContaining({ key: "lease", label: "Lease summary", href: "/leases/lease-1/summary" }),
-      expect.objectContaining({ key: "ledger", label: "Lease ledger", href: "/leases/lease-1/ledger" }),
+      expect.objectContaining({ key: "ledger", label: "Payment ledger", href: "/leases/lease-1/ledger" }),
       expect.objectContaining({ key: "property", label: "Property / unit", href: "/properties?propertyId=property-1&unitId=unit-1" }),
       expect.objectContaining({ key: "tenant", label: "Tenant", href: "/tenants?tenantId=tenant-1" }),
       expect.objectContaining({ key: "admin_review", label: "Lifecycle review", href: "/admin/lease-lifecycle-review" }),

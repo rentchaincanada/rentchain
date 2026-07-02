@@ -192,6 +192,14 @@ function safeRelatedLabel(item: DecisionInboxItem) {
   return operationalReviewLabel({ value: raw || item.id, queue: item.workflow.queue });
 }
 
+function isLeaseLedgerDestination(destination: string | null | undefined) {
+  return /^\/leases\/[^/]+\/ledger(?:$|[?#])/.test(String(destination || "").trim());
+}
+
+function contextLinkLabel(destination: string | null | undefined) {
+  return isLeaseLedgerDestination(destination) ? "Open payment ledger" : "View context";
+}
+
 function safeAutomationReason(reason: string, item: DecisionInboxItem) {
   const routedMatch = reason.match(/^Decision\s+(.+?)\s+is routed to\s+([a-z_]+)\.?$/i);
   if (routedMatch) {
@@ -249,7 +257,7 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
         </span>
         {item.destination ? (
           <Link to={item.destination} style={{ color: "#2563eb", fontWeight: 800 }}>
-            View context
+            {contextLinkLabel(item.destination)}
           </Link>
         ) : (
           <span style={{ color: "#64748b", fontSize: 13 }}>No context link available</span>
@@ -314,7 +322,7 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
                 ) : null}
                 {action.status === "available" && action.destination ? (
                   <Link to={action.destination} style={{ color: "#2563eb", fontWeight: 800, fontSize: 13 }}>
-                    Open manual context
+                    {contextLinkLabel(action.destination)}
                   </Link>
                 ) : null}
               </div>

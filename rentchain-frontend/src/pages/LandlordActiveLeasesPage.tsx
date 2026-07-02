@@ -604,7 +604,7 @@ export default function LandlordActiveLeasesPage() {
         `Monthly rent: ${formatCurrency(lease.monthlyRent)}`,
         `Status: ${prettyLeaseStatus(lease.status)}`,
         `Term: ${formatDate(lease.startDate)} to ${formatDate(lease.endDate)}`,
-        `View ledger: ${ledgerUrl}`,
+        `Payment ledger: ${ledgerUrl}`,
         `Lease summary: ${typeof window !== "undefined" ? `${window.location.origin}${summaryPath}` : summaryPath}`,
       ]
         .filter(Boolean)
@@ -672,7 +672,7 @@ export default function LandlordActiveLeasesPage() {
             </button>
           ) : null}
           <Link to={ledgerPath} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}>
-            Ledger
+            Payment ledger
           </Link>
           {emailHref ? (
             <a

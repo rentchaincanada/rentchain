@@ -580,7 +580,7 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getAllByRole("button", { name: /Dismiss: Dismisses this signal from active review/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /Resolve: Marks the operational review task as resolved/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Rent past due date").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: "Lease ledger" }).some((link) => link.getAttribute("href") === "/leases/lease-1/ledger")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Payment ledger" }).some((link) => link.getAttribute("href") === "/leases/lease-1/ledger")).toBe(true);
     expect(screen.getAllByRole("link", { name: "Harbour View · Unit 101" }).some((link) => link.getAttribute("href") === "/properties?propertyId=prop-1&unitId=unit-1")).toBe(true);
     expect(screen.getByRole("link", { name: "Jane Tenant" })).toHaveAttribute("href", "/tenants?tenantId=tenant-1");
     expect(screen.queryByText(/Unit ref/i)).not.toBeInTheDocument();

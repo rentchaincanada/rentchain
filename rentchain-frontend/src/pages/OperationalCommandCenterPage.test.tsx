@@ -221,7 +221,7 @@ describe("deriveCommandCenterSignals", () => {
       workflowStatus: "New",
       reviewStatus: "Open",
       financialStatus: "Review required",
-      nextActionLabel: "Review payment evidence",
+      nextActionLabel: "Open payment ledger",
     });
     expect(signals.some((signal) => signal.title === "Lease ending soon")).toBe(true);
     expect(signals.some((signal) => signal.title === "Vacant units visible")).toBe(true);
@@ -320,7 +320,7 @@ describe("deriveCommandCenterSignals", () => {
     );
     expect(preview.evidenceLinks).toEqual([
       expect.objectContaining({
-        label: "Payments / obligations source workflow",
+        label: "Payment ledger source workflow",
         destination: "/leases/lease-1/ledger",
       }),
     ]);
@@ -402,7 +402,7 @@ describe("deriveCommandCenterSignals", () => {
     );
     expect(preview.evidenceLinks).toEqual([
       expect.objectContaining({
-        label: "Payments / obligations source workflow",
+        label: "Payment ledger source workflow",
         destination: "/leases/lease-1/ledger",
         sensitivityClass: "sensitive",
       }),
@@ -423,7 +423,7 @@ describe("deriveCommandCenterSignals", () => {
         sourceLabel: "Decision inbox · Delinquency Review",
         destination: "/leases/lease-1/ledger",
         routingReason: "Delinquency or payment evidence review",
-        evidenceLabel: "Payments / obligations source workflow",
+        evidenceLabel: "Payment ledger source workflow",
         relatedResourceLabel: "North Towers · 101 · John Smith",
         reviewStatus: "Open",
         assignmentLabel: "Operations owned",
@@ -669,7 +669,7 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getAllByText("Financial status: Review required").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Assignment: Operations owned").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Escalation: Critical").length).toBeGreaterThan(0);
-    expect(screen.getByText("Next action: Review payment evidence")).toBeInTheDocument();
+    expect(screen.getByText("Next action: Open payment ledger")).toBeInTheDocument();
     expect(screen.getAllByText("Review workspace readiness").length).toBeGreaterThan(0);
     expect(screen.getByTestId("operational-review-queue")).toBeInTheDocument();
     expect(screen.getByText("Operational review queue")).toBeInTheDocument();

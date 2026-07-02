@@ -145,7 +145,7 @@ export default function LandlordLeaseSummaryPage() {
           to={ledgerPath}
           style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
         >
-          Open ledger
+          Open payment ledger
         </Link>
           <button
             type="button"

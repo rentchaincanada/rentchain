@@ -138,7 +138,7 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(screen.getAllByText("Coburg Rd").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Tony Wenpeng").length).toBeGreaterThan(0);
     expect(screen.queryByText(/gs:\/\//i)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(screen.getByRole("link", { name: "Open payment ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download evidence package" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to leases" })).toHaveAttribute("href", "/leases");

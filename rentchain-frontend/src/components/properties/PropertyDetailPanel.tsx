@@ -1583,7 +1583,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                         fontSize: "0.8rem",
                       }}
                     >
-                      Ledger
+                      Payment ledger
                     </button>
                   ) : null}
                 </div>
@@ -1877,7 +1877,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                               {occupancyView.ledgerHref ? (
                                 <>
                                   {" · "}
-                                  <a href={occupancyView.ledgerHref}>Ledger</a>
+                                  <a href={occupancyView.ledgerHref}>Payment ledger</a>
                                 </>
                               ) : null}
                             </div>
@@ -2026,7 +2026,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                         {occupancyView.ledgerHref ? (
                           <>
                             {" · "}
-                            <a href={occupancyView.ledgerHref}>Ledger</a>
+                            <a href={occupancyView.ledgerHref}>Payment ledger</a>
                           </>
                         ) : null}
                       </div>

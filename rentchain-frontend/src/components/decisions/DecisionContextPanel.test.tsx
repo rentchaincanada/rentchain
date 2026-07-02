@@ -44,7 +44,7 @@ describe("DecisionContextPanel", () => {
     );
 
     expect(screen.getByRole("link", { name: "Lease summary" })).toHaveAttribute("href", "/leases/lease-1/summary");
-    expect(screen.getByRole("link", { name: "Lease ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(screen.getByRole("link", { name: "Payment ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("link", { name: "Property / unit" })).toHaveAttribute("href", "/properties?propertyId=property-1&unitId=unit-1");
     expect(screen.getByRole("link", { name: "Tenant" })).toHaveAttribute("href", "/tenants?tenantId=tenant-1");
     expect(screen.getByRole("link", { name: "Lifecycle review" })).toHaveAttribute("href", "/admin/lease-lifecycle-review");
@@ -66,6 +66,6 @@ describe("DecisionContextPanel", () => {
     );
 
     expect(screen.getByText("Context unavailable")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Lease ledger" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Payment ledger" })).not.toBeInTheDocument();
   });
 });

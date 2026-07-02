@@ -372,7 +372,11 @@ describe("DecisionInboxPage", () => {
     expect(screen.getByText("Related: Lease context review")).toBeInTheDocument();
     expect(screen.getByText("Missing payment review is routed to delinquency review.")).toBeInTheDocument();
     expect(screen.queryByText(/Decision decision:review_missing_payment/)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View context" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(
+      screen
+        .getAllByRole("link", { name: "Open payment ledger" })
+        .some((link) => link.getAttribute("href") === "/leases/lease-1/ledger")
+    ).toBe(true);
     expect(screen.getByText("Open cost approval")).toBeInTheDocument();
     expect(screen.getByText("No context link available")).toBeInTheDocument();
     expect(screen.getAllByText("Operator review session").length).toBeGreaterThan(0);

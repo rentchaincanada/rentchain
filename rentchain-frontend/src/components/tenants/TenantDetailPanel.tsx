@@ -773,7 +773,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
             }}
           >
             <div style={{ color: text.muted, fontSize: "0.8rem" }}>
-              Use the current lease ledger to record charges and payments.
+              Use the current payment ledger to record charges and payments.
             </div>
             <button
               type="button"
@@ -789,7 +789,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
                 boxShadow: shadows.sm,
               }}
             >
-              Open current lease ledger →
+              Open payment ledger →
             </button>
           </div>
 
@@ -856,7 +856,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
             </span>
             {ledgerMode === "lease" ? (
               <span style={{ color: text.muted, fontSize: "0.75rem", fontWeight: 400 }}>
-                Showing the latest {RECENT_LEASE_LEDGER_ENTRY_LIMIT} entries here. Open current lease ledger for the full history.
+                Showing the latest {RECENT_LEASE_LEDGER_ENTRY_LIMIT} entries here. Open payment ledger for the full history.
               </span>
             ) : null}
             {ledgerMode === "tenant" ? (

@@ -131,7 +131,7 @@ export function buildDecisionContextLinks(
     });
     links.push({
       key: "ledger",
-      label: "Lease ledger",
+      label: "Payment ledger",
       href: `/leases/${encodeURIComponent(decision.leaseId)}/ledger`,
       helperText: "Review obligations and payments",
     });

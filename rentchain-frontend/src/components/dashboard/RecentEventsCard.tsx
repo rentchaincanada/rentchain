@@ -42,7 +42,7 @@ export function RecentEventsCard({
     .map((event) => String(event?.leaseId || event?.subjectLeaseId || event?.metadata?.leaseId || "").trim())
     .find(Boolean);
   const canOpenLedger = Boolean(onOpenLedger) && openLedgerEnabled !== false;
-  const ledgerButtonLabel = ledgerLeaseId ? "View ledger" : "View leases";
+  const ledgerButtonLabel = ledgerLeaseId ? "Open payment ledger" : "View leases";
 
   return (
     <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>

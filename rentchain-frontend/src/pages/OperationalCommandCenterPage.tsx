@@ -364,6 +364,15 @@ export function scopedSourceDestinationForSignal(signal: CommandCenterSignal) {
   return signal.destination;
 }
 
+function isLeaseLedgerDestination(destination: string | null | undefined) {
+  return /^\/leases\/[^/]+\/ledger(?:$|[?#])/.test(String(destination || "").trim());
+}
+
+function sourceWorkflowLabelForSignal(signal: CommandCenterSignal) {
+  if (isLeaseLedgerDestination(scopedSourceDestinationForSignal(signal))) return "Payment ledger source workflow";
+  return `${CATEGORY_CONFIG[signal.category].label} source workflow`;
+}
+
 export function reviewWorkspacePreviewForSignal(signal: CommandCenterSignal): ReviewWorkspaceUiModel {
   const scope = signal.manualReviewScope && signal.manualReviewScopeId
     ? { scope: signal.manualReviewScope, scopeId: signal.manualReviewScopeId }
@@ -383,7 +392,7 @@ export function reviewWorkspacePreviewForSignal(signal: CommandCenterSignal): Re
     autonomousActionsEnabled: false,
     evidenceLinks: [
       {
-        label: `${CATEGORY_CONFIG[signal.category].label} source workflow`,
+        label: sourceWorkflowLabelForSignal(signal),
         destination: scopedSourceDestinationForSignal(signal),
         sensitivityClass: signal.category === "screening" || signal.category === "documents" ? "restricted" : "sensitive",
       },
@@ -449,7 +458,9 @@ function priorityFromDecision(item: DecisionInboxItem, category: CommandCenterCa
 }
 
 function nextActionForDecision(item: DecisionInboxItem, category: CommandCenterCategory) {
-  if (category === "payments") return "Review payment evidence";
+  if (category === "payments") {
+    return isLeaseLedgerDestination(item.destination) ? "Open payment ledger" : "Review payment evidence";
+  }
   if (category === "screening") return "Review screening workflow";
   if (category === "lease_lifecycle") return "Review lease readiness";
   if (category === "occupancy") return "Review occupancy context";
@@ -593,7 +604,7 @@ function resolveDecisionContextLabel(
   const existingLabel = String(item.relatedEntity?.label || "").trim();
   if (existingLabel && !looksLikeInternalId(existingLabel) && !hasRawReferenceLabel(existingLabel)) return existingLabel;
 
-  if (item.workflow?.queue === "delinquency_review") return "Lease ledger review";
+  if (item.workflow?.queue === "delinquency_review") return "Payment ledger review";
   if (item.workflow?.queue === "screening_review") return "Screening workflow review";
   if (item.workflow?.queue === "lease_review") return "Lease workflow review";
   if (item.relatedEntity?.kind === "property") return "Property review";

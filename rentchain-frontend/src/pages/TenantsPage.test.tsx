@@ -279,10 +279,10 @@ describe("TenantsPage", () => {
     expect(leaseLinks.length).toBeGreaterThan(0);
     expect(leaseLinks[0]).toHaveAttribute("href", "/leases/lease-1/summary");
     expect(screen.queryByText("lease-1")).not.toBeInTheDocument();
-    expect(screen.getByText("Lease ledger")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "View ledger" })).toBeEnabled();
+    expect(screen.getByText("Payment ledger")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open payment ledger" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Record payment" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Export ledger" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Export payment ledger" })).toBeEnabled();
   });
 
   it("shows the current lease from tenant detail when the list row has no currentLeaseId", async () => {
@@ -490,10 +490,10 @@ describe("TenantsPage", () => {
 
     expect(await screen.findByText("Tenant actions")).toBeInTheDocument();
     expect(screen.getAllByText("No current lease linked").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "View ledger" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Open payment ledger" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Record payment" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Export ledger" })).toBeDisabled();
-    expect(screen.getByText("Link a current lease before using lease ledger actions.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Export payment ledger" })).toBeDisabled();
+    expect(screen.getByText("Link a current lease before using payment ledger actions.")).toBeInTheDocument();
   });
 
   it("fails closed by hiding the targeted cleanup tenant ids from the landlord list", async () => {

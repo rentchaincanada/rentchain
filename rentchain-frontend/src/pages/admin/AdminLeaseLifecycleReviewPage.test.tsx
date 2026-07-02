@@ -133,7 +133,7 @@ describe("AdminLeaseLifecycleReviewPage", () => {
     expect(screen.getByText(/No history yet/i)).toBeInTheDocument();
     expect(screen.getByText(/Related decision/i)).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Lease summary" }).some((link) => link.getAttribute("href") === "/leases/lease-2/summary")).toBe(true);
-    expect(screen.getAllByRole("link", { name: "Lease ledger" }).some((link) => link.getAttribute("href") === "/leases/lease-2/ledger")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Payment ledger" }).some((link) => link.getAttribute("href") === "/leases/lease-2/ledger")).toBe(true);
     expect(screen.getAllByRole("link", { name: "Property / unit" }).some((link) => link.getAttribute("href") === "/properties?propertyId=property-2&unitId=unit-2")).toBe(true);
     expect(screen.getAllByRole("link", { name: "Lifecycle review" }).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Evidence").length).toBeGreaterThan(0);

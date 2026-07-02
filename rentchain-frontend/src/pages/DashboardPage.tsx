@@ -167,6 +167,10 @@ function isGenericActionLabel(label: string): boolean {
   return ["open", "review", "view"].includes(label.trim().toLowerCase());
 }
 
+function isLegacyLedgerActionLabel(label: string): boolean {
+  return ["ledger", "lease ledger", "open ledger", "view ledger"].includes(label.trim().toLowerCase());
+}
+
 function decisionDestinationCopy(item: LandlordDecisionQueueItem): { meta: string; action: string } {
   const href = String(item.recommendedActionHref || "").trim();
   const label = String(item.recommendedActionLabel || "").trim();
@@ -184,7 +188,10 @@ function decisionDestinationCopy(item: LandlordDecisionQueueItem): { meta: strin
     return { meta: "Lease renewals · Review operator inputs", action: "Review renewals" };
   }
   if (href.includes("/ledger")) {
-    return { meta: "Payment ledger · Review obligation", action: label && !isGenericActionLabel(label) ? label : "Open ledger" };
+    return {
+      meta: "Payment ledger · Review obligation",
+      action: label && !isGenericActionLabel(label) && !isLegacyLedgerActionLabel(label) ? label : "Open payment ledger",
+    };
   }
   if (href.includes("/messages")) {
     return { meta: "Messages · Review thread", action: label && !isGenericActionLabel(label) ? label : "Open messages" };
