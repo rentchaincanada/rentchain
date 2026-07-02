@@ -113,7 +113,8 @@ import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
 import { UpgradeCTA } from "@/components/billing/UpgradeCTA";
 import { dispatchUpgradePrompt, resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 import { FREE_TIER_UPGRADE_GUIDANCE } from "@/constants/tiers";
-const statusOptions: RentalApplicationStatus[] = [
+const statusFilterOptions: RentalApplicationStatus[] = [
+  "IN_PROGRESS",
   "SUBMITTED",
   "IN_REVIEW",
   "APPROVED",
@@ -121,6 +122,29 @@ const statusOptions: RentalApplicationStatus[] = [
   "CONDITIONAL_COSIGNER",
   "CONDITIONAL_DEPOSIT",
 ];
+
+const statusActionOptions: RentalApplicationStatus[] = [
+  "SUBMITTED",
+  "IN_REVIEW",
+  "APPROVED",
+  "DECLINED",
+  "CONDITIONAL_COSIGNER",
+  "CONDITIONAL_DEPOSIT",
+];
+
+const statusLabels: Record<RentalApplicationStatus, string> = {
+  DRAFT: "Draft",
+  IN_PROGRESS: "In progress",
+  SUBMITTED: "Submitted",
+  IN_REVIEW: "In review",
+  APPROVED: "Approved",
+  DECLINED: "Declined",
+  CONDITIONAL_COSIGNER: "Conditional - cosigner",
+  CONDITIONAL_DEPOSIT: "Conditional - deposit",
+};
+
+const formatApplicationStatus = (status: RentalApplicationStatus | string) =>
+  statusLabels[status as RentalApplicationStatus] || String(status).replace(/_/g, " ").toLowerCase();
 
 const supportedAnalyticsApplicationEntries = ["application-funnel", "screening-checkout"] as const;
 type AnalyticsApplicationEntry = (typeof supportedAnalyticsApplicationEntries)[number];
@@ -130,7 +154,7 @@ const isAnalyticsApplicationEntry = (value: string | null): value is AnalyticsAp
 
 const normalizeApplicationStatusParam = (value: string | null): RentalApplicationStatus | null => {
   const normalized = String(value || "").trim().toUpperCase();
-  return statusOptions.includes(normalized as RentalApplicationStatus) ? (normalized as RentalApplicationStatus) : null;
+  return statusFilterOptions.includes(normalized as RentalApplicationStatus) ? (normalized as RentalApplicationStatus) : null;
 };
 
 const analyticsApplicationEntryCopy: Record<AnalyticsApplicationEntry, { title: string; body: string }> = {
@@ -569,6 +593,7 @@ const ApplicationsPage: React.FC = () => {
   const [transUnionAccessOpen, setTransUnionAccessOpen] = useState(false);
   const [transUnionConnectOpen, setTransUnionConnectOpen] = useState(false);
   const [transUnionUpdateOpen, setTransUnionUpdateOpen] = useState(false);
+  const [screeningSetupExpanded, setScreeningSetupExpanded] = useState(false);
   const [transUnionAccessSource, setTransUnionAccessSource] = useState("applications_page");
   const APPLICATION_REMINDER_RESEND_COOLDOWN_MS = 24 * 60 * 60 * 1000;
   const APPLICATION_HIGH_PRIORITY_ACTIVITY_MS = 3 * 24 * 60 * 60 * 1000;
@@ -1250,10 +1275,11 @@ const ApplicationsPage: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const nextStatus = normalizeApplicationStatusParam(params.get("status"));
-    if (nextStatus && nextStatus !== statusFilter) {
-      setStatusFilter(nextStatus);
-    }
-  }, [location.search, statusFilter]);
+    setStatusFilter((current) => {
+      if (nextStatus) return nextStatus;
+      return current ? "" : current;
+    });
+  }, [location.search]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -1601,6 +1627,27 @@ const ApplicationsPage: React.FC = () => {
     setSendAppOpen(true);
   };
 
+  const updateStatusFilter = useCallback(
+    (nextStatusValue: string) => {
+      const nextStatus = nextStatusValue ? normalizeApplicationStatusParam(nextStatusValue) || "" : "";
+      setStatusFilter(nextStatus);
+
+      const params = new URLSearchParams(location.search);
+      if (nextStatus) {
+        params.set("status", nextStatus);
+      } else {
+        params.delete("status");
+      }
+
+      const nextSearch = params.toString();
+      const currentSearch = location.search.replace(/^\?/, "");
+      if (nextSearch !== currentSearch) {
+        navigate({ pathname: location.pathname, search: nextSearch }, { replace: false });
+      }
+    },
+    [location.pathname, location.search, navigate]
+  );
+
   const handleRowScreen = (applicationId: string) => {
     if (!SCREENING_ENABLED) return;
     const application = applications.find((entry) => entry.id === applicationId);
@@ -1922,6 +1969,68 @@ const ApplicationsPage: React.FC = () => {
       dropOffHint,
     };
   }, [funnel]);
+
+  const applicationsEmptyState = useMemo(() => {
+    if (statusFilter) {
+      const selectedStatusLabel = formatApplicationStatus(statusFilter);
+      const hasFunnelActivity =
+        Boolean(analyticsEntryContext) ||
+        Boolean(funnelSummary && (funnelSummary.started > 0 || funnelSummary.inProgress > 0 || funnelSummary.completed > 0));
+      const inProgressHint =
+        funnelSummary && funnelSummary.inProgress > 0
+          ? ` ${funnelSummary.inProgress} applicant${funnelSummary.inProgress === 1 ? " is" : "s are"} still in progress.`
+          : "";
+      return {
+        title: `No ${selectedStatusLabel.toLowerCase()} applications found`,
+        body: hasFunnelActivity
+          ? `The Application Funnel includes started and in-progress application-link activity, while this list only shows records that match ${selectedStatusLabel}.${inProgressHint} Change the status filter to All statuses or In progress to review unfinished applicants.`
+          : `No application records match ${selectedStatusLabel}. Change the status filter to All statuses to review the rest of the queue.`,
+        action: (
+          <Button type="button" variant="secondary" onClick={() => updateStatusFilter("")}>
+            View all statuses
+          </Button>
+        ),
+      };
+    }
+
+    if (search.trim()) {
+      return {
+        title: "No matching applications",
+        body: "No applications match this search. Clear the search to review the full queue.",
+        action: (
+          <Button type="button" variant="secondary" onClick={() => setSearch("")}>
+            Clear search
+          </Button>
+        ),
+      };
+    }
+
+    return {
+      title: "No applications yet",
+      body: "Applications keep screening decisions and applicant details in one auditable flow.",
+      action: (
+        <Button
+          variant="secondary"
+          onClick={() => {
+            track("empty_state_cta_clicked", { pageKey: "applications", ctaKey: "create_application" });
+            handleCreateApplication(false);
+          }}
+          disabled={!propertiesReady}
+        >
+          {propertiesLoaded ? "Send application link" : "Loading properties..."}
+        </Button>
+      ),
+    };
+  }, [
+    analyticsEntryContext,
+    funnelSummary,
+    handleCreateApplication,
+    propertiesLoaded,
+    propertiesReady,
+    search,
+    statusFilter,
+    updateStatusFilter,
+  ]);
 
   const handleSendReminder = useCallback(
     async (application: RentalApplicationSummary) => {
@@ -2327,38 +2436,66 @@ const ApplicationsPage: React.FC = () => {
         ) : null}
       </Card>
 
-      <ScreeningProviderSetupCard
-        integration={transUnionIntegration}
-        loading={transUnionLoading}
-        readyToScreen={Boolean(detail)}
-        screeningEnabled={SCREENING_ENABLED}
-        workflowStatus={displayScreeningStatus || manualScreeningStatus?.status || null}
-        selectedApplicationLabel={buildApplicantLabel(detail)}
-        onChooseApplicant={guideToApplicationsForScreening}
-        screeningsCompletedCount={
-          detail
-            ? screeningHistory.filter((item) => item.status === "completed").length
-            : null
-        }
-        lastScreeningDate={detail ? screeningHistory[0]?.screenedAt || screeningHistory[0]?.requestedAt || null : null}
-        onGetAccess={() => {
-          emitTransUnionUsageEvent("tu_get_access_clicked", "applications_page");
-          openTransUnionAccess("applications_page");
-        }}
-        onConnectExisting={() => {
-          emitTransUnionUsageEvent("tu_have_credentials_clicked", "applications_page");
-          setTransUnionConnectOpen(true);
-        }}
-        onEnterDetails={() => setTransUnionConnectOpen(true)}
-        onViewInstructions={() => openTransUnionAccess("applications_page")}
-        onUpdateCredentials={() => setTransUnionUpdateOpen(true)}
-        onDisconnect={() => void handleTransUnionDisconnect()}
-        onStartScreening={
-          detail
-            ? () => handleRowScreen(detail.id)
-            : guideToApplicationsForScreening
-        }
-      />
+      <section className="rc-screening-provider-setup-shell" aria-label="Screening provider setup">
+        <div className="rc-screening-provider-setup-summary">
+          <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Screening provider setup</div>
+            <div style={{ color: text.muted, fontSize: "0.94rem", lineHeight: 1.6 }}>
+              Screening setup is available when you need provider access, credentials, or workflow details.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: spacing.sm, alignItems: "center", flexWrap: "wrap" }}>
+            <Pill tone={isTransUnionConnected ? "accent" : "muted"}>
+              {isTransUnionConnected ? "Connected" : "Not connected"}
+            </Pill>
+            <Button
+              type="button"
+              variant="secondary"
+              aria-expanded={screeningSetupExpanded}
+              aria-controls="screening-provider-setup-panel"
+              onClick={() => setScreeningSetupExpanded((value) => !value)}
+            >
+              {screeningSetupExpanded ? "Hide screening setup" : "Open screening setup"}
+            </Button>
+          </div>
+        </div>
+      </section>
+      {screeningSetupExpanded ? (
+        <div id="screening-provider-setup-panel">
+          <ScreeningProviderSetupCard
+            integration={transUnionIntegration}
+            loading={transUnionLoading}
+            readyToScreen={Boolean(detail)}
+            screeningEnabled={SCREENING_ENABLED}
+            workflowStatus={displayScreeningStatus || manualScreeningStatus?.status || null}
+            selectedApplicationLabel={buildApplicantLabel(detail)}
+            onChooseApplicant={guideToApplicationsForScreening}
+            screeningsCompletedCount={
+              detail
+                ? screeningHistory.filter((item) => item.status === "completed").length
+                : null
+            }
+            lastScreeningDate={detail ? screeningHistory[0]?.screenedAt || screeningHistory[0]?.requestedAt || null : null}
+            onGetAccess={() => {
+              emitTransUnionUsageEvent("tu_get_access_clicked", "applications_page");
+              openTransUnionAccess("applications_page");
+            }}
+            onConnectExisting={() => {
+              emitTransUnionUsageEvent("tu_have_credentials_clicked", "applications_page");
+              setTransUnionConnectOpen(true);
+            }}
+            onEnterDetails={() => setTransUnionConnectOpen(true)}
+            onViewInstructions={() => openTransUnionAccess("applications_page")}
+            onUpdateCredentials={() => setTransUnionUpdateOpen(true)}
+            onDisconnect={() => void handleTransUnionDisconnect()}
+            onStartScreening={
+              detail
+                ? () => handleRowScreen(detail.id)
+                : guideToApplicationsForScreening
+            }
+          />
+        </div>
+      ) : null}
 
       <Card elevated style={{ display: "grid", gap: spacing.md }}>
         <div style={{ display: "grid", gap: 4 }}>
@@ -2394,11 +2531,6 @@ const ApplicationsPage: React.FC = () => {
         </div>
         <div
           className="rc-viewing-requests-layout"
-          style={{
-            display: "grid",
-            gap: spacing.md,
-            gridTemplateColumns: "minmax(260px, 320px) minmax(0, 1fr)",
-          }}
         >
           <div className="rc-viewing-requests-list-pane">
             {viewingLoading ? (
@@ -2575,13 +2707,13 @@ const ApplicationsPage: React.FC = () => {
               <select
                 className="rc-applications-filter"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => updateStatusFilter(e.target.value)}
                 style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
               >
                 <option value="">All statuses</option>
-                {statusOptions.map((s) => (
+                {statusFilterOptions.map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {formatApplicationStatus(s)}
                   </option>
                 ))}
               </select>
@@ -2613,20 +2745,9 @@ const ApplicationsPage: React.FC = () => {
                 />
               ) : filtered.length === 0 ? (
                 <EmptyState
-                  title="No applications yet"
-                  body="Applications keep screening decisions and applicant details in one auditable flow."
-                  action={
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        track("empty_state_cta_clicked", { pageKey: "applications", ctaKey: "create_application" });
-                        handleCreateApplication(false);
-                      }}
-                      disabled={!propertiesReady}
-                    >
-                      {propertiesLoaded ? "Send application link" : "Loading properties..."}
-                    </Button>
-                  }
+                  title={applicationsEmptyState.title}
+                  body={applicationsEmptyState.body}
+                  action={applicationsEmptyState.action}
                 />
               ) : (
                 <div style={{ display: "grid", gap: spacing.sm }}>
@@ -2698,7 +2819,7 @@ const ApplicationsPage: React.FC = () => {
                           {app.email || "No email"}
                         </div>
                         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                          <Pill>{app.status}</Pill>
+                          <Pill>{formatApplicationStatus(app.status)}</Pill>
                           {isPartial && typeof app.completionPercent === "number" ? (
                             <span style={{ color: text.subtle, fontSize: 12 }}>{app.completionPercent}% complete</span>
                           ) : null}
@@ -2892,9 +3013,9 @@ const ApplicationsPage: React.FC = () => {
                     Print / Save PDF
                   </Button>
                   <div className="rc-applications-status-row">
-                    {statusOptions.map((s) => (
+                    {statusActionOptions.map((s) => (
                       <Button key={s} variant={detail.status === s ? "primary" : "secondary"} onClick={() => void setStatus(s)}>
-                        {s.replace("_", " ")}
+                        {formatApplicationStatus(s)}
                       </Button>
                     ))}
                   </div>

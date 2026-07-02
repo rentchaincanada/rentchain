@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ApplicationsPage from "./ApplicationsPage";
 
@@ -124,8 +124,9 @@ vi.mock("@/api/screeningApi", () => ({
 }));
 
 vi.mock("../components/layout/ResponsiveMasterDetail", () => ({
-  ResponsiveMasterDetail: ({ master, detail }: any) => (
+  ResponsiveMasterDetail: ({ searchSlot, master, detail }: any) => (
     <div>
+      <div>{searchSlot}</div>
       <div>{master}</div>
       <div>{detail}</div>
     </div>
@@ -247,6 +248,11 @@ vi.mock("../config/screening", () => ({
 vi.mock("@/lib/analytics", () => ({
   track: vi.fn(),
 }));
+
+const LocationProbe = () => {
+  const location = useLocation();
+  return <div data-testid="location-search">{location.search}</div>;
+};
 
 afterEach(() => {
   cleanup();
@@ -575,6 +581,11 @@ describe("ApplicationsPage", () => {
     });
 
     expect(screen.getByRole("button", { name: "Send screening invite" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open screening setup" })).toBeInTheDocument();
+    expect(screen.queryByText("Screening Provider")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open screening setup" }));
+
     expect(screen.getAllByText("Screening provider setup").length).toBeGreaterThan(0);
     expect(screen.getByText("Screening Provider")).toBeInTheDocument();
     expect(screen.getAllByText("Screening workflow").length).toBeGreaterThan(0);
@@ -589,6 +600,148 @@ describe("ApplicationsPage", () => {
     expect(screen.queryByText("TransUnion Connection")).not.toBeInTheDocument();
     expect(screen.getByText("Application Funnel")).toBeInTheDocument();
     expect(screen.getByText("40%")).toBeInTheDocument();
+  });
+
+  it("exposes the supported in-progress status filter and requests in-progress records", async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Jamie Stone");
+    const statusSelect = container.querySelector(".rc-applications-filter") as HTMLSelectElement;
+
+    expect(screen.getByRole("option", { name: "In progress" })).toBeInTheDocument();
+    expect(statusSelect).toBeTruthy();
+    fireEvent.change(statusSelect, { target: { value: "IN_PROGRESS" } });
+
+    await waitFor(() => {
+      expect(mocks.fetchRentalApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          propertyId: undefined,
+          status: "IN_PROGRESS",
+        })
+      );
+    });
+  });
+
+  it("explains a funnel-linked submitted filter when no submitted records are returned", async () => {
+    mocks.fetchRentalApplications.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={["/applications?entry=application-funnel&status=SUBMITTED"]}>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Application funnel review")).toBeInTheDocument();
+    expect(await screen.findByText("No submitted applications found")).toBeInTheDocument();
+    expect(screen.getByText(/The Application Funnel includes started and in-progress application-link activity/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View all statuses" })).toBeInTheDocument();
+  });
+
+  it("clears the dashboard-provided submitted status query when All statuses is selected", async () => {
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: 1_710_000_000_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: 1_709_999_000_000,
+          lastActivityAt: 1_710_000_000_000,
+          submittedAt: null,
+          reminderEligibleAt: 1_710_086_400_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+    mocks.fetchRentalApplications.mockResolvedValueOnce([]);
+
+    const { container } = render(
+      <MemoryRouter initialEntries={["/applications?entry=application-funnel&status=SUBMITTED"]}>
+        <LocationProbe />
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("No submitted applications found")).toBeInTheDocument();
+    const statusSelect = container.querySelector(".rc-applications-filter") as HTMLSelectElement;
+    expect(statusSelect.value).toBe("SUBMITTED");
+
+    fireEvent.change(statusSelect, { target: { value: "" } });
+
+    await waitFor(() => {
+      expect(statusSelect.value).toBe("");
+    });
+    expect(screen.getByTestId("location-search")).toHaveTextContent("?entry=application-funnel");
+    expect(await screen.findByText("In-progress applicant")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.fetchRentalApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          propertyId: undefined,
+          status: undefined,
+        })
+      );
+    });
+  });
+
+  it("clears the submitted query from the View all statuses empty-state action", async () => {
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: 1_710_000_000_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: 1_709_999_000_000,
+          lastActivityAt: 1_710_000_000_000,
+          submittedAt: null,
+          reminderEligibleAt: 1_710_086_400_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+    mocks.fetchRentalApplications.mockResolvedValueOnce([]);
+
+    render(
+      <MemoryRouter initialEntries={["/applications?entry=application-funnel&status=SUBMITTED"]}>
+        <LocationProbe />
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "View all statuses" }));
+
+    expect(screen.getByTestId("location-search")).toHaveTextContent("?entry=application-funnel");
+    expect(await screen.findByText("In-progress applicant")).toBeInTheDocument();
   });
 
   it("hydrates analytics application-funnel query params into valid filters", async () => {
@@ -659,7 +812,7 @@ describe("ApplicationsPage", () => {
 
     expect(await screen.findByText("Application Funnel")).toBeInTheDocument();
     expect(screen.getByText("Started")).toBeInTheDocument();
-    expect(screen.getByText("In progress")).toBeInTheDocument();
+    expect(screen.getAllByText("In progress").length).toBeGreaterThan(0);
     expect(screen.getByText("Completed")).toBeInTheDocument();
     expect(screen.getByText("Conversion")).toBeInTheDocument();
     expect(screen.getByText("40%")).toBeInTheDocument();
@@ -742,6 +895,8 @@ describe("ApplicationsPage", () => {
     );
 
     await screen.findAllByRole("heading", { name: "Applications" });
+    fireEvent.click(screen.getByRole("button", { name: "Open screening setup" }));
+
     expect(
       screen.getAllByText("Next step: choose an applicant, then start screening from that application.").length
     ).toBeGreaterThan(0);
