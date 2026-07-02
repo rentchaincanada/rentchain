@@ -412,6 +412,21 @@ describe("DashboardPage", () => {
     );
   });
 
+  it("stacks Dashboard decision card actions below content on mobile", async () => {
+    installMatchMedia(true);
+
+    renderDashboard();
+
+    const decisionRows = await screen.findAllByTestId("dashboard-decision-row");
+    expect(decisionRows[0]).toHaveStyle("grid-template-columns: minmax(0, 1fr)");
+
+    const action = screen.getByRole("link", { name: /Open lease workspace: Resolve lease renewal/i });
+    expect(action).toHaveStyle("width: 100%");
+    expect(action).toHaveStyle("white-space: normal");
+    expect(action).toHaveStyle("justify-self: stretch");
+    expect(action).toHaveAttribute("href", "/leases");
+  });
+
   it("keeps decision queue content visible when portfolio data fails", async () => {
     mocks.fetchLandlordPortfolioStatusFinancialMock.mockRejectedValue(new Error("Portfolio API unavailable"));
 

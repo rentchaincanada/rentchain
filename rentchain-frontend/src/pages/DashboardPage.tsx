@@ -211,6 +211,28 @@ function decisionReason(item: LandlordDecisionQueueItem): string {
   return description || "Review the recommended next step for this operational decision.";
 }
 
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = React.useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+    return window.matchMedia(query).matches;
+  });
+
+  React.useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const mediaQuery = window.matchMedia(query);
+    const updateMatches = () => setMatches(mediaQuery.matches);
+    updateMatches();
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", updateMatches);
+      return () => mediaQuery.removeEventListener("change", updateMatches);
+    }
+    mediaQuery.addListener(updateMatches);
+    return () => mediaQuery.removeListener(updateMatches);
+  }, [query]);
+
+  return matches;
+}
+
 function formatShortWeekday(value: Date): string {
   return new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(value);
 }
@@ -630,11 +652,13 @@ function DecisionQueuePreview({ queue }: { queue: LandlordDecisionQueueResponse 
 
 function DecisionRow({ item }: { item: LandlordDecisionQueueItem }) {
   const destinationLabel = decisionDestinationLabel(item);
+  const isMobileDecisionCard = useMediaQuery("(max-width: 640px)");
   return (
     <div
+      data-testid="dashboard-decision-row"
       style={{
         display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) auto",
+        gridTemplateColumns: isMobileDecisionCard ? "minmax(0, 1fr)" : "minmax(0, 1fr) auto",
         gap: 12,
         alignItems: "start",
         padding: 12,
@@ -660,7 +684,17 @@ function DecisionRow({ item }: { item: LandlordDecisionQueueItem }) {
           </span>
         </div>
       </div>
-      <Link to={operationalHref(item)} aria-label={`${destinationLabel}: ${item.title || "Review required"}`} style={{ ...compactButton, width: "fit-content", whiteSpace: "nowrap" }}>
+      <Link
+        to={operationalHref(item)}
+        aria-label={`${destinationLabel}: ${item.title || "Review required"}`}
+        style={{
+          ...compactButton,
+          width: isMobileDecisionCard ? "100%" : "fit-content",
+          whiteSpace: isMobileDecisionCard ? "normal" : "nowrap",
+          justifySelf: isMobileDecisionCard ? "stretch" : "end",
+          textAlign: "center",
+        }}
+      >
         {destinationLabel}
       </Link>
     </div>
