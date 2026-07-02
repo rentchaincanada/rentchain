@@ -1275,10 +1275,11 @@ const ApplicationsPage: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const nextStatus = normalizeApplicationStatusParam(params.get("status"));
-    if (nextStatus && nextStatus !== statusFilter) {
-      setStatusFilter(nextStatus);
-    }
-  }, [location.search, statusFilter]);
+    setStatusFilter((current) => {
+      if (nextStatus) return nextStatus;
+      return current ? "" : current;
+    });
+  }, [location.search]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -1626,6 +1627,27 @@ const ApplicationsPage: React.FC = () => {
     setSendAppOpen(true);
   };
 
+  const updateStatusFilter = useCallback(
+    (nextStatusValue: string) => {
+      const nextStatus = nextStatusValue ? normalizeApplicationStatusParam(nextStatusValue) || "" : "";
+      setStatusFilter(nextStatus);
+
+      const params = new URLSearchParams(location.search);
+      if (nextStatus) {
+        params.set("status", nextStatus);
+      } else {
+        params.delete("status");
+      }
+
+      const nextSearch = params.toString();
+      const currentSearch = location.search.replace(/^\?/, "");
+      if (nextSearch !== currentSearch) {
+        navigate({ pathname: location.pathname, search: nextSearch }, { replace: false });
+      }
+    },
+    [location.pathname, location.search, navigate]
+  );
+
   const handleRowScreen = (applicationId: string) => {
     if (!SCREENING_ENABLED) return;
     const application = applications.find((entry) => entry.id === applicationId);
@@ -1964,7 +1986,7 @@ const ApplicationsPage: React.FC = () => {
           ? `The Application Funnel includes started and in-progress application-link activity, while this list only shows records that match ${selectedStatusLabel}.${inProgressHint} Change the status filter to All statuses or In progress to review unfinished applicants.`
           : `No application records match ${selectedStatusLabel}. Change the status filter to All statuses to review the rest of the queue.`,
         action: (
-          <Button type="button" variant="secondary" onClick={() => setStatusFilter("")}>
+          <Button type="button" variant="secondary" onClick={() => updateStatusFilter("")}>
             View all statuses
           </Button>
         ),
@@ -2007,6 +2029,7 @@ const ApplicationsPage: React.FC = () => {
     propertiesReady,
     search,
     statusFilter,
+    updateStatusFilter,
   ]);
 
   const handleSendReminder = useCallback(
@@ -2684,7 +2707,7 @@ const ApplicationsPage: React.FC = () => {
               <select
                 className="rc-applications-filter"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => updateStatusFilter(e.target.value)}
                 style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
               >
                 <option value="">All statuses</option>

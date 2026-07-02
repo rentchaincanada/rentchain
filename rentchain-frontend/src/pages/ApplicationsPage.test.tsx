@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ApplicationsPage from "./ApplicationsPage";
 
@@ -248,6 +248,11 @@ vi.mock("../config/screening", () => ({
 vi.mock("@/lib/analytics", () => ({
   track: vi.fn(),
 }));
+
+const LocationProbe = () => {
+  const location = useLocation();
+  return <div data-testid="location-search">{location.search}</div>;
+};
 
 afterEach(() => {
   cleanup();
@@ -634,6 +639,109 @@ describe("ApplicationsPage", () => {
     expect(await screen.findByText("No submitted applications found")).toBeInTheDocument();
     expect(screen.getByText(/The Application Funnel includes started and in-progress application-link activity/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View all statuses" })).toBeInTheDocument();
+  });
+
+  it("clears the dashboard-provided submitted status query when All statuses is selected", async () => {
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: 1_710_000_000_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: 1_709_999_000_000,
+          lastActivityAt: 1_710_000_000_000,
+          submittedAt: null,
+          reminderEligibleAt: 1_710_086_400_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+    mocks.fetchRentalApplications.mockResolvedValueOnce([]);
+
+    const { container } = render(
+      <MemoryRouter initialEntries={["/applications?entry=application-funnel&status=SUBMITTED"]}>
+        <LocationProbe />
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("No submitted applications found")).toBeInTheDocument();
+    const statusSelect = container.querySelector(".rc-applications-filter") as HTMLSelectElement;
+    expect(statusSelect.value).toBe("SUBMITTED");
+
+    fireEvent.change(statusSelect, { target: { value: "" } });
+
+    await waitFor(() => {
+      expect(statusSelect.value).toBe("");
+    });
+    expect(screen.getByTestId("location-search")).toHaveTextContent("?entry=application-funnel");
+    expect(await screen.findByText("In-progress applicant")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.fetchRentalApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          propertyId: undefined,
+          status: undefined,
+        })
+      );
+    });
+  });
+
+  it("clears the submitted query from the View all statuses empty-state action", async () => {
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: 1_710_000_000_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: 1_709_999_000_000,
+          lastActivityAt: 1_710_000_000_000,
+          submittedAt: null,
+          reminderEligibleAt: 1_710_086_400_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+    mocks.fetchRentalApplications.mockResolvedValueOnce([]);
+
+    render(
+      <MemoryRouter initialEntries={["/applications?entry=application-funnel&status=SUBMITTED"]}>
+        <LocationProbe />
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "View all statuses" }));
+
+    expect(screen.getByTestId("location-search")).toHaveTextContent("?entry=application-funnel");
+    expect(await screen.findByText("In-progress applicant")).toBeInTheDocument();
   });
 
   it("hydrates analytics application-funnel query params into valid filters", async () => {
