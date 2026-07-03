@@ -910,7 +910,7 @@ describe("tenantPortalRoutes foundation", () => {
 
     expect(res.status).toBe(200);
     expect(res.body?.data?.signatureStatus).toBe("not_started");
-    expect(res.body?.data?.signatureReadinessLabel).toBe("Lease available");
+    expect(res.body?.data?.signatureReadinessLabel).toBe("Lease signing not started");
     expect(res.body?.data?.leaseExecution).toEqual(
       expect.objectContaining({
         executionStatus: "draft",
@@ -959,7 +959,7 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.leasePdfStatus).toBe("not_available");
     expect(res.body?.data?.leasePdfLabel).toBe("Lease document not available");
     expect(res.body?.data?.signatureStatus).toBe("not_started");
-    expect(res.body?.data?.signatureReadinessLabel).toBe("Lease available");
+    expect(res.body?.data?.signatureReadinessLabel).toBe("Lease signing not started");
     expect(res.body?.data?.leaseExecution).toEqual(
       expect.objectContaining({
         executionStatus: "draft",

@@ -402,7 +402,7 @@ export function deriveTenantSafeLeaseReadinessMetadata(
       : signatureStatus === "awaiting_tenant_signature"
       ? "Awaiting tenant signature"
       : signatureStatus === "not_started"
-      ? "Lease available"
+      ? "Lease signing not started"
       : "Lease signing unavailable";
 
   const signatureReadinessDescription =
@@ -413,7 +413,7 @@ export function deriveTenantSafeLeaseReadinessMetadata(
       : signatureStatus === "awaiting_tenant_signature"
       ? "A tenant-safe lease document is available, and the next visible signing step belongs to the tenant."
       : signatureStatus === "not_started"
-      ? "A lease record is visible, but tenant signing has not been surfaced here yet."
+      ? "A lease record is visible, but tenant signing has not started and no tenant-safe signing step is available yet."
       : "Lease signing details are not available in this workspace yet.";
 
   return {

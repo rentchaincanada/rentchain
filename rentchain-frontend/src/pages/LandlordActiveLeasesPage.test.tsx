@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LandlordActiveLeasesPage from "./LandlordActiveLeasesPage";
@@ -237,6 +237,7 @@ describe("LandlordActiveLeasesPage", () => {
       signingStatus: "signed",
       signedAt: "2026-01-02T00:00:00.000Z",
     });
+    mocks.convertUnitReferenceToLease.mockClear();
     mocks.convertUnitReferenceToLease.mockResolvedValue({
       ok: true,
       lease: { id: "lease-9" },
@@ -845,6 +846,24 @@ describe("LandlordActiveLeasesPage", () => {
         })
       )
     );
+  });
+
+  it("blocks conversion when the start date is after the end date", async () => {
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Occupied units missing lease records/i)).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Convert unit 9 to lease" })[0]);
+    fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2026-09-01" } });
+    fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2026-08-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create lease" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Convert reference to lease" });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Lease start date must be on or before the end date.");
+    expect(mocks.convertUnitReferenceToLease).not.toHaveBeenCalled();
   });
 
   it("shows a recovery action when conversion is blocked by missing info", async () => {

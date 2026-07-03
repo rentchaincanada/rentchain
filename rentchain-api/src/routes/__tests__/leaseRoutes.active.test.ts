@@ -432,7 +432,7 @@ describe("leaseRoutes GET /active", () => {
     expect(res.body?.leases?.[0]).toEqual(
       expect.objectContaining({
         signatureStatus: "not_started",
-        signatureReadinessLabel: "Lease available",
+        signatureReadinessLabel: "Lease signing not started",
         leaseExecution: expect.objectContaining({
           executionStatus: "draft",
           requiredNextAction: "complete_lease_details",
@@ -1086,6 +1086,7 @@ describe("leaseRoutes GET /active", () => {
       })
     );
     expect(JSON.stringify(res.body)).not.toContain("lease-documents/");
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it("does not use app-domain lease PDF paths as document URL fallback", async () => {
@@ -1167,7 +1168,7 @@ describe("leaseRoutes GET /active", () => {
     );
   });
 
-  it("sends a non-blocking lease available email after creating a persisted lease", async () => {
+  it("does not send a lease available email after creating a persisted lease without a tenant-safe document", async () => {
     seedDoc("properties", "prop-1", {
       landlordId: "landlord-1",
       name: "Harbour View",
@@ -1197,16 +1198,92 @@ describe("leaseRoutes GET /active", () => {
     });
 
     expect(res.status).toBe(201);
-    expect(res.body?.leaseNotification).toEqual(expect.objectContaining({ attempted: true, sent: true }));
-    expect(sendEmailMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: "jane@example.com",
-        subject: "Lease available in RentChain",
-      })
+    expect(res.body?.leaseNotification).toEqual(
+      expect.objectContaining({ attempted: false, sent: false, reason: "lease_document_not_available" })
     );
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
-  it("does not send lease creation email when recipient context is missing", async () => {
+  it("does not send a lease available email after occupied-unit conversion without a primary lease document", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      occupantName: "Recovered Tenant",
+      rent: 1850,
+      leaseDocument: {
+        fileName: "lease.pdf",
+        bucket: "bucket-1",
+        path: "leases/supporting-reference.pdf",
+      },
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/reconciliation-candidates/unit-1/convert",
+      body: {
+        tenantEmail: "recovered@example.com",
+        startDate: "2026-05-01",
+        endDate: "2027-04-30",
+        monthlyRent: 1850,
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body?.ok).toBe(true);
+    expect(res.body?.leaseNotification).toEqual(
+      expect.objectContaining({ attempted: false, sent: false, reason: "lease_document_not_available" })
+    );
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects lease creation when the start date is after the end date", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      units: [{ id: "unit-1", unitNumber: "101", status: "vacant", occupancyStatus: "vacant" }],
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/",
+      body: {
+        tenantId: "tenant-1",
+        propertyId: "prop-1",
+        unitNumber: "101",
+        monthlyRent: 1850,
+        startDate: "2026-09-01",
+        endDate: "2026-08-31",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: "lease_date_range_invalid",
+        message: "Lease start date must be on or before the end date.",
+      })
+    );
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("does not inspect recipient context or send availability email during internal lease creation", async () => {
     seedDoc("properties", "prop-1", {
       landlordId: "landlord-1",
       name: "Harbour View",
@@ -1236,7 +1313,7 @@ describe("leaseRoutes GET /active", () => {
 
     expect(res.status).toBe(201);
     expect(res.body?.leaseNotification).toEqual(
-      expect.objectContaining({ attempted: false, sent: false, reason: "tenant_email_missing" })
+      expect.objectContaining({ attempted: false, sent: false, reason: "lease_document_not_available" })
     );
     expect(sendEmailMock).not.toHaveBeenCalled();
   });

@@ -154,7 +154,7 @@ describe("lease draft routes", () => {
   };
   const auth = { Authorization: "Bearer test-token" };
 
-  it("create draft then generate snapshot with URL", async () => {
+  it("creates a draft and generates Schedule A without exposing it as the primary lease document", async () => {
     const router = (await import("../leaseRoutes")).default;
     const app = express();
     app.use(express.json());
@@ -192,45 +192,19 @@ describe("lease draft routes", () => {
     );
 
     const attachmentDocsAfterGenerate = Array.from(store.get("ledgerAttachments")?.values() || []).map((doc) => doc.data);
-    expect(attachmentDocsAfterGenerate).toEqual([
-      expect.objectContaining({
-        tenantId: "tenant-1",
-        landlordId: "landlord-1",
-        leaseId: null,
-        draftId,
-        propertyId: "prop-1",
-        category: "Lease",
-        purpose: "LEASE",
-        purposeLabel: "Lease",
-        url: "https://example.invalid/schedule-a.pdf",
-      }),
-    ]);
+    expect(attachmentDocsAfterGenerate).toEqual([]);
 
     const activateRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
     expect(activateRes.status).toBe(200);
-    expect(activateRes.body?.lease).toEqual(
-      expect.objectContaining({
-        documentUrl: "https://example.invalid/schedule-a.pdf",
-        approvedDocumentUrl: "https://example.invalid/schedule-a.pdf",
-        documentRef: "https://example.invalid/schedule-a.pdf",
-      })
-    );
+    expect(activateRes.body?.lease?.documentUrl).toBeUndefined();
+    expect(activateRes.body?.lease?.approvedDocumentUrl).toBeUndefined();
+    expect(activateRes.body?.lease?.documentRef).toBeUndefined();
 
     const attachmentDocsAfterActivate = Array.from(store.get("ledgerAttachments")?.values() || []).map((doc) => doc.data);
-    expect(attachmentDocsAfterActivate).toHaveLength(1);
-    expect(attachmentDocsAfterActivate[0]).toEqual(
-      expect.objectContaining({
-        tenantId: "tenant-1",
-        landlordId: "landlord-1",
-        leaseId: String(activateRes.body?.leaseId || ""),
-        draftId,
-        propertyId: "prop-1",
-        category: "Lease",
-      })
-    );
+    expect(attachmentDocsAfterActivate).toEqual([]);
   }, 30000);
 
-  it("updates one visible Lease attachment across repeated draft PDF generation", async () => {
+  it("does not create a visible Lease attachment across repeated Schedule A generation", async () => {
     const router = (await import("../leaseRoutes")).default;
     const app = express();
     app.use(express.json());
@@ -260,22 +234,12 @@ describe("lease draft routes", () => {
       });
     expect(secondGenerateRes.status).toBe(201);
 
+    expect(String(secondGenerateRes.body?.snapshotId || "")).toBeTruthy();
     const attachmentDocs = Array.from(store.get("ledgerAttachments")?.values() || []).map((doc) => doc.data);
-    expect(attachmentDocs).toHaveLength(1);
-    expect(attachmentDocs[0]).toEqual(
-      expect.objectContaining({
-        tenantId: "tenant-1",
-        leaseId: null,
-        draftId,
-        leaseSnapshotId: String(secondGenerateRes.body?.snapshotId || ""),
-        category: "Lease",
-        purpose: "LEASE",
-        url: "https://example.invalid/schedule-a.pdf",
-      })
-    );
+    expect(attachmentDocs).toEqual([]);
   });
 
-  it("updates a legacy same-url Lease attachment instead of creating a visible duplicate", async () => {
+  it("does not update a legacy same-url Lease attachment when only Schedule A is generated", async () => {
     const router = (await import("../leaseRoutes")).default;
     const app = express();
     app.use(express.json());
@@ -315,13 +279,14 @@ describe("lease draft routes", () => {
     expect(attachmentDocs[0][1].data).toEqual(
       expect.objectContaining({
         tenantId: "tenant-1",
-        leaseId: null,
-        draftId,
         category: "Lease",
         purpose: "LEASE",
         url: "https://example.invalid/schedule-a.pdf",
+        ledgerItemId: "legacy-ledger-item",
       })
     );
+    expect(attachmentDocs[0][1].data.draftId).toBeUndefined();
+    expect(attachmentDocs[0][1].data.leaseId).toBeUndefined();
   });
 
   it("activates a draft using the latest durable generated snapshot when the draft pointer is missing", async () => {
@@ -337,13 +302,18 @@ describe("lease draft routes", () => {
       status: "generated",
       updatedAt: 100,
     });
+    await fakeDb.collection("tenants").doc("tenant-1").set({
+      landlordId: "landlord-1",
+      fullName: "Tenant One",
+      email: "tenant@example.com",
+    });
     await fakeDb.collection("leaseSnapshots").doc("snapshot-old").set({
       ...payload,
       landlordId: "landlord-1",
       draftId,
       sourceDraftId: draftId,
       generatedAt: 100,
-      generatedFiles: [{ kind: "schedule-a-pdf", url: "https://example.invalid/old-schedule-a.pdf" }],
+      generatedFiles: [{ kind: "lease-pdf", url: "https://example.invalid/old-lease.pdf" }],
     });
     await fakeDb.collection("leaseSnapshots").doc("snapshot-new").set({
       ...payload,
@@ -351,16 +321,20 @@ describe("lease draft routes", () => {
       draftId,
       sourceDraftId: draftId,
       generatedAt: 200,
-      generatedFiles: [{ kind: "schedule-a-pdf", url: "https://example.invalid/new-schedule-a.pdf" }],
+      generatedFiles: [{ kind: "lease-pdf", url: "https://example.invalid/new-lease.pdf" }],
     });
 
     const activateRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
     expect(activateRes.status).toBe(200);
+    expect(activateRes.body?.leaseNotification).toEqual(
+      expect.objectContaining({ attempted: false, sent: false, reason: "lease_document_not_available" })
+    );
+    expect(sendEmailMock).not.toHaveBeenCalled();
     expect(activateRes.body?.lease).toEqual(
       expect.objectContaining({
-        documentUrl: "https://example.invalid/new-schedule-a.pdf",
-        approvedDocumentUrl: "https://example.invalid/new-schedule-a.pdf",
-        documentRef: "https://example.invalid/new-schedule-a.pdf",
+        documentUrl: "https://example.invalid/new-lease.pdf",
+        approvedDocumentUrl: "https://example.invalid/new-lease.pdf",
+        documentRef: "https://example.invalid/new-lease.pdf",
         latestLeaseSnapshotId: "snapshot-new",
       })
     );
@@ -378,7 +352,7 @@ describe("lease draft routes", () => {
         purposeLabel: "Lease",
         title: "Lease document",
         fileName: "schedule-a-v1.pdf",
-        url: "https://example.invalid/new-schedule-a.pdf",
+        url: "https://example.invalid/new-lease.pdf",
         source: "lease_pdf_generation",
       })
     );
@@ -415,7 +389,7 @@ describe("lease draft routes", () => {
       draftId,
       sourceDraftId: draftId,
       generatedAt: 300,
-      generatedFiles: [{ kind: "schedule-a-pdf", url: "https://example.invalid/existing-schedule-a.pdf" }],
+      generatedFiles: [{ kind: "lease-pdf", url: "https://example.invalid/existing-lease.pdf" }],
     });
 
     const firstRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
@@ -423,9 +397,9 @@ describe("lease draft routes", () => {
     expect(firstRes.body?.leaseId).toBe(leaseId);
     expect(firstRes.body?.lease).toEqual(
       expect.objectContaining({
-        documentUrl: "https://example.invalid/existing-schedule-a.pdf",
-        approvedDocumentUrl: "https://example.invalid/existing-schedule-a.pdf",
-        documentRef: "https://example.invalid/existing-schedule-a.pdf",
+        documentUrl: "https://example.invalid/existing-lease.pdf",
+        approvedDocumentUrl: "https://example.invalid/existing-lease.pdf",
+        documentRef: "https://example.invalid/existing-lease.pdf",
         latestLeaseSnapshotId: "snapshot-existing",
       })
     );
@@ -436,7 +410,7 @@ describe("lease draft routes", () => {
       draftId,
       sourceDraftId: draftId,
       generatedAt: 400,
-      generatedFiles: [{ kind: "schedule-a-pdf", url: "https://example.invalid/existing-schedule-a-new.pdf" }],
+      generatedFiles: [{ kind: "lease-pdf", url: "https://example.invalid/existing-lease-new.pdf" }],
     });
 
     const secondRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
@@ -452,7 +426,7 @@ describe("lease draft routes", () => {
         draftId,
         leaseSnapshotId: "snapshot-existing-new",
         category: "Lease",
-        url: "https://example.invalid/existing-schedule-a-new.pdf",
+        url: "https://example.invalid/existing-lease-new.pdf",
       })
     );
   });
@@ -587,13 +561,10 @@ describe("lease draft routes", () => {
     expect(activateRes.body?.ok).toBe(true);
     const leaseId = String(activateRes.body?.leaseId || "");
     expect(leaseId).toBeTruthy();
-    expect(activateRes.body?.leaseNotification).toEqual(expect.objectContaining({ attempted: true, sent: true }));
-    expect(sendEmailMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: "tenant@example.com",
-        subject: "Lease available in RentChain",
-      })
+    expect(activateRes.body?.leaseNotification).toEqual(
+      expect.objectContaining({ attempted: false, sent: false, reason: "lease_document_not_available" })
     );
+    expect(sendEmailMock).not.toHaveBeenCalled();
 
     const leasesRes = await request(app).get("/tenant/tenant-1").set(auth);
     expect(leasesRes.status).toBe(200);
@@ -672,5 +643,62 @@ describe("lease draft routes", () => {
       .send({});
     expect(res.status).toBe(400);
     expect(res.body?.error).toBe("end_date_required");
+  });
+
+  it("returns 400 when creating a draft with an end date before the start date", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    const res = await request(app)
+      .post("/drafts")
+      .set(auth)
+      .send({
+        ...payload,
+        startDate: "2026-09-01",
+        endDate: "2026-08-31",
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: "lease_date_range_invalid",
+      })
+    );
+  });
+
+  it("returns 400 when draft activation has an end date before the start date", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    const draftId = "draft_invalid_range";
+    await fakeDb.collection("leaseDrafts").doc(draftId).set({
+      ...payload,
+      landlordId: "landlord-1",
+      startDate: "2026-09-01",
+      endDate: "2026-08-31",
+      status: "generated",
+      templateVersion: "ns-schedule-a-v1",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    const res = await request(app)
+      .post(`/drafts/${encodeURIComponent(draftId)}/activate`)
+      .set(auth)
+      .send({});
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: "lease_date_range_invalid",
+        message: "Lease start date must be on or before the end date.",
+      })
+    );
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 });

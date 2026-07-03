@@ -845,6 +845,36 @@ describe("leaseRoutes integrity repairs", () => {
     expect(res.body?.tenant?.phone).toBe("90255511119");
   });
 
+  it("rejects occupied unit conversion when the start date is after the end date", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+      status: "occupied",
+      occupantName: "Recovered Tenant",
+      rent: 1850,
+    });
+
+    const app = await makeApp();
+    const res = await request(app)
+      .post("/reconciliation-candidates/unit-1/convert")
+      .send({
+        startDate: "2026-09-01",
+        endDate: "2026-08-31",
+        monthlyRent: 1850,
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: "lease_date_range_invalid",
+        message: "Lease start date must be on or before the end date.",
+      })
+    );
+  });
+
   it("lists only active occupied reconciliation candidates from non-archived properties", async () => {
     seedDoc("properties", "prop-active", {
       landlordId: "landlord-1",

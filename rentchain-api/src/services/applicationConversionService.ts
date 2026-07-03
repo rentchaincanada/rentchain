@@ -3,8 +3,6 @@ import crypto from "crypto";
 import { runScreeningWithCredits } from "./screeningsService";
 import { logAuditEvent } from "./auditEventsService";
 import { db } from "../firebase";
-import { sendEmail } from "./emailService";
-import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { createTenancyIfMissing } from "./tenanciesService";
 import { createReplacementTenancyInvite } from "./tenantPortal/tenantInviteService";
 import { syncPropertyUnitOccupancyForTenantContext } from "./tenantPortal/tenantOccupancySyncService";
@@ -135,7 +133,7 @@ export async function convertApplicationToTenant(params: {
     console.warn("[applicationConversion] occupancy sync skipped", err);
   }
 
-  const invitation = await createAndEmailInvite({
+  const invitation = await createConversionInvite({
     landlordId: params.landlordId,
     tenantId,
     propertyId: application.propertyId ?? null,
@@ -207,7 +205,7 @@ export async function convertApplicationToTenant(params: {
   };
 }
 
-async function createAndEmailInvite(opts: {
+async function createConversionInvite(opts: {
   landlordId: string;
   tenantId: string;
   propertyId?: string | null;
@@ -237,52 +235,12 @@ async function createAndEmailInvite(opts: {
   const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
   const inviteUrl = `${baseUrl}/tenant/invite/${created.token}`;
 
-  if (!hasEmail) {
-    return { inviteUrl, inviteEmailed: false };
-  }
-
-  const from = process.env.EMAIL_FROM || process.env.FROM_EMAIL;
-  if (!from) {
-    console.warn("[applicationConversion] missing email sender env, skipping email");
-    return { inviteUrl, inviteEmailed: false };
-  }
-
-  const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
-    Promise.race([
-      p,
-      new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`SEND_TIMEOUT_${ms}MS`)), ms)),
-    ]);
-
-  try {
-    const subject = "You're invited to RentChain";
-    const greet = opts.tenantName ? `Hi ${opts.tenantName},` : "Hi,";
-    const text = buildEmailText({
-      intro: `${greet}\n\nYou've been invited to join RentChain as a tenant. This link may expire.`,
-      ctaText: "View invitation",
-      ctaUrl: inviteUrl,
-      footerNote: "If you weren't expecting this, you can ignore this email.",
+  if (hasEmail) {
+    console.info("[applicationConversion] tenant invite email suppressed until tenant-safe lease handoff is explicit", {
+      applicationId: opts.applicationId || null,
+      tenantId: opts.tenantId,
+      propertyId: opts.propertyId || null,
     });
-    const html = buildEmailHtml({
-      title: "You're invited to RentChain",
-      intro: `${greet} You've been invited to join RentChain as a tenant. This link may expire.`,
-      ctaText: "View invitation",
-      ctaUrl: inviteUrl,
-      footerNote: "If you weren't expecting this, you can ignore this email.",
-    });
-
-    await withTimeout(
-      sendEmail({
-        to: tenantEmail,
-        from: from as string,
-        subject,
-        text,
-        html,
-      }),
-      8000
-    );
-    return { inviteUrl, inviteEmailed: true };
-  } catch (err) {
-    console.error("[applicationConversion] invite email failed", err?.message || err);
-    return { inviteUrl, inviteEmailed: false };
   }
+  return { inviteUrl, inviteEmailed: false };
 }

@@ -35,8 +35,6 @@ import { buildLeaseRiskPersistenceFields, computeLeaseRiskSnapshot } from "../se
 import { loadPropertyCredibilitySummary } from "../services/risk/propertyCredibilitySummary";
 import { dedupePropertyScopedLeasesByUnit, filterPropertyScopedLeases } from "../services/risk/propertyLeaseIsolation";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
-import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
-import { sendEmail } from "../services/emailService";
 import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
 import {
   resolvePaymentIntentByRentPaymentId,
@@ -118,6 +116,19 @@ function toIsoDate(input: unknown): string | null {
   return parsed.toISOString().slice(0, 10);
 }
 
+function isInvalidLeaseDateRange(startDate?: string | null, endDate?: string | null): boolean {
+  if (!startDate || !endDate) return false;
+  return String(startDate).slice(0, 10) > String(endDate).slice(0, 10);
+}
+
+function leaseDateRangeError() {
+  return {
+    ok: false,
+    error: "lease_date_range_invalid",
+    message: "Lease start date must be on or before the end date.",
+  };
+}
+
 function cents(value: unknown): number | null {
   const n = Number(value);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
@@ -137,89 +148,8 @@ function normalizePhoneDigits(value: unknown): string | null {
   return digits || null;
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function publicAppUrl() {
-  return String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
-}
-
-async function loadTenantNotificationContext(tenantId: string, landlordId: string) {
-  const normalizedTenantId = String(tenantId || "").trim();
-  if (!normalizedTenantId) return null;
-  const tenantSnap = await db.collection("tenants").doc(normalizedTenantId).get().catch(() => null);
-  if (!tenantSnap?.exists) return null;
-  const tenant = (tenantSnap.data() as any) || {};
-  const tenantLandlordId = String(tenant?.landlordId || "").trim();
-  if (tenantLandlordId && landlordId && tenantLandlordId !== landlordId) return null;
-  return {
-    tenantId: normalizedTenantId,
-    tenantName: String(tenant?.fullName || tenant?.name || "").trim() || null,
-    tenantEmail: String(tenant?.email || "").trim().toLowerCase() || null,
-  };
-}
-
-async function sendLeaseAvailableEmail(params: {
-  leaseId: string;
-  tenantId: string;
-  landlordId: string;
-  tenantEmail?: string | null;
-  tenantName?: string | null;
-  propertyLabel?: string | null;
-  unitLabel?: string | null;
-  startDate?: string | null;
-}) {
-  const tenantContext = params.tenantEmail
-    ? {
-        tenantId: params.tenantId,
-        tenantName: params.tenantName || null,
-        tenantEmail: params.tenantEmail,
-      }
-    : await loadTenantNotificationContext(params.tenantId, params.landlordId);
-  const tenantEmail = String(tenantContext?.tenantEmail || "").trim().toLowerCase();
-  if (!EMAIL_RE.test(tenantEmail)) {
-    return { attempted: false, sent: false, reason: "tenant_email_missing" };
-  }
-  const from = String(process.env.LEASE_EMAIL_FROM || process.env.EMAIL_FROM || process.env.FROM_EMAIL || "").trim();
-  if (!from) {
-    return { attempted: false, sent: false, reason: "email_from_missing" };
-  }
-
-  const contextParts = [params.propertyLabel, params.unitLabel, params.startDate ? `Start date: ${params.startDate}` : null]
-    .map((value) => String(value || "").trim())
-    .filter(Boolean);
-  const intro = [
-    tenantContext?.tenantName ? `Hi ${tenantContext.tenantName},` : "Hi,",
-    "A lease is available in your RentChain tenant portal.",
-    contextParts.length ? contextParts.join("\n") : null,
-  ].filter(Boolean).join("\n\n");
-
-  try {
-    await sendEmail({
-      to: tenantEmail,
-      from,
-      replyTo: from,
-      subject: "Lease available in RentChain",
-      text: buildEmailText({
-        intro,
-        ctaText: "View lease",
-        ctaUrl: `${publicAppUrl()}/tenant/lease`,
-      }),
-      html: buildEmailHtml({
-        title: "Lease available",
-        intro,
-        ctaText: "View lease",
-        ctaUrl: `${publicAppUrl()}/tenant/lease`,
-      }),
-    });
-    return { attempted: true, sent: true };
-  } catch (err: any) {
-    console.error("[lease-created] tenant email send failed", {
-      leaseId: params.leaseId,
-      tenantId: params.tenantId,
-      errMessage: err?.message,
-    });
-    return { attempted: true, sent: false, reason: err?.message || "send_failed" };
-  }
+function internalLeaseRecordNotificationSuppressed() {
+  return { attempted: false, sent: false, reason: "lease_document_not_available" };
 }
 
 function escapeCsvCell(value: unknown): string {
@@ -2255,6 +2185,9 @@ router.post("/reconciliation-candidates/:unitId/convert", requireLandlord, async
 
     if (!occupantName) return res.status(400).json({ ok: false, error: "occupant_name_required" });
     if (!startDate) return res.status(400).json({ ok: false, error: "start_date_required" });
+    if (isInvalidLeaseDateRange(startDate, endDate)) {
+      return res.status(400).json(leaseDateRangeError());
+    }
     if (!Number.isFinite(monthlyRent) || monthlyRent <= 0) {
       return res.status(400).json({ ok: false, error: "monthly_rent_required" });
     }
@@ -2342,16 +2275,7 @@ router.post("/reconciliation-candidates/:unitId/convert", requireLandlord, async
     await tenantRef.set({ currentLeaseId: lease.id, updatedAt: new Date().toISOString() }, { merge: true });
 
     const enrichedLease = await enrichLeaseRow({ id: lease.id, ...firestoreLeaseRecord });
-    const leaseNotification = await sendLeaseAvailableEmail({
-      leaseId: lease.id,
-      tenantId: tenantRef.id,
-      landlordId,
-      tenantEmail,
-      tenantName: occupantName,
-      propertyLabel: propertyName,
-      unitLabel: unitNumber || null,
-      startDate,
-    });
+    const leaseNotification = internalLeaseRecordNotificationSuppressed();
     return res.status(201).json({
       ok: true,
       lease: enrichedLease,
@@ -2573,6 +2497,9 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
     if (termType === "fixed" && !endDate) {
       return res.status(400).json({ ok: false, error: "end_date_required" });
     }
+    if (isInvalidLeaseDateRange(startDate, endDate)) {
+      return res.status(400).json(leaseDateRangeError());
+    }
     if (!Number.isFinite(baseRentCents) || baseRentCents <= 0) {
       return res.status(400).json({ ok: false, error: "base_rent_required" });
     }
@@ -2785,14 +2712,7 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       },
     });
 
-    const leaseNotification = await sendLeaseAvailableEmail({
-      leaseId: leaseRef.id,
-      tenantId,
-      landlordId,
-      propertyLabel: null,
-      unitLabel: String(draft?.unitLabel || draft?.unitNumber || "").trim() || null,
-      startDate,
-    });
+    const leaseNotification = internalLeaseRecordNotificationSuppressed();
 
     return res.status(200).json({
       ok: true,
@@ -3591,6 +3511,9 @@ router.post("/", requireLandlord, async (req: Request, res: Response) => {
     if (!body.startDate) {
       return res.status(400).json({ error: "startDate is required" });
     }
+    if (isInvalidLeaseDateRange(body.startDate, body.endDate)) {
+      return res.status(400).json(leaseDateRangeError());
+    }
 
     const landlordId = String((req as any)?.user?.landlordId || (req as any)?.user?.id || "").trim();
     const tenantIds = Array.isArray((body as any)?.tenantIds)
@@ -3689,17 +3612,9 @@ router.post("/", requireLandlord, async (req: Request, res: Response) => {
         );
       }
     }
-    const leaseNotification =
-      landlordId && firestoreLeaseWritten
-        ? await sendLeaseAvailableEmail({
-            leaseId: lease.id,
-            tenantId: String(lease.tenantId || body.tenantId || "").trim(),
-            landlordId,
-            propertyLabel: null,
-            unitLabel: unitSelection.unitLabel,
-            startDate: lease.startDate,
-          })
-        : { attempted: false, sent: false, reason: "lease_not_persisted" };
+    const leaseNotification = landlordId && firestoreLeaseWritten
+      ? internalLeaseRecordNotificationSuppressed()
+      : { attempted: false, sent: false, reason: "lease_not_persisted" };
     res.status(201).json({
       lease: {
         ...lease,
