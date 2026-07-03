@@ -52,7 +52,7 @@ describe("DecisionContextPanel", () => {
     expect(screen.getByText("Rent past due date")).toBeInTheDocument();
     expect(screen.getByText("$1,450.00")).toBeInTheDocument();
     expect(screen.getByText("Review workflow trail")).toBeInTheDocument();
-    expect(screen.getByText("Tracks operational review actions only.")).toBeInTheDocument();
+    expect(screen.getByText(/Tracks operational review actions only; reviewed or resolved status does not mark rent paid/i)).toBeInTheDocument();
     expect(screen.getByText(/Workflow status:/)).toBeInTheDocument();
     expect(screen.getByText(/Last action:/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /fix/i })).not.toBeInTheDocument();
