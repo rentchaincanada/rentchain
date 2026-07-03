@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Building2, Inbox, LayoutDashboard, Menu, ScrollText, X } from "lucide-react";
+import { Building2, ClipboardList, Inbox, LayoutDashboard, Menu, ScrollText, X } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import TopNav from "./TopNav";
 import { useAuth } from "../../context/useAuth";
@@ -21,6 +21,7 @@ const landlordMobileTabs = [
   { to: "/properties", label: "Properties", icon: Building2 },
   { to: "/applications", label: "Applicants", icon: ScrollText },
   { to: "/landlord/unified-inbox", label: "Inbox", icon: Inbox },
+  { to: "/operations", label: "Operations", icon: ClipboardList },
 ];
 
 const stickyWorkspaceIds = new Set([
