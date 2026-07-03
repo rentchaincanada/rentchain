@@ -2421,6 +2421,59 @@ describe("tenant workspace frontend shell", () => {
     expect(await screen.findByText("refresh failed")).toBeInTheDocument();
   });
 
+  it("shows provider-signed leases without documents as signed-copy pending instead of not started", async () => {
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-provider-signed",
+      startDate: "2026-03-01",
+      endDate: "2027-02-28",
+      monthlyRent: 1800,
+      status: "active",
+      documentUrl: null,
+      leaseDocumentContext: {
+        leaseId: "lease-provider-signed",
+        documentStatus: "pending",
+        displayLabel: "Signed lease document pending",
+        source: "lease_signing_signed_without_document",
+        confidence: "medium",
+        warnings: ["Signing is complete, but no tenant-safe signed lease document link is available yet."],
+      },
+      signatureStatus: "signed",
+      signatureReadinessLabel: "Lease signing complete",
+      signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
+      providerSigningStatus: "signed",
+      providerSignedAt: "2026-07-03T10:00:00.000Z",
+      providerDerivedLeaseState: "active",
+      providerSigningAvailable: false,
+      leasePdfStatus: "pending",
+      leasePdfLabel: "Document preparation needed",
+      leasePdfDescription: "A lease document workflow is visible, but no approved tenant-safe lease document link is available yet.",
+      leaseExecution: {
+        executionStatus: "fully_executed",
+        executionLabel: "Lease fully executed",
+        executionDescription: "The visible lease record indicates the current execution flow is complete.",
+        requiredNextAction: "none",
+        tenantSignatureStatus: "completed",
+        landlordSignatureStatus: "completed",
+        pdfStatus: "blocked",
+        completedAt: "2026-07-03T10:00:00.000Z",
+      },
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <TenantLeasePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/^Lease signature complete$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Signed lease document pending$/i)).toBeInTheDocument();
+    expect(screen.getByText(/signed copy is still being prepared for this tenant workspace/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Signing complete; signed copy pending$/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/no tenant-safe signed lease document link is available yet/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^Signature workflow not started$/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /View lease/i })).not.toBeInTheDocument();
+  });
+
   it("does not open Schedule A when the tenant primary lease refresh path returns it", async () => {
     tenantPortalApi.refreshTenantLeaseDocumentUrl.mockResolvedValueOnce({
       documentUrl: "https://storage.googleapis.com/lease-documents/leases/landlord/draft/schedule-a-v1.pdf",
