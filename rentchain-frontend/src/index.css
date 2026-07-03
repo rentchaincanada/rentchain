@@ -460,6 +460,7 @@ button,
   padding: 16px;
   border-radius: 24px;
   background: #f8fafc;
+  width: 100%;
 }
 
 .analytics-workspace-header {
@@ -509,7 +510,13 @@ button,
 }
 
 .analytics-kpi-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
+
+.analytics-workspace-summary-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
 }
 
 .analytics-kpi-card {
@@ -550,6 +557,16 @@ button,
 .analytics-print-summary__intro {
   color: #334155;
   margin-bottom: 8px;
+}
+
+@media (min-width: 1320px) {
+  .analytics-kpi-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .analytics-workspace-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {

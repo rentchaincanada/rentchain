@@ -488,7 +488,7 @@ export default function LandlordAnalyticsPage() {
   ) : null;
 
   return (
-    <MacShell title="Analytics" showTopNav={false}>
+    <MacShell title="Analytics" showTopNav={false} maxWidth="min(100%, 1500px)">
       <div className="analytics-workspace-page">
         {analyticsEnabled ? (
           <AnalyticsWorkspaceHeader
@@ -562,14 +562,7 @@ export default function LandlordAnalyticsPage() {
             <AnalyticsKpiGrid items={summaryItems} periodLabel={periodLabel(period)} />
 
             {canViewPortfolioScore ? (
-              <div
-                className="analytics-workspace-summary-grid"
-                style={{
-                  display: "grid",
-                  gap: 12,
-                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                }}
-              >
+              <div className="analytics-workspace-summary-grid">
                 <AnalyticsSectionPanel
                   title="Applications"
                   description="Track whether interest is turning into submitted and approved applications."
