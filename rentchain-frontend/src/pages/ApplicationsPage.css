@@ -1,3 +1,15 @@
+.rc-applications-page {
+  display: grid;
+  gap: 18px;
+  margin: 0 auto;
+  max-width: min(100%, 1320px);
+  min-width: 0;
+  padding: 16px;
+  width: 100%;
+  border-radius: 24px;
+  background: #f8fafc;
+}
+
 .rc-applications-grid {
   display: block;
   min-height: 0;
@@ -141,6 +153,13 @@
 }
 
 @media (max-width: 768px) {
+  .rc-applications-page {
+    gap: 14px;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
   .rc-applications-grid {
     overflow: visible;
   }

@@ -2343,7 +2343,7 @@ const ApplicationsPage: React.FC = () => {
 
   return (
     <>
-      <div className="rc-applications-page" style={{ display: "grid", gap: spacing.lg }}>
+      <div className="rc-applications-page">
       <Card elevated className="rc-applications-header">
         <div className="rc-applications-header-row" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
           <div>
