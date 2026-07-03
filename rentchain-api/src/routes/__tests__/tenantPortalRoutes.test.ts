@@ -971,6 +971,169 @@ describe("tenantPortalRoutes foundation", () => {
     );
   });
 
+  it("projects provider-signed leases as signed-copy pending when no tenant-safe document exists", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      landlordId: "landlord-1",
+      status: "active",
+      tenantSignature: null,
+      tenantSignedAt: null,
+      tenantSignatureCompletedAt: null,
+      landlordSignature: null,
+      landlordSignedAt: null,
+      landlordSignatureCompletedAt: null,
+      fullyExecutedAt: null,
+      fullySignedAt: null,
+      signatureCompletedAt: null,
+      documentUrl: null,
+      approvedDocumentUrl: null,
+      documentRef: null,
+      documentStatus: null,
+      leaseDocumentStatus: null,
+      pdfStatus: null,
+      generationStatus: null,
+    });
+    ensureCollection("leaseSigningRequests").set("request-signed-no-document", {
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      providerId: "dropbox_sign",
+      providerRequestId: "raw-provider-request-id",
+      providerRequestRef: "dropbox_sign_ref_safe",
+      currentSigningStatus: "signed",
+      currentStatusAt: "2026-07-03T10:00:00.000Z",
+      createdAt: "2026-07-03T09:00:00.000Z",
+    });
+    ensureCollection("leaseSigningEvents").set("event-signed-no-document", {
+      requestId: "request-signed-no-document",
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      type: "signed",
+      occurredAt: "2026-07-03T10:00:00.000Z",
+      actorRole: "provider",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.providerSigningStatus).toBe("signed");
+    expect(res.body?.data?.signatureStatus).toBe("signed");
+    expect(res.body?.data?.leaseDocumentContext).toEqual(
+      expect.objectContaining({
+        documentStatus: "pending",
+        displayLabel: "Signed lease document pending",
+        source: "lease_signing_signed_without_document",
+        warnings: ["Signing is complete, but no tenant-safe signed lease document link is available yet."],
+      })
+    );
+    expect(res.body?.data?.leasePdfStatus).toBe("pending");
+    expect(res.body?.data?.leaseExecution).toEqual(
+      expect.objectContaining({
+        executionStatus: "fully_executed",
+        executionLabel: "Lease fully executed",
+        completedAt: "2026-07-03T10:00:00.000Z",
+      })
+    );
+    expect(JSON.stringify(res.body)).not.toContain("raw-provider-request-id");
+    expect(JSON.stringify(res.body)).not.toContain("request-signed-no-document");
+  });
+
+  it("surfaces provider signed-document storage metadata as a tenant-safe signed lease document and vault item", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      landlordId: "landlord-1",
+      status: "active",
+      tenantSignature: null,
+      tenantSignedAt: null,
+      landlordSignature: null,
+      landlordSignedAt: null,
+      documentUrl: null,
+      approvedDocumentUrl: null,
+      documentRef: null,
+    });
+    ensureCollection("leaseSigningRequests").set("request-signed-document", {
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      providerId: "dropbox_sign",
+      providerRequestId: "raw-provider-request-id",
+      providerRequestRef: "dropbox_sign_ref_safe",
+      currentSigningStatus: "signed",
+      currentStatusAt: "2026-07-03T10:00:00.000Z",
+      signedDocument: {
+        bucket: "signed-lease-documents",
+        path: "lease-signing/landlord-1/request-signed-document/signed.pdf",
+        internalReferenceOnly: true,
+      },
+      signedDocumentHash: "signed_doc_hash",
+      signedDocumentStoredAt: "2026-07-03T10:05:00.000Z",
+      createdAt: "2026-07-03T09:00:00.000Z",
+    });
+    ensureCollection("leaseSigningEvents").set("event-signed-document", {
+      requestId: "request-signed-document",
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      type: "signed",
+      occurredAt: "2026-07-03T10:00:00.000Z",
+      actorRole: "provider",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-1",
+        email: "tenant@example.com",
+        role: "tenant",
+        tenantId: "tenant-1",
+      }),
+    };
+    const leaseRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease",
+      headers,
+    });
+    const attachmentsRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/attachments",
+      headers,
+    });
+
+    expect(leaseRes.status).toBe(200);
+    expect(leaseRes.body?.data?.documentUrl).toBe(
+      "https://signed.example/lease-signing/landlord-1/request-signed-document/signed.pdf"
+    );
+    expect(leaseRes.body?.data?.leaseDocumentContext).toEqual(
+      expect.objectContaining({
+        documentStatus: "signed",
+        documentUrl: "https://signed.example/lease-signing/landlord-1/request-signed-document/signed.pdf",
+        displayLabel: "Signed lease document",
+        source: "leaseSigningRequests.signedDocument",
+      })
+    );
+    expect(attachmentsRes.status).toBe(200);
+    expect(attachmentsRes.body?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Signed lease document",
+          url: "https://signed.example/lease-signing/landlord-1/request-signed-document/signed.pdf",
+        }),
+      ])
+    );
+    const payload = JSON.stringify({ lease: leaseRes.body, attachments: attachmentsRes.body });
+    expect(payload).not.toContain("signed-lease-documents");
+    expect(payload).not.toContain("raw-provider-request-id");
+  });
+
   it("links tenant lease workspace to generated unsigned lease package attachments", async () => {
     ensureCollection("leases").set("lease-1", {
       ...(ensureCollection("leases").get("lease-1") || {}),

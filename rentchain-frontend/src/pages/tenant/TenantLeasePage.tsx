@@ -176,6 +176,7 @@ export default function TenantLeasePage() {
 
   const execution = data?.leaseExecution || null;
   const providerSigningStatus = String(data?.providerSigningStatus || "not_started");
+  const providerSigningComplete = providerSigningStatus === "signed";
   const providerSigningAvailable = data?.providerSigningAvailable === true || providerSigningStatus === "pending_signature";
   const leaseDocumentContext = data?.leaseDocumentContext || null;
   const scheduleADocumentContext = data?.scheduleADocumentContext || null;
@@ -183,6 +184,7 @@ export default function TenantLeasePage() {
   const rawScheduleAUrl = String(scheduleADocumentContext?.documentUrl || "").trim();
   const leaseDocumentUrl = rawLeaseDocumentUrl && !isScheduleADocumentUrl(rawLeaseDocumentUrl) ? rawLeaseDocumentUrl : null;
   const scheduleAUrl = rawScheduleAUrl || (isScheduleADocumentUrl(rawLeaseDocumentUrl) ? rawLeaseDocumentUrl : null);
+  const signedCopyPending = providerSigningComplete && !leaseDocumentUrl;
   const leaseDocumentLabel = leaseDocumentUrl
     ? leaseDocumentContext?.displayLabel || data?.leasePdfLabel || null
     : scheduleAUrl
@@ -206,6 +208,7 @@ export default function TenantLeasePage() {
   });
   const executionStatus = String(execution?.executionStatus || "").trim();
   const signatureWorkflowVisible =
+    providerSigningComplete ||
     Boolean(data?.tenantSignature?.signedAt) ||
     ["ready_for_tenant_signature", "tenant_signed", "ready_for_landlord_signature", "landlord_signed", "fully_executed"].includes(
       executionStatus
@@ -456,7 +459,9 @@ export default function TenantLeasePage() {
                 <div style={{ color: "var(--text-muted, #64748b)" }}>
                   {providerSigningAvailable
                     ? "Open the secure signing session to review and sign the lease."
-                    : providerSigningStatus === "signed"
+                    : providerSigningComplete && signedCopyPending
+                    ? "The provider-backed signing workflow is complete. The signed copy is still being prepared for this tenant workspace."
+                    : providerSigningComplete
                     ? "The provider-backed signing workflow is complete."
                     : data.signatureReadinessDescription || "Lease signing details are not available in this workspace yet."}
                 </div>
@@ -497,10 +502,16 @@ export default function TenantLeasePage() {
               <div style={{ display: "grid", gap: 12 }}>
                 <div style={{ display: "grid", gap: 6 }}>
                   <div style={{ fontWeight: 800 }}>
-                    {signatureWorkflowVisible ? execution.executionLabel : "Signature workflow not started"}
+                    {signedCopyPending
+                      ? "Signing complete; signed copy pending"
+                      : signatureWorkflowVisible
+                      ? execution.executionLabel
+                      : "Signature workflow not started"}
                   </div>
                   <div style={{ color: "var(--text-muted, #64748b)" }}>
-                    {signatureWorkflowVisible
+                    {signedCopyPending
+                      ? "Signing is complete, but no tenant-safe signed lease document link is available yet."
+                      : signatureWorkflowVisible
                       ? execution.executionDescription
                       : "Lease details are visible, but no tenant-safe signature workflow or execution evidence is available yet."}
                   </div>
