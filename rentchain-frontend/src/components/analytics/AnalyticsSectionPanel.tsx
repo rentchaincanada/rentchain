@@ -34,16 +34,15 @@ export function AnalyticsSectionPanel({ title, description, metrics, emptyMessag
           <div style={{ display: "grid", gap: 10 }}>
             {metrics.map((metric) => (
               <div
+                className="analytics-section-metric-row"
                 key={metric.label}
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
                   gap: 16,
                   padding: "10px 0",
                   borderTop: "1px solid #e2e8f0",
                 }}
               >
-                <div style={{ display: "grid", gap: 2 }}>
+                <div className="analytics-section-metric-row__body" style={{ display: "grid", gap: 2 }}>
                   <div style={{ fontWeight: 600, color: "#0f172a" }}>{metric.label}</div>
                   {metric.hint ? <div style={{ color: "#64748b", fontSize: "0.88rem" }}>{metric.hint}</div> : null}
                   <TrendDeltaBadge
@@ -52,7 +51,9 @@ export function AnalyticsSectionPanel({ title, description, metrics, emptyMessag
                     formatAbsoluteDelta={metric.formatAbsoluteDelta}
                   />
                 </div>
-                <div style={{ fontWeight: 700, color: "#0f172a", textAlign: "right" }}>{metric.value}</div>
+                <div className="analytics-section-metric-row__value" style={{ fontWeight: 700, color: "#0f172a" }}>
+                  {metric.value}
+                </div>
               </div>
             ))}
           </div>

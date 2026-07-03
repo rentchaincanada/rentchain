@@ -517,7 +517,11 @@ describe("LandlordAnalyticsPage", () => {
     expect(within(controlArea).getByLabelText(/Analytics property/i)).toBeInTheDocument();
     const tabPanel = screen.getByRole("tabpanel", { name: "Analytics alerts" });
     const kpiGrid = screen.getByTestId("analytics-kpi-grid");
+    expect(kpiGrid).toHaveClass("analytics-kpi-grid");
     expect(Boolean(tabPanel.compareDocumentPosition(kpiGrid) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    const scheduledRentKpi = within(kpiGrid).getByText("Scheduled rent").closest(".analytics-kpi-card");
+    expect(scheduledRentKpi).toBeTruthy();
+    expect(within(scheduledRentKpi as HTMLElement).getByText("$6,600")).toHaveClass("analytics-kpi-card__value");
     expect(screen.getByRole("tab", { name: "Analytics alerts" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Portfolio benchmarking" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Decision outcomes" })).toBeInTheDocument();
@@ -561,6 +565,13 @@ describe("LandlordAnalyticsPage", () => {
 
     expect(screen.getByRole("heading", { name: /Applications/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Revenue signal/i })).toBeInTheDocument();
+    const estimatedScheduledRentRow = screen
+      .getByText("Estimated scheduled rent")
+      .closest(".analytics-section-metric-row");
+    expect(estimatedScheduledRentRow).toBeTruthy();
+    expect(within(estimatedScheduledRentRow as HTMLElement).getByText("$6,600")).toHaveClass(
+      "analytics-section-metric-row__value"
+    );
     expect(screen.getAllByText(/vs prior 90 days/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(macShellSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Analytics", showTopNav: false }));
@@ -870,6 +881,20 @@ describe("LandlordAnalyticsPage", () => {
         propertyId: "prop-2",
       })
     );
+  });
+
+  it("hydrates vacancy readiness focus from destination query params", async () => {
+    await mockEntitlements();
+    await mockApiResolved();
+
+    render(
+      <MemoryRouter initialEntries={["/analytics?entry=vacancy-readiness"]}>
+        <LandlordAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Focused from decisions: Vacancy readiness/i)).toBeInTheDocument();
+    expect(screen.getByTestId("analytics-kpi-grid")).toHaveClass("analytics-kpi-grid");
   });
 
   it("shows a loading state while analytics are being fetched", async () => {
