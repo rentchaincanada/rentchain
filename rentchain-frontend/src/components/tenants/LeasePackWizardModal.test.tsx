@@ -1,5 +1,6 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createLeaseDraft } from "@/api/leasePacksApi";
 import { LeasePackWizardModal } from "./LeasePackWizardModal";
 
 vi.mock("@/api/leasePacksApi", () => ({
@@ -24,6 +25,7 @@ vi.mock("@/components/leases/LeaseRiskCard", () => ({
 
 describe("LeasePackWizardModal jurisdiction workflow guidance", () => {
   afterEach(() => {
+    vi.clearAllMocks();
     cleanup();
   });
 
@@ -73,5 +75,30 @@ describe("LeasePackWizardModal jurisdiction workflow guidance", () => {
     expect(screen.getByText("ON Residential")).toBeInTheDocument();
     expect(screen.getByText(/Ontario lease pack documents are available/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Generate Schedule A PDF/i })).not.toBeInTheDocument();
+  });
+
+  it("blocks lease pack generation when the start date is after the end date", () => {
+    render(
+      <LeasePackWizardModal
+        open
+        onClose={vi.fn()}
+        landlordName="Landlord"
+        tenant={{
+          id: "tenant-1",
+          fullName: "Tenant One",
+          propertyId: "property-1",
+          propertyName: "Harbour Place",
+          unitId: "unit-1",
+          unit: "1",
+          province: "NS",
+        }}
+        lease={{ startDate: "2026-09-01", endDate: "2026-08-31", monthlyRent: 2000 }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Generate Schedule A PDF/i }));
+
+    expect(screen.getByText("Lease start date must be on or before the end date.")).toBeInTheDocument();
+    expect(createLeaseDraft).not.toHaveBeenCalled();
   });
 });

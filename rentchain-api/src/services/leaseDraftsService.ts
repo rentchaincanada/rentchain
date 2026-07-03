@@ -146,7 +146,7 @@ export function validateCreateInput(
     ensure(Boolean(endDate), "end_date_required", "endDate is required for fixed term");
   }
   if (startDate && endDate) {
-    ensure(endDate >= startDate, "end_date_invalid", "endDate must be on or after startDate");
+    ensure(endDate >= startDate, "lease_date_range_invalid", "Lease start date must be on or before the end date.");
   }
   ensure(baseRentCents != null && baseRentCents > 0, "rent_invalid", "baseRentCents must be > 0");
   ensure(parkingCents != null, "parking_invalid", "parkingCents must be >= 0");

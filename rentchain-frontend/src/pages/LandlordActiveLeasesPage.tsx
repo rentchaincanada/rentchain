@@ -66,6 +66,10 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function isInvalidLeaseDateRange(startDate: string, endDate: string) {
+  return Boolean(startDate && endDate && startDate > endDate);
+}
+
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
   return fallback;
@@ -561,8 +565,12 @@ export default function LandlordActiveLeasesPage() {
 
   async function handleConvert() {
     if (!selectedCandidate) return;
-    setConvertSaving(true);
     setError(null);
+    if (isInvalidLeaseDateRange(startDate, endDate)) {
+      setError("Lease start date must be on or before the end date.");
+      return;
+    }
+    setConvertSaving(true);
     try {
       await convertUnitReferenceToLease(selectedCandidate.unitId, {
         occupantName,

@@ -118,6 +118,23 @@ function toIsoDate(input: unknown): string | null {
   return parsed.toISOString().slice(0, 10);
 }
 
+function isInvalidLeaseDateRange(startDate?: string | null, endDate?: string | null): boolean {
+  if (!startDate || !endDate) return false;
+  return String(startDate).slice(0, 10) > String(endDate).slice(0, 10);
+}
+
+function leaseDateRangeError() {
+  return {
+    ok: false,
+    error: "lease_date_range_invalid",
+    message: "Lease start date must be on or before the end date.",
+  };
+}
+
+function tenantSafeLeaseDocumentAvailable(input: Record<string, any> | null | undefined): boolean {
+  return Boolean(String(input?.documentUrl || input?.approvedDocumentUrl || input?.documentRef || "").trim().startsWith("https://"));
+}
+
 function cents(value: unknown): number | null {
   const n = Number(value);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
@@ -167,6 +184,7 @@ async function sendLeaseAvailableEmail(params: {
   propertyLabel?: string | null;
   unitLabel?: string | null;
   startDate?: string | null;
+  leaseDocumentAvailable?: boolean;
 }) {
   const tenantContext = params.tenantEmail
     ? {
@@ -178,6 +196,9 @@ async function sendLeaseAvailableEmail(params: {
   const tenantEmail = String(tenantContext?.tenantEmail || "").trim().toLowerCase();
   if (!EMAIL_RE.test(tenantEmail)) {
     return { attempted: false, sent: false, reason: "tenant_email_missing" };
+  }
+  if (!params.leaseDocumentAvailable) {
+    return { attempted: false, sent: false, reason: "lease_document_not_available" };
   }
   const from = String(process.env.LEASE_EMAIL_FROM || process.env.EMAIL_FROM || process.env.FROM_EMAIL || "").trim();
   if (!from) {
@@ -2255,6 +2276,9 @@ router.post("/reconciliation-candidates/:unitId/convert", requireLandlord, async
 
     if (!occupantName) return res.status(400).json({ ok: false, error: "occupant_name_required" });
     if (!startDate) return res.status(400).json({ ok: false, error: "start_date_required" });
+    if (isInvalidLeaseDateRange(startDate, endDate)) {
+      return res.status(400).json(leaseDateRangeError());
+    }
     if (!Number.isFinite(monthlyRent) || monthlyRent <= 0) {
       return res.status(400).json({ ok: false, error: "monthly_rent_required" });
     }
@@ -2351,6 +2375,7 @@ router.post("/reconciliation-candidates/:unitId/convert", requireLandlord, async
       propertyLabel: propertyName,
       unitLabel: unitNumber || null,
       startDate,
+      leaseDocumentAvailable: tenantSafeLeaseDocumentAvailable(firestoreLeaseRecord),
     });
     return res.status(201).json({
       ok: true,
@@ -2573,6 +2598,9 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
     if (termType === "fixed" && !endDate) {
       return res.status(400).json({ ok: false, error: "end_date_required" });
     }
+    if (isInvalidLeaseDateRange(startDate, endDate)) {
+      return res.status(400).json(leaseDateRangeError());
+    }
     if (!Number.isFinite(baseRentCents) || baseRentCents <= 0) {
       return res.status(400).json({ ok: false, error: "base_rent_required" });
     }
@@ -2792,6 +2820,7 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       propertyLabel: null,
       unitLabel: String(draft?.unitLabel || draft?.unitNumber || "").trim() || null,
       startDate,
+      leaseDocumentAvailable: tenantSafeLeaseDocumentAvailable(leaseRecord),
     });
 
     return res.status(200).json({
@@ -3591,6 +3620,9 @@ router.post("/", requireLandlord, async (req: Request, res: Response) => {
     if (!body.startDate) {
       return res.status(400).json({ error: "startDate is required" });
     }
+    if (isInvalidLeaseDateRange(body.startDate, body.endDate)) {
+      return res.status(400).json(leaseDateRangeError());
+    }
 
     const landlordId = String((req as any)?.user?.landlordId || (req as any)?.user?.id || "").trim();
     const tenantIds = Array.isArray((body as any)?.tenantIds)
@@ -3698,6 +3730,7 @@ router.post("/", requireLandlord, async (req: Request, res: Response) => {
             propertyLabel: null,
             unitLabel: unitSelection.unitLabel,
             startDate: lease.startDate,
+            leaseDocumentAvailable: false,
           })
         : { attempted: false, sent: false, reason: "lease_not_persisted" };
     res.status(201).json({

@@ -52,6 +52,12 @@ function centsToDollars(value: unknown): string {
   return (n / 100).toFixed(2);
 }
 
+const DATE_RANGE_ERROR = "Lease start date must be on or before the end date.";
+
+function isInvalidLeaseDateRange(startDate?: string | null, endDate?: string | null) {
+  return Boolean(startDate && endDate && startDate > endDate);
+}
+
 export const LeasePackWizardModal: React.FC<Props> = ({
   open,
   onClose,
@@ -181,6 +187,10 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   React.useEffect(() => {
     if (!open || !draftId) return;
     const t = window.setTimeout(() => {
+      if (isInvalidLeaseDateRange(payload.startDate, payload.endDate)) {
+        setError(DATE_RANGE_ERROR);
+        return;
+      }
       setSaving(true);
       updateLeaseDraft(draftId, payload)
         .catch((err: any) => setError(err?.message || "Failed to save draft changes."))
@@ -203,15 +213,6 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       setError("Schedule A generation is available for Nova Scotia properties only.");
       return;
     }
-    if (import.meta.env.MODE !== "production") {
-      console.debug("[leasepack] generate clicked", {
-        termType: state.termType,
-        startDate: state.startDate,
-        endDate: state.endDate || null,
-        baseRentCents: dollarsToCents(state.baseRent),
-        draftId: draftId || null,
-      });
-    }
     if (!propertyId || !unitId || !tenantId) {
       setError("Missing tenant/property/unit data to create a lease pack draft.");
       return;
@@ -224,9 +225,22 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       setError("End date required for fixed term.");
       return;
     }
+    if (isInvalidLeaseDateRange(state.startDate, state.endDate)) {
+      setError(DATE_RANGE_ERROR);
+      return;
+    }
     if (dollarsToCents(state.baseRent) <= 0) {
       setError("Base rent must be greater than 0.");
       return;
+    }
+    if (import.meta.env.MODE !== "production") {
+      console.debug("[leasepack] generate clicked", {
+        termType: state.termType,
+        startDate: state.startDate,
+        endDate: state.endDate || null,
+        baseRentCents: dollarsToCents(state.baseRent),
+        draftId: draftId || null,
+      });
     }
     setGenerating(true);
     setError("");
@@ -290,6 +304,10 @@ export const LeasePackWizardModal: React.FC<Props> = ({
     }
     if (!draftId) {
       setError("Generate Schedule A PDF first, then activate the lease.");
+      return;
+    }
+    if (isInvalidLeaseDateRange(state.startDate, state.endDate)) {
+      setError(DATE_RANGE_ERROR);
       return;
     }
     setActivating(true);

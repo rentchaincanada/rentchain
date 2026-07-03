@@ -1167,7 +1167,7 @@ describe("leaseRoutes GET /active", () => {
     );
   });
 
-  it("sends a non-blocking lease available email after creating a persisted lease", async () => {
+  it("does not send a lease available email after creating a persisted lease without a tenant-safe document", async () => {
     seedDoc("properties", "prop-1", {
       landlordId: "landlord-1",
       name: "Harbour View",
@@ -1197,13 +1197,49 @@ describe("leaseRoutes GET /active", () => {
     });
 
     expect(res.status).toBe(201);
-    expect(res.body?.leaseNotification).toEqual(expect.objectContaining({ attempted: true, sent: true }));
-    expect(sendEmailMock).toHaveBeenCalledWith(
+    expect(res.body?.leaseNotification).toEqual(
+      expect.objectContaining({ attempted: false, sent: false, reason: "lease_document_not_available" })
+    );
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects lease creation when the start date is after the end date", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      units: [{ id: "unit-1", unitNumber: "101", status: "vacant", occupancyStatus: "vacant" }],
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/",
+      body: {
+        tenantId: "tenant-1",
+        propertyId: "prop-1",
+        unitNumber: "101",
+        monthlyRent: 1850,
+        startDate: "2026-09-01",
+        endDate: "2026-08-31",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(
       expect.objectContaining({
-        to: "jane@example.com",
-        subject: "Lease available in RentChain",
+        ok: false,
+        error: "lease_date_range_invalid",
+        message: "Lease start date must be on or before the end date.",
       })
     );
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it("does not send lease creation email when recipient context is missing", async () => {
