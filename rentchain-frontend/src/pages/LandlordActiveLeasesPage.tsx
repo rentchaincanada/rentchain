@@ -269,6 +269,13 @@ function paymentReadinessChecklist(lease: LandlordActiveLease) {
   return missing.join(" · ");
 }
 
+function paymentSetupReviewLabel(lease: LandlordActiveLease) {
+  const nextAction = lease.paymentReadiness?.requiredNextAction;
+  if (nextAction === "complete_lease_details") return "Complete lease details";
+  if (nextAction === "review_rent_terms") return "Review rent terms";
+  return "Complete payment setup";
+}
+
 function lifecycleNextActionLabel(
   value:
     | "review_expiring_lease"
@@ -636,6 +643,12 @@ export default function LandlordActiveLeasesPage() {
     const primaryDocumentUrl = primaryLeaseDocumentUrl(lease);
     const canOpenPrimaryDocument = canOpenPrimaryLeaseDocumentFromList(lease);
     const scheduleAUrl = scheduleADocumentUrl(lease);
+    const rentPaymentSetupPath = `${summaryPath}?section=rent-payment`;
+    const rentCollectionEnabled = lease.rentPaymentSummary?.paymentRail.enabled === true;
+    const canEnableRentCollection = !rentCollectionEnabled && lease.paymentReadiness?.readinessStatus === "ready_to_configure";
+    const shouldReviewPaymentSetup =
+      view !== "archived" && !rentCollectionEnabled && Boolean(lease.paymentReadiness) && !canEnableRentCollection;
+    const paymentSetupReason = shouldReviewPaymentSetup ? paymentReadinessChecklist(lease) : null;
     return (
       <div style={{ display: "grid", gap: 12 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -726,8 +739,7 @@ export default function LandlordActiveLeasesPage() {
             </button>
           ) : (
             <>
-              {lease.rentPaymentSummary?.paymentRail.enabled !== true &&
-              lease.paymentReadiness?.readinessStatus === "ready_to_configure" ? (
+              {canEnableRentCollection ? (
                 <button
                   type="button"
                   onClick={() => void handleEnableRentCollection(lease)}
@@ -736,6 +748,14 @@ export default function LandlordActiveLeasesPage() {
                 >
                   {paymentRailBusyLeaseId === lease.id ? "Enabling..." : "Enable rent collection"}
                 </button>
+              ) : shouldReviewPaymentSetup ? (
+                <Link
+                  to={rentPaymentSetupPath}
+                  title={paymentSetupReason || lease.paymentReadiness?.readinessDescription || "Review payment setup details."}
+                  style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", textDecoration: "none" }}
+                >
+                  {paymentSetupReviewLabel(lease)}
+                </Link>
               ) : null}
               <button
                 type="button"
@@ -747,6 +767,9 @@ export default function LandlordActiveLeasesPage() {
             </>
           )}
         </div>
+        {paymentSetupReason ? (
+          <div style={{ color: "#64748b", fontSize: 12 }}>Payment setup: {paymentSetupReason}</div>
+        ) : null}
         {view !== "archived" ? <LeaseSigningDashboard leaseId={lease.id} tenantEmail={lease.tenantEmail} /> : null}
       </div>
     );

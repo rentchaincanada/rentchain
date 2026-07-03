@@ -336,6 +336,93 @@ describe("LandlordActiveLeasesPage", () => {
     expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
   });
 
+  it("shows a staged rent-terms action instead of enablement when payment setup is not ready", async () => {
+    mocks.enableLeasePaymentRail.mockClear();
+    mocks.getActiveLeasesForLandlord.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-1",
+          propertyId: "prop-1",
+          propertyName: "Harbour View",
+          unitNumber: "101",
+          monthlyRent: 1850,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          tenantName: "Jane Tenant",
+          tenantEmail: "jane@example.com",
+          documentUrl: "https://example.com/lease.pdf",
+          leaseExecution: {
+            executionStatus: "tenant_signed",
+            executionLabel: "Lease execution in progress",
+            executionDescription: "The lease still needs landlord execution.",
+            requiredNextAction: "landlord_signature",
+            tenantSignatureStatus: "completed",
+            landlordSignatureStatus: "needed",
+            pdfStatus: "generated",
+            completedAt: null,
+          },
+          paymentReadiness: {
+            readinessStatus: "not_ready",
+            readinessLabel: "Review rent terms",
+            readinessDescription:
+              "The lease is visible, but some rent-term details should be reviewed before future payment setup planning.",
+            requiredNextAction: "review_rent_terms",
+            rentTerms: {
+              rentAmountAvailable: true,
+              dueDateAvailable: false,
+              leaseDatesAvailable: true,
+              tenantLinked: true,
+              leaseExecuted: false,
+            },
+            paymentSetup: {
+              processorConnected: false,
+              moneyMovementEnabled: false,
+              storedPaymentMethod: false,
+            },
+          },
+          rentPaymentSummary: {
+            paymentRail: {
+              enabled: false,
+              enabledAt: null,
+              processor: null,
+              blockedReason: "payment_readiness_not_ready",
+            },
+            latestPayment: null,
+            paymentExperience: {
+              history: [],
+              latestStatus: null,
+              retryAvailable: false,
+              receiptSummary: {
+                available: false,
+                label: "No payment summary available yet",
+                amountCents: null,
+                paidAt: null,
+                leaseReference: null,
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Rent collection not enabled/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Due day missing/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Payment setup: Due day missing")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Enable rent collection/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review rent terms" })).toHaveAttribute(
+      "href",
+      "/leases/lease-1/summary?section=rent-payment"
+    );
+    expect(mocks.enableLeasePaymentRail).not.toHaveBeenCalled();
+  });
+
   it("navigates compact workflow buttons to distinct summary section URLs", async () => {
     render(
       <MemoryRouter>
