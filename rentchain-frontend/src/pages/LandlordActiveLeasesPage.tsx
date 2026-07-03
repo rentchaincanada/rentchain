@@ -421,6 +421,7 @@ export default function LandlordActiveLeasesPage() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [selectedCandidate, setSelectedCandidate] = React.useState<LeaseReconciliationCandidate | null>(null);
   const [convertSaving, setConvertSaving] = React.useState(false);
+  const [convertError, setConvertError] = React.useState<string | null>(null);
   const [paymentRailBusyLeaseId, setPaymentRailBusyLeaseId] = React.useState<string | null>(null);
   const [documentBusyLeaseId, setDocumentBusyLeaseId] = React.useState<string | null>(null);
   const [occupantName, setOccupantName] = React.useState("");
@@ -487,6 +488,7 @@ export default function LandlordActiveLeasesPage() {
 
   React.useEffect(() => {
     if (!selectedCandidate) return;
+    setConvertError(null);
     setOccupantName(String(selectedCandidate.occupantName || ""));
     setTenantEmail("");
     setTenantPhone("");
@@ -566,8 +568,9 @@ export default function LandlordActiveLeasesPage() {
   async function handleConvert() {
     if (!selectedCandidate) return;
     setError(null);
+    setConvertError(null);
     if (isInvalidLeaseDateRange(startDate, endDate)) {
-      setError("Lease start date must be on or before the end date.");
+      setConvertError("Lease start date must be on or before the end date.");
       return;
     }
     setConvertSaving(true);
@@ -583,9 +586,10 @@ export default function LandlordActiveLeasesPage() {
         monthlyRent: Number(monthlyRent || 0),
       });
       setSelectedCandidate(null);
+      setConvertError(null);
       await load();
     } catch (err: unknown) {
-      setError(errorMessage(err, "Failed to convert reference to lease."));
+      setConvertError(errorMessage(err, "Failed to convert reference to lease."));
     } finally {
       setConvertSaving(false);
     }
@@ -1151,6 +1155,9 @@ export default function LandlordActiveLeasesPage() {
           onClick={() => !convertSaving && setSelectedCandidate(null)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Convert reference to lease"
             style={{
               width: "min(520px, 96vw)",
               borderRadius: 16,
@@ -1169,6 +1176,22 @@ export default function LandlordActiveLeasesPage() {
             <div style={{ color: "#475569", fontSize: 13 }}>
               This creates a real lease record. The unit reference document stays as supporting context and does not remain the lease truth.
             </div>
+            {convertError ? (
+              <div
+                role="alert"
+                style={{
+                  border: "1px solid #fecaca",
+                  background: "#fef2f2",
+                  color: "#991b1b",
+                  borderRadius: 8,
+                  padding: 10,
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                {convertError}
+              </div>
+            ) : null}
             <label style={{ display: "grid", gap: 4 }}>
               <span>Occupant name</span>
               <input value={occupantName} onChange={(event) => setOccupantName(event.target.value)} />
@@ -1200,11 +1223,25 @@ export default function LandlordActiveLeasesPage() {
             <div style={{ display: "grid", gridTemplateColumns: isNarrowLayout ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: 8 }}>
               <label style={{ display: "grid", gap: 4 }}>
                 <span>Start date</span>
-                <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(event) => {
+                    setStartDate(event.target.value);
+                    setConvertError(null);
+                  }}
+                />
               </label>
               <label style={{ display: "grid", gap: 4 }}>
                 <span>End date</span>
-                <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(event) => {
+                    setEndDate(event.target.value);
+                    setConvertError(null);
+                  }}
+                />
               </label>
               <label style={{ display: "grid", gap: 4 }}>
                 <span>Monthly rent</span>
@@ -1212,7 +1249,14 @@ export default function LandlordActiveLeasesPage() {
               </label>
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <button type="button" onClick={() => setSelectedCandidate(null)} disabled={convertSaving}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCandidate(null);
+                  setConvertError(null);
+                }}
+                disabled={convertSaving}
+              >
                 Cancel
               </button>
               <button type="button" onClick={() => void handleConvert()} disabled={convertSaving}>

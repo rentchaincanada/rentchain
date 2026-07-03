@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LandlordActiveLeasesPage from "./LandlordActiveLeasesPage";
@@ -861,7 +861,8 @@ describe("LandlordActiveLeasesPage", () => {
     fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2026-08-31" } });
     fireEvent.click(screen.getByRole("button", { name: "Create lease" }));
 
-    expect(await screen.findByText("Lease start date must be on or before the end date.")).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Convert reference to lease" });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Lease start date must be on or before the end date.");
     expect(mocks.convertUnitReferenceToLease).not.toHaveBeenCalled();
   });
 

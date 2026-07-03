@@ -1203,6 +1203,46 @@ describe("leaseRoutes GET /active", () => {
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
+  it("does not send a lease available email after occupied-unit conversion without a primary lease document", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      occupantName: "Recovered Tenant",
+      rent: 1850,
+      leaseDocument: {
+        fileName: "lease.pdf",
+        bucket: "bucket-1",
+        path: "leases/supporting-reference.pdf",
+      },
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/reconciliation-candidates/unit-1/convert",
+      body: {
+        tenantEmail: "recovered@example.com",
+        startDate: "2026-05-01",
+        endDate: "2027-04-30",
+        monthlyRent: 1850,
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body?.ok).toBe(true);
+    expect(res.body?.leaseNotification).toEqual(
+      expect.objectContaining({ attempted: false, sent: false, reason: "lease_document_not_available" })
+    );
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
   it("rejects lease creation when the start date is after the end date", async () => {
     seedDoc("properties", "prop-1", {
       landlordId: "landlord-1",

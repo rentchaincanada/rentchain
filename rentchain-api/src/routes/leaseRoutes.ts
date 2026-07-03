@@ -132,7 +132,8 @@ function leaseDateRangeError() {
 }
 
 function tenantSafeLeaseDocumentAvailable(input: Record<string, any> | null | undefined): boolean {
-  return Boolean(String(input?.documentUrl || input?.approvedDocumentUrl || input?.documentRef || "").trim().startsWith("https://"));
+  const primaryDocumentUrl = String(input?.documentUrl || input?.approvedDocumentUrl || input?.documentRef || "").trim();
+  return Boolean(primaryDocumentUrl.startsWith("https://") && !isScheduleADocumentValue(primaryDocumentUrl));
 }
 
 function cents(value: unknown): number | null {
@@ -2375,7 +2376,9 @@ router.post("/reconciliation-candidates/:unitId/convert", requireLandlord, async
       propertyLabel: propertyName,
       unitLabel: unitNumber || null,
       startDate,
-      leaseDocumentAvailable: tenantSafeLeaseDocumentAvailable(firestoreLeaseRecord),
+      // Occupied-unit conversion creates the internal lease record only. Unit/reference
+      // documents are supporting context and must not trigger tenant-facing lease availability.
+      leaseDocumentAvailable: false,
     });
     return res.status(201).json({
       ok: true,
