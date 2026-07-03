@@ -93,6 +93,7 @@ describe("LandlordNav mobile drawer", () => {
     const drawer = screen.getByRole("dialog", { name: "Navigation menu" });
     expect(drawer).toHaveClass("is-open");
     expect(within(drawer).getByRole("button", { name: "Dashboard" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "Operations" })).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "Payments" })).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "Work Orders" })).toBeInTheDocument();
   });
@@ -252,12 +253,14 @@ describe("LandlordNav mobile drawer", () => {
     expect(within(tabbar).getByText("Properties")).toBeInTheDocument();
     expect(within(tabbar).getByText("Applicants")).toBeInTheDocument();
     expect(within(tabbar).getByText("Inbox")).toBeInTheDocument();
+    expect(within(tabbar).getByText("Operations")).toBeInTheDocument();
     expect(within(tabbar).getByText("More")).toBeInTheDocument();
     expect(within(tabbar).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "Dashboard",
       "Properties",
       "Applicants",
       "Inbox",
+      "Operations",
       "More",
     ]);
     expect(within(tabbar).queryByText("Tenants")).not.toBeInTheDocument();
@@ -274,6 +277,13 @@ describe("LandlordNav mobile drawer", () => {
       "Applications",
       "Inbox",
     ]);
+    expect(NAV_ITEMS.find((item) => item.id === "operations")).toEqual(
+      expect.objectContaining({
+        label: "Operations",
+        to: "/operations",
+        showInDrawer: true,
+      })
+    );
   });
 
   it("shows one landlord drawer inbox entry pointing to the unified inbox", async () => {
@@ -305,6 +315,16 @@ describe("LandlordNav mobile drawer", () => {
 
     fireEvent.click(within(tabbar).getByRole("button", { name: "Inbox" }));
     expect(screen.getByTestId("current-path")).toHaveTextContent("/landlord/unified-inbox");
+
+    fireEvent.click(within(tabbar).getByRole("button", { name: "Operations" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/operations");
+  });
+
+  it("marks the Operations tab active on the operations route", () => {
+    renderLandlordNav("/operations");
+
+    const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
+    expect(within(tabbar).getByRole("button", { name: "Operations" })).toHaveClass("active");
   });
 
   it("marks the unified inbox tab active on the landlord unified inbox route", () => {

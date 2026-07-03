@@ -43,7 +43,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Operations",
     to: "/operations",
     icon: ClipboardList,
-    showInDrawer: false,
+    showInDrawer: true,
     requiresLandlordOrAdmin: true,
   },
   {
