@@ -432,7 +432,7 @@ describe("leaseRoutes GET /active", () => {
     expect(res.body?.leases?.[0]).toEqual(
       expect.objectContaining({
         signatureStatus: "not_started",
-        signatureReadinessLabel: "Lease available",
+        signatureReadinessLabel: "Lease signing not started",
         leaseExecution: expect.objectContaining({
           executionStatus: "draft",
           requiredNextAction: "complete_lease_details",

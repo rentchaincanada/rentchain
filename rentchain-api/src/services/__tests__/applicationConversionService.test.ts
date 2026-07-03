@@ -76,7 +76,7 @@ describe("applicationConversionService", () => {
     process.env.PUBLIC_APP_URL = "https://www.rentchain.test";
   });
 
-  it("converts rentalApplications records and creates a hashed tenant invite", async () => {
+  it("converts rentalApplications records and creates a hashed tenant invite without emailing the tenant", async () => {
     ensureCollection("rentalApplications").set("app-1", {
       id: "app-1",
       landlordId: "landlord-1",
@@ -110,8 +110,8 @@ describe("applicationConversionService", () => {
     });
 
     expect(result.inviteUrl).toContain("/tenant/invite/");
-    expect(result.inviteEmailed).toBe(true);
-    expect(sendEmailMock).toHaveBeenCalledWith(expect.objectContaining({ to: "jamie@example.com" }));
+    expect(result.inviteEmailed).toBe(false);
+    expect(sendEmailMock).not.toHaveBeenCalled();
     const invites = Array.from(ensureCollection("tenancy_invites").values());
     expect(invites).toHaveLength(1);
     expect(invites[0]?.token_hash).toBeTruthy();
@@ -132,6 +132,11 @@ describe("applicationConversionService", () => {
     expect(ensureCollection("units").get("unit-1")).toEqual(
       expect.objectContaining({ status: "vacant", occupancyStatus: "vacant" })
     );
+    expect(ensureCollection("tenantNotifications").size).toBe(0);
+    expect(ensureCollection("tenantMessages").size).toBe(0);
+    expect(ensureCollection("messages").size).toBe(0);
+    expect(ensureCollection("emailOutbox").size).toBe(0);
+    expect(ensureCollection("outbox").size).toBe(0);
   });
 
   it("does not create another tenant when conversion is repeated for the same application", async () => {
@@ -162,5 +167,6 @@ describe("applicationConversionService", () => {
     expect(second).toMatchObject({ tenantId: first.tenantId, alreadyConverted: true });
     expect(ensureCollection("tenants").size).toBe(1);
     expect(ensureCollection("tenancy_invites").size).toBe(1);
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 });

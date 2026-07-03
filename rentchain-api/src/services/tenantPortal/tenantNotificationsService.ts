@@ -204,11 +204,18 @@ export async function listTenantNotificationFeed(params: {
 
   if (lease) {
     const id = safeNotificationId("lease", lease.leaseId, "current");
+    const tenantSafeLeaseReady =
+      lease.leasePdfStatus === "available" ||
+      lease.signatureStatus === "awaiting_tenant_signature" ||
+      lease.signatureStatus === "awaiting_landlord_signature" ||
+      lease.signatureStatus === "signed";
     items.push({
       id,
       type: "lease",
-      title: "Lease summary available",
-      summary: lease.status ? `Your lease is currently ${lease.status}.` : "Your lease summary is available in the tenant workspace.",
+      title: tenantSafeLeaseReady ? "Lease document available" : "Lease setup in progress",
+      summary: tenantSafeLeaseReady
+        ? "A tenant-safe lease document or signing step is available in the tenant workspace."
+        : "A lease record is visible, but no tenant-safe lease document or signing step is available yet.",
       createdAt: lease.startDate || new Date().toISOString(),
       status: lease.status && /active|current/i.test(lease.status) ? "success" : "info",
       relatedPath: "/tenant/lease",
