@@ -508,6 +508,41 @@ button,
   color: #fff;
 }
 
+.analytics-kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+}
+
+.analytics-kpi-card {
+  min-width: 0;
+}
+
+.analytics-kpi-card__label {
+  overflow-wrap: anywhere;
+}
+
+.analytics-kpi-card__value {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  line-height: 1.15;
+}
+
+.analytics-section-metric-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: start;
+}
+
+.analytics-section-metric-row__body {
+  min-width: 0;
+}
+
+.analytics-section-metric-row__value {
+  max-width: 100%;
+  text-align: right;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
 .analytics-print-summary .printKpis {
   grid-template-columns: repeat(3, 1fr);
 }
@@ -528,6 +563,20 @@ button,
 
   .analytics-workspace-header__top {
     margin-bottom: 12px;
+  }
+
+  .analytics-kpi-grid,
+  .analytics-workspace-summary-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .analytics-section-metric-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .analytics-section-metric-row__value {
+    text-align: left;
   }
 }
 

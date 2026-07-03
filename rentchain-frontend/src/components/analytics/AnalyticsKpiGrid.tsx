@@ -18,11 +18,11 @@ type Props = {
 export function AnalyticsKpiGrid({ items, periodLabel = "period" }: Props) {
   return (
     <div
+      className="analytics-kpi-grid"
       data-testid="analytics-kpi-grid"
       style={{
         display: "grid",
         gap: 12,
-        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
       }}
     >
       {items.map((item) => (
