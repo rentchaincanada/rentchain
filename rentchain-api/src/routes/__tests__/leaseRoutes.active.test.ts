@@ -1283,7 +1283,7 @@ describe("leaseRoutes GET /active", () => {
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
-  it("does not send lease creation email when recipient context is missing", async () => {
+  it("does not inspect recipient context or send availability email during internal lease creation", async () => {
     seedDoc("properties", "prop-1", {
       landlordId: "landlord-1",
       name: "Harbour View",
@@ -1313,7 +1313,7 @@ describe("leaseRoutes GET /active", () => {
 
     expect(res.status).toBe(201);
     expect(res.body?.leaseNotification).toEqual(
-      expect.objectContaining({ attempted: false, sent: false, reason: "tenant_email_missing" })
+      expect.objectContaining({ attempted: false, sent: false, reason: "lease_document_not_available" })
     );
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
