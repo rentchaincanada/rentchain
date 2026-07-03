@@ -508,6 +508,13 @@ describe("LandlordAnalyticsPage", () => {
     );
 
     expect(await screen.findByText(/Analytics alerts/i)).toBeInTheDocument();
+    expect(macShellSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Analytics",
+        showTopNav: false,
+        maxWidth: "min(100%, 1500px)",
+      })
+    );
     const workspacePage = container.querySelector(".analytics-workspace-page");
     expect(workspacePage).toBeTruthy();
 
@@ -532,6 +539,7 @@ describe("LandlordAnalyticsPage", () => {
     expect(screen.getByRole("tab", { name: "Attention-worthy insights" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Portfolio-level execution state summary" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Review leases/i })).toHaveAttribute("href", "/portfolio-health");
+    expect(container.querySelector(".analytics-workspace-summary-grid")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("tab", { name: "Portfolio benchmarking" }));
     expect(screen.getByRole("heading", { name: /Portfolio benchmarking/i })).toBeInTheDocument();
