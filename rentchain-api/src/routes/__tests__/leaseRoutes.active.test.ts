@@ -1086,6 +1086,7 @@ describe("leaseRoutes GET /active", () => {
       })
     );
     expect(JSON.stringify(res.body)).not.toContain("lease-documents/");
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it("does not use app-domain lease PDF paths as document URL fallback", async () => {

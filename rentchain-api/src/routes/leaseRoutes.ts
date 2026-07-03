@@ -131,11 +131,6 @@ function leaseDateRangeError() {
   };
 }
 
-function tenantSafeLeaseDocumentAvailable(input: Record<string, any> | null | undefined): boolean {
-  const primaryDocumentUrl = String(input?.documentUrl || input?.approvedDocumentUrl || input?.documentRef || "").trim();
-  return Boolean(primaryDocumentUrl.startsWith("https://") && !isScheduleADocumentValue(primaryDocumentUrl));
-}
-
 function cents(value: unknown): number | null {
   const n = Number(value);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
@@ -2823,7 +2818,9 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       propertyLabel: null,
       unitLabel: String(draft?.unitLabel || draft?.unitNumber || "").trim() || null,
       startDate,
-      leaseDocumentAvailable: tenantSafeLeaseDocumentAvailable(leaseRecord),
+      // Draft activation creates or updates the internal lease record. Tenant-facing
+      // availability is withheld until an explicit tenant-ready document/signing flow exists.
+      leaseDocumentAvailable: false,
     });
 
     return res.status(200).json({

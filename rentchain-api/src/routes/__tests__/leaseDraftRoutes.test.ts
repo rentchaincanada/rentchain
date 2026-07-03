@@ -302,6 +302,11 @@ describe("lease draft routes", () => {
       status: "generated",
       updatedAt: 100,
     });
+    await fakeDb.collection("tenants").doc("tenant-1").set({
+      landlordId: "landlord-1",
+      fullName: "Tenant One",
+      email: "tenant@example.com",
+    });
     await fakeDb.collection("leaseSnapshots").doc("snapshot-old").set({
       ...payload,
       landlordId: "landlord-1",
@@ -321,6 +326,10 @@ describe("lease draft routes", () => {
 
     const activateRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
     expect(activateRes.status).toBe(200);
+    expect(activateRes.body?.leaseNotification).toEqual(
+      expect.objectContaining({ attempted: false, sent: false, reason: "lease_document_not_available" })
+    );
+    expect(sendEmailMock).not.toHaveBeenCalled();
     expect(activateRes.body?.lease).toEqual(
       expect.objectContaining({
         documentUrl: "https://example.invalid/new-lease.pdf",
