@@ -302,6 +302,41 @@ describe("UnifiedInboxPage", () => {
     expect(screen.getByRole("button", { name: /Pipe leak reported/i })).toHaveTextContent("Read");
   });
 
+  it("keeps the inbox usable when landlord read-state persistence fails", async () => {
+    const unreadRecord = record({
+      id: "maintenance-priority",
+      audienceRole: "landlord",
+      sourceKind: "landlord.maintenance",
+      title: "Pipe leak reported",
+      body: "Maintenance priority at Unit 204",
+      priority: "high",
+      status: "unread",
+      readAt: null,
+    });
+    mocks.fetchUnifiedInbox.mockResolvedValue({
+      ok: true,
+      role: "landlord",
+      items: [unreadRecord],
+      records: [unreadRecord],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+    mocks.markUnifiedInboxRecordRead.mockRejectedValueOnce(new Error("Not Found"));
+
+    render(<UnifiedInboxPage role="landlord" />);
+
+    expect(await screen.findByRole("tab", { name: /Unread 1/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Pipe leak reported/i }));
+
+    await waitFor(() => expect(mocks.markUnifiedInboxRecordRead).toHaveBeenCalledWith("landlord", "maintenance-priority"));
+    expect(screen.queryByText("We couldn't load this inbox.")).not.toBeInTheDocument();
+    expect(screen.getByText("Read status was not saved.")).toBeInTheDocument();
+    expect(screen.getByText("Not Found")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Unread 1/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Pipe leak reported/i })).toHaveTextContent("Unread");
+  });
+
   it("shows a safe error state when the inbox cannot load", async () => {
     mocks.fetchUnifiedInbox.mockRejectedValue(new Error("Unable to load inbox"));
 

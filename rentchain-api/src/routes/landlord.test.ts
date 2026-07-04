@@ -320,6 +320,21 @@ describe("landlord unified inbox route", () => {
     expectSafeResponse(after.body);
   });
 
+  it("registers the read-state route expected by the /api/landlord mount", async () => {
+    const router = (await import("./landlordInboxRoutes")).default;
+    const registeredRoutes = (router as any).stack
+      .filter((layer: any) => layer?.route)
+      .map((layer: any) => ({
+        path: layer.route.path,
+        methods: layer.route.methods,
+      }));
+
+    expect(registeredRoutes).toContainEqual({
+      path: "/inbox/:recordId/read",
+      methods: expect.objectContaining({ post: true }),
+    });
+  });
+
   it("rejects cross-landlord property access before deriving inbox data", async () => {
     const router = (await import("./landlordInboxRoutes")).default;
     const res = await invokeRouter(router, {

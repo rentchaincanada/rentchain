@@ -89,6 +89,7 @@ export default function UnifiedInboxPage({ role }: Props) {
   const [data, setData] = React.useState<UnifiedInboxResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [readError, setReadError] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<InboxTab>("all");
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = React.useState<PriorityFilter>("all");
@@ -99,6 +100,7 @@ export default function UnifiedInboxPage({ role }: Props) {
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
+    setReadError(null);
     try {
       const response = await fetchUnifiedInbox(role);
       setData(response);
@@ -163,11 +165,12 @@ export default function UnifiedInboxPage({ role }: Props) {
         return;
       }
       try {
+        setReadError(null);
         const response = await markUnifiedInboxRecordRead(role, record.id);
         const readAt = response.record.readAt || new Date().toISOString();
         setLocalReadAtById((current) => ({ ...current, [record.id]: readAt }));
       } catch (err) {
-        setError(errorMessage(err));
+        setReadError(errorMessage(err));
       }
     },
     [localReadAtById, role]
@@ -217,6 +220,13 @@ export default function UnifiedInboxPage({ role }: Props) {
 
       {!loading && !error ? (
         <>
+          {readError ? (
+            <Card elevated style={{ borderColor: colors.borderStrong, color: text.secondary, display: "grid", gap: spacing.xs }}>
+              <div style={{ color: text.primary, fontWeight: 800 }}>Read status was not saved.</div>
+              <div>{readError}</div>
+            </Card>
+          ) : null}
+
           <Card style={{ display: "grid", gap: spacing.md }}>
             <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }} role="tablist" aria-label="Inbox views">
               {TABS.map((tab) => {
