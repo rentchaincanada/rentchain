@@ -577,17 +577,13 @@ function drawTable(
   title: string,
   rows: Array<{ label: string; value: string }>
 ) {
-  doc.moveDown(0.8);
-  if (doc.y > doc.page.height - doc.page.margins.bottom - 80) {
-    doc.addPage();
-  }
-  doc.font("Helvetica-Bold").fontSize(12).fillColor("#0f172a").text(title);
-  doc.moveDown(0.3);
   const startX = doc.page.margins.left;
   const tableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const labelWidth = Math.min(190, tableWidth * 0.38);
   const valueWidth = tableWidth - labelWidth;
-  for (const row of rows) {
+  const pageBottom = () => doc.page.height - doc.page.margins.bottom;
+  const maxRowHeight = Math.max(72, Math.min(132, pageBottom() - doc.page.margins.top - 24));
+  const estimateRowHeight = (row: { label: string; value: string }) => {
     const labelHeight = doc.heightOfString(row.label, {
       width: labelWidth - 12,
       align: "left",
@@ -596,8 +592,21 @@ function drawTable(
       width: valueWidth - 12,
       align: "left",
     });
-    const rowHeight = Math.max(labelHeight, valueHeight, 16) + 10;
-    if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+    return Math.min(Math.max(labelHeight, valueHeight, 16) + 10, maxRowHeight);
+  };
+  const firstRowHeight = rows[0] ? estimateRowHeight(rows[0]) : 0;
+  const sectionGap = 10;
+  const titleBlockHeight = 28;
+  if (doc.y + sectionGap + titleBlockHeight + firstRowHeight > pageBottom()) {
+    doc.addPage();
+  } else {
+    doc.moveDown(0.8);
+  }
+  doc.font("Helvetica-Bold").fontSize(12).fillColor("#0f172a").text(title);
+  doc.moveDown(0.3);
+  for (const row of rows) {
+    const rowHeight = estimateRowHeight(row);
+    if (doc.y + rowHeight > pageBottom()) {
       doc.addPage();
     }
     const y = doc.y;
@@ -610,12 +619,20 @@ function drawTable(
       .font("Helvetica-Bold")
       .fontSize(10)
       .fillColor("#374151")
-      .text(row.label, startX + 6, y + 5, { width: labelWidth - 12 });
+      .text(row.label, startX + 6, y + 5, {
+        width: labelWidth - 12,
+        height: rowHeight - 10,
+        ellipsis: true,
+      });
     doc
       .font("Helvetica")
       .fontSize(10)
       .fillColor("#0f172a")
-      .text(row.value, startX + labelWidth + 6, y + 5, { width: valueWidth - 12 });
+      .text(row.value, startX + labelWidth + 6, y + 5, {
+        width: valueWidth - 12,
+        height: rowHeight - 10,
+        ellipsis: true,
+      });
     doc.y = y + rowHeight;
   }
 }

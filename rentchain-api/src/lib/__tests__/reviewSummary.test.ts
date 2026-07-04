@@ -132,5 +132,7 @@ describe("review summary export contract", () => {
     expect(rendered).toContain("Call references before approval.");
     expect(rendered).not.toContain("raw-app-id-123");
     expect(rendered).not.toContain("provider-order-raw-id");
+    expect(rendered).not.toContain("Application ID");
+    expect(rendered).not.toContain("Screening reference");
   });
 });
