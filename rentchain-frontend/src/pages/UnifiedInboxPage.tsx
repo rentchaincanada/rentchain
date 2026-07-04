@@ -2,6 +2,7 @@ import React from "react";
 import { RefreshCcw, Search } from "lucide-react";
 import {
   fetchUnifiedInbox,
+  markUnifiedInboxRecordRead,
   type UnifiedInboxPriority,
   type UnifiedInboxRecord,
   type UnifiedInboxResponse,
@@ -88,6 +89,7 @@ export default function UnifiedInboxPage({ role }: Props) {
   const [data, setData] = React.useState<UnifiedInboxResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [readError, setReadError] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<InboxTab>("all");
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = React.useState<PriorityFilter>("all");
@@ -98,6 +100,7 @@ export default function UnifiedInboxPage({ role }: Props) {
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
+    setReadError(null);
     try {
       const response = await fetchUnifiedInbox(role);
       setData(response);
@@ -152,14 +155,26 @@ export default function UnifiedInboxPage({ role }: Props) {
   }, [filteredRecords, openedRecordId, safeRecords]);
   const unreadCount = safeRecords.filter((record) => record.status === "unread").length;
   const priorityCount = safeRecords.filter((record) => record.priority === "critical" || record.priority === "high").length;
-  const markRecordRead = React.useCallback((record: UnifiedInboxRecord) => {
-    setOpenedRecordId(record.id);
-    if (record.status !== "unread" && record.readAt) return;
-    setLocalReadAtById((current) => {
-      if (current[record.id]) return current;
-      return { ...current, [record.id]: new Date().toISOString() };
-    });
-  }, []);
+  const markRecordRead = React.useCallback(
+    async (record: UnifiedInboxRecord) => {
+      setOpenedRecordId(record.id);
+      if (record.status !== "unread" && record.readAt) return;
+      if (localReadAtById[record.id]) return;
+      if (role !== "landlord") {
+        setLocalReadAtById((current) => ({ ...current, [record.id]: new Date().toISOString() }));
+        return;
+      }
+      try {
+        setReadError(null);
+        const response = await markUnifiedInboxRecordRead(role, record.id);
+        const readAt = response.record.readAt || new Date().toISOString();
+        setLocalReadAtById((current) => ({ ...current, [record.id]: readAt }));
+      } catch (err) {
+        setReadError(errorMessage(err));
+      }
+    },
+    [localReadAtById, role]
+  );
   const resetFilterContext = React.useCallback(() => {
     setOpenedRecordId(null);
   }, []);
@@ -205,6 +220,13 @@ export default function UnifiedInboxPage({ role }: Props) {
 
       {!loading && !error ? (
         <>
+          {readError ? (
+            <Card elevated style={{ borderColor: colors.borderStrong, color: text.secondary, display: "grid", gap: spacing.xs }}>
+              <div style={{ color: text.primary, fontWeight: 800 }}>Read status was not saved.</div>
+              <div>{readError}</div>
+            </Card>
+          ) : null}
+
           <Card style={{ display: "grid", gap: spacing.md }}>
             <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }} role="tablist" aria-label="Inbox views">
               {TABS.map((tab) => {

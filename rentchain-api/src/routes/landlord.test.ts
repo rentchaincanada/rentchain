@@ -30,6 +30,10 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
         const entry = collection.get(id);
         return { id, exists: Boolean(entry), data: () => entry?.data };
       },
+      set: async (value: any, options?: { merge?: boolean }) => {
+        const current = collection.get(id)?.data || {};
+        collection.set(id, { id, data: options?.merge ? { ...current, ...value } : value });
+      },
     };
   }
 
@@ -87,20 +91,20 @@ vi.mock("../middleware/requireLandlord", () => ({
   },
 }));
 
-async function invokeRouter(router: any, options: { url: string; user?: any }) {
+async function invokeRouter(router: any, options: { url: string; user?: any; method?: string; body?: any }) {
   return await new Promise<{ status: number; body: any }>((resolve, reject) => {
     const [path, queryString] = options.url.split("?");
     const query = new URLSearchParams(queryString || "");
     mockUser = options.user ?? null;
     const req: any = {
-      method: "GET",
+      method: options.method || "GET",
       url: options.url,
       originalUrl: options.url,
       path,
       query: Object.fromEntries(query.entries()),
       params: {},
       headers: {},
-      body: {},
+      body: options.body || {},
     };
     const res: any = {
       statusCode: 200,
@@ -279,6 +283,56 @@ describe("landlord unified inbox route", () => {
       propertyId: "prop-1",
     });
     expectSafeResponse(res.body);
+  });
+
+  it("persists read state for safe landlord inbox records across refetches", async () => {
+    const router = (await import("./landlordInboxRoutes")).default;
+    const user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord" };
+
+    const before = await invokeRouter(router, { url: "/inbox?limit=20", user });
+    expect(before.status).toBe(200);
+    const target = before.body.items.find((item: any) => item.status === "unread");
+    expect(target?.id).toMatch(/^inbox_v1_/);
+
+    const read = await invokeRouter(router, {
+      method: "POST",
+      url: `/inbox/${target.id}/read`,
+      user,
+    });
+    expect(read.status).toBe(200);
+    expect(read.body.record).toMatchObject({
+      id: target.id,
+      status: "read",
+      readAt: expect.any(String),
+    });
+
+    const after = await invokeRouter(router, { url: "/inbox?limit=20", user });
+    expect(after.status).toBe(200);
+    const refreshed = after.body.items.find((item: any) => item.id === target.id);
+    expect(refreshed).toMatchObject({
+      id: target.id,
+      status: "read",
+      readAt: read.body.record.readAt,
+    });
+    expect(after.body.items.filter((item: any) => item.status === "unread")).toHaveLength(
+      before.body.items.filter((item: any) => item.status === "unread").length - 1
+    );
+    expectSafeResponse(after.body);
+  });
+
+  it("registers the read-state route expected by the /api/landlord mount", async () => {
+    const router = (await import("./landlordInboxRoutes")).default;
+    const registeredRoutes = (router as any).stack
+      .filter((layer: any) => layer?.route)
+      .map((layer: any) => ({
+        path: layer.route.path,
+        methods: layer.route.methods,
+      }));
+
+    expect(registeredRoutes).toContainEqual({
+      path: "/inbox/:recordId/read",
+      methods: expect.objectContaining({ post: true }),
+    });
   });
 
   it("rejects cross-landlord property access before deriving inbox data", async () => {
