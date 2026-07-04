@@ -225,3 +225,76 @@
     display: block;
   }
 }
+
+@media print {
+  .lease-ledger-print-root {
+    color: #0f172a !important;
+    font-size: 11px !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-page {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-page > * {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 10px;
+  }
+
+  .lease-ledger-print-root .lease-ledger-actions,
+  .lease-ledger-print-root .lease-ledger-csv-card,
+  .lease-ledger-print-root input,
+  .lease-ledger-print-root select,
+  .lease-ledger-print-root textarea,
+  .lease-ledger-print-root button {
+    display: none !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-obligations-table,
+  .lease-ledger-print-root .lease-ledger-entries-table {
+    display: none !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-obligation-cards,
+  .lease-ledger-print-root .lease-ledger-entry-cards {
+    display: grid !important;
+    gap: 8px !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-obligation-card,
+  .lease-ledger-print-root .lease-ledger-entry-card,
+  .lease-ledger-print-root .lease-ledger-decision-card,
+  .lease-ledger-print-root .lease-ledger-next-action,
+  .lease-ledger-print-root .lease-ledger-decision-summary > div {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border-color: #cbd5e1 !important;
+    box-shadow: none !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-obligation-card-grid,
+  .lease-ledger-print-root .lease-ledger-entry-card-grid,
+  .lease-ledger-print-root .lease-ledger-decision-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-next-action {
+    display: grid !important;
+    gap: 6px !important;
+  }
+
+  .lease-ledger-print-root *,
+  .lease-ledger-print-root *::before,
+  .lease-ledger-print-root *::after {
+    max-width: 100% !important;
+    overflow: visible !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+  }
+}

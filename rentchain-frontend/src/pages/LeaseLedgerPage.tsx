@@ -14,7 +14,13 @@ import {
 } from "../api/leaseLedgerApi";
 import { downloadAuthenticatedExport } from "../api/exportDownload";
 import { patchDecisionAction } from "@/api/decisionApi";
-import { triggerDocumentDownload } from "../lib/documentRendering";
+import {
+  createPrintRoot,
+  nextRenderFrame,
+  PRINT_MODE_ATTRIBUTE,
+  PRINT_ROOT_ACTIVE_ATTRIBUTE,
+  triggerDocumentDownload,
+} from "../lib/documentRendering";
 import {
   archiveLeaseRecord,
   createLeaseNote,
@@ -679,6 +685,7 @@ const modalCard: React.CSSProperties = {
 
 export default function LeaseLedgerPage() {
   const { leaseId = "" } = useParams();
+  const printSourceRef = React.useRef<HTMLDivElement | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [loading, setLoading] = useState(true);
@@ -939,14 +946,49 @@ export default function LeaseLedgerPage() {
 
   async function printOrExportLedgerPdf() {
     if (typeof window !== "undefined" && typeof window.print === "function") {
-      window.print();
+      const printableSource = printSourceRef.current;
+      if (!printableSource || typeof document === "undefined") {
+        window.print();
+        return;
+      }
+
+      const body = document.body;
+      const previousMode = body.getAttribute(PRINT_MODE_ATTRIBUTE);
+      const printableRoot = createPrintRoot(document);
+      printableRoot.classList.add("lease-ledger-print-root");
+      printableRoot.appendChild(printableSource.cloneNode(true));
+      let cleanedUp = false;
+
+      const cleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        window.removeEventListener("afterprint", cleanup);
+        printableRoot.remove();
+        body.removeAttribute(PRINT_ROOT_ACTIVE_ATTRIBUTE);
+        if (previousMode) {
+          body.setAttribute(PRINT_MODE_ATTRIBUTE, previousMode);
+        } else {
+          body.removeAttribute(PRINT_MODE_ATTRIBUTE);
+        }
+      };
+
+      try {
+        body.setAttribute(PRINT_MODE_ATTRIBUTE, "lease-ledger");
+        body.setAttribute(PRINT_ROOT_ACTIVE_ATTRIBUTE, "true");
+        body.appendChild(printableRoot);
+        window.addEventListener("afterprint", cleanup, { once: true });
+        await nextRenderFrame(window);
+        window.print();
+      } finally {
+        window.setTimeout(cleanup, 250);
+      }
       return;
     }
     await exportLedger("pdf");
   }
 
   return (
-    <div className="lease-ledger-page">
+    <div className="lease-ledger-page" ref={printSourceRef}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "1.2rem" }}>Lease Ledger</h1>
