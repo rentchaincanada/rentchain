@@ -826,7 +826,20 @@ describe("LeaseLedgerPage", () => {
   });
 
   it("opens browser print preview for lease ledger PDF output", async () => {
-    const printSpy = vi.spyOn(window, "print").mockImplementation(() => {});
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => {
+      const printRoot = document.querySelector('[data-print-root="true"].lease-ledger-print-root');
+      expect(document.body.getAttribute("data-print-root-active")).toBe("true");
+      expect(document.body.getAttribute("data-print-mode")).toBe("lease-ledger");
+      expect(printRoot?.textContent).toContain("Lease Ledger");
+      expect(printRoot?.textContent).toContain("Harbour View · Unit 101");
+      expect(printRoot?.textContent).toContain("Charges");
+      expect(printRoot?.textContent).toContain("Payment obligations");
+      expect(printRoot?.textContent).toContain("Financial delinquency summary");
+      expect(printRoot?.textContent).toContain("Decisions");
+      expect(printRoot?.querySelector('[aria-label="Ledger entry cards"]')).not.toBeNull();
+      expect(printRoot?.querySelector('[aria-label="Payment obligation cards"]')).not.toBeNull();
+      window.dispatchEvent(new Event("afterprint"));
+    });
 
     render(
       <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
@@ -839,11 +852,13 @@ describe("LeaseLedgerPage", () => {
     await screen.findAllByText("Harbour View · Unit 101");
     fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
 
-    expect(printSpy).toHaveBeenCalled();
+    await waitFor(() => expect(printSpy).toHaveBeenCalled());
     expect(global.fetch).not.toHaveBeenCalledWith(
       expect.stringContaining("/api/leases/lease-1/ledger/export.pdf"),
       expect.anything()
     );
+    expect(document.querySelector('[data-print-root="true"].lease-ledger-print-root')).not.toBeInTheDocument();
+    expect(document.body.hasAttribute("data-print-root-active")).toBe(false);
     printSpy.mockRestore();
   });
 
