@@ -4553,6 +4553,203 @@ describe("tenantPortalRoutes foundation", () => {
     expect(serialized).not.toContain("unit-1");
   });
 
+  it("keeps the RC1 landlord-to-tenant reflection fixture coherent across tenant surfaces", async () => {
+    ensureCollection("applications").clear();
+    ensureCollection("ledgerAttachments").clear();
+    ensureCollection("tenantNotifications").clear();
+    ensureCollection("tenantMessages").clear();
+    ensureCollection("messages").clear();
+    ensureCollection("emailOutbox").clear();
+    ensureCollection("outbox").clear();
+    ensureCollection("rentalApplications").set("rc1-app", {
+      id: "rc1-app",
+      landlordId: "landlord-1",
+      applicantEmail: "tenant@example.com",
+      applicant: {
+        firstName: "Taylor",
+        lastName: "Tenant",
+        email: "tenant@example.com",
+      },
+      tenantId: "tenant-1",
+      convertedTenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      status: "converted",
+      applicantFullName: "Taylor Tenant",
+      applicantPhone: "902-555-0100",
+      createdAt: "2026-06-01T00:00:00.000Z",
+      updatedAt: "2026-06-02T00:00:00.000Z",
+      internalReviewNotes: "landlord-only application note",
+    });
+    ensureCollection("leases").set("lease-1", {
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      status: "active",
+      startDate: "2026-09-01",
+      endDate: "2027-08-31",
+      monthlyRent: 1500,
+      dueDay: null,
+      documentUrl: null,
+      approvedDocumentUrl: null,
+      documentRef: null,
+      leaseDocument: null,
+      scheduleADocument: null,
+      paymentRailEnabled: false,
+      paymentRailProcessor: null,
+      tenantSignature: null,
+      tenantSignedAt: null,
+      landlordSignature: null,
+      landlordSignedAt: null,
+      fullyExecutedAt: null,
+      fullySignedAt: null,
+      signatureCompletedAt: null,
+      confidentialNotes: "landlord-only lease note",
+    });
+    ensureCollection("leaseSigningRequests").set("rc1-signing-request", {
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      providerId: "dropbox_sign",
+      providerRequestId: "raw-provider-request-id",
+      providerRequestRef: "provider-ref-safe",
+      currentSigningStatus: "signed",
+      currentStatusAt: "2026-07-03T10:00:00.000Z",
+      createdAt: "2026-07-03T09:00:00.000Z",
+    });
+    ensureCollection("leaseSigningEvents").set("rc1-signing-event", {
+      requestId: "rc1-signing-request",
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      type: "signed",
+      occurredAt: "2026-07-03T10:00:00.000Z",
+      actorRole: "provider",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-1",
+        email: "tenant@example.com",
+        role: "tenant",
+        tenantId: "tenant-1",
+      }),
+    };
+
+    const profileRes = await invokeRouter(router, { method: "GET", url: "/profile", headers });
+    const workspaceRes = await invokeRouter(router, { method: "GET", url: "/workspace", headers });
+    const leaseRes = await invokeRouter(router, { method: "GET", url: "/lease", headers });
+    const attachmentsRes = await invokeRouter(router, { method: "GET", url: "/attachments", headers });
+    const checkoutRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/leases/lease-1/payments/checkout",
+      headers,
+    });
+
+    expect(profileRes.status).toBe(200);
+    expect(profileRes.body?.data?.profile?.application).toEqual(
+      expect.objectContaining({
+        applicationId: expect.stringMatching(/^application-ref-/),
+        status: "converted",
+      })
+    );
+    expect(profileRes.body?.data?.profile?.application?.applicationId).not.toBe("rc1-app");
+    expect(profileRes.body?.data?.profile?.lease).toEqual(
+      expect.objectContaining({
+        status: "active",
+        monthlyRent: 1500,
+        startDate: "2026-09-01",
+        endDate: "2027-08-31",
+        leaseDocumentContext: expect.objectContaining({
+          documentStatus: "missing",
+          displayLabel: "No lease document available yet",
+        }),
+      })
+    );
+
+    expect(workspaceRes.status).toBe(200);
+    expect(workspaceRes.body?.data?.lease?.paymentReadiness).toEqual(
+      expect.objectContaining({
+        readinessStatus: "not_ready",
+        readinessLabel: "Review rent terms",
+        requiredNextAction: "review_rent_terms",
+        rentTerms: expect.objectContaining({
+          rentAmountAvailable: true,
+          dueDateAvailable: false,
+          leaseDatesAvailable: true,
+          tenantLinked: true,
+          leaseExecuted: true,
+        }),
+      })
+    );
+    expect(workspaceRes.body?.data?.lease?.rentPaymentSummary?.paymentRail).toEqual(
+      expect.objectContaining({
+        enabled: false,
+      })
+    );
+
+    expect(leaseRes.status).toBe(200);
+    expect(leaseRes.body?.data).toEqual(
+      expect.objectContaining({
+        providerSigningStatus: "signed",
+        leasePdfStatus: "pending",
+        leaseDocumentContext: expect.objectContaining({
+          documentStatus: "pending",
+          displayLabel: "Signed lease document pending",
+          source: "lease_signing_signed_without_document",
+          warnings: ["Signing is complete, but no tenant-safe signed lease document link is available yet."],
+        }),
+        leaseExecution: expect.objectContaining({
+          executionStatus: "fully_executed",
+          executionLabel: "Lease fully executed",
+        }),
+        paymentReadiness: expect.objectContaining({
+          readinessStatus: "not_ready",
+          readinessLabel: "Review rent terms",
+          requiredNextAction: "review_rent_terms",
+        }),
+      })
+    );
+    expect(leaseRes.body?.data?.rentPaymentSummary?.paymentRail?.enabled).toBe(false);
+
+    expect(attachmentsRes.status).toBe(200);
+    expect(attachmentsRes.body?.leaseDocumentContext).toEqual(
+      expect.objectContaining({
+        documentStatus: "pending",
+        displayLabel: "Signed lease document pending",
+      })
+    );
+    expect(attachmentsRes.body?.data?.some((item: any) => item.title === "Signed lease document")).toBe(false);
+
+    expect(checkoutRes.status).toBe(400);
+    expect(checkoutRes.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: "TENANT_RENT_PAYMENT_BLOCKED",
+        detail: "payment_rail_not_enabled",
+      })
+    );
+
+    expect(ensureCollection("tenantNotifications").size).toBe(0);
+    expect(ensureCollection("tenantMessages").size).toBe(0);
+    expect(ensureCollection("messages").size).toBe(0);
+    expect(ensureCollection("emailOutbox").size).toBe(0);
+    expect(ensureCollection("outbox").size).toBe(0);
+
+    const serialized = JSON.stringify({
+      profile: profileRes.body?.data,
+      workspace: workspaceRes.body?.data,
+      lease: leaseRes.body?.data,
+      attachments: attachmentsRes.body,
+    });
+    expect(serialized).not.toContain("raw-provider-request-id");
+    expect(serialized).not.toContain("rc1-signing-request");
+    expect(serialized).not.toContain("landlord-only application note");
+    expect(serialized).not.toContain("landlord-only lease note");
+  });
+
   it("returns tenant-safe access visibility from existing share records", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {
