@@ -404,6 +404,129 @@ describe("ApplicationsPage", () => {
   });
 
   it("provides a printable application summary action for the selected application", async () => {
+    mocks.fetchRentalApplication.mockResolvedValue({
+      id: "app-1",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      applicationLinkId: "link-1",
+      createdAt: Date.now(),
+      submittedAt: Date.now(),
+      updatedAt: Date.now(),
+      status: "SUBMITTED",
+      applicant: { firstName: "Jamie", lastName: "Stone", email: "jamie@example.com" },
+      residentialHistory: [
+        {
+          address: "12 North Street",
+          durationMonths: 18,
+          rentAmountCents: 180000,
+          landlordName: "Morgan Lee",
+          landlordPhone: "555-555-0123",
+          reasonForLeaving: "Larger unit needed",
+        },
+      ],
+      applicantProfile: {
+        currentAddress: {
+          line1: "12 North Street",
+          city: "Halifax",
+          provinceState: "NS",
+          postalCode: "B3H 1A1",
+          country: "CA",
+        },
+        currentRentAmountCents: 180000,
+        employment: {
+          employerName: "Harbour Labs",
+          jobTitle: "Designer",
+          incomeAmountCents: 7800000,
+          incomeFrequency: "annual",
+          monthsAtJob: 24,
+        },
+        workReference: {
+          name: "Taylor Grant",
+          phone: "555-555-0100",
+        },
+        signature: {
+          type: "typed",
+          signedAt: "2026-03-31T18:00:00.000Z",
+        },
+        applicantNotes: "Prefers a September move if possible.",
+      },
+      applicationConsent: {
+        version: "v1.0",
+        acceptedAt: "2026-03-31T18:00:00.000Z",
+      },
+      coApplicant: {
+        fullName: "Riley Stone",
+        email: "riley@example.com",
+        phone: "555-555-0199",
+        monthlyIncome: 3200,
+      },
+      household: {
+        otherOccupants: "One child",
+        pets: "One cat",
+        vehicles: "One vehicle",
+        notes: "Needs parking.",
+      },
+      currentLeaseStatus: {
+        hasActiveLease: true,
+        leaseEndDate: "2026-04-30",
+        landlordAware: "yes",
+        reasonForMoving: "Moving closer to work.",
+      },
+      screeningStatus: "complete",
+      screeningProvider: "Provider A",
+      screening: { requested: true, status: "complete" },
+      employment: { applicant: {} },
+      consent: { creditConsent: true, referenceConsent: true, dataSharingConsent: true, acceptedAt: Date.now() },
+      landlordNote: "Call reference before final approval.",
+      flags: ["income_review"],
+    });
+    mocks.fetchApplicationDecisionSummary.mockResolvedValue({
+      applicationId: "app-1",
+      riskInsights: {
+        score: 74,
+        grade: "B",
+        confidence: 0.82,
+        signals: ["Stable employment"],
+        recommendations: ["Verify income documents"],
+      },
+      referenceQuestions: ["Would you rent to this applicant again?"],
+      screeningRecommendation: {
+        recommended: false,
+        reason: "Screening is complete.",
+      },
+      decisionSupport: {
+        summaryLine: "Application is ready for landlord review.",
+        nextBestAction: "Call references before approval.",
+      },
+    });
+    mocks.fetchViewingRequests.mockResolvedValueOnce([
+      {
+        id: "view-1",
+        applicantName: "Jamie Stone",
+        applicantEmail: "jamie@example.com",
+        applicantPhone: null,
+        requestedMessage: "Weekend preferred",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        applicationId: "app-1",
+        status: "slots_proposed",
+        proposedSlots: [
+          {
+            id: "slot-1",
+            startAt: "2026-04-05T14:00:00.000Z",
+            endAt: "2026-04-05T14:30:00.000Z",
+            note: "Afternoon",
+            isSelected: false,
+          },
+        ],
+        selectedSlot: null,
+        requestedAt: "2026-04-03T10:00:00.000Z",
+        createdAt: "2026-04-03T10:00:00.000Z",
+        updatedAt: "2026-04-03T10:00:00.000Z",
+      },
+    ]);
+
     const { container } = render(
       <MemoryRouter>
         <ApplicationsPage />
@@ -421,6 +544,16 @@ describe("ApplicationsPage", () => {
     const printSource = container.querySelector(".print-only-application");
     expect(printSource?.textContent).toContain("Application summary");
     expect(printSource?.textContent).toContain("Jamie Stone");
+    expect(printSource?.textContent).toContain("Applicant profile");
+    expect(printSource?.textContent).toContain("Harbour Labs");
+    expect(printSource?.textContent).toContain("Household & co-applicant");
+    expect(printSource?.textContent).toContain("Riley Stone");
+    expect(printSource?.textContent).toContain("Current housing & residential history");
+    expect(printSource?.textContent).toContain("12 North Street");
+    expect(printSource?.textContent).toContain("Screening, risk & decision guidance");
+    expect(printSource?.textContent).toContain("Stable employment");
+    expect(printSource?.textContent).toContain("Viewing requests");
+    expect(printSource?.textContent).toContain("Weekend preferred");
   });
 
   it("hides cancelled viewing requests by default and preserves active ordering", async () => {

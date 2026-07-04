@@ -4372,7 +4372,12 @@ router.get("/rental-applications/:id/review-summary.pdf", async (req: any, res) 
       });
     }
     const summary = buildReviewSummary(id, access.data);
-    const pdfBuffer = await buildReviewSummaryPdf(summary);
+    const decisionSummary = buildApplicationDecisionSummary({
+      applicationId: id,
+      application: access.data,
+      reviewSummary: summary,
+    });
+    const pdfBuffer = await buildReviewSummaryPdf(summary, { decisionSummary });
     const bucket = String(process.env.GCS_UPLOAD_BUCKET || "").trim();
 
     if (!bucket) {
