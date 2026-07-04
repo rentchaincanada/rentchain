@@ -15,6 +15,7 @@ const router = Router();
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
+const READ_STATES_COLLECTION = "unifiedInboxReadStates";
 
 export type LandlordInboxRequest = {
   limit: number;
@@ -55,6 +56,15 @@ const SOURCE_MAP: Record<string, SourceKind> = {
 function asString(value: unknown, max = 240): string {
   const next = String(value || "").trim().slice(0, max);
   return next || "";
+}
+
+function isSafeInboxRecordId(value: string) {
+  return /^inbox_v1_[A-Za-z0-9_-]+$/.test(value);
+}
+
+function readStateDocId(landlordId: string, recordId: string) {
+  const scope = Buffer.from(landlordId, "utf8").toString("base64url");
+  return `landlord_${scope}_${recordId}`;
 }
 
 function hasLandlordScope(record: any, landlordId: string) {
@@ -149,6 +159,19 @@ async function loadCollection(name: string) {
   return (snap?.docs || []).map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }));
 }
 
+async function loadReadStatesByRecordId(landlordId: string) {
+  const records = await loadCollection(READ_STATES_COLLECTION);
+  const entries: Array<[string, string]> = [];
+  for (const record of records) {
+    const recordId = asString(record?.recordId, 240);
+    const readAt = asString(record?.readAt, 120);
+    if (asString(record?.landlordId, 240) === landlordId && isSafeInboxRecordId(recordId) && readAt) {
+      entries.push([recordId, readAt]);
+    }
+  }
+  return new Map<string, string>(entries);
+}
+
 async function resolvePropertyScope(landlordId: string, propertyId: string | null) {
   if (!propertyId) return { ok: true as const };
   const propertyDoc = await db.collection("properties").doc(propertyId).get().catch(() => null);
@@ -185,6 +208,47 @@ function applySafeFilters(items: UnifiedInboxEvent[], request: LandlordInboxRequ
   });
 }
 
+function applyPersistedReadStates(items: UnifiedInboxEvent[], readStatesByRecordId: Map<string, string>) {
+  return items.map((item) => {
+    const readAt = readStatesByRecordId.get(item.id);
+    if (!readAt) return item;
+    if (item.status !== "unread" && item.readAt) return item;
+    return { ...item, status: "read" as const, readAt };
+  });
+}
+
+async function deriveScopedLandlordInbox(landlordId: string, request: LandlordInboxRequest) {
+  const [snapshot, leases, maintenanceRequests, messages] = await Promise.all([
+    loadLandlordAnalyticsSnapshot({
+      landlordId,
+      propertyId: request.propertyId || undefined,
+    }),
+    loadCollection("leases"),
+    loadCollection("maintenanceRequests"),
+    loadCollection("messages"),
+  ]);
+
+  const analyticsDecisions = Array.isArray(snapshot?.decisions?.items) ? snapshot.decisions.items : [];
+  const safePage = await deriveLandlordUnifiedInbox(landlordId, {
+    applicationItems: filterScopedRecords(
+      analyticsDecisions.filter((item: any) => asString(item?.decisionType, 120) !== "start_screening_checkout"),
+      landlordId,
+      request.propertyId
+    ),
+    screeningItems: filterScopedRecords(
+      analyticsDecisions.filter((item: any) => asString(item?.decisionType, 120) === "start_screening_checkout"),
+      landlordId,
+      request.propertyId
+    ),
+    leaseItems: filterScopedRecords(leases, landlordId, request.propertyId),
+    maintenanceRequests: filterScopedRecords(maintenanceRequests, landlordId, request.propertyId),
+    messages: filterScopedRecords(messages, landlordId, request.propertyId),
+    limit: MAX_LIMIT,
+  });
+  const readStatesByRecordId = await loadReadStatesByRecordId(landlordId);
+  return applyPersistedReadStates(safePage.items, readStatesByRecordId);
+}
+
 router.get("/inbox", requireAuth, requireLandlord, async (req: Request, res: Response) => {
   try {
     const landlordId = asString((req as any).user?.landlordId || (req as any).user?.id, 240);
@@ -207,35 +271,8 @@ router.get("/inbox", requireAuth, requireLandlord, async (req: Request, res: Res
       });
     }
 
-    const [snapshot, leases, maintenanceRequests, messages] = await Promise.all([
-      loadLandlordAnalyticsSnapshot({
-        landlordId,
-        propertyId: request.propertyId || undefined,
-      }),
-      loadCollection("leases"),
-      loadCollection("maintenanceRequests"),
-      loadCollection("messages"),
-    ]);
-
-    const analyticsDecisions = Array.isArray(snapshot?.decisions?.items) ? snapshot.decisions.items : [];
-    const safePage = await deriveLandlordUnifiedInbox(landlordId, {
-      applicationItems: filterScopedRecords(
-        analyticsDecisions.filter((item: any) => asString(item?.decisionType, 120) !== "start_screening_checkout"),
-        landlordId,
-        request.propertyId
-      ),
-      screeningItems: filterScopedRecords(
-        analyticsDecisions.filter((item: any) => asString(item?.decisionType, 120) === "start_screening_checkout"),
-        landlordId,
-        request.propertyId
-      ),
-      leaseItems: filterScopedRecords(leases, landlordId, request.propertyId),
-      maintenanceRequests: filterScopedRecords(maintenanceRequests, landlordId, request.propertyId),
-      messages: filterScopedRecords(messages, landlordId, request.propertyId),
-      limit: MAX_LIMIT,
-    });
-
-    const filteredItems = applySafeFilters(safePage.items, request);
+    const safeItems = await deriveScopedLandlordInbox(landlordId, request);
+    const filteredItems = applySafeFilters(safeItems, request);
     const items = filteredItems.slice(request.offset, request.offset + request.limit).map(toPublicInboxRecord);
 
     return res.json({
@@ -248,6 +285,56 @@ router.get("/inbox", requireAuth, requireLandlord, async (req: Request, res: Res
   } catch (err: any) {
     console.error("[landlord-unified-inbox] failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "LANDLORD_INBOX_FAILED", message: "Unable to load inbox" });
+  }
+});
+
+router.post("/inbox/:recordId/read", requireAuth, requireLandlord, async (req: Request, res: Response) => {
+  try {
+    const landlordId = asString((req as any).user?.landlordId || (req as any).user?.id, 240);
+    if (!landlordId) {
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED", message: "Landlord context is required" });
+    }
+
+    const recordId = asString(req.params?.recordId, 240);
+    if (!recordId || !isSafeInboxRecordId(recordId)) {
+      return res.status(400).json({ ok: false, error: "INVALID_INBOX_RECORD", message: "Inbox record is not available" });
+    }
+
+    const request: LandlordInboxRequest = {
+      limit: MAX_LIMIT,
+      offset: 0,
+      propertyId: null,
+      source: null,
+      dateFrom: null,
+      dateTo: null,
+    };
+    const safeItems = await deriveScopedLandlordInbox(landlordId, request);
+    const item = safeItems.find((entry) => entry.id === recordId && entry.audienceRole === "landlord");
+    if (!item) {
+      return res.status(404).json({ ok: false, error: "INBOX_RECORD_NOT_FOUND", message: "Inbox record not found" });
+    }
+
+    const existingReadAt = item.readAt && item.status === "read" ? item.readAt : null;
+    const readAt = existingReadAt || new Date().toISOString();
+    await db
+      .collection(READ_STATES_COLLECTION)
+      .doc(readStateDocId(landlordId, recordId))
+      .set(
+        {
+          audienceRole: "landlord",
+          landlordId,
+          recordId,
+          sourceKind: item.sourceKind,
+          readAt,
+          updatedAt: readAt,
+        },
+        { merge: true }
+      );
+
+    return res.json({ ok: true, record: toPublicInboxRecord({ ...item, status: "read", readAt }) });
+  } catch (err: any) {
+    console.error("[landlord-unified-inbox] read update failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "LANDLORD_INBOX_READ_FAILED", message: "Unable to mark inbox item read" });
   }
 });
 

@@ -48,6 +48,11 @@ export type UnifiedInboxResponse = {
   offset: number;
 };
 
+export type UnifiedInboxReadResponse = {
+  ok: true;
+  record: UnifiedInboxRecord;
+};
+
 export async function fetchUnifiedInbox(role: UnifiedInboxRole): Promise<UnifiedInboxResponse> {
   if (role === "tenant") {
     return tenantApiFetch<UnifiedInboxResponse>("/tenant/inbox");
@@ -56,4 +61,16 @@ export async function fetchUnifiedInbox(role: UnifiedInboxRole): Promise<Unified
     return apiFetch<UnifiedInboxResponse>("/contractor/inbox");
   }
   return apiFetch<UnifiedInboxResponse>("/landlord/inbox");
+}
+
+export async function markUnifiedInboxRecordRead(
+  role: UnifiedInboxRole,
+  recordId: string
+): Promise<UnifiedInboxReadResponse> {
+  if (role !== "landlord") {
+    throw new Error("Read-state persistence is not available for this inbox role.");
+  }
+  return apiFetch<UnifiedInboxReadResponse>(`/landlord/inbox/${encodeURIComponent(recordId)}/read`, {
+    method: "POST",
+  });
 }

@@ -2,6 +2,7 @@ import React from "react";
 import { RefreshCcw, Search } from "lucide-react";
 import {
   fetchUnifiedInbox,
+  markUnifiedInboxRecordRead,
   type UnifiedInboxPriority,
   type UnifiedInboxRecord,
   type UnifiedInboxResponse,
@@ -152,14 +153,25 @@ export default function UnifiedInboxPage({ role }: Props) {
   }, [filteredRecords, openedRecordId, safeRecords]);
   const unreadCount = safeRecords.filter((record) => record.status === "unread").length;
   const priorityCount = safeRecords.filter((record) => record.priority === "critical" || record.priority === "high").length;
-  const markRecordRead = React.useCallback((record: UnifiedInboxRecord) => {
-    setOpenedRecordId(record.id);
-    if (record.status !== "unread" && record.readAt) return;
-    setLocalReadAtById((current) => {
-      if (current[record.id]) return current;
-      return { ...current, [record.id]: new Date().toISOString() };
-    });
-  }, []);
+  const markRecordRead = React.useCallback(
+    async (record: UnifiedInboxRecord) => {
+      setOpenedRecordId(record.id);
+      if (record.status !== "unread" && record.readAt) return;
+      if (localReadAtById[record.id]) return;
+      if (role !== "landlord") {
+        setLocalReadAtById((current) => ({ ...current, [record.id]: new Date().toISOString() }));
+        return;
+      }
+      try {
+        const response = await markUnifiedInboxRecordRead(role, record.id);
+        const readAt = response.record.readAt || new Date().toISOString();
+        setLocalReadAtById((current) => ({ ...current, [record.id]: readAt }));
+      } catch (err) {
+        setError(errorMessage(err));
+      }
+    },
+    [localReadAtById, role]
+  );
   const resetFilterContext = React.useCallback(() => {
     setOpenedRecordId(null);
   }, []);

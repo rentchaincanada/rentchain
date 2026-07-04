@@ -5,6 +5,7 @@ import type { UnifiedInboxRecord } from "../api/unifiedInboxApi";
 
 const mocks = vi.hoisted(() => ({
   fetchUnifiedInbox: vi.fn(),
+  markUnifiedInboxRecordRead: vi.fn(),
 }));
 
 vi.mock("../api/unifiedInboxApi", async () => {
@@ -12,6 +13,7 @@ vi.mock("../api/unifiedInboxApi", async () => {
   return {
     ...actual,
     fetchUnifiedInbox: mocks.fetchUnifiedInbox,
+    markUnifiedInboxRecordRead: mocks.markUnifiedInboxRecordRead,
   };
 });
 
@@ -33,6 +35,20 @@ function record(overrides: Partial<UnifiedInboxRecord>): UnifiedInboxRecord {
 describe("UnifiedInboxPage", () => {
   beforeEach(() => {
     mocks.fetchUnifiedInbox.mockReset();
+    mocks.markUnifiedInboxRecordRead.mockReset();
+    mocks.markUnifiedInboxRecordRead.mockResolvedValue({
+      ok: true,
+      record: record({
+        id: "maintenance-priority",
+        audienceRole: "landlord",
+        sourceKind: "landlord.maintenance",
+        title: "Pipe leak reported",
+        body: "Maintenance priority at Unit 204",
+        priority: "high",
+        status: "read",
+        readAt: "2026-06-09T15:00:00.000Z",
+      }),
+    });
     mocks.fetchUnifiedInbox.mockResolvedValue({
       ok: true,
       role: "tenant",
@@ -207,7 +223,7 @@ describe("UnifiedInboxPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Pipe leak reported/i }));
     const pipeButton = screen.getByRole("button", { name: /Pipe leak reported/i });
     expect(pipeButton).toHaveAttribute("aria-expanded", "true");
-    expect(pipeButton).toHaveTextContent("Read");
+    await waitFor(() => expect(pipeButton).toHaveTextContent("Read"));
     expect(screen.getByRole("tab", { name: /Unread 1/i })).toBeInTheDocument();
     expect(pipeButton.nextElementSibling).toHaveTextContent("Pipe leak reported");
     expect(pipeButton.nextElementSibling).toHaveTextContent("Status");
@@ -221,7 +237,7 @@ describe("UnifiedInboxPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Outstanding rent balance/i }));
     const paymentButton = screen.getByRole("button", { name: /Outstanding rent balance/i });
     expect(paymentButton).toHaveAttribute("aria-expanded", "true");
-    expect(paymentButton).toHaveTextContent("Read");
+    await waitFor(() => expect(paymentButton).toHaveTextContent("Read"));
     expect(screen.getByRole("tab", { name: /Unread 0/i })).toBeInTheDocument();
     expect(screen.getByTestId("unified-inbox-detail-panel")).toHaveTextContent("Outstanding rent balance");
 
@@ -236,6 +252,54 @@ describe("UnifiedInboxPage", () => {
     expect(screen.getAllByText("System notice").length).toBeGreaterThan(0);
     expect(screen.queryByText("Lease renewal ready")).not.toBeInTheDocument();
     expect(screen.queryByText("Outstanding rent balance")).not.toBeInTheDocument();
+  });
+
+  it("persists landlord read state through the API and keeps it after refresh", async () => {
+    const unreadRecord = record({
+      id: "maintenance-priority",
+      audienceRole: "landlord",
+      sourceKind: "landlord.maintenance",
+      title: "Pipe leak reported",
+      body: "Maintenance priority at Unit 204",
+      priority: "high",
+      status: "unread",
+      readAt: null,
+    });
+    const readRecord = { ...unreadRecord, status: "read" as const, readAt: "2026-06-09T15:00:00.000Z" };
+    mocks.fetchUnifiedInbox
+      .mockResolvedValueOnce({
+        ok: true,
+        role: "landlord",
+        items: [unreadRecord],
+        records: [unreadRecord],
+        total: 1,
+        limit: 20,
+        offset: 0,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        role: "landlord",
+        items: [readRecord],
+        records: [readRecord],
+        total: 1,
+        limit: 20,
+        offset: 0,
+      });
+    mocks.markUnifiedInboxRecordRead.mockResolvedValueOnce({ ok: true, record: readRecord });
+
+    render(<UnifiedInboxPage role="landlord" />);
+
+    expect(await screen.findByRole("tab", { name: /Unread 1/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Pipe leak reported/i }));
+
+    await waitFor(() => expect(mocks.markUnifiedInboxRecordRead).toHaveBeenCalledWith("landlord", "maintenance-priority"));
+    expect(await screen.findByRole("tab", { name: /Unread 0/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Refresh/i }));
+
+    await waitFor(() => expect(mocks.fetchUnifiedInbox).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("tab", { name: /Unread 0/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Pipe leak reported/i })).toHaveTextContent("Read");
   });
 
   it("shows a safe error state when the inbox cannot load", async () => {
