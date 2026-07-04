@@ -5,6 +5,7 @@ import type {
   RiskAgentReviewSnapshot,
 } from "@/types/applicationDecisionSummary";
 import { colors, radius, shadows, spacing, text } from "@/styles/tokens";
+import "./LandlordDecisionPanel.css";
 
 type LandlordDecisionPanelProps = {
   riskSnapshot?: RiskAgentReviewSnapshot;
@@ -214,7 +215,7 @@ export const LandlordDecisionPanel: React.FC<LandlordDecisionPanelProps> = ({
             <div style={{ color: text.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Risk Summary
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr)", gap: spacing.md }}>
+            <div className="rc-landlord-decision-panel__risk-summary-grid">
               <div
                 style={{
                   borderRadius: radius.lg,
