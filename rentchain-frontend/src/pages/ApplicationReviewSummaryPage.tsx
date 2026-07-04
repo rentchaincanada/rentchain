@@ -607,7 +607,9 @@ function ApplicationReviewSummaryPageBody() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "1.2rem" }}>Application Review Summary</h1>
-          <div style={{ fontSize: 12, color: text.subtle }}>Application ID: {id}</div>
+          <div style={{ fontSize: 12, color: text.subtle }}>
+            Landlord review packet for the selected application.
+          </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Button variant="ghost" onClick={() => navigate(-1)}>Back</Button>

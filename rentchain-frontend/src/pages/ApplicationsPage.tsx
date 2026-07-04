@@ -727,6 +727,21 @@ const ApplicationsPage: React.FC = () => {
     if (!detail) return null;
     const applicantName = `${detail.applicant.firstName} ${detail.applicant.lastName}`.trim() || "Applicant";
     const propertyName = properties.find((property) => property.id === detail.propertyId)?.name || "Property";
+    const profileIncome = detail.applicantProfile?.employment?.incomeAmountCents;
+    const profileFrequency = detail.applicantProfile?.employment?.incomeFrequency;
+    const monthlyIncomeFromProfile =
+      typeof profileIncome === "number"
+        ? profileFrequency === "annual"
+          ? profileIncome / 12 / 100
+          : profileIncome / 100
+        : null;
+    const printViewingRequests = showCancelledViewingRequests
+      ? viewingRequests
+      : viewingRequests.filter((request) => request.status !== "cancelled");
+    const matchingViewingRequests = printViewingRequests.filter((request) => {
+      const requestApplicationId = String(request.applicationId || "").trim();
+      return !requestApplicationId || requestApplicationId === detail.id;
+    });
     return {
       ...detail,
       fullName: applicantName,
@@ -736,18 +751,28 @@ const ApplicationsPage: React.FC = () => {
       applicantPhone: detail.applicant.phoneHome || detail.applicant.phoneWork || null,
       dateOfBirth: detail.applicant.dob || null,
       propertyName,
-      unitApplied: null,
+      unitApplied: (detail as any).unitApplied || (detail as any).unit || null,
       monthlyIncome:
-        typeof detail.employment?.applicant?.monthlyIncomeCents === "number"
+        monthlyIncomeFromProfile ??
+        (typeof detail.employment?.applicant?.monthlyIncomeCents === "number"
           ? detail.employment.applicant.monthlyIncomeCents / 100
-          : null,
+          : null),
       recentAddress: detail.residentialHistory?.[0]
         ? {
             streetName: detail.residentialHistory[0].address,
           }
         : null,
+      applicantProfile: detail.applicantProfile || null,
+      applicationConsent: detail.applicationConsent || null,
+      currentLeaseStatus: detail.currentLeaseStatus || null,
+      residentialHistory: detail.residentialHistory || [],
+      household: detail.household || null,
+      coApplicant: detail.coApplicant || null,
+      consent: detail.consent || null,
+      decisionSummary,
+      viewingRequests: matchingViewingRequests,
     };
-  }, [detail, properties]);
+  }, [decisionSummary, detail, properties, showCancelledViewingRequests, viewingRequests]);
   const screeningOrderId = detail?.screening?.orderId || null;
   const isTransUnionConnected = transUnionIntegration.status === "connected";
   const visibleViewingRequests = useMemo(

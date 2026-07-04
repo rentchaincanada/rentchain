@@ -373,6 +373,39 @@ describe("rentalApplications review summary risk surface", () => {
     expect(res.body?.risk ?? null).toBeNull();
   });
 
+  it("passes decision context to the review-summary PDF export", async () => {
+    getLatestApplicationRiskMock.mockResolvedValue(null);
+    const reviewSummary = await import("../../lib/reviewSummary");
+    vi.mocked(reviewSummary.buildReviewSummaryPdf).mockResolvedValue(Buffer.from("%PDF-1.4"));
+    const previousBucket = process.env.GCS_UPLOAD_BUCKET;
+    delete process.env.GCS_UPLOAD_BUCKET;
+
+    try {
+      const app = await createApp();
+      const res = await request(app)
+        .get("/api/rental-applications/app-1/review-summary.pdf")
+        .set("Authorization", "Bearer landlord");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toContain("application/pdf");
+      expect(reviewSummary.buildReviewSummaryPdf).toHaveBeenCalledWith(
+        expect.objectContaining({ applicationId: "app-1" }),
+        {
+          decisionSummary: expect.objectContaining({
+            applicationId: "app-1",
+            decisionSupport: null,
+          }),
+        }
+      );
+    } finally {
+      if (previousBucket == null) {
+        delete process.env.GCS_UPLOAD_BUCKET;
+      } else {
+        process.env.GCS_UPLOAD_BUCKET = previousBucket;
+      }
+    }
+  });
+
   it("rejects unauthorized cross-landlord access", async () => {
     getLatestApplicationRiskMock.mockResolvedValue(null);
 
