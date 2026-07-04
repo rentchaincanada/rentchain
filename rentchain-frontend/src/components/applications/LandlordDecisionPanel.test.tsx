@@ -8,7 +8,7 @@ afterEach(() => {
 
 describe("LandlordDecisionPanel", () => {
   it("renders the structured risk summary, factors, flags, and recommendations", () => {
-    render(
+    const { container } = render(
       <LandlordDecisionPanel
         riskSnapshot={{
           version: "risk-v1",
@@ -38,6 +38,7 @@ describe("LandlordDecisionPanel", () => {
     );
 
     expect(screen.getByText("Landlord Decision Panel")).toBeInTheDocument();
+    expect(container.querySelector(".rc-landlord-decision-panel__risk-summary-grid")).toBeTruthy();
     expect(screen.getByText("78")).toBeInTheDocument();
     expect(screen.getByText("Grade B")).toBeInTheDocument();
     expect(screen.getByText("Lower risk")).toBeInTheDocument();
