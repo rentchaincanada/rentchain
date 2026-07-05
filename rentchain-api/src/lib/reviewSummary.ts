@@ -43,7 +43,9 @@ export type ReviewSummary = {
   };
   screening: {
     status: string;
+    statusLabel: string;
     provider: string | null;
+    providerLabel: string | null;
     referenceId: string | null;
   };
   coApplicant: {
@@ -107,6 +109,7 @@ export type ReviewSummaryPdfDecisionContext = {
   screeningSummary?: {
     available?: boolean;
     provider?: string | null;
+    providerLabel?: string | null;
     completedAt?: string | null;
     highlights?: string[];
   } | null;
@@ -211,6 +214,34 @@ function screeningStatus(raw: unknown): string {
   return value;
 }
 
+function screeningStatusLabel(raw: unknown): string {
+  const value = screeningStatus(raw);
+  if (["complete", "completed"].includes(value)) return "Screening complete";
+  if (["not_requested", "not_run", "not_started"].includes(value)) return "Screening not requested";
+  if (["processing", "external_pending", "requested", "in_progress", "provider_pending"].includes(value)) {
+    return "Screening in progress";
+  }
+  if (value === "paid") return "Screening paid; result pending";
+  if (value === "unpaid") return "Screening not started";
+  if (value === "ineligible") return "Screening unavailable";
+  if (["failed", "cancelled"].includes(value)) return value === "failed" ? "Screening failed" : "Screening cancelled";
+  return value
+    .split(/[\s_]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function screeningProviderLabel(raw: unknown): string | null {
+  const value = stringOrNull(raw);
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if (["stub", "stubbed_screening", "mock", "test"].includes(normalized)) return null;
+  if (normalized === "transunion_referral" || normalized === "transunion_manual") return "TransUnion";
+  if (normalized === "manual") return "Manual review";
+  return value;
+}
+
 function buildInsights(summary: Omit<ReviewSummary, "insights">): string[] {
   const insights: string[] = [];
   insights.push(`Application completeness: ${summary.derived.completeness.label}`);
@@ -224,8 +255,8 @@ function buildInsights(summary: Omit<ReviewSummary, "insights">): string[] {
     insights.push(`Time at current job: ${summary.employment.monthsAtJob} months`);
   }
   if (summary.screening.status && summary.screening.status !== "not_run") {
-    const provider = summary.screening.provider || "Provider unavailable";
-    insights.push(`Screening status: ${summary.screening.status} (${provider})`);
+    const provider = summary.screening.providerLabel || "Provider unavailable";
+    insights.push(`Screening status: ${summary.screening.statusLabel} (${provider})`);
   }
   if (summary.derived.flags.length) {
     const missing = summary.derived.flags
@@ -353,7 +384,9 @@ export function buildReviewSummary(applicationId: string, application: any): Rev
     },
     screening: {
       status: screeningStatus(application?.screeningStatus || screening?.status),
+      statusLabel: screeningStatusLabel(application?.screeningStatus || screening?.status),
       provider: stringOrNull(application?.screeningProvider || screening?.provider),
+      providerLabel: screeningProviderLabel(application?.screeningProvider || screening?.provider),
       referenceId: stringOrNull(screening?.orderId || application?.screeningSessionId || application?.screeningResultId),
     },
     coApplicant: {
@@ -564,8 +597,8 @@ export function buildReviewSummaryPdfSections(
           label: "Completeness",
           value: `${summary.derived.completeness.label} (${Math.round(summary.derived.completeness.score * 100)}%)`,
         },
-        { label: "Screening status", value: summary.screening.status || "not_run" },
-        { label: "Screening provider", value: summary.screening.provider || "Not provided" },
+        { label: "Screening status", value: summary.screening.statusLabel || "Screening not requested" },
+        { label: "Screening provider", value: summary.screening.providerLabel || "Not provided" },
         { label: "Screening recommendation", value: decision?.screeningRecommendation?.reason || "Not provided" },
         {
           label: "Screening highlights",

@@ -23,6 +23,7 @@ export type ApplicationDecisionSummary = {
   screeningSummary?: {
     available: boolean;
     provider?: string | null;
+    providerLabel?: string | null;
     completedAt?: string | null;
     highlights?: string[];
   } | null;
@@ -52,6 +53,28 @@ function titleCase(value: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function normalizedStatus(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isApprovedStatus(value: unknown) {
+  return ["approved", "accepted"].includes(normalizedStatus(value));
+}
+
+function isDeniedStatus(value: unknown) {
+  return ["denied", "rejected", "declined"].includes(normalizedStatus(value));
+}
+
+function screeningProviderLabel(raw: unknown): string | null {
+  const value = String(raw ?? "").trim();
+  if (!value) return null;
+  const normalized = value.toLowerCase();
+  if (["stub", "stubbed_screening", "mock", "test"].includes(normalized)) return null;
+  if (normalized === "transunion_referral" || normalized === "transunion_manual") return "TransUnion";
+  if (normalized === "manual") return "Manual review";
+  return value;
 }
 
 function asIsoOrNull(value: unknown): string | null {
@@ -230,8 +253,23 @@ function buildReferenceQuestions(reviewSummary: ReviewSummary, riskInsights: Non
 }
 
 function buildScreeningRecommendation(application: any, reviewSummary: ReviewSummary, riskInsights: NonNullable<ApplicationDecisionRiskInsights>) {
-  const screeningStatus = String(application?.screeningStatus || application?.screening?.status || "").trim().toLowerCase();
-  if (screeningStatus === "complete") {
+  const applicationStatus = application?.status;
+  const screeningStatus = normalizedStatus(application?.screeningStatus || application?.screening?.status);
+  if (isApprovedStatus(applicationStatus) && !["complete", "completed"].includes(screeningStatus)) {
+    return {
+      recommended: false,
+      reason: "Application was approved without a completed third-party screening package.",
+      priority: "low" as const,
+    };
+  }
+  if (isDeniedStatus(applicationStatus) && !["complete", "completed"].includes(screeningStatus)) {
+    return {
+      recommended: false,
+      reason: "Application was closed without a completed third-party screening package.",
+      priority: "low" as const,
+    };
+  }
+  if (["complete", "completed"].includes(screeningStatus)) {
     return {
       recommended: false,
       reason: "Screening is already complete and can be reviewed alongside references.",
@@ -285,6 +323,7 @@ function buildScreeningSummary(application: any) {
   return {
     available,
     provider: application?.screeningProvider || application?.screening?.provider || null,
+    providerLabel: screeningProviderLabel(application?.screeningProvider || application?.screening?.provider),
     completedAt: asIsoOrNull(application?.screeningCompletedAt || application?.screening?.paidAt),
     highlights,
   };
@@ -294,8 +333,33 @@ function buildDecisionSupport(
   reviewSummary: ReviewSummary,
   screeningRecommendation: NonNullable<ApplicationDecisionSummary["screeningRecommendation"]>,
   screeningSummary: NonNullable<ApplicationDecisionSummary["screeningSummary"]>,
-  riskInsights: NonNullable<ApplicationDecisionRiskInsights>
+  riskInsights: NonNullable<ApplicationDecisionRiskInsights>,
+  applicationStatus?: string | null
 ) {
+  if (isApprovedStatus(applicationStatus)) {
+    if (screeningSummary.available) {
+      return {
+        summaryLine: "Application is approved. Screening was available as part of the review context.",
+        nextBestAction: "Use the approved application summary and supporting records for lease preparation.",
+      };
+    }
+    return {
+      summaryLine: "Application is approved. No completed third-party screening package is recorded in this review summary.",
+      nextBestAction: "Use the approved application summary and note that the decision was made without completed third-party screening.",
+    };
+  }
+  if (isDeniedStatus(applicationStatus)) {
+    if (screeningSummary.available) {
+      return {
+        summaryLine: "Application is closed. Screening was available as part of the recorded review context.",
+        nextBestAction: "Keep the completed review summary with the closed application record.",
+      };
+    }
+    return {
+      summaryLine: "Application is closed. No completed third-party screening package is recorded in this review summary.",
+      nextBestAction: "Keep the decision context with the closed application record.",
+    };
+  }
   if (screeningSummary.available) {
     return {
       summaryLine: "Screening is available. Use it with the current application signals and references to complete review.",
@@ -337,7 +401,13 @@ export function buildApplicationDecisionSummary(params: {
   const referenceQuestions = buildReferenceQuestions(reviewSummary, riskInsights);
   const screeningRecommendation = buildScreeningRecommendation(application, reviewSummary, riskInsights);
   const screeningSummary = buildScreeningSummary(application);
-  const decisionSupport = buildDecisionSupport(reviewSummary, screeningRecommendation, screeningSummary, riskInsights);
+  const decisionSupport = buildDecisionSupport(
+    reviewSummary,
+    screeningRecommendation,
+    screeningSummary,
+    riskInsights,
+    application?.status
+  );
 
   return {
     applicationId,
