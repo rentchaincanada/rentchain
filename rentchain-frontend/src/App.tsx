@@ -1000,9 +1000,11 @@ function App() {
           path="/verified-screenings"
           element={
             <RequireAuth>
-              <Suspense fallback={null}>
-                <AdminVerifiedScreeningsPage />
-              </Suspense>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <AdminVerifiedScreeningsPage audience="landlord" shell="none" />
+                </Suspense>
+              </LandlordNav>
             </RequireAuth>
           }
         />

@@ -93,6 +93,40 @@ describe("ContractorsPage", () => {
     expect(screen.getByText(/No invites yet\./i)).toBeInTheDocument();
   });
 
+  it("renders invite history in a mobile-safe presentation with invite actions", async () => {
+    mocks.listContractorInvites.mockResolvedValue([
+      {
+        id: "invite-1",
+        email: "very.long.contractor.email@example.test",
+        status: "pending",
+        inviteLink: "https://example.test/invite/one",
+        createdAtMs: Date.UTC(2026, 5, 1, 12, 0),
+        expiresAtMs: Date.UTC(2026, 5, 8, 12, 0),
+        acceptedAtMs: null,
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ContractorsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByLabelText("Invite history table")).toBeInTheDocument();
+    expect(screen.getByLabelText("Invite history cards")).toBeInTheDocument();
+    expect(screen.getAllByText("very.long.contractor.email@example.test").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /Open invite link/i })).toHaveAttribute(
+      "href",
+      "https://example.test/invite/one"
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Resend/i })[0]);
+
+    await waitFor(() => {
+      expect(mocks.resendContractorInvite).toHaveBeenCalledWith("invite-1");
+    });
+  });
+
   it("renders a teaser state when marketplace directory access is unavailable", async () => {
     mocks.useEntitlements.mockReturnValue({
       loading: false,

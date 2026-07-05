@@ -18,6 +18,7 @@ import {
 import ContractorCard from "../../components/marketplace/ContractorCard";
 import ContractorFilterBar from "../../components/marketplace/ContractorFilterBar";
 import ContractorProfileForm from "../../components/marketplace/ContractorProfileForm";
+import "./ContractorsPage.css";
 
 function formatDate(ms?: number | null) {
   if (!ms) return "-";
@@ -101,7 +102,7 @@ export default function ContractorsPage() {
   }
 
   return (
-    <div style={{ display: "grid", gap: 14 }}>
+    <div className="rc-contractors-page" style={{ display: "grid", gap: 14 }}>
       <Card>
         <div style={{ fontWeight: 700, fontSize: "1.06rem" }}>Contractor directory</div>
         <div style={{ color: "#64748b", marginTop: 4 }}>
@@ -234,7 +235,7 @@ export default function ContractorsPage() {
       {canViewMarketplaceDirectory ? (
         <Card style={{ display: "grid", gap: 10 }}>
           <div style={{ fontWeight: 600 }}>Invite contractor</div>
-          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))" }}>
+          <div className="rc-contractors-invite-form-grid">
             <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="contractor@email.com" />
             <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Optional message" />
           </div>
@@ -272,36 +273,92 @@ export default function ContractorsPage() {
           ) : invites.length === 0 ? (
             <div style={{ color: "#64748b" }}>No invites yet.</div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>
-                  <th style={{ padding: 8 }}>Email</th>
-                  <th style={{ padding: 8 }}>Status</th>
-                  <th style={{ padding: 8 }}>Created</th>
-                  <th style={{ padding: 8 }}>Expires</th>
-                  <th style={{ padding: 8 }}>Accepted</th>
-                  <th style={{ padding: 8 }}>Invite Link</th>
-                  <th style={{ padding: 8 }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              <div className="rc-contractors-invite-table-wrap" aria-label="Invite history table">
+                <table className="rc-contractors-invite-table">
+                  <thead>
+                    <tr>
+                      <th>Email</th>
+                      <th>Status</th>
+                      <th>Created</th>
+                      <th>Expires</th>
+                      <th>Accepted</th>
+                      <th>Invite Link</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invites.map((invite) => (
+                      <tr key={invite.id}>
+                        <td>{invite.email}</td>
+                        <td>{invite.status}</td>
+                        <td>{formatDate(invite.createdAtMs)}</td>
+                        <td>{formatDate(invite.expiresAtMs || null)}</td>
+                        <td>{formatDate(invite.acceptedAtMs)}</td>
+                        <td>
+                          {invite.inviteLink ? (
+                            <a href={invite.inviteLink} target="_blank" rel="noreferrer">
+                              Open
+                            </a>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td>
+                          {invite.status !== "accepted" ? (
+                            <Button
+                              variant="ghost"
+                              onClick={async () => {
+                                try {
+                                  await resendContractorInvite(invite.id);
+                                  await load();
+                                } catch (err: any) {
+                                  setError(String(err?.message || "Failed to resend invite"));
+                                }
+                              }}
+                            >
+                              Resend
+                            </Button>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="rc-contractors-invite-cards" aria-label="Invite history cards">
                 {invites.map((invite) => (
-                  <tr key={invite.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                    <td style={{ padding: 8 }}>{invite.email}</td>
-                    <td style={{ padding: 8 }}>{invite.status}</td>
-                    <td style={{ padding: 8 }}>{formatDate(invite.createdAtMs)}</td>
-                    <td style={{ padding: 8 }}>{formatDate(invite.expiresAtMs || null)}</td>
-                    <td style={{ padding: 8 }}>{formatDate(invite.acceptedAtMs)}</td>
-                    <td style={{ padding: 8 }}>
+                  <div className="rc-contractors-invite-card" key={invite.id}>
+                    <div>
+                      <div className="rc-contractors-invite-card-label">Email</div>
+                      <div className="rc-contractors-wrap-text">{invite.email}</div>
+                    </div>
+                    <div className="rc-contractors-invite-card-grid">
+                      <div>
+                        <div className="rc-contractors-invite-card-label">Status</div>
+                        <div>{invite.status}</div>
+                      </div>
+                      <div>
+                        <div className="rc-contractors-invite-card-label">Created</div>
+                        <div>{formatDate(invite.createdAtMs)}</div>
+                      </div>
+                      <div>
+                        <div className="rc-contractors-invite-card-label">Expires</div>
+                        <div>{formatDate(invite.expiresAtMs || null)}</div>
+                      </div>
+                      <div>
+                        <div className="rc-contractors-invite-card-label">Accepted</div>
+                        <div>{formatDate(invite.acceptedAtMs)}</div>
+                      </div>
+                    </div>
+                    <div className="rc-contractors-invite-card-actions">
                       {invite.inviteLink ? (
                         <a href={invite.inviteLink} target="_blank" rel="noreferrer">
-                          Open
+                          Open invite link
                         </a>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                    <td style={{ padding: 8 }}>
+                      ) : null}
                       {invite.status !== "accepted" ? (
                         <Button
                           variant="ghost"
@@ -316,14 +373,12 @@ export default function ContractorsPage() {
                         >
                           Resend
                         </Button>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                  </tr>
+                      ) : null}
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </>
           )}
         </Card>
       ) : null}

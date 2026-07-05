@@ -15,6 +15,8 @@ import { colors, spacing, text, radius } from "../styles/tokens";
 
 const statusOptions = ["QUEUED", "IN_PROGRESS", "COMPLETE", "CANCELLED"] as const;
 const recommendationOptions = ["APPROVE", "DECLINE", "CONDITIONAL"] as const;
+type VerifiedScreeningsAudience = "admin" | "landlord";
+type VerifiedScreeningsShell = "mac" | "none";
 type QueueViewState =
   | "ready"
   | "empty"
@@ -23,7 +25,70 @@ type QueueViewState =
   | "forbidden"
   | "error";
 
-const AdminVerifiedScreeningsPage: React.FC = () => {
+type AdminVerifiedScreeningsPageProps = {
+  audience?: VerifiedScreeningsAudience;
+  shell?: VerifiedScreeningsShell;
+};
+
+function ScreeningSummaryDetail({ item }: { item: VerifiedScreeningQueueItem }) {
+  return (
+    <div style={{ display: "grid", gap: spacing.md }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="rc-wrap-text" style={{ fontSize: "1.1rem", fontWeight: 700 }}>
+            {item.applicant?.name || "Applicant"}
+          </div>
+          <div style={{ color: text.muted }} className="rc-wrap-text">
+            {item.applicant?.email || "No email"}
+          </div>
+        </div>
+        <div className="rc-wrap-row">
+          <Pill>{item.serviceLevel}</Pill>
+          <Pill>{item.status}</Pill>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(180px,100%),1fr))", gap: 8 }}>
+        <div>
+          <div style={{ color: text.muted, fontSize: 12, fontWeight: 700 }}>Paid</div>
+          <div>
+            ${(item.totalAmountCents / 100).toFixed(2)} {item.currency}
+          </div>
+        </div>
+        <div>
+          <div style={{ color: text.muted, fontSize: 12, fontWeight: 700 }}>Created</div>
+          <div>{item.createdAt ? new Date(item.createdAt).toLocaleString() : "-"}</div>
+        </div>
+        <div>
+          <div style={{ color: text.muted, fontSize: 12, fontWeight: 700 }}>Recommendation</div>
+          <div>{item.recommendation || "Pending review"}</div>
+        </div>
+        <div>
+          <div style={{ color: text.muted, fontSize: 12, fontWeight: 700 }}>AI review</div>
+          <div>{item.aiIncluded ? "Included" : "Not included"}</div>
+        </div>
+      </div>
+
+      {item.resultSummary ? (
+        <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ fontWeight: 700 }}>Result summary</div>
+          <div className="rc-wrap-text" style={{ color: text.muted }}>
+            {item.resultSummary}
+          </div>
+        </div>
+      ) : (
+        <div style={{ color: text.muted }}>
+          Detailed screening results are not available in this workspace yet.
+        </div>
+      )}
+    </div>
+  );
+}
+
+const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = ({
+  audience = "admin",
+  shell = "mac",
+}) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -37,6 +102,8 @@ const AdminVerifiedScreeningsPage: React.FC = () => {
   const [viewMessage, setViewMessage] = useState<string | null>(null);
 
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+  const isAdminAudience = audience === "admin";
+  const pageTitle = isAdminAudience ? "Admin · Verified Screenings" : "Verified Screenings";
 
   const load = async () => {
     try {
@@ -89,8 +156,8 @@ const AdminVerifiedScreeningsPage: React.FC = () => {
         showToast({ message: "Failed to load detail", description: err?.message || "", variant: "error" });
       }
     };
-    if (isAdmin) void loadDetail();
-  }, [selectedId, isAdmin]);
+    if (isAdminAudience && isAdmin) void loadDetail();
+  }, [selectedId, isAdmin, isAdminAudience]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return items;
@@ -98,9 +165,21 @@ const AdminVerifiedScreeningsPage: React.FC = () => {
     return items.filter((i) => {
       const name = (i.applicant?.name || "").toLowerCase();
       const email = (i.applicant?.email || "").toLowerCase();
-      return name.includes(q) || email.includes(q) || i.applicationId?.toLowerCase().includes(q);
+      return name.includes(q) || email.includes(q) || (isAdminAudience && i.applicationId?.toLowerCase().includes(q));
     });
-  }, [items, search]);
+  }, [isAdminAudience, items, search]);
+
+  const selectedSummary = useMemo(
+    () => (selectedId ? items.find((item) => item.id === selectedId) || null : null),
+    [items, selectedId]
+  );
+
+  const renderShell = (children: React.ReactNode) =>
+    shell === "mac" ? (
+      <MacShell title={pageTitle}>{children}</MacShell>
+    ) : (
+      <div style={{ display: "grid", gap: spacing.lg }}>{children}</div>
+    );
 
   const handleSave = async () => {
     if (!detail) return;
@@ -133,8 +212,7 @@ const AdminVerifiedScreeningsPage: React.FC = () => {
             : viewState === "forbidden"
               ? "You do not have access to this queue."
               : "Unable to load verified screenings.";
-    return (
-      <MacShell title="Admin · Verified Screenings">
+    return renderShell(
         <Section>
           <Card elevated style={{ display: "grid", gap: 12 }}>
             <h1 style={{ margin: 0, fontSize: "1.2rem" }}>{heading}</h1>
@@ -156,12 +234,10 @@ const AdminVerifiedScreeningsPage: React.FC = () => {
             </div>
           </Card>
         </Section>
-      </MacShell>
     );
   }
 
-  return (
-    <MacShell title="Admin · Verified Screenings">
+  return renderShell(
       <Section style={{ display: "grid", gap: spacing.md }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.sm }}>
           <h1 style={{ margin: 0, fontSize: "1.3rem" }}>Verified Screening Queue</h1>
@@ -179,7 +255,7 @@ const AdminVerifiedScreeningsPage: React.FC = () => {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search applicant or application ID"
+                placeholder={isAdminAudience ? "Search applicant or application ID" : "Search applicant or email"}
                 style={{ width: "100%" }}
               />
             }
@@ -238,12 +314,16 @@ const AdminVerifiedScreeningsPage: React.FC = () => {
               ) : null
             }
             hasSelection={Boolean(selectedId)}
-            selectedLabel={detail?.applicant?.name || "Screening"}
+            selectedLabel={(isAdminAudience ? detail?.applicant?.name : selectedSummary?.applicant?.name) || "Screening"}
             onClearSelection={() => setSelectedId(null)}
             detail={
               <Card>
-                {!detail ? (
+                {isAdminAudience && !detail ? (
                   <div style={{ color: text.muted }}>Select a queue item.</div>
+                ) : !isAdminAudience && !selectedSummary ? (
+                  <div style={{ color: text.muted }}>Select a screening.</div>
+                ) : !isAdminAudience && selectedSummary ? (
+                  <ScreeningSummaryDetail item={selectedSummary} />
                 ) : (
                   <div style={{ display: "grid", gap: spacing.md }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
@@ -329,7 +409,6 @@ const AdminVerifiedScreeningsPage: React.FC = () => {
           />
         </Card>
       </Section>
-    </MacShell>
   );
 };
 
