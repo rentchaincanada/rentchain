@@ -3058,6 +3058,22 @@ const ApplicationsPage: React.FC = () => {
                   <div style={{ color: text.muted, fontSize: 13 }}>{detail.applicant.email}</div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  {detail.id ? (
+                    canViewReviewSummary ? (
+                      <Button
+                        variant="secondary"
+                        onClick={() => navigate(`/applications/${detail.id}/review-summary`)}
+                      >
+                        Open review summary
+                      </Button>
+                    ) : (
+                      <UpgradeCTA
+                        featureKey="review_summary"
+                        label="Upgrade for Review Summary"
+                        variant="secondary"
+                      />
+                    )
+                  ) : null}
                   <Button variant="secondary" onClick={() => void printSummaryDocument("application")}>
                     Print / Save PDF
                   </Button>
@@ -3171,7 +3187,7 @@ const ApplicationsPage: React.FC = () => {
                           onClick={() => navigate(`/applications/${detail.id}/review-summary`)}
                           disabled={!detail?.id}
                         >
-                          View Screening Decision
+                          Application review summary
                         </Button>
                       ) : (
                         <UpgradeCTA
