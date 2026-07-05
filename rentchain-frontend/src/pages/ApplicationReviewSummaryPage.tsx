@@ -290,6 +290,25 @@ function networkReusePathSupportLabel(
   return "No reusable summaries approved yet";
 }
 
+function screeningStatusDisplayLabel(status?: string | null, label?: string | null) {
+  if (label) return label;
+  const normalized = String(status || "").trim().toLowerCase();
+  if (!normalized) return "Screening not requested";
+  if (["complete", "completed"].includes(normalized)) return "Screening complete";
+  if (["not_requested", "not_run", "not_started"].includes(normalized)) return "Screening not requested";
+  if (["processing", "external_pending", "requested", "in_progress", "provider_pending"].includes(normalized)) {
+    return "Screening in progress";
+  }
+  if (normalized === "paid") return "Screening paid; result pending";
+  if (normalized === "unpaid") return "Screening not started";
+  if (normalized === "ineligible") return "Screening unavailable";
+  return normalized
+    .split(/[\s_]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
 type SummaryLoadError = {
   message: string;
   status?: number;
@@ -1882,8 +1901,8 @@ function ApplicationReviewSummaryPageBody() {
           <Card style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 700 }}>Screening & Compliance</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-              {kv("Screening status", summary.screening.status || "not_run")}
-              {kv("Screening provider", summary.screening.provider || "Not provided")}
+              {kv("Screening status", screeningStatusDisplayLabel(summary.screening.status, summary.screening.statusLabel))}
+              {kv("Screening provider", summary.screening.providerLabel || "Not provided")}
               {kv(
                 "Completeness",
                 `${summary.derived.completeness.label} (${Math.round(summary.derived.completeness.score * 100)}%)`

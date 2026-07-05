@@ -127,6 +127,7 @@ describe("review summary export contract", () => {
     const rendered = JSON.stringify(sections);
     expect(rendered).toContain("Harbour View");
     expect(rendered).toContain("Unit 203");
+    expect(rendered).toContain("Screening complete");
     expect(rendered).toContain("One child");
     expect(rendered).toContain("Stable employment");
     expect(rendered).toContain("Call references before approval.");
@@ -164,5 +165,34 @@ describe("review summary export contract", () => {
     expect(JSON.stringify(applicationContext)).not.toContain(rawUnitId);
     expect(JSON.stringify(applicationContext)).not.toContain(rawPropertyId);
     expect(JSON.stringify(applicationContext)).not.toContain("raw-app-id-456");
+  });
+
+  it("renders landlord-facing screening labels without raw provider implementation details", () => {
+    const summary = buildReviewSummary("raw-app-id-789", {
+      status: "APPROVED",
+      screeningStatus: "not_requested",
+      screeningProvider: "STUB",
+      applicant: {
+        firstName: "Phil",
+        lastName: "Jones",
+      },
+    });
+
+    const sections = buildReviewSummaryPdfSections(summary);
+    const screeningSection = sections.find((section) => section.title === "Screening & Deterministic Signals");
+    const rendered = JSON.stringify(sections);
+
+    expect(summary.screening.status).toBe("not_requested");
+    expect(summary.screening.statusLabel).toBe("Screening not requested");
+    expect(summary.screening.providerLabel).toBeNull();
+    expect(screeningSection?.rows).toEqual(
+      expect.arrayContaining([
+        { label: "Screening status", value: "Screening not requested" },
+        { label: "Screening provider", value: "Not provided" },
+      ])
+    );
+    expect(rendered).not.toContain("not_requested");
+    expect(rendered).not.toContain("STUB");
+    expect(rendered).not.toContain("raw-app-id-789");
   });
 });

@@ -143,6 +143,51 @@ describe("buildApplicationDecisionSummary", () => {
     expect(result.decisionSupport?.summaryLine).toContain("Screening is available");
   });
 
+  it("uses retrospective decision guidance for approved applications without completed screening", () => {
+    const application = buildApplication({
+      status: "APPROVED",
+      screeningStatus: "not_requested",
+      screeningProvider: "STUB",
+      screening: { requested: false, status: "NOT_REQUESTED" },
+      applicantProfile: {
+        currentAddress: {
+          line1: "123 King St",
+          city: "Halifax",
+          provinceState: "NS",
+          postalCode: "B3H1A1",
+          country: "CA",
+        },
+        timeAtCurrentAddressMonths: 18,
+        currentRentAmountCents: 180000,
+        employment: {
+          employerName: "",
+          jobTitle: "",
+          incomeAmountCents: null,
+          incomeFrequency: null,
+          monthsAtJob: null,
+        },
+        workReference: { name: "", phone: "" },
+        signature: { signedAt: null },
+      },
+    });
+
+    const reviewSummary = buildReviewSummary("app-approved", application);
+    const result = buildApplicationDecisionSummary({
+      applicationId: "app-approved",
+      application,
+      reviewSummary,
+    });
+
+    expect(result.status).toBe("APPROVED");
+    expect(result.screeningRecommendation?.recommended).toBe(false);
+    expect(result.screeningRecommendation?.reason).toContain("approved without a completed third-party screening");
+    expect(result.screeningSummary?.provider).toBe("STUB");
+    expect(result.screeningSummary?.providerLabel).toBeNull();
+    expect(result.decisionSupport?.summaryLine).toContain("Application is approved");
+    expect(result.decisionSupport?.nextBestAction).not.toContain("Complete screening before deciding");
+    expect(result.decisionSupport?.nextBestAction).toContain("decision was made without completed third-party screening");
+  });
+
   it("adds an active lease conflict risk when lease end date is more than two months away and landlord is not aware", () => {
     const futureDate = new Date();
     futureDate.setMonth(futureDate.getMonth() + 4);

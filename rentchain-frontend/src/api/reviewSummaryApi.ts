@@ -44,7 +44,9 @@ type ReviewSummaryCore = {
   };
   screening: {
     status: string;
+    statusLabel?: string | null;
     provider: string | null;
+    providerLabel?: string | null;
     referenceId: string | null;
   };
   derived: {

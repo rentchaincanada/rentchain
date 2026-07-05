@@ -41,6 +41,14 @@ function priorityTone(priority?: string | null) {
   }
 }
 
+function providerDisplayLabel(provider?: string | null, providerLabel?: string | null) {
+  if (providerLabel) return providerLabel;
+  const raw = String(provider || "").trim();
+  if (!raw) return "Provider unavailable";
+  if (["stub", "stubbed_screening", "mock", "test"].includes(raw.toLowerCase())) return "Provider unavailable";
+  return raw;
+}
+
 const PillList: React.FC<{ items: string[]; emptyLabel: string }> = ({ items, emptyLabel }) => {
   if (!items.length) {
     return <div style={{ color: text.subtle, fontSize: 12 }}>{emptyLabel}</div>;
@@ -189,7 +197,7 @@ export const ApplicationDecisionSummaryCard: React.FC<ApplicationDecisionSummary
             {screeningSummary?.available ? (
               <div style={{ display: "grid", gap: 6, color: text.secondary, fontSize: 12 }}>
                 <div>
-                  Screening summary: {screeningSummary.provider || "Provider unavailable"}
+                  Screening summary: {providerDisplayLabel(screeningSummary.provider, screeningSummary.providerLabel)}
                   {formatWhen(screeningSummary.completedAt) ? ` · completed ${formatWhen(screeningSummary.completedAt)}` : ""}
                 </div>
                 <PillList items={screeningSummary.highlights || []} emptyLabel="No screening highlights available yet." />

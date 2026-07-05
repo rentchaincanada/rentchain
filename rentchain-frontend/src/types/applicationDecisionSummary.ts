@@ -43,6 +43,7 @@ export type ApplicationDecisionSummary = {
   screeningSummary?: {
     available: boolean;
     provider?: string | null;
+    providerLabel?: string | null;
     completedAt?: string | null;
     highlights?: string[];
   } | null;
