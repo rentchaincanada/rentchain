@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Building2, ClipboardList, FileText, Home, ReceiptText, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Building2, ClipboardList, FileText, Home, Inbox, ReceiptText, ShieldCheck } from "lucide-react";
 import { fetchDashboardSummary, type DashboardSummaryData } from "@/api/dashboard";
 import {
   fetchDecisionInbox,
@@ -1159,9 +1159,47 @@ export default function OperationalCommandCenterPage() {
                 This page prioritizes source workflow issues only; it does not execute actions, enforce legal timelines, or modify records.
               </div>
             </div>
-            <Link to="/decision-inbox" style={{ color: "#2563eb", fontWeight: 900 }}>
-              Open decision inbox
-            </Link>
+            <Card
+              style={{
+                borderRadius: 10,
+                padding: 14,
+                display: "grid",
+                gap: 10,
+                minWidth: 0,
+                border: "1px solid #bfdbfe",
+                background: "#eff6ff",
+              }}
+            >
+              <div style={{ display: "flex", gap: 8, alignItems: "center", color: "#1d4ed8", fontWeight: 900 }}>
+                <Inbox size={18} />
+                <span>Operational inbox bridge</span>
+              </div>
+              <div style={{ color: "#334155", lineHeight: 1.45, fontSize: 13 }}>
+                Review messages and source-linked actions tied to applications, leases, maintenance, payments, or work orders
+                when that context is available.
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <Link
+                  to="/landlord/unified-inbox"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 999,
+                    padding: "9px 12px",
+                    background: "#2563eb",
+                    color: "#fff",
+                    fontWeight: 900,
+                    textDecoration: "none",
+                  }}
+                >
+                  Open operational inbox
+                </Link>
+                <Link to="/decision-inbox" style={{ color: "#2563eb", fontWeight: 900 }}>
+                  Open decision inbox
+                </Link>
+              </div>
+            </Card>
           </div>
         </Section>
 

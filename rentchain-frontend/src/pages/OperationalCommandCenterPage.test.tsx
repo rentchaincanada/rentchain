@@ -637,6 +637,10 @@ describe("OperationalCommandCenterPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Operational command center" })).toBeInTheDocument();
     expect(screen.getByText(/does not execute actions, enforce legal timelines, or modify records/i)).toBeInTheDocument();
+    expect(screen.getByText("Operational inbox bridge")).toBeInTheDocument();
+    expect(screen.getByText(/Review messages and source-linked actions tied to applications, leases, maintenance, payments, or work orders/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open operational inbox" })).toHaveAttribute("href", "/landlord/unified-inbox");
+    expect(screen.getByRole("link", { name: "Open decision inbox" })).toHaveAttribute("href", "/decision-inbox");
 
     await waitFor(() => {
       expect(mocks.fetchDecisionInbox).toHaveBeenCalled();
