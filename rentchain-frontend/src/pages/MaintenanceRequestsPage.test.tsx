@@ -369,6 +369,15 @@ describe("landlord maintenance workspace", () => {
   });
 
   it("opens the related request from the scheduled maintenance calendar", async () => {
+    const scheduledStart = new Date();
+    scheduledStart.setDate(scheduledStart.getDate() + 2);
+    scheduledStart.setHours(13, 0, 0, 0);
+    const scheduledEnd = new Date(scheduledStart);
+    scheduledEnd.setHours(15, 0, 0, 0);
+    const confirmationUpdatedAt = new Date(scheduledStart);
+    confirmationUpdatedAt.setDate(confirmationUpdatedAt.getDate() - 1);
+    confirmationUpdatedAt.setHours(10, 0, 0, 0);
+
     maintenanceWorkflowApi.listLandlordMaintenance.mockResolvedValue({
       items: [
         {
@@ -405,11 +414,11 @@ describe("landlord maintenance workspace", () => {
           priority: "normal",
           status: "scheduled",
           assignedContractorName: "North Shore Plumbing",
-          serviceWindowStartAt: Date.UTC(2026, 3, 15, 13, 0),
-          serviceWindowEndAt: Date.UTC(2026, 3, 15, 15, 0),
+          serviceWindowStartAt: scheduledStart.getTime(),
+          serviceWindowEndAt: scheduledEnd.getTime(),
           accessRequired: false,
           tenantConfirmationStatus: "confirmed",
-          tenantConfirmationUpdatedAt: Date.UTC(2026, 3, 14, 10, 0),
+          tenantConfirmationUpdatedAt: confirmationUpdatedAt.getTime(),
           createdAt: 100,
           updatedAt: 200,
           statusHistory: [],
@@ -426,6 +435,16 @@ describe("landlord maintenance workspace", () => {
     );
 
     expect((await screen.findAllByText(/Scheduled maintenance calendar/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Compact 7-day view of scheduled maintenance windows/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Next 7 days").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Show 30-day calendar" }).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Show 30-day calendar" })[0]);
+    expect(screen.getAllByText(/Read-only 30-day view of scheduled maintenance windows/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Show compact 7-day view" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Previous" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Next" }).length).toBeGreaterThan(0);
+
     fireEvent.click((await screen.findAllByRole("button", { name: /Leaky pipe/i }))[0]);
 
     expect(await screen.findAllByText(/Leaky pipe/i)).not.toHaveLength(0);
