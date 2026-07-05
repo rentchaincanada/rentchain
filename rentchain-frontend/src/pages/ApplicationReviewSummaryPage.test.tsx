@@ -169,8 +169,13 @@ describe("ApplicationReviewSummaryPage", () => {
     renderPage();
 
     expect(await screen.findByText("Application Review Summary")).toBeInTheDocument();
-    expect(await screen.findByText("Landlord review packet for the selected application.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Landlord review packet for the selected application, connected back to the Applications workspace.")
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Review summary for this rental application from the Applications workspace.", { exact: false })).toBeInTheDocument();
+    expect(await screen.findByText("Source-safe context only.", { exact: false })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to applications" })).toHaveAttribute("href", "/applications");
+    expect(screen.getByRole("button", { name: "Download PDF" })).toBeInTheDocument();
     expect(screen.queryByText(/Application ID:/i)).not.toBeInTheDocument();
     expect(await screen.findByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByText("Application Context")).toBeInTheDocument();
@@ -345,7 +350,7 @@ describe("ApplicationReviewSummaryPage", () => {
 
     fireEvent.click(await screen.findByRole("tab", { name: "Screening" }));
 
-    expect(await screen.findByText("Screening not requested")).toBeInTheDocument();
+    expect((await screen.findAllByText("Screening not requested")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Not provided")).length).toBeGreaterThan(0);
     expect(screen.queryByText("not_requested")).not.toBeInTheDocument();
     expect(screen.queryByText("STUB")).not.toBeInTheDocument();

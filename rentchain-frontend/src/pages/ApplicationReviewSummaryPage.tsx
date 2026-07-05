@@ -87,6 +87,51 @@ function kv(label: string, value: string) {
   );
 }
 
+function summaryChip(label: string, value: string, hint?: string) {
+  return (
+    <div
+      key={label}
+      style={{
+        display: "grid",
+        gap: 4,
+        minWidth: 0,
+        padding: "10px 12px",
+        border: `1px solid ${colors.border}`,
+        borderRadius: 10,
+        background: "#fff",
+      }}
+    >
+      <div style={{ fontSize: 12, color: text.subtle }}>{label}</div>
+      <div style={{ fontWeight: 800, color: text.main, overflowWrap: "anywhere" }}>{value || "Not provided"}</div>
+      {hint ? <div style={{ fontSize: 12, color: text.subtle }}>{hint}</div> : null}
+    </div>
+  );
+}
+
+function statusPill(label: string) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "fit-content",
+        padding: "6px 10px",
+        borderRadius: 999,
+        border: `1px solid ${colors.border}`,
+        background: "#eef2ff",
+        color: "#3730a3",
+        fontSize: 12,
+        fontWeight: 800,
+        textTransform: "uppercase",
+        letterSpacing: 0,
+      }}
+    >
+      {label || "Not provided"}
+    </span>
+  );
+}
+
 function intakeTone(state: "ready_for_review" | "needs_follow_up") {
   return state === "ready_for_review"
     ? { color: "#166534", background: "#dcfce7", label: "Ready for review" }
@@ -632,7 +677,7 @@ function ApplicationReviewSummaryPageBody() {
         <div>
           <h1 style={{ margin: 0, fontSize: "1.2rem" }}>Application Review Summary</h1>
           <div style={{ fontSize: 12, color: text.subtle }}>
-            Landlord review packet for the selected application.
+            Landlord review packet for the selected application, connected back to the Applications workspace.
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -682,6 +727,54 @@ function ApplicationReviewSummaryPageBody() {
 
       {!loading && !error && summary ? (
         <>
+          <Card
+            style={{
+              display: "grid",
+              gap: 14,
+              padding: 18,
+              background: "#f8fafc",
+              borderColor: "#dbe4ef",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1fr) auto",
+                gap: 12,
+                alignItems: "start",
+              }}
+            >
+              <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: text.subtle, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0 }}>
+                  Review summary
+                </div>
+                <div style={{ fontSize: "1.4rem", fontWeight: 800, color: text.main, overflowWrap: "anywhere" }}>
+                  {summary.applicant.name || "Applicant review"}
+                </div>
+                <div style={{ fontSize: 13, color: text.subtle, maxWidth: 780 }}>
+                  Review summary for this rental application from the Applications workspace. Use this page to scan the applicant,
+                  application context, screening posture, and next decision guidance without exposing internal identifiers.
+                </div>
+              </div>
+              {statusPill(summary.application?.status || "Not provided")}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+              {summaryChip("Applicant", summary.applicant.name || "Not provided", summary.applicant.email || undefined)}
+              {summaryChip(
+                "Property / unit",
+                [summary.application?.propertyName, summary.application?.unitLabel].filter(Boolean).join(" · ") ||
+                  "Not provided"
+              )}
+              {summaryChip("Submitted", dateOr(summary.application?.submittedAt))}
+              {summaryChip("Screening", screeningStatusDisplayLabel(summary.screening.status, summary.screening.statusLabel))}
+            </div>
+
+            <div style={{ fontSize: 12, color: text.subtle }}>
+              Source-safe context only. Missing values remain marked as not provided rather than falling back to raw IDs.
+            </div>
+          </Card>
+
           <div
             role="tablist"
             aria-label="Review summary sections"
@@ -733,7 +826,8 @@ function ApplicationReviewSummaryPageBody() {
             <div>
               <div style={{ fontWeight: 700 }}>Application Context</div>
               <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
-                Landlord-safe property, unit, lease, and rent context available for this application.
+                Landlord-safe property, unit, lease, and rent context available for this application. Values only appear when
+                a safe display value is present in the review summary.
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
@@ -793,7 +887,7 @@ function ApplicationReviewSummaryPageBody() {
                 <div style={{ fontSize: 12, color: text.subtle }}>
                   These categories match the tenant-facing package language and only reflect records available in the current authorized review summary.
                 </div>
-                {intakeView.packageCategories.map((item) => {
+                {intakeView.packageCategories.map((item, index) => {
                   const tone =
                     item.status === "ready"
                       ? { color: "#166534", background: "#dcfce7", label: "Available to review" }
@@ -802,7 +896,7 @@ function ApplicationReviewSummaryPageBody() {
                       : { color: "#9a3412", background: "#ffedd5", label: "Missing" };
                   return (
                     <div
-                      key={item.key}
+                      key={`${item.key}-${index}`}
                       style={{
                         border: `1px solid ${colors.border}`,
                         borderRadius: 10,
@@ -997,8 +1091,8 @@ function ApplicationReviewSummaryPageBody() {
                 >
                   <div style={{ fontWeight: 700, color: text.main }}>Still needs follow-up</div>
                   {resolutionView.openFollowUpCategories.length ? (
-                    resolutionView.openFollowUpCategories.map((item) => (
-                      <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                    resolutionView.openFollowUpCategories.map((item, index) => (
+                      <div key={`${item.key}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
                         <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
                       </div>
                     ))
@@ -1020,8 +1114,8 @@ function ApplicationReviewSummaryPageBody() {
                 >
                   <div style={{ fontWeight: 700, color: text.main }}>Now appears addressed</div>
                   {resolutionView.addressedCategories.length ? (
-                    resolutionView.addressedCategories.map((item) => (
-                      <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                    resolutionView.addressedCategories.map((item, index) => (
+                      <div key={`${item.key}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
                         <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
                       </div>
                     ))
@@ -1412,8 +1506,8 @@ function ApplicationReviewSummaryPageBody() {
                     >
                       <div style={{ fontWeight: 700, color: text.main }}>Completed items</div>
                       {leasePreparation.completedItems.length ? (
-                        leasePreparation.completedItems.map((item) => (
-                          <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                        leasePreparation.completedItems.map((item, index) => (
+                          <div key={`${item.key}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
                             <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
                           </div>
                         ))
@@ -1435,8 +1529,8 @@ function ApplicationReviewSummaryPageBody() {
                     >
                       <div style={{ fontWeight: 700, color: text.main }}>Outstanding items</div>
                       {leasePreparation.outstandingItems.length ? (
-                        leasePreparation.outstandingItems.map((item) => (
-                          <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                        leasePreparation.outstandingItems.map((item, index) => (
+                          <div key={`${item.key}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
                             <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
                           </div>
                         ))
@@ -1534,8 +1628,8 @@ function ApplicationReviewSummaryPageBody() {
                     >
                       <div style={{ fontWeight: 700, color: text.main }}>Completed items</div>
                       {moveInReadiness.completedItems.length ? (
-                        moveInReadiness.completedItems.map((item) => (
-                          <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                        moveInReadiness.completedItems.map((item, index) => (
+                          <div key={`${item.key}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
                             <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
                           </div>
                         ))
@@ -1557,8 +1651,8 @@ function ApplicationReviewSummaryPageBody() {
                     >
                       <div style={{ fontWeight: 700, color: text.main }}>Outstanding items</div>
                       {moveInReadiness.outstandingItems.length ? (
-                        moveInReadiness.outstandingItems.map((item) => (
-                          <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                        moveInReadiness.outstandingItems.map((item, index) => (
+                          <div key={`${item.key}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
                             <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
                           </div>
                         ))
