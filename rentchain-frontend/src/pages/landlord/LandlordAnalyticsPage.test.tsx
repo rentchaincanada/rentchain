@@ -538,6 +538,7 @@ describe("LandlordAnalyticsPage", () => {
     expect(screen.getByRole("tab", { name: "Predictive metrics" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Attention-worthy insights" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Portfolio-level execution state summary" })).toBeInTheDocument();
+    expect(screen.queryByText("Continue the demo flow")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Review leases/i })).toHaveAttribute("href", "/portfolio-health");
     expect(container.querySelector(".analytics-workspace-summary-grid")).toBeTruthy();
 
@@ -883,6 +884,9 @@ describe("LandlordAnalyticsPage", () => {
     );
 
     expect(await screen.findByText(/Focused from decisions: Revenue pressure/i)).toBeInTheDocument();
+    expect(screen.getByText("Continue the demo flow")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to dashboard" })).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByRole("link", { name: "Open operations" })).toHaveAttribute("href", "/operations");
     expect(fetchLandlordAnalyticsSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
         period: "90d",
@@ -902,6 +906,9 @@ describe("LandlordAnalyticsPage", () => {
     );
 
     expect(await screen.findByText(/Focused from decisions: Vacancy readiness/i)).toBeInTheDocument();
+    expect(screen.getByText("Continue the demo flow")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to dashboard" })).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByRole("link", { name: "Open operations" })).toHaveAttribute("href", "/operations");
     expect(screen.getByTestId("analytics-kpi-grid")).toHaveClass("analytics-kpi-grid");
   });
 

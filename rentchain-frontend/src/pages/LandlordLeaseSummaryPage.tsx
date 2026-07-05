@@ -169,6 +169,12 @@ export default function LandlordLeaseSummaryPage() {
         >
           Back to leases
         </Link>
+        <Link
+          to="/operations"
+          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+        >
+          Open operations
+        </Link>
       </div>
 
       {loading ? <div>Loading lease summary…</div> : null}

@@ -1,5 +1,5 @@
 import React from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { fetchLandlordAnalyticsSnapshot, type AnalyticsPeriod, type LandlordAnalyticsSnapshot } from "../../api/landlordAnalyticsApi";
 import {
   fetchLandlordAnalyticsAlerts,
@@ -491,21 +491,35 @@ export default function LandlordAnalyticsPage() {
     <MacShell title="Analytics" showTopNav={false} maxWidth="min(100%, 1500px)">
       <div className="analytics-workspace-page">
         {analyticsEnabled ? (
-          <AnalyticsWorkspaceHeader
-            title="Analytics"
-            description="A calm view of portfolio health, application activity, leasing pressure, maintenance burden, and rent signals."
-            focusLabel={routedEntryLabel}
-            activeTab={activeTab}
-            tabs={ANALYTICS_WORKSPACE_TABS}
-            period={period}
-            propertyId={propertyId}
-            properties={snapshot?.properties || []}
-            disabled={loading}
-            onTabChange={setActiveTab}
-            onPeriodChange={setPeriod}
-            onPropertyChange={setPropertyId}
-            onPrint={() => void printSummaryDocument("summary")}
-          />
+          <>
+            <AnalyticsWorkspaceHeader
+              title="Analytics"
+              description="A calm view of portfolio health, application activity, leasing pressure, maintenance burden, and rent signals."
+              focusLabel={routedEntryLabel}
+              activeTab={activeTab}
+              tabs={ANALYTICS_WORKSPACE_TABS}
+              period={period}
+              propertyId={propertyId}
+              properties={snapshot?.properties || []}
+              disabled={loading}
+              onTabChange={setActiveTab}
+              onPeriodChange={setPeriod}
+              onPropertyChange={setPropertyId}
+              onPrint={() => void printSummaryDocument("summary")}
+            />
+            {routedEntryLabel ? (
+              <Card className="analytics-demo-actions no-print">
+                <div className="analytics-demo-actions__copy">
+                  <strong>Continue the demo flow</strong>
+                  <span>Return to the operational home or open the review queue after checking this signal.</span>
+                </div>
+                <div className="analytics-demo-actions__links">
+                  <Link to="/dashboard">Back to dashboard</Link>
+                  <Link to="/operations">Open operations</Link>
+                </div>
+              </Card>
+            ) : null}
+          </>
         ) : (
           <Section>
             <div style={{ display: "grid", gap: 6 }}>

@@ -142,6 +142,7 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download evidence package" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to leases" })).toHaveAttribute("href", "/leases");
+    expect(screen.getByRole("link", { name: "Open operations" })).toHaveAttribute("href", "/operations");
   });
 
   it("scrolls to and highlights requested lease summary workflow sections after data loads", async () => {

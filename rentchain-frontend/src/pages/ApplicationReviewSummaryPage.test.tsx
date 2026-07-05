@@ -161,6 +161,7 @@ describe("ApplicationReviewSummaryPage", () => {
 
     expect(await screen.findByText("Application Review Summary")).toBeInTheDocument();
     expect(await screen.findByText("Landlord review packet for the selected application.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to applications" })).toHaveAttribute("href", "/applications");
     expect(screen.queryByText(/Application ID:/i)).not.toBeInTheDocument();
     expect(await screen.findByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByText("Intake Summary")).toBeInTheDocument();
