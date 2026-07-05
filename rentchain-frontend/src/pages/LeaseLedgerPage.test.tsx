@@ -437,6 +437,8 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getByText(/Renewal pending/i)).toBeInTheDocument();
     expect(screen.getByText("Waiting for landlord signature")).toBeInTheDocument();
     expect(screen.getByText("Call tenant next week")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to lease summary" })).toHaveAttribute("href", "/leases/lease-1/summary");
+    expect(screen.getByRole("link", { name: "Open operations" })).toHaveAttribute("href", "/operations");
   });
 
   it("formats ledger cents as readable dollars and cents", async () => {

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { Card, Button } from "../components/ui/Ui";
 import { colors, text } from "../styles/tokens";
 import { useEntitlements } from "@/hooks/useEntitlements";
@@ -323,7 +323,6 @@ class ReviewSummaryErrorBoundary extends React.Component<
 
 function ApplicationReviewSummaryPageBody() {
   const { id = "" } = useParams();
-  const navigate = useNavigate();
   const { showToast } = useToast();
   const entitlements = useEntitlements();
   const [loading, setLoading] = useState(true);
@@ -612,7 +611,23 @@ function ApplicationReviewSummaryPageBody() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Button variant="ghost" onClick={() => navigate(-1)}>Back</Button>
+          <Link
+            to="/applications"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minHeight: 38,
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: `1px solid ${colors.border}`,
+              color: text.main,
+              textDecoration: "none",
+              fontWeight: 700,
+            }}
+          >
+            Back to applications
+          </Link>
           <Button variant="secondary" onClick={() => void downloadPdf()}>Download PDF</Button>
           <Button variant="secondary" onClick={() => void copyText(shareUrl, "Share link copied")}>Copy link</Button>
           {summary?.screening?.referenceId ? (

@@ -1011,6 +1011,8 @@ export default function LeaseLedgerPage() {
           ) : null}
         </div>
         <div className="lease-ledger-actions">
+          <Link to={`/leases/${encodeURIComponent(leaseId)}/summary`}>Back to lease summary</Link>
+          <Link to="/operations">Open operations</Link>
           <Link to="/leases?view=archived">View archive</Link>
           <button aria-label="Add lease note" onClick={() => setShowNoteModal(true)}>Add note</button>
           <button onClick={() => setShowChargeModal(true)}>Add charge</button>
