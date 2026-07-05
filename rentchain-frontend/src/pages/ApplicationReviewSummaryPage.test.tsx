@@ -70,6 +70,15 @@ describe("ApplicationReviewSummaryPage", () => {
     vi.mocked(fetchReviewSummary).mockResolvedValue({
       applicationId: "app-1",
       generatedAt: "2026-04-01T00:00:00.000Z",
+      application: {
+        status: "SUBMITTED",
+        submittedAt: "2026-04-01T10:00:00.000Z",
+        propertyName: "Kentville Suites",
+        unitLabel: "Unit 105",
+        leaseStartDate: "2026-09-01T00:00:00.000Z",
+        requestedRentAmountCents: 150000,
+        moveInDate: "2026-09-01T00:00:00.000Z",
+      },
       applicant: {
         name: "Jane Applicant",
         email: "jane@example.com",
@@ -164,6 +173,13 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(screen.getByRole("link", { name: "Back to applications" })).toHaveAttribute("href", "/applications");
     expect(screen.queryByText(/Application ID:/i)).not.toBeInTheDocument();
     expect(await screen.findByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("Application Context")).toBeInTheDocument();
+    expect(await screen.findByText("Kentville Suites")).toBeInTheDocument();
+    expect(await screen.findByText("Unit 105")).toBeInTheDocument();
+    expect(screen.getByText(/CA\$1,500/)).toBeInTheDocument();
+    expect(screen.queryByText("ixcRcv8tTgz0lKvDRw66")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copy reference ID" })).not.toBeInTheDocument();
+    expect(screen.queryByText("TU-1")).not.toBeInTheDocument();
     expect(await screen.findByText("Intake Summary")).toBeInTheDocument();
     expect(await screen.findByText("Shared package categories")).toBeInTheDocument();
     expect(await screen.findByText("Recent activity")).toBeInTheDocument();
@@ -231,6 +247,8 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(await screen.findByText("Identity verification completed")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Screening" }));
+    expect(screen.queryByText("Reference ID")).not.toBeInTheDocument();
+    expect(screen.queryByText("TU-1")).not.toBeInTheDocument();
     expect(await screen.findByText("Trust guidance")).toBeInTheDocument();
     expect(await screen.findByText("Credibility summary")).toBeInTheDocument();
     expect(await screen.findByText("Credibility established")).toBeInTheDocument();
