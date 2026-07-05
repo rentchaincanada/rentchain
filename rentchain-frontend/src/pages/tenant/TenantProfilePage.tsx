@@ -59,6 +59,141 @@ function buildProfilePropertyDisplay(property: Awaited<ReturnType<typeof getTena
     .join(" · ");
 }
 
+function firstSafeValue(...values: Array<unknown>) {
+  for (const value of values) {
+    const next = cleanProfileDisplayValue(String(value || ""));
+    if (next) return next;
+  }
+  return null;
+}
+
+function hasTenantSafeDocumentUrl(lease: any) {
+  const contextUrl = String(lease?.leaseDocumentContext?.documentUrl || "").trim();
+  const documentUrl = String(lease?.documentUrl || "").trim();
+  return Boolean(contextUrl || documentUrl);
+}
+
+function buildRentalDocumentSummary(lease: any) {
+  const context = lease?.leaseDocumentContext || null;
+  const contextStatus = String(context?.documentStatus || "").trim();
+  const providerSigned = String(lease?.providerSigningStatus || "").trim() === "signed";
+  const hasDocumentUrl = hasTenantSafeDocumentUrl(lease);
+  const displayLabel = String(context?.displayLabel || lease?.leasePdfLabel || "").trim();
+
+  if (providerSigned && !hasDocumentUrl) {
+    return {
+      label: "Signed copy pending",
+      detail: "Signing is complete, but no tenant-safe signed lease document link is available yet.",
+    };
+  }
+
+  if (contextStatus === "signed" || (providerSigned && hasDocumentUrl)) {
+    return {
+      label: displayLabel || "Signed document ready",
+      detail: "A tenant-safe signed lease document is available in your workspace.",
+    };
+  }
+
+  if (contextStatus === "generated" || hasDocumentUrl) {
+    return {
+      label: displayLabel || "Lease document available",
+      detail: "A tenant-safe lease document is available. Signing or final execution may still be tracked separately.",
+    };
+  }
+
+  if (contextStatus === "pending") {
+    return {
+      label: displayLabel || "Lease document pending",
+      detail: "A lease document workflow is visible, but the tenant-safe document link is not ready yet.",
+    };
+  }
+
+  return {
+    label: displayLabel || "No lease document available yet",
+    detail: "No tenant-safe lease document link is available in this profile yet.",
+  };
+}
+
+function buildRentalSigningSummary(lease: any) {
+  const execution = lease?.leaseExecution || null;
+  const providerSigningStatus = String(lease?.providerSigningStatus || "not_started").trim();
+  const providerSigned = providerSigningStatus === "signed";
+  const documentSummary = buildRentalDocumentSummary(lease);
+
+  if (providerSigned && documentSummary.label === "Signed copy pending") {
+    return {
+      label: "Lease signature complete",
+      detail: "Provider-backed signing is complete. The signed copy is still being prepared for this tenant workspace.",
+    };
+  }
+
+  if (providerSigned) {
+    return {
+      label: "Lease signature complete",
+      detail: hasTenantSafeDocumentUrl(lease)
+        ? "Provider-backed signing is complete and a tenant-safe signed copy is available."
+        : "Provider-backed signing is complete.",
+    };
+  }
+
+  if (execution?.executionLabel) {
+    return {
+      label: execution.executionLabel,
+      detail: execution.executionDescription || "Lease execution status is available from your tenant-safe lease workspace.",
+    };
+  }
+
+  if (lease?.signatureReadinessLabel) {
+    return {
+      label: lease.signatureReadinessLabel,
+      detail: lease.signatureReadinessDescription || "Lease signing details are not available in this workspace yet.",
+    };
+  }
+
+  return {
+    label: "Lease signing not started",
+    detail: "No tenant-safe signature workflow or execution evidence is available yet.",
+  };
+}
+
+function buildRentalPaymentSummary(lease: any) {
+  const readiness = lease?.paymentReadiness || null;
+  const paymentSummary = lease?.rentPaymentSummary || null;
+  const paymentRailEnabled = paymentSummary?.paymentRail?.enabled === true;
+  const readinessStatus = String(readiness?.readinessStatus || "").trim();
+  const checkoutAvailable = paymentRailEnabled && readinessStatus === "ready_to_configure";
+
+  if (checkoutAvailable) {
+    return {
+      label: "Rent collection enabled",
+      detail: "Tenant checkout is available when a rent payment is due.",
+      checkout: "Checkout available",
+    };
+  }
+
+  if (paymentRailEnabled) {
+    return {
+      label: "Rent collection enabled",
+      detail: "Rent collection is enabled. Payment availability follows the current lease payment status.",
+      checkout: "Checkout status depends on payment state",
+    };
+  }
+
+  if (readiness) {
+    return {
+      label: readiness.readinessLabel || "Payment setup needs review",
+      detail: readiness.readinessDescription || "Lease payment setup details still need review before checkout can start.",
+      checkout: "Checkout unavailable",
+    };
+  }
+
+  return {
+    label: "Payment setup not ready",
+    detail: "Payment readiness will appear here when your current lease exposes enough rent-term detail.",
+    checkout: "Checkout unavailable",
+  };
+}
+
 export default function TenantProfilePage() {
   const [data, setData] = useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -245,6 +380,17 @@ export default function TenantProfilePage() {
     updatedAt: attachments?.updatedAt,
     access: null,
   });
+  const profileLease = (data?.profile?.lease || null) as any;
+  const workspaceLease = (workspace?.lease || null) as any;
+  const rentalLease = workspaceLease ? { ...(profileLease || {}), ...workspaceLease } : profileLease;
+  const rentalDocumentSummary = buildRentalDocumentSummary(rentalLease);
+  const rentalSigningSummary = buildRentalSigningSummary(rentalLease);
+  const rentalPaymentSummary = buildRentalPaymentSummary(rentalLease);
+  const leaseTermStart = formatDate(rentalLease?.startDate);
+  const leaseTermEnd = formatDate(rentalLease?.endDate);
+  const leaseTerm =
+    leaseTermStart !== "—" || leaseTermEnd !== "—" ? `${leaseTermStart} to ${leaseTermEnd}` : "Lease dates not provided";
+  const rentalPropertySummary = propertyDisplay || firstSafeValue(workspace?.unit?.label ? `Unit ${workspace.unit.label}` : null) || "No property linked yet";
 
   return (
     <TenantSurfaceShell
@@ -378,23 +524,85 @@ export default function TenantProfilePage() {
       >
         <div ref={rentalRecordRef} tabIndex={-1} style={{ outline: "none" }}>
         <TenantInfoCard heading="Rental record" accent="#7c3aed">
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ display: "grid", gap: 4 }}>
+              <div style={{ fontSize: "1.05rem", fontWeight: 800, color: textTokens.primary }}>
+                Current rental record
+              </div>
+              <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                This profile reflects tenant-safe lease, document, signing, and rent setup details from your current workspace.
+              </div>
+            </div>
+
           <TenantKeyValueGrid
             rows={[
               { label: "Application", value: prettyStatus(data?.profile?.application?.status) },
-              { label: "Lease", value: prettyStatus(data?.profile?.lease?.status) },
-              { label: "Rent", value: formatMoney(data?.profile?.lease?.monthlyRent) },
-              { label: "Lease start", value: formatDate(data?.profile?.lease?.startDate) },
-              { label: "Lease end", value: formatDate(data?.profile?.lease?.endDate) },
-              {
-                label: "Lease document",
-                value:
-                  data?.profile?.lease?.leaseDocumentContext?.displayLabel ||
-                  (data?.profile?.lease?.documentUrl ? "Available" : "Not shared yet"),
-              },
+              { label: "Lease", value: prettyStatus(rentalLease?.status) },
+              { label: "Property / unit", value: rentalPropertySummary },
+              { label: "Rent", value: formatMoney(rentalLease?.monthlyRent) },
+              { label: "Lease term", value: leaseTerm },
             ]}
           />
-          <div style={{ color: textTokens.muted }}>
-            This section keeps your current rental record visible in one place. Longer history can be added over time as more tenant-safe records are linked.
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+                gap: spacing.sm,
+              }}
+            >
+              {[
+                {
+                  title: "Lease document",
+                  label: rentalDocumentSummary.label,
+                  detail: rentalDocumentSummary.detail,
+                },
+                {
+                  title: "Signing / execution",
+                  label: rentalSigningSummary.label,
+                  detail: rentalSigningSummary.detail,
+                },
+                {
+                  title: "Rent payments",
+                  label: rentalPaymentSummary.label,
+                  detail: `${rentalPaymentSummary.detail} ${rentalPaymentSummary.checkout}.`,
+                },
+              ].map((item) => (
+                <div
+                  key={item.title}
+                  style={{
+                    border: "1px solid rgba(15,23,42,0.08)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    display: "grid",
+                    gap: 6,
+                    minWidth: 0,
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 800, color: textTokens.muted, textTransform: "uppercase" }}>
+                    {item.title}
+                  </div>
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>{item.label}</div>
+                  <div style={{ color: textTokens.secondary, lineHeight: 1.5 }}>{item.detail}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <Link to="/tenant/lease" style={{ fontWeight: 700 }}>
+                Open lease details
+              </Link>
+              <Link to="/tenant/payments" style={{ fontWeight: 700 }}>
+                Review payments
+              </Link>
+              <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
+                Open documents
+              </Link>
+            </div>
+
+            <div style={{ color: textTokens.muted }}>
+              Longer rental history can be added over time as more tenant-safe records are linked.
+            </div>
           </div>
         </TenantInfoCard>
         </div>

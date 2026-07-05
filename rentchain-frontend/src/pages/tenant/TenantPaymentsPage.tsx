@@ -8,6 +8,7 @@ import {
   TenantPaymentsSummary,
   TenantRentCharge,
 } from "../../api/tenantPortalApi";
+import { getTenantWorkspace } from "../../api/tenantPortal";
 import { useTenantOutletContext } from "./TenantLayout.clean";
 import { colors, radius, shadows, text as textTokens } from "../../styles/tokens";
 
@@ -78,6 +79,22 @@ function optionalSurfaceError(reason: any, fallback: string): string | null {
   return reason?.status === 404 ? null : reason?.message || fallback;
 }
 
+function isLikelyRawId(value: string | null | undefined): boolean {
+  return Boolean(value && /^[A-Za-z0-9_-]{12,}$/.test(value));
+}
+
+function safeDisplayValue(value: string | null | undefined): string | null {
+  const next = String(value || "").trim();
+  if (!next || isLikelyRawId(next)) return null;
+  return next;
+}
+
+function isActiveLease(value: any): boolean {
+  if (!value) return false;
+  const status = String(value?.status || "").trim().toLowerCase();
+  return !["ended", "expired", "terminated", "cancelled", "canceled"].includes(status);
+}
+
 export const TenantPaymentsPage: React.FC = () => {
   const tenantContext = useTenantOutletContext();
   const lease = tenantContext?.lease ?? null;
@@ -88,6 +105,7 @@ export const TenantPaymentsPage: React.FC = () => {
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [charges, setCharges] = useState<TenantRentCharge[]>([]);
   const [chargesError, setChargesError] = useState<string | null>(null);
+  const [workspace, setWorkspace] = useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -97,10 +115,11 @@ export const TenantPaymentsPage: React.FC = () => {
     setSummaryError(null);
     setChargesError(null);
     try {
-      const [historyResult, summaryResult, chargesResult] = await Promise.allSettled([
+      const [historyResult, summaryResult, chargesResult, workspaceResult] = await Promise.allSettled([
         getTenantPayments(),
         getTenantPaymentsSummary(),
         getTenantRentCharges(),
+        getTenantWorkspace(),
       ]);
       if (historyResult.status === "fulfilled") {
         setPayments(Array.isArray(historyResult.value) ? historyResult.value : []);
@@ -120,6 +139,11 @@ export const TenantPaymentsPage: React.FC = () => {
         setCharges([]);
         setChargesError(optionalSurfaceError(chargesResult.reason, "Rent charges are unavailable"));
       }
+      if (workspaceResult.status === "fulfilled") {
+        setWorkspace(workspaceResult.value ?? null);
+      } else {
+        setWorkspace(null);
+      }
     } catch (err: any) {
       setError(err?.message || "Failed to load payments");
       setSummaryError(err?.message || "Failed to load payments summary");
@@ -132,6 +156,31 @@ export const TenantPaymentsPage: React.FC = () => {
   useEffect(() => {
     void loadPayments();
   }, [loadPayments, refreshKey]);
+
+  const workspaceLease = workspace?.lease ?? null;
+  const activeLease = lease || workspaceLease;
+  const hasActiveLease = isActiveLease(activeLease);
+  const workspacePropertyLine = safeDisplayValue(workspace?.property?.street1);
+  const leasePropertyLine =
+    lease?.propertyName || workspacePropertyLine || "Your lease";
+  const leaseUnitLine =
+    lease?.unitNumber || safeDisplayValue(workspace?.unit?.label);
+  const paymentReadiness = (activeLease as any)?.paymentReadiness || null;
+  const rentPaymentSummary = (activeLease as any)?.rentPaymentSummary || null;
+  const rentCollectionEnabled = rentPaymentSummary?.paymentRail?.enabled === true;
+  const paymentSetupIncomplete =
+    hasActiveLease && (!rentCollectionEnabled || paymentReadiness?.readinessStatus === "not_ready");
+  const paymentSetupEmptyState = paymentSetupIncomplete
+    ? {
+        title: rentCollectionEnabled ? "Payment setup is not ready" : "Rent collection not enabled yet",
+        body: paymentReadiness?.readinessDescription
+          ? `${paymentReadiness.readinessDescription} Online rent payments are not available yet.`
+          : "Your lease is active, but online rent payments are not available yet. Your landlord still needs to finish rent payment setup before checkout can start.",
+      }
+    : {
+        title: "No payments yet",
+        body: "Recorded rent payments will appear here with date, amount, method, status, and notes.",
+      };
 
   const renderStatusBadge = () => {
     const status = summary?.currentPeriod?.status ?? "unknown";
@@ -169,7 +218,7 @@ export const TenantPaymentsPage: React.FC = () => {
           </div>
           <div style={{ fontSize: 20, fontWeight: 700 }}>Rent payments</div>
           <div style={{ color: textTokens.muted, fontSize: 13 }}>
-            {lease?.propertyName || "Your lease"} · {lease?.unitNumber ? `Unit ${lease.unitNumber}` : "Unit"}
+            {leasePropertyLine} · {leaseUnitLine ? `Unit ${leaseUnitLine}` : "Unit"}
           </div>
         </div>
         {renderStatusBadge()}
@@ -289,13 +338,13 @@ export const TenantPaymentsPage: React.FC = () => {
         />
       ) : isLoading ? (
         <TenantPaymentSkeleton />
-      ) : !lease ? (
+      ) : !hasActiveLease ? (
         <TenantPaymentState
           title="No active lease found"
           body="Payment history appears after an active lease is linked to your tenant workspace."
         />
       ) : payments.length === 0 ? (
-        <TenantPaymentState title="No payments yet" body="Recorded rent payments will appear here with date, amount, method, status, and notes." />
+        <TenantPaymentState title={paymentSetupEmptyState.title} body={paymentSetupEmptyState.body} />
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
