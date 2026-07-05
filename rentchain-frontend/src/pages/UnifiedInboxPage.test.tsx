@@ -152,7 +152,7 @@ describe("UnifiedInboxPage", () => {
     render(<UnifiedInboxPage role="landlord" />);
 
     expect(await screen.findByRole("heading", { name: "Unified inbox" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Application status updated/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Application status updated/i }));
 
     expect(screen.getByText("Open the application workspace from the server-projected safe action.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open application workspace/i })).toHaveAttribute("href", "/applications");
