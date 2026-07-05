@@ -288,11 +288,11 @@ function isOpenMaintenanceRequest(request: { status?: unknown }): boolean {
   return !["completed", "cancelled", "canceled", "resolved", "closed"].includes(status);
 }
 
-function useNarrowDashboardLayout(): boolean {
+function useReducedDashboardLayout(): boolean {
   const [isNarrow, setIsNarrow] = React.useState(false);
 
   React.useEffect(() => {
-    const media = window.matchMedia("(max-width: 900px)");
+    const media = window.matchMedia("(max-width: 1120px)");
     const update = () => setIsNarrow(media.matches);
     update();
     media.addEventListener("change", update);
@@ -919,7 +919,7 @@ function WorkspaceRoutingSection() {
 }
 
 export default function DashboardPage() {
-  const isNarrow = useNarrowDashboardLayout();
+  const isReducedDashboardLayout = useReducedDashboardLayout();
   const [portfolio, setPortfolio] = React.useState<Loadable<LandlordPortfolioStatusFinancialResponse>>({
     data: null,
     loading: true,
@@ -1048,9 +1048,10 @@ export default function DashboardPage() {
           </div>
 
           <div
+            data-testid="dashboard-decision-layout-grid"
             style={{
               display: "grid",
-              gridTemplateColumns: isNarrow ? "1fr" : "minmax(0, 1.15fr) minmax(300px, 0.85fr)",
+              gridTemplateColumns: isReducedDashboardLayout ? "1fr" : "minmax(0, 1.15fr) minmax(300px, 0.85fr)",
               gap: spacing.lg,
               minWidth: 0,
             }}

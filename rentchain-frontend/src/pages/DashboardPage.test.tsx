@@ -487,13 +487,14 @@ describe("DashboardPage", () => {
     expect(screen.getByText("No dated schedule items are visible for this week. Upcoming dated decisions will appear here.")).toBeInTheDocument();
   });
 
-  it("collapses the primary dashboard grid on narrow viewports", async () => {
+  it("stacks the decision and upcoming-actions grid on reduced desktop widths", async () => {
     installMatchMedia(true);
 
     renderDashboard();
 
     await waitFor(() => {
-      expect(screen.getByTestId("dashboard-operational-grid")).toHaveStyle({ gridTemplateColumns: "1fr" });
+      expect(window.matchMedia).toHaveBeenCalledWith("(max-width: 1120px)");
+      expect(screen.getByTestId("dashboard-decision-layout-grid")).toHaveStyle({ gridTemplateColumns: "1fr" });
     });
   });
 });
