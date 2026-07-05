@@ -1134,6 +1134,155 @@ describe("tenantPortalRoutes foundation", () => {
     expect(payload).not.toContain("raw-provider-request-id");
   });
 
+  it("keeps tenant document vault reflection aligned with signed-document availability and Schedule A separation", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      landlordId: "landlord-1",
+      status: "active",
+      documentUrl: null,
+      approvedDocumentUrl: null,
+      documentRef: null,
+      leaseDocument: null,
+      signedDocument: null,
+      scheduleADocument: {
+        bucket: "lease-documents",
+        path: "leases/landlord-1/draft-vault/schedule-a-v1.pdf",
+      },
+      internalSignedDocumentUrl: "https://landlord-only.example/evidence-package.pdf",
+    });
+    ensureCollection("leaseSigningRequests").set("vault-signing-request", {
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      providerId: "dropbox_sign",
+      providerRequestId: "provider-envelope-raw-123",
+      providerEnvelopeId: "provider-envelope-raw-456",
+      providerRequestRef: "dropbox_sign_ref_safe",
+      currentSigningStatus: "signed",
+      currentStatusAt: "2026-07-03T10:00:00.000Z",
+      landlordEvidencePackageUrl: "https://landlord-only.example/signing-evidence.pdf",
+      createdAt: "2026-07-03T09:00:00.000Z",
+    });
+    ensureCollection("leaseSigningEvents").set("vault-signing-event", {
+      requestId: "vault-signing-request",
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      type: "signed",
+      occurredAt: "2026-07-03T10:00:00.000Z",
+      actorRole: "provider",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-1",
+        email: "tenant@example.com",
+        role: "tenant",
+        tenantId: "tenant-1",
+      }),
+    };
+
+    const pendingLeaseRes = await invokeRouter(router, { method: "GET", url: "/lease", headers });
+    const pendingAttachmentsRes = await invokeRouter(router, { method: "GET", url: "/attachments", headers });
+
+    expect(pendingLeaseRes.status).toBe(200);
+    expect(pendingLeaseRes.body?.data).toEqual(
+      expect.objectContaining({
+        providerSigningStatus: "signed",
+        leasePdfStatus: "pending",
+        leaseDocumentContext: expect.objectContaining({
+          documentStatus: "pending",
+          displayLabel: "Signed lease document pending",
+          source: "lease_signing_signed_without_document",
+          warnings: ["Signing is complete, but no tenant-safe signed lease document link is available yet."],
+        }),
+      })
+    );
+    expect(pendingAttachmentsRes.status).toBe(200);
+    expect(pendingAttachmentsRes.body?.leaseDocumentContext).toEqual(
+      expect.objectContaining({
+        documentStatus: "pending",
+        displayLabel: "Signed lease document pending",
+      })
+    );
+    expect(pendingAttachmentsRes.body?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Schedule A",
+          category: "Attachments",
+          purpose: "SCHEDULE_A",
+          purposeLabel: "Schedule A",
+          url: "https://signed.example/leases/landlord-1/draft-vault/schedule-a-v1.pdf",
+        }),
+      ])
+    );
+    expect(pendingAttachmentsRes.body?.data?.some((item: any) => item.title === "Signed lease document")).toBe(false);
+    expect(pendingAttachmentsRes.body?.data?.filter((item: any) => item.category === "Lease" && item.purpose === "LEASE")).toEqual([]);
+
+    ensureCollection("leaseSigningRequests").set("vault-signing-request", {
+      ...(ensureCollection("leaseSigningRequests").get("vault-signing-request") || {}),
+      signedDocument: {
+        bucket: "signed-lease-documents",
+        path: "tenant-visible/signed-lease-copy.pdf",
+        providerEnvelopeId: "provider-envelope-raw-789",
+      },
+      signedDocumentHash: "signed_doc_hash_should_not_leak",
+      signedDocumentStoredAt: "2026-07-03T10:05:00.000Z",
+    });
+
+    const readyLeaseRes = await invokeRouter(router, { method: "GET", url: "/lease", headers });
+    const readyAttachmentsRes = await invokeRouter(router, { method: "GET", url: "/attachments", headers });
+
+    expect(readyLeaseRes.status).toBe(200);
+    expect(readyLeaseRes.body?.data?.leaseDocumentContext).toEqual(
+      expect.objectContaining({
+        documentStatus: "signed",
+        documentUrl: "https://signed.example/tenant-visible/signed-lease-copy.pdf",
+        displayLabel: "Signed lease document",
+        source: "leaseSigningRequests.signedDocument",
+      })
+    );
+    expect(readyLeaseRes.body?.data?.leasePdfStatus).toBe("available");
+    expect(readyAttachmentsRes.status).toBe(200);
+    expect(readyAttachmentsRes.body?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Signed lease document",
+          fileName: "signed-lease.pdf",
+          category: "Lease",
+          purpose: "LEASE",
+          purposeLabel: "Lease",
+          url: "https://signed.example/tenant-visible/signed-lease-copy.pdf",
+        }),
+        expect.objectContaining({
+          title: "Schedule A",
+          category: "Attachments",
+          purpose: "SCHEDULE_A",
+          purposeLabel: "Schedule A",
+          url: "https://signed.example/leases/landlord-1/draft-vault/schedule-a-v1.pdf",
+        }),
+      ])
+    );
+    expect(
+      readyAttachmentsRes.body?.data?.filter((item: any) => item.category === "Lease" && item.purpose === "LEASE")
+    ).toHaveLength(1);
+    expect(
+      readyAttachmentsRes.body?.data?.filter((item: any) => item.category === "Attachments" && item.purpose === "SCHEDULE_A")
+    ).toHaveLength(1);
+
+    const serialized = JSON.stringify({
+      pendingLease: pendingLeaseRes.body,
+      pendingAttachments: pendingAttachmentsRes.body,
+      readyLease: readyLeaseRes.body,
+      readyAttachments: readyAttachmentsRes.body,
+    });
+    expect(serialized).not.toContain("provider-envelope-raw");
+    expect(serialized).not.toContain("vault-signing-request");
+    expect(serialized).not.toContain("signed-lease-documents");
+    expect(serialized).not.toContain("leaseSigningEvents");
+    expect(serialized).not.toContain("landlord-only.example");
+    expect(serialized).not.toContain("signed_doc_hash_should_not_leak");
+  });
+
   it("links tenant lease workspace to generated unsigned lease package attachments", async () => {
     ensureCollection("leases").set("lease-1", {
       ...(ensureCollection("leases").get("lease-1") || {}),
