@@ -194,6 +194,13 @@ describe("LandlordNav mobile drawer", () => {
     expect(screen.getByText("PM Companies", { selector: ".rc-landlord-mobile-role" })).toBeInTheDocument();
   });
 
+  it("keeps verified screenings inside the landlord shell with bottom navigation", () => {
+    renderLandlordNav("/verified-screenings");
+
+    expect(screen.getByRole("navigation", { name: "Bottom navigation" })).toBeInTheDocument();
+    expect(screen.getByText("Verified Screenings", { selector: ".rc-landlord-mobile-role" })).toBeInTheDocument();
+  });
+
   it("keeps the mobile tab bar and close control available while the drawer is open", () => {
     renderLandlordNav();
 

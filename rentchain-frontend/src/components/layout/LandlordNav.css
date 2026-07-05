@@ -115,6 +115,32 @@
   color: #1d4ed8;
 }
 
+@media (min-width: 821px) and (max-width: 1180px) {
+  .rc-landlord-workspace-bar {
+    height: auto;
+    min-height: var(--rc-landlord-workspace-bar-height);
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    overflow: visible;
+  }
+
+  .rc-landlord-workspace-context {
+    width: 100%;
+  }
+
+  .rc-landlord-workspace-links {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    overflow-x: visible;
+    row-gap: 8px;
+  }
+
+  .rc-landlord-workspace-links a {
+    padding: 7px 9px;
+  }
+}
+
 .rc-landlord-content {
   padding: 0 0 24px;
   box-sizing: border-box;

@@ -1,0 +1,99 @@
+.rc-contractors-page,
+.rc-contractors-page * {
+  box-sizing: border-box;
+}
+
+.rc-contractors-page {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.rc-contractors-invite-form-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  min-width: 0;
+}
+
+.rc-contractors-wrap-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.rc-contractors-invite-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rc-contractors-invite-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.rc-contractors-invite-table th,
+.rc-contractors-invite-table td {
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.rc-contractors-invite-table thead tr {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.rc-contractors-invite-table tbody tr {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.rc-contractors-invite-table td {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.rc-contractors-invite-cards {
+  display: none;
+}
+
+.rc-contractors-invite-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.rc-contractors-invite-card-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+}
+
+.rc-contractors-invite-card-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rc-contractors-invite-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 720px) {
+  .rc-contractors-invite-table-wrap {
+    display: none;
+  }
+
+  .rc-contractors-invite-cards {
+    display: grid;
+    gap: 10px;
+  }
+}
