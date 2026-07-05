@@ -230,7 +230,7 @@ describe("tenant profile and communications pages", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/6227 Coburg Road · Unit 6 · Halifax, NS B3H 1Z8/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/6227 Coburg Road · Unit 6 · Halifax, NS B3H 1Z8/i)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/raw-unit-id-123456789/i)).not.toBeInTheDocument();
   });
 
@@ -294,7 +294,7 @@ describe("tenant profile and communications pages", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/6227 Coburg Road · Unit 6 · Halifax, NS B3H 1Z8/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/6227 Coburg Road · Unit 6 · Halifax, NS B3H 1Z8/i)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/raw-unit-id-123456789/i)).not.toBeInTheDocument();
   });
 
@@ -352,7 +352,7 @@ describe("tenant profile and communications pages", () => {
     expect((await screen.findAllByText(/Verification is still in progress/i)).length).toBeGreaterThan(0);
     expect(screen.getByRole("textbox", { name: /Display name/i })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: /Phone/i })).toBeInTheDocument();
-    expect(screen.getByText(/123 Main St · Unit 4 · Halifax, NS B3H 1Z8/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/123 Main St · Unit 4 · Halifax, NS B3H 1Z8/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/unit-4/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Rental record/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Employment and income/i).length).toBeGreaterThan(0);
@@ -411,7 +411,7 @@ describe("tenant profile and communications pages", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/123 Main St · Apartment 4 · Halifax, NS/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/123 Main St · Apartment 4 · Halifax, NS/i)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/raw-unit-id-123456789/i)).not.toBeInTheDocument();
   });
 
@@ -465,8 +465,278 @@ describe("tenant profile and communications pages", () => {
     );
 
     expect((await screen.findAllByText(/Rental record/i)).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Available").length).toBeGreaterThan(0);
+    expect(screen.getByText("Lease document available")).toBeInTheDocument();
+    expect(screen.getByText(/tenant-safe lease document is available/i)).toBeInTheDocument();
     expect(screen.queryByText("Not shared yet")).not.toBeInTheDocument();
+  });
+
+  it("explains signed-copy-pending and payment setup state in the tenant profile rental record", async () => {
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: { authority: "active_tenant" },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0100",
+        authorityLabel: "Active tenant",
+        property: {
+          propertyId: "prop-1",
+          rc_prop_id: "rc-prop-1",
+          street1: "123 Main St",
+          street2: null,
+          city: "Halifax",
+          province: "NS",
+          postalCode: "B3H 1A1",
+          features: [],
+        },
+        unit: { unitId: "raw-unit-id-123456789", label: "4" },
+        application: { status: "converted" },
+        lease: {
+          status: "active",
+          monthlyRent: 1500,
+          startDate: "2025-09-01",
+          endDate: "2026-08-31",
+          documentUrl: null,
+        },
+      },
+      identity: {
+        overallStatus: "verified",
+        identityVerification: {
+          status: "verified",
+          label: "Verified",
+          note: "Verified.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: true,
+          path: "/tenant/attachments",
+          label: "Open documents",
+          note: "Open your tenant documents area.",
+        },
+      },
+    });
+    tenantPortalApi.getTenantWorkspace.mockResolvedValueOnce({
+      context: {
+        authority: "active_tenant",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: "app-1",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        unitId: "raw-unit-id-123456789",
+        invitedEmail: "tenant@example.com",
+      },
+      property: null,
+      unit: { unitId: "raw-unit-id-123456789", label: "4" },
+      lease: {
+        leaseId: "lease-1",
+        status: "active",
+        startDate: "2025-09-01",
+        endDate: "2026-08-31",
+        monthlyRent: 1500,
+        documentUrl: null,
+        providerSigningStatus: "signed",
+        providerRequestId: "raw-provider-envelope-123456789",
+        leaseDocumentContext: {
+          documentStatus: "pending",
+          displayLabel: "Signed lease document pending",
+          source: "lease_signing_signed_without_document",
+          confidence: "medium",
+          warnings: ["Signing is complete, but no tenant-safe signed lease document link is available yet."],
+        },
+        paymentReadiness: {
+          readinessStatus: "not_ready",
+          readinessLabel: "Review rent terms",
+          readinessDescription: "Lease payment setup details still need review before checkout can start.",
+          requiredNextAction: "review_rent_terms",
+          rentTerms: {
+            rentAmountAvailable: true,
+            dueDateAvailable: false,
+            leaseDatesAvailable: true,
+            tenantLinked: true,
+            leaseExecuted: true,
+          },
+          paymentSetup: {
+            processorConnected: false,
+            moneyMovementEnabled: false,
+            storedPaymentMethod: false,
+          },
+        },
+        rentPaymentSummary: {
+          paymentRail: {
+            enabled: false,
+            enabledAt: null,
+            processor: null,
+            blockedReason: null,
+          },
+          latestPayment: null,
+          paymentExperience: {
+            history: [],
+            latestStatus: null,
+            retryAvailable: false,
+            receiptSummary: {
+              available: false,
+              label: "",
+              amountCents: null,
+              paidAt: null,
+              leaseReference: null,
+            },
+          },
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantProfilePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Current rental record")).toBeInTheDocument();
+    expect(screen.getByText("Signed copy pending")).toBeInTheDocument();
+    expect(screen.getByText(/Provider-backed signing is complete/i)).toBeInTheDocument();
+    expect(screen.getByText("Review rent terms")).toBeInTheDocument();
+    expect(screen.getByText(/Checkout unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByText(/workflow not started/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/raw-provider-envelope/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/raw-unit-id-123456789/i)).not.toBeInTheDocument();
+  });
+
+  it("shows signed-document-ready and checkout-available states in the tenant profile rental record", async () => {
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: { authority: "active_tenant" },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0100",
+        authorityLabel: "Active tenant",
+        property: null,
+        unit: null,
+        application: { status: "converted" },
+        lease: {
+          status: "active",
+          monthlyRent: 1800,
+          startDate: "2026-05-01",
+          endDate: "2027-04-30",
+          documentUrl: null,
+        },
+      },
+      identity: {
+        overallStatus: "verified",
+        identityVerification: {
+          status: "verified",
+          label: "Verified",
+          note: "Verified.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: true,
+          path: "/tenant/attachments",
+          label: "Open documents",
+          note: "Open your tenant documents area.",
+        },
+      },
+    });
+    tenantPortalApi.getTenantWorkspace.mockResolvedValueOnce({
+      context: {
+        authority: "active_tenant",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: "app-1",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        unitId: "unit-1",
+        invitedEmail: "tenant@example.com",
+      },
+      property: {
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        street1: "123 Main St",
+        street2: null,
+        city: "Halifax",
+        province: "NS",
+        postalCode: "B3H 1A1",
+        features: [],
+      },
+      unit: { unitId: "unit-1", label: "4" },
+      lease: {
+        leaseId: "lease-1",
+        status: "active",
+        startDate: "2026-05-01",
+        endDate: "2027-04-30",
+        monthlyRent: 1800,
+        documentUrl: "https://tenant-safe.example/signed-lease.pdf",
+        providerSigningStatus: "signed",
+        leaseDocumentContext: {
+          documentStatus: "signed",
+          documentUrl: "https://tenant-safe.example/signed-lease.pdf",
+          displayLabel: "Signed lease document",
+          source: "leaseSigningRequests.signedDocument",
+          confidence: "high",
+          warnings: [],
+        },
+        paymentReadiness: {
+          readinessStatus: "ready_to_configure",
+          readinessLabel: "Rent terms ready for future setup",
+          readinessDescription: "Rent terms are ready.",
+          requiredNextAction: "confirm_payment_setup_later",
+          rentTerms: {
+            rentAmountAvailable: true,
+            dueDateAvailable: true,
+            leaseDatesAvailable: true,
+            tenantLinked: true,
+            leaseExecuted: true,
+          },
+          paymentSetup: {
+            processorConnected: false,
+            moneyMovementEnabled: false,
+            storedPaymentMethod: false,
+          },
+        },
+        rentPaymentSummary: {
+          paymentRail: {
+            enabled: true,
+            enabledAt: "2026-04-27T10:00:00.000Z",
+            processor: "stripe",
+            blockedReason: null,
+          },
+          latestPayment: null,
+          paymentExperience: {
+            history: [],
+            latestStatus: null,
+            retryAvailable: false,
+            receiptSummary: {
+              available: false,
+              label: "",
+              amountCents: null,
+              paidAt: null,
+              leaseReference: null,
+            },
+          },
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantProfilePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Signed lease document")).toBeInTheDocument();
+    expect(screen.getByText(/tenant-safe signed copy is available/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Rent collection enabled").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Checkout available/i)).toBeInTheDocument();
+    expect(screen.queryByText(/signed copy pending/i)).not.toBeInTheDocument();
   });
 
   it("tenant profile page saves bounded profile edits safely", async () => {
