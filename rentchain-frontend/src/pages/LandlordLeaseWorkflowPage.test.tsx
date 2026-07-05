@@ -141,6 +141,10 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(await screen.findByRole("heading", { name: "Execution Review" })).toBeInTheDocument();
     expect(screen.getByText("Review the lease package, signature state, and document readiness before treating execution as complete.")).toBeInTheDocument();
     expect(screen.getByTestId("lease-workflow-page")).toHaveStyle({ maxWidth: "1040px" });
+    expect(screen.getByTestId("lease-workflow-page")).toHaveStyle({
+      margin: "0 auto",
+      boxSizing: "border-box",
+    });
     expect(screen.getByLabelText("Workflow overview")).toHaveStyle({
       background: "#f8fafc",
       borderRadius: "8px",

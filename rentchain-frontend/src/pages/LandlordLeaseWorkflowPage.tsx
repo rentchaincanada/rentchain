@@ -337,6 +337,9 @@ const buttonLinkStyle: React.CSSProperties = {
 const workflowPageStyle: React.CSSProperties = {
   width: "100%",
   maxWidth: 1040,
+  margin: "0 auto",
+  padding: "0 16px 24px",
+  boxSizing: "border-box",
   display: "grid",
   gap: 16,
 };
