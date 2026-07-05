@@ -882,125 +882,137 @@ function ApplicationReviewSummaryPageBody() {
                 ))}
               </div>
 
-              <Card style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontWeight: 700 }}>Shared package categories</div>
-                <div style={{ fontSize: 12, color: text.subtle }}>
-                  These categories match the tenant-facing package language and only reflect records available in the current authorized review summary.
-                </div>
-                {intakeView.packageCategories.map((item, index) => {
-                  const tone =
-                    item.status === "ready"
-                      ? { color: "#166534", background: "#dcfce7", label: "Available to review" }
-                      : item.status === "partial"
-                      ? { color: "#1d4ed8", background: "#dbeafe", label: "Partly available" }
-                      : { color: "#9a3412", background: "#ffedd5", label: "Missing" };
-                  return (
-                    <div
-                      key={`${item.key}-${index}`}
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: 10,
-                        padding: 10,
-                        display: "grid",
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                        <div style={{ fontWeight: 600, color: text.main }}>{item.label}</div>
+              <div
+                aria-label="Secondary review context"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))",
+                  gap: 10,
+                  alignItems: "start",
+                }}
+              >
+                <Card style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontWeight: 700 }}>Shared package categories</div>
+                  <div style={{ fontSize: 12, color: text.subtle }}>
+                    These categories match the tenant-facing package language and only reflect records available in the current authorized review summary.
+                  </div>
+                  {intakeView.packageCategories.map((item, index) => {
+                    const tone =
+                      item.status === "ready"
+                        ? { color: "#166534", background: "#dcfce7", label: "Available to review" }
+                        : item.status === "partial"
+                        ? { color: "#1d4ed8", background: "#dbeafe", label: "Partly available" }
+                        : { color: "#9a3412", background: "#ffedd5", label: "Missing" };
+                    return (
+                      <div
+                        key={`${item.key}-${index}`}
+                        style={{
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: 10,
+                          padding: 10,
+                          display: "grid",
+                          gap: 6,
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 600, color: text.main }}>{item.label}</div>
+                          <div
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: 999,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: tone.color,
+                              background: tone.background,
+                            }}
+                          >
+                            {tone.label}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 13, color: text.subtle }}>{item.detail}</div>
+                      </div>
+                    );
+                  })}
+                </Card>
+
+                <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
+                  <Card style={{ display: "grid", gap: 8 }}>
+                    <div style={{ fontWeight: 700 }}>Missing items</div>
+                    <div style={{ fontSize: 12, color: text.subtle }}>
+                      Missing categories stay high-level so this view does not imply access to anything the tenant has not shared.
+                    </div>
+                    {intakeView.missingItems.length ? (
+                      intakeView.missingItems.map((item) => (
                         <div
+                          key={item.label}
                           style={{
-                            padding: "4px 8px",
-                            borderRadius: 999,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            color: tone.color,
-                            background: tone.background,
+                            border: `1px solid ${colors.border}`,
+                            borderRadius: 10,
+                            padding: 10,
+                            display: "grid",
+                            gap: 6,
                           }}
                         >
-                          {tone.label}
+                          <div style={{ fontWeight: 600, color: text.main }}>{item.label}</div>
+                          <div style={{ fontSize: 13, color: text.subtle }}>{item.detail}</div>
                         </div>
+                      ))
+                    ) : (
+                      <div style={{ fontSize: 13, color: text.subtle }}>
+                        No major intake gaps are surfaced in the current review summary.
                       </div>
-                      <div style={{ fontSize: 13, color: text.subtle }}>{item.detail}</div>
+                    )}
+                    <div style={{ fontSize: 12, color: text.subtle }}>
+                      Shared with tenant permission and current server-authorized review access.
                     </div>
-                  );
-                })}
-              </Card>
+                  </Card>
 
-              <Card style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontWeight: 700 }}>Missing items</div>
-                <div style={{ fontSize: 12, color: text.subtle }}>
-                  Missing categories stay high-level so this view does not imply access to anything the tenant has not shared.
-                </div>
-                {intakeView.missingItems.length ? (
-                  intakeView.missingItems.map((item) => (
-                    <div
-                      key={item.label}
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: 10,
-                        padding: 10,
-                        display: "grid",
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, color: text.main }}>{item.label}</div>
-                      <div style={{ fontSize: 13, color: text.subtle }}>{item.detail}</div>
+                  <Card style={{ display: "grid", gap: 8 }}>
+                    <div style={{ fontWeight: 700 }}>Recent activity</div>
+                    <div style={{ fontSize: 12, color: text.subtle }}>
+                      Recent review-state updates are shown here using the same authorized summary and current package state.
                     </div>
-                  ))
-                ) : (
-                  <div style={{ fontSize: 13, color: text.subtle }}>
-                    No major intake gaps are surfaced in the current review summary.
-                  </div>
-                )}
-                <div style={{ fontSize: 12, color: text.subtle }}>
-                  Shared with tenant permission and current server-authorized review access.
-                </div>
-              </Card>
-
-              <Card style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontWeight: 700 }}>Recent activity</div>
-                <div style={{ fontSize: 12, color: text.subtle }}>
-                  Recent review-state updates are shown here using the same authorized summary and current package state.
-                </div>
-                {recentActivity.length ? (
-                  recentActivity.map((item) => (
-                    <div
-                      key={item.id}
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: 10,
-                        padding: 10,
-                        display: "grid",
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                        <div style={{ fontWeight: 600, color: text.main }}>{item.title}</div>
+                    {recentActivity.length ? (
+                      recentActivity.map((item) => (
                         <div
+                          key={item.id}
                           style={{
-                            padding: "4px 8px",
-                            borderRadius: 999,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            color: item.actionRequired ? "#9a3412" : "#1d4ed8",
-                            background: item.actionRequired ? "#ffedd5" : "#dbeafe",
+                            border: `1px solid ${colors.border}`,
+                            borderRadius: 10,
+                            padding: 10,
+                            display: "grid",
+                            gap: 6,
                           }}
                         >
-                          {item.actionRequired ? "Needs attention" : "Updated"}
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                            <div style={{ fontWeight: 600, color: text.main }}>{item.title}</div>
+                            <div
+                              style={{
+                                padding: "4px 8px",
+                                borderRadius: 999,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: item.actionRequired ? "#9a3412" : "#1d4ed8",
+                                background: item.actionRequired ? "#ffedd5" : "#dbeafe",
+                              }}
+                            >
+                              {item.actionRequired ? "Needs attention" : "Updated"}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 13, color: text.subtle }}>{item.description}</div>
+                          <div style={{ fontSize: 12, color: text.subtle }}>
+                            {(item.actorLabel ? `${item.actorLabel} • ` : "") + dateOr(item.occurredAt)}
+                          </div>
                         </div>
+                      ))
+                    ) : (
+                      <div style={{ fontSize: 13, color: text.subtle }}>
+                        No recent review activity is available from the current summary yet.
                       </div>
-                      <div style={{ fontSize: 13, color: text.subtle }}>{item.description}</div>
-                      <div style={{ fontSize: 12, color: text.subtle }}>
-                        {(item.actorLabel ? `${item.actorLabel} • ` : "") + dateOr(item.occurredAt)}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ fontSize: 13, color: text.subtle }}>
-                    No recent review activity is available from the current summary yet.
-                  </div>
-                )}
-              </Card>
+                    )}
+                  </Card>
+                </div>
+              </div>
             </Card>
           ) : null}
 
