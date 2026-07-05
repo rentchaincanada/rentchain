@@ -4,6 +4,15 @@ import type { ApplicationDecisionSummary, RiskAgentReviewSnapshot } from "@/type
 type ReviewSummaryCore = {
   applicationId: string;
   generatedAt: string;
+  application: {
+    status: string | null;
+    submittedAt: string | null;
+    propertyName: string | null;
+    unitLabel: string | null;
+    leaseStartDate: string | null;
+    requestedRentAmountCents: number | null;
+    moveInDate: string | null;
+  };
   applicant: {
     name: string | null;
     email: string | null;

@@ -283,6 +283,96 @@ async function hydrateApplicationDisplayContext(application: any) {
   return next;
 }
 
+function safeReviewContextText(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (/^(app|application|lease|property|prop|tenant|unit)[-_][A-Za-z0-9_-]+$/i.test(raw)) return null;
+  if (/^[A-Za-z0-9_-]{16,}$/.test(raw) && /[a-z]/.test(raw) && /[A-Z]/.test(raw) && /\d/.test(raw)) {
+    return null;
+  }
+  return raw;
+}
+
+function firstSafeReviewContextText(...values: unknown[]): string | null {
+  for (const value of values) {
+    const safe = safeReviewContextText(value);
+    if (safe) return safe;
+  }
+  return null;
+}
+
+function reviewSummaryRentCents(application: any): number | null {
+  return (
+    centsFromValue(application?.requestedRentAmountCents) ||
+    centsFromValue(application?.requestedRentCents) ||
+    centsFromValue(application?.monthlyRentAmountCents) ||
+    centsFromValue(application?.monthlyRentCents) ||
+    centsFromValue(application?.rentAmountCents) ||
+    centsFromValue(application?.rentCents) ||
+    centsFromValue(application?.requestedRent) ||
+    centsFromValue(application?.monthlyRent) ||
+    centsFromValue(application?.rentAmount) ||
+    centsFromValue(application?.rent)
+  );
+}
+
+async function hydrateReviewSummaryApplicationContext(application: any) {
+  const next = { ...(application || {}) };
+  const applicationLandlordId = String(next.landlordId || "").trim();
+  const propertyId = String(next.propertyId || "").trim();
+  const unitReference = String(next.unitId || next.unitApplied || next.unit || "").trim();
+
+  next.propertyName = firstSafeReviewContextText(
+    next.propertyName,
+    next.property?.name,
+    next.propertyAddress,
+    next.address
+  );
+  next.unitLabel =
+    firstSafeReviewContextText(next.unitLabel, next.unitName, next.unitNumber) ||
+    (!next.unitId ? firstSafeReviewContextText(next.unitApplied, next.unit) : null);
+
+  if (!next.propertyName && propertyId) {
+    try {
+      const propSnap = await db.collection("properties").doc(propertyId).get();
+      if (propSnap.exists) {
+        const prop = propSnap.data() as any;
+        const propLandlordId = String(prop?.landlordId || "").trim();
+        if (!applicationLandlordId || !propLandlordId || propLandlordId === applicationLandlordId) {
+          next.propertyName = firstSafeReviewContextText(prop?.name, prop?.addressLine1, prop?.address);
+        }
+      }
+    } catch {
+      // best-effort display context only
+    }
+  }
+
+  if (!next.unitLabel && unitReference) {
+    try {
+      const unitSnap = await db.collection("units").doc(unitReference).get();
+      if (unitSnap.exists) {
+        const unit = unitSnap.data() as any;
+        const unitLandlordId = String(unit?.landlordId || "").trim();
+        const unitPropertyId = String(unit?.propertyId || "").trim();
+        const landlordMatches = !applicationLandlordId || !unitLandlordId || unitLandlordId === applicationLandlordId;
+        const propertyMatches = !propertyId || !unitPropertyId || unitPropertyId === propertyId;
+        if (landlordMatches && propertyMatches) {
+          next.unitLabel = firstSafeReviewContextText(unit?.unitNumber, unit?.name, unit?.label);
+        }
+      }
+    } catch {
+      // best-effort display context only
+    }
+  }
+
+  const rentCents = reviewSummaryRentCents(next);
+  if (rentCents != null) {
+    next.requestedRentAmountCents = rentCents;
+  }
+
+  return next;
+}
+
 async function sendRentalApplicationDecisionEmail(params: {
   action: (typeof APPLICATION_DECISION_ACTIONS)[number];
   application: any;
@@ -4223,7 +4313,8 @@ router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
         error: access.error,
       });
     }
-    const summary = buildReviewSummary(id, access.data);
+    const summaryApplication = await hydrateReviewSummaryApplicationContext(access.data);
+    const summary = buildReviewSummary(id, summaryApplication);
     const [risk, tenantIdentitySummary] = await Promise.all([
       getLatestApplicationRisk({ applicationId: id }),
       loadLandlordSafeTenantIdentitySummary({ applicationId: id, application: access.data }),
@@ -4326,7 +4417,7 @@ router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
     });
     const decisionSummary = buildApplicationDecisionSummary({
       applicationId: id,
-      application: access.data,
+      application: summaryApplication,
       reviewSummary: summary,
     });
     const networkReuseSummary = deriveNetworkReuseSummary({
@@ -4371,10 +4462,11 @@ router.get("/rental-applications/:id/review-summary.pdf", async (req: any, res) 
         error: access.error,
       });
     }
-    const summary = buildReviewSummary(id, access.data);
+    const summaryApplication = await hydrateReviewSummaryApplicationContext(access.data);
+    const summary = buildReviewSummary(id, summaryApplication);
     const decisionSummary = buildApplicationDecisionSummary({
       applicationId: id,
-      application: access.data,
+      application: summaryApplication,
       reviewSummary: summary,
     });
     const pdfBuffer = await buildReviewSummaryPdf(summary, { decisionSummary });

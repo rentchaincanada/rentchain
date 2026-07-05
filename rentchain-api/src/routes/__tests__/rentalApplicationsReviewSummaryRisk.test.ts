@@ -373,10 +373,100 @@ describe("rentalApplications review summary risk surface", () => {
     expect(res.body?.risk ?? null).toBeNull();
   });
 
+  it("hydrates review-summary context with landlord-safe property and unit labels", async () => {
+    getLatestApplicationRiskMock.mockResolvedValue(null);
+    const reviewSummary = await import("../../lib/reviewSummary");
+    vi.mocked(reviewSummary.buildReviewSummary).mockClear();
+    upsertDoc("properties", "property-1", {
+      landlordId: "landlord-1",
+      name: "Kentville Suites",
+      addressLine1: "8282 Kentella",
+    });
+    upsertDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "105",
+    });
+    upsertDoc("rentalApplications", "app-1", {
+      id: "app-1",
+      landlordId: "landlord-1",
+      status: "SUBMITTED",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      unitApplied: "unit-1",
+      leaseStartDate: "2026-09-01",
+      requestedRent: 1500,
+    });
+
+    const app = await createApp();
+    const res = await request(app)
+      .get("/api/rental-applications/app-1/review-summary")
+      .set("Authorization", "Bearer landlord");
+
+    expect(res.status).toBe(200);
+    expect(reviewSummary.buildReviewSummary).toHaveBeenCalledWith(
+      "app-1",
+      expect.objectContaining({
+        propertyName: "Kentville Suites",
+        unitLabel: "105",
+        leaseStartDate: "2026-09-01",
+        requestedRentAmountCents: 150000,
+      })
+    );
+  });
+
+  it("does not fall back to raw property or unit identifiers when safe labels are unavailable", async () => {
+    getLatestApplicationRiskMock.mockResolvedValue(null);
+    const reviewSummary = await import("../../lib/reviewSummary");
+    vi.mocked(reviewSummary.buildReviewSummary).mockClear();
+    const rawPropertyId = "prpRcv8tTgz0lKvDRw66";
+    const rawUnitId = "ixcRcv8tTgz0lKvDRw66";
+    upsertDoc("rentalApplications", "app-1", {
+      id: "app-1",
+      landlordId: "landlord-1",
+      status: "SUBMITTED",
+      propertyId: rawPropertyId,
+      unitId: rawUnitId,
+      unitApplied: rawUnitId,
+    });
+
+    const app = await createApp();
+    const res = await request(app)
+      .get("/api/rental-applications/app-1/review-summary")
+      .set("Authorization", "Bearer landlord");
+
+    expect(res.status).toBe(200);
+    const hydratedApplication = vi.mocked(reviewSummary.buildReviewSummary).mock.calls[0]?.[1] || {};
+    expect(hydratedApplication.propertyName).toBeNull();
+    expect(hydratedApplication.unitLabel).toBeNull();
+    expect(hydratedApplication.propertyName).not.toBe(rawPropertyId);
+    expect(hydratedApplication.unitLabel).not.toBe(rawUnitId);
+  });
+
   it("passes decision context to the review-summary PDF export", async () => {
     getLatestApplicationRiskMock.mockResolvedValue(null);
     const reviewSummary = await import("../../lib/reviewSummary");
+    vi.mocked(reviewSummary.buildReviewSummary).mockClear();
     vi.mocked(reviewSummary.buildReviewSummaryPdf).mockResolvedValue(Buffer.from("%PDF-1.4"));
+    upsertDoc("properties", "property-1", {
+      landlordId: "landlord-1",
+      name: "Kentville Suites",
+    });
+    upsertDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "105",
+    });
+    upsertDoc("rentalApplications", "app-1", {
+      id: "app-1",
+      landlordId: "landlord-1",
+      status: "SUBMITTED",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      unitApplied: "unit-1",
+      leaseStartDate: "2026-09-01",
+      requestedRentAmountCents: 150000,
+    });
     const previousBucket = process.env.GCS_UPLOAD_BUCKET;
     delete process.env.GCS_UPLOAD_BUCKET;
 
@@ -388,6 +478,15 @@ describe("rentalApplications review summary risk surface", () => {
 
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toContain("application/pdf");
+      expect(reviewSummary.buildReviewSummary).toHaveBeenCalledWith(
+        "app-1",
+        expect.objectContaining({
+          propertyName: "Kentville Suites",
+          unitLabel: "105",
+          leaseStartDate: "2026-09-01",
+          requestedRentAmountCents: 150000,
+        })
+      );
       expect(reviewSummary.buildReviewSummaryPdf).toHaveBeenCalledWith(
         expect.objectContaining({ applicationId: "app-1" }),
         {

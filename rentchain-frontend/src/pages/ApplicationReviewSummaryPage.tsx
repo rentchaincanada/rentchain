@@ -57,6 +57,12 @@ function dateOr(value: string | null | undefined): string {
   return Number.isNaN(parsed.getTime()) ? "Not provided" : parsed.toLocaleString();
 }
 
+function dateOnlyOr(value: string | null | undefined): string {
+  if (!value) return "Not provided";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "Not provided" : parsed.toLocaleDateString();
+}
+
 function ratio(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return "Not provided";
   return `${value.toFixed(2)}x`;
@@ -630,14 +636,6 @@ function ApplicationReviewSummaryPageBody() {
           </Link>
           <Button variant="secondary" onClick={() => void downloadPdf()}>Download PDF</Button>
           <Button variant="secondary" onClick={() => void copyText(shareUrl, "Share link copied")}>Copy link</Button>
-          {summary?.screening?.referenceId ? (
-            <Button
-              variant="secondary"
-              onClick={() => void copyText(summary.screening.referenceId || "", "Reference ID copied")}
-            >
-              Copy reference ID
-            </Button>
-          ) : null}
         </div>
       </div>
 
@@ -712,6 +710,23 @@ function ApplicationReviewSummaryPageBody() {
               aria-labelledby="review-summary-tab-overview"
               style={{ display: "grid", gap: 12 }}
             >
+          <Card style={{ display: "grid", gap: 12 }}>
+            <div>
+              <div style={{ fontWeight: 700 }}>Application Context</div>
+              <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                Landlord-safe property, unit, lease, and rent context available for this application.
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
+              {kv("Status", summary.application?.status || "Not provided")}
+              {kv("Submitted", dateOr(summary.application?.submittedAt))}
+              {kv("Property", summary.application?.propertyName || "Not provided")}
+              {kv("Unit", summary.application?.unitLabel || "Not provided")}
+              {kv("Lease start", dateOnlyOr(summary.application?.leaseStartDate))}
+              {kv("Requested rent", money(summary.application?.requestedRentAmountCents ?? null))}
+            </div>
+          </Card>
+
           {intakeView ? (
             <Card style={{ display: "grid", gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -1869,7 +1884,6 @@ function ApplicationReviewSummaryPageBody() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
               {kv("Screening status", summary.screening.status || "not_run")}
               {kv("Screening provider", summary.screening.provider || "Not provided")}
-              {kv("Reference ID", summary.screening.referenceId || "Not provided")}
               {kv(
                 "Completeness",
                 `${summary.derived.completeness.label} (${Math.round(summary.derived.completeness.score * 100)}%)`

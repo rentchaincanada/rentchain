@@ -135,4 +135,34 @@ describe("review summary export contract", () => {
     expect(rendered).not.toContain("Application ID");
     expect(rendered).not.toContain("Screening reference");
   });
+
+  it("does not use raw ID-shaped context values as property or unit labels", () => {
+    const rawUnitId = "ixcRcv8tTgz0lKvDRw66";
+    const rawPropertyId = "prpRcv8tTgz0lKvDRw66";
+    const summary = buildReviewSummary("raw-app-id-456", {
+      status: "SUBMITTED",
+      propertyName: rawPropertyId,
+      unitApplied: rawUnitId,
+      requestedRent: null,
+      applicant: {
+        firstName: "Phil",
+        lastName: "Jones",
+      },
+    });
+
+    const applicationContext = buildReviewSummaryPdfSections(summary).find(
+      (section) => section.title === "Application Context"
+    );
+
+    expect(applicationContext?.rows).toEqual(
+      expect.arrayContaining([
+        { label: "Property", value: "Not provided" },
+        { label: "Unit", value: "Not provided" },
+        { label: "Requested rent", value: "Not provided" },
+      ])
+    );
+    expect(JSON.stringify(applicationContext)).not.toContain(rawUnitId);
+    expect(JSON.stringify(applicationContext)).not.toContain(rawPropertyId);
+    expect(JSON.stringify(applicationContext)).not.toContain("raw-app-id-456");
+  });
 });

@@ -130,14 +130,33 @@ function stringOrNull(value: unknown): string | null {
   return raw ? raw : null;
 }
 
+function looksLikeInternalId(value: string): boolean {
+  const raw = value.trim();
+  if (/^(app|application|lease|property|prop|tenant|unit)[-_][A-Za-z0-9_-]+$/i.test(raw)) return true;
+  if (!/^[A-Za-z0-9_-]{16,}$/.test(raw)) return false;
+  return /[a-z]/.test(raw) && /[A-Z]/.test(raw) && /\d/.test(raw);
+}
+
+function safeContextLabel(value: unknown): string | null {
+  const raw = stringOrNull(value);
+  if (!raw || looksLikeInternalId(raw)) return null;
+  return raw;
+}
+
 function numberOrNull(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
 
+function positiveCentsOrNull(value: unknown): number | null {
+  const cents = numberOrNull(value);
+  return cents != null && cents > 0 ? cents : null;
+}
+
 function amountToCents(value: unknown): number | null {
+  if (value == null || String(value).trim() === "") return null;
   const amount = numberOrNull(value);
-  if (amount == null) return null;
+  if (amount == null || amount <= 0) return null;
   return Math.round(amount * 100);
 }
 
@@ -276,13 +295,31 @@ export function buildReviewSummary(applicationId: string, application: any): Rev
     application: {
       status: stringOrNull(application?.status),
       submittedAt: toIso(application?.submittedAt || application?.createdAt),
-      propertyName: stringOrNull(application?.propertyName),
-      unitLabel: stringOrNull(application?.unitApplied || application?.unit || application?.unitLabel),
+      propertyName: safeContextLabel(
+        application?.propertyName ||
+          application?.property?.name ||
+          application?.propertyAddress ||
+          application?.address
+      ),
+      unitLabel: safeContextLabel(
+        application?.unitLabel ||
+          application?.unitName ||
+          application?.unitNumber ||
+          application?.unitApplied ||
+          application?.unit
+      ),
       leaseStartDate: toIso(application?.leaseStartDate || application?.moveInDate),
       requestedRentAmountCents:
-        numberOrNull(application?.requestedRentAmountCents) ??
-        numberOrNull(application?.requestedRentCents) ??
-        amountToCents(application?.requestedRent),
+        positiveCentsOrNull(application?.requestedRentAmountCents) ??
+        positiveCentsOrNull(application?.requestedRentCents) ??
+        positiveCentsOrNull(application?.monthlyRentAmountCents) ??
+        positiveCentsOrNull(application?.monthlyRentCents) ??
+        positiveCentsOrNull(application?.rentAmountCents) ??
+        positiveCentsOrNull(application?.rentCents) ??
+        amountToCents(application?.requestedRent) ??
+        amountToCents(application?.monthlyRent) ??
+        amountToCents(application?.rentAmount) ??
+        amountToCents(application?.rent),
       moveInDate: toIso(application?.moveInDate),
     },
     applicant: {
