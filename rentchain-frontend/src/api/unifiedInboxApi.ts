@@ -26,6 +26,19 @@ export type UnifiedInboxSourceKind =
   | "contractor.work_order"
   | "contractor.message";
 
+export type UnifiedInboxSourceAction = {
+  label: string;
+  href: string;
+  helper: string;
+  routeKind?:
+    | "applications_workspace"
+    | "leases_workspace"
+    | "maintenance_workspace"
+    | "payment_workspace"
+    | "work_order_workspace"
+    | string;
+};
+
 export type UnifiedInboxRecord = {
   id: string;
   sourceKind: UnifiedInboxSourceKind;
@@ -36,6 +49,7 @@ export type UnifiedInboxRecord = {
   status: UnifiedInboxStatus;
   occurredAt: string;
   readAt: string | null;
+  sourceAction?: UnifiedInboxSourceAction | null;
 };
 
 export type UnifiedInboxResponse = {

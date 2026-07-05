@@ -33,7 +33,18 @@ vi.mock("../../middleware/requireAuth", () => ({
   },
 }));
 
-const PUBLIC_RECORD_KEYS = ["audienceRole", "body", "id", "occurredAt", "priority", "readAt", "sourceKind", "status", "title"];
+const PUBLIC_RECORD_KEYS = [
+  "audienceRole",
+  "body",
+  "id",
+  "occurredAt",
+  "priority",
+  "readAt",
+  "sourceAction",
+  "sourceKind",
+  "status",
+  "title",
+];
 const EXCLUDED_RESPONSE_FIELDS = [
   "sourceId",
   "sourceRef",
@@ -143,6 +154,7 @@ describe("unifiedInboxRoutes", () => {
     expect(res.body).toMatchObject({ ok: true, role: "tenant", total: 2 });
     const body = res.body as { items: Array<Record<string, unknown>>; records: Array<Record<string, unknown>> };
     expect(body.items.map((item) => Object.keys(item).sort())).toEqual([PUBLIC_RECORD_KEYS, PUBLIC_RECORD_KEYS]);
+    expect(body.items.map((item) => item.sourceAction)).toEqual([null, null]);
     expect(body.records).toEqual(body.items);
     const json = JSON.stringify(res.body);
     expect(json).toContain("tenant.viewing");
@@ -169,6 +181,12 @@ describe("unifiedInboxRoutes", () => {
     expect(res.body).toMatchObject({ ok: true, role: "landlord", total: 1 });
     const body = res.body as { items: Array<Record<string, unknown>> };
     expect(body.items.map((item) => Object.keys(item).sort())).toEqual([PUBLIC_RECORD_KEYS]);
+    expect(body.items[0]?.sourceAction).toEqual({
+      href: "/work-orders",
+      label: "Open related work orders",
+      helper: "Open the work order workspace to review available work-order records.",
+      routeKind: "work_order_workspace",
+    });
     expect(JSON.stringify(res.body)).toContain("landlord.work_order");
     expect(JSON.stringify(res.body)).not.toContain("work-order-1");
     for (const field of EXCLUDED_RESPONSE_FIELDS) {
@@ -201,6 +219,7 @@ describe("unifiedInboxRoutes", () => {
     expect(contractor.body).toMatchObject({ ok: true, role: "contractor", total: 1 });
     const body = contractor.body as { items: Array<Record<string, unknown>> };
     expect(body.items.map((item) => Object.keys(item).sort())).toEqual([PUBLIC_RECORD_KEYS]);
+    expect(body.items[0]?.sourceAction).toBeNull();
     const json = JSON.stringify(contractor.body);
     expect(json).not.toContain("contractor-1");
     for (const field of EXCLUDED_RESPONSE_FIELDS) {

@@ -50,6 +50,20 @@ export type UnifiedInboxSourceRef = {
   ref: string;
 };
 
+export type UnifiedInboxSourceActionRouteKind =
+  | "applications_workspace"
+  | "leases_workspace"
+  | "maintenance_workspace"
+  | "payment_workspace"
+  | "work_order_workspace";
+
+export type UnifiedInboxSourceAction = {
+  label: string;
+  href: string;
+  helper: string;
+  routeKind: UnifiedInboxSourceActionRouteKind;
+};
+
 export type UnifiedInboxEvent = UnifiedInboxSafetyFlags & {
   id: string;
   sourceKind: SourceKind;
@@ -68,7 +82,9 @@ export type UnifiedInboxEvent = UnifiedInboxSafetyFlags & {
 export type UnifiedInboxPublicRecord = Pick<
   UnifiedInboxEvent,
   "id" | "sourceKind" | "audienceRole" | "title" | "body" | "priority" | "status" | "occurredAt" | "readAt"
->;
+> & {
+  sourceAction: UnifiedInboxSourceAction | null;
+};
 
 export type UnifiedInboxPage = {
   items: UnifiedInboxEvent[];
