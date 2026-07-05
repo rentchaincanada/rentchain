@@ -183,6 +183,12 @@ function leaseTransitionTone(
   return { color: "#9a3412", background: "#ffedd5", label: "Not ready for lease step" };
 }
 
+function shouldShowLeaseWorkspaceAction(
+  state: "not_ready_for_lease" | "ready_for_lease_step" | "lease_step_started" | "awaiting_next_action"
+) {
+  return state === "ready_for_lease_step" || state === "lease_step_started";
+}
+
 function leasePreparationTone(
   state: "not_started" | "preparing_lease" | "needs_attention" | "ready_for_execution" | "awaiting_next_action"
 ) {
@@ -1399,6 +1405,47 @@ function ApplicationReviewSummaryPageBody() {
                       ))}
                     </div>
                   </div>
+
+                  {shouldShowLeaseWorkspaceAction(leaseTransition.transitionState) ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 12,
+                        display: "grid",
+                        gap: 10,
+                        background: "#f8fafc",
+                      }}
+                    >
+                      <div style={{ display: "grid", gap: 4 }}>
+                        <div style={{ fontWeight: 800, color: text.main }}>Continue lease follow-through</div>
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          Open Leases to continue lease setup, execution readiness, signing, ledger, and rent-payment follow-through.
+                          This review summary does not create a lease or guess an exact lease record.
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        <Link
+                          to="/leases"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            minHeight: 38,
+                            padding: "8px 12px",
+                            borderRadius: 8,
+                            border: `1px solid ${colors.border}`,
+                            background: "#fff",
+                            color: text.main,
+                            textDecoration: "none",
+                            fontWeight: 800,
+                          }}
+                        >
+                          Continue to lease workspace
+                        </Link>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
