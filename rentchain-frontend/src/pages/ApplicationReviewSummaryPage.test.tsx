@@ -236,6 +236,7 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(await screen.findByText(/Derived from current review state/i)).toBeInTheDocument();
     expect(await screen.findByText("Lease step")).toBeInTheDocument();
     expect(await screen.findByText("Not ready for lease step")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Continue to lease workspace" })).not.toBeInTheDocument();
     expect(await screen.findByText("Lease blockers")).toBeInTheDocument();
     expect(await screen.findByText("Lease preparation")).toBeInTheDocument();
     expect((await screen.findAllByText("Not started")).length).toBeGreaterThan(0);
@@ -439,6 +440,11 @@ describe("ApplicationReviewSummaryPage", () => {
     expect((await screen.findAllByText("Ready for decision")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Ready for next step")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Ready for lease step")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Continue lease follow-through")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/This review summary does not create a lease or guess an exact lease record/i)
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continue to lease workspace" })).toHaveAttribute("href", "/leases");
     expect((await screen.findAllByText("Awaiting next action")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Move-in readiness")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Awaiting next action")).length).toBeGreaterThan(1);
@@ -524,6 +530,7 @@ describe("ApplicationReviewSummaryPage", () => {
     expect((await screen.findAllByText("Decision workspace")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Hold for later")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Not ready for lease step")).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "Continue to lease workspace" })).not.toBeInTheDocument();
     expect((await screen.findAllByText("Not started")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Not ready for execution")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Not ready for signing")).length).toBeGreaterThan(0);
