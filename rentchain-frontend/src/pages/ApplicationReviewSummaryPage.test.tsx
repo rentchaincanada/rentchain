@@ -188,6 +188,10 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(await screen.findByText("Intake Summary")).toBeInTheDocument();
     expect(await screen.findByText("Shared package categories")).toBeInTheDocument();
     expect(await screen.findByText("Recent activity")).toBeInTheDocument();
+    expect(screen.getByLabelText("Secondary review context")).toHaveStyle({
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))",
+    });
     expect(screen.getAllByText("Profile details").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Rental history").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Documents & records").length).toBeGreaterThan(0);
