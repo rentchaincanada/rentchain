@@ -231,7 +231,8 @@ describe("UnifiedInboxPage", () => {
       background: "#f8fafc",
       boxShadow: "none",
     });
-    expect(screen.getByRole("link", { name: /Open work orders/i })).toHaveAttribute("href", "/work-orders");
+    expect(screen.getByText("Use the work order workspace to find the related maintenance item.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open related work orders/i })).toHaveAttribute("href", "/work-orders");
 
     fireEvent.click(screen.getByRole("tab", { name: /Unread 1/i }));
     fireEvent.click(screen.getByRole("button", { name: /Outstanding rent balance/i }));
@@ -240,6 +241,8 @@ describe("UnifiedInboxPage", () => {
     await waitFor(() => expect(paymentButton).toHaveTextContent("Read"));
     expect(screen.getByRole("tab", { name: /Unread 0/i })).toBeInTheDocument();
     expect(screen.getByTestId("unified-inbox-detail-panel")).toHaveTextContent("Outstanding rent balance");
+    expect(screen.getByText("Open Payments to review payment setup, balances, or collection activity.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open payment workspace/i })).toHaveAttribute("href", "/payments");
 
     fireEvent.click(screen.getByRole("tab", { name: /All 4/i }));
     fireEvent.change(screen.getByLabelText("Search inbox"), { target: { value: "balance" } });
@@ -335,6 +338,38 @@ describe("UnifiedInboxPage", () => {
     expect(screen.getByText("Not Found")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Unread 1/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Pipe leak reported/i })).toHaveTextContent("Unread");
+  });
+
+  it("shows honest source-action copy when no linked workspace action is available", async () => {
+    const messageRecord = record({
+      id: "landlord-message",
+      audienceRole: "landlord",
+      sourceKind: "landlord.message",
+      title: "Tenant replied",
+      body: "Thanks for the update.",
+      priority: "normal",
+      status: "read",
+      readAt: "2026-06-09T15:00:00.000Z",
+    });
+    mocks.fetchUnifiedInbox.mockResolvedValue({
+      ok: true,
+      role: "landlord",
+      items: [messageRecord],
+      records: [messageRecord],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+
+    render(<UnifiedInboxPage role="landlord" />);
+
+    expect(await screen.findByRole("heading", { name: "Unified inbox" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Tenant replied/i }));
+
+    expect(screen.getByTestId("unified-inbox-detail-panel")).toHaveTextContent(
+      "This inbox item does not include a linked workspace action yet."
+    );
+    expect(screen.queryByRole("link", { name: /Stay in inbox/i })).not.toBeInTheDocument();
   });
 
   it("shows a safe error state when the inbox cannot load", async () => {

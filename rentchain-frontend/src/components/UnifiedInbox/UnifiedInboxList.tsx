@@ -49,23 +49,46 @@ function priorityTone(priority: UnifiedInboxRecord["priority"]) {
   return { color: "#075985", background: "#e0f2fe" };
 }
 
-function workspaceForRecord(record: UnifiedInboxRecord, role: UnifiedInboxRole) {
+type WorkspaceAction = {
+  href: string;
+  label: string;
+  helper: string;
+};
+
+function workspaceForRecord(record: UnifiedInboxRecord, role: UnifiedInboxRole): WorkspaceAction | null {
   if (role === "tenant") return null;
   if (role === "contractor") return null;
+  const recordBody = `${record.title} ${record.body}`;
+  const isPaymentLike = /\b(payment|payments|rent|invoice|charge|balance|outstanding|collection)\b/i.test(recordBody);
   if (record.sourceKind.includes("maintenance") || record.sourceKind.includes("work_order")) {
-    return { href: "/work-orders", label: "Open work orders" };
+    return {
+      href: "/work-orders",
+      label: "Open related work orders",
+      helper: "Use the work order workspace to find the related maintenance item.",
+    };
   }
   if (record.sourceKind.includes("lease")) {
-    return { href: "/leases", label: "Open leases" };
+    return {
+      href: "/leases",
+      label: isPaymentLike ? "Open related leases" : "Open lease workspace",
+      helper: isPaymentLike
+        ? "Open the lease workspace to find the related summary or payment ledger."
+        : "Open the lease workspace to find the related lease record.",
+    };
   }
   if (record.sourceKind.includes("application") || record.sourceKind.includes("screening") || record.sourceKind.includes("viewing")) {
-    return { href: "/applications", label: "Open applications" };
+    return {
+      href: "/applications",
+      label: "Open related applications",
+      helper: "Open the application workspace to find the related application, screening, or viewing record.",
+    };
   }
-  if (/\b(payment|payments|rent|invoice|charge|balance|outstanding|collection)\b/i.test(record.title + " " + record.body)) {
-    return { href: "/payments", label: "Open payments" };
-  }
-  if (record.sourceKind.includes("message")) {
-    return { href: "/landlord/unified-inbox", label: "Stay in inbox" };
+  if (isPaymentLike) {
+    return {
+      href: "/payments",
+      label: "Open payment workspace",
+      helper: "Open Payments to review payment setup, balances, or collection activity.",
+    };
   }
   return null;
 }
@@ -202,29 +225,40 @@ export function UnifiedInboxList({ records, role, onOpenRecord }: Props) {
                     <strong>{formatDate(record.occurredAt)}</strong>
                   </div>
                 </div>
-                {selectedWorkspace ? (
-                  <a
-                    href={selectedWorkspace.href}
-                    style={{
-                      alignItems: "center",
-                      background: colors.accent,
-                      borderRadius: 999,
-                      color: "#fff",
-                      display: "inline-flex",
-                      fontSize: "0.95rem",
-                      fontWeight: 800,
-                      gap: 8,
-                      justifySelf: "start",
-                      padding: "10px 14px",
-                      textDecoration: "none",
-                    }}
-                  >
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      {selectedWorkspace.label}
-                      <ArrowUpRight size={16} aria-hidden="true" />
-                    </span>
-                  </a>
-                ) : null}
+                <div style={{ display: "grid", gap: 8, justifyItems: "start" }}>
+                  {selectedWorkspace ? (
+                    <>
+                      <div style={{ color: text.muted, fontSize: "0.9rem", lineHeight: 1.5 }}>
+                        {selectedWorkspace.helper}
+                      </div>
+                      <a
+                        href={selectedWorkspace.href}
+                        style={{
+                          alignItems: "center",
+                          background: colors.accent,
+                          borderRadius: 999,
+                          color: "#fff",
+                          display: "inline-flex",
+                          fontSize: "0.95rem",
+                          fontWeight: 800,
+                          gap: 8,
+                          justifySelf: "start",
+                          padding: "10px 14px",
+                          textDecoration: "none",
+                        }}
+                      >
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                          {selectedWorkspace.label}
+                          <ArrowUpRight size={16} aria-hidden="true" />
+                        </span>
+                      </a>
+                    </>
+                  ) : (
+                    <div style={{ color: text.muted, fontSize: "0.9rem", lineHeight: 1.5 }}>
+                      This inbox item does not include a linked workspace action yet.
+                    </div>
+                  )}
+                </div>
               </Card>
             ) : null}
           </React.Fragment>
