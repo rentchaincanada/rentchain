@@ -60,11 +60,18 @@ function workspaceForRecord(record: UnifiedInboxRecord, role: UnifiedInboxRole):
   if (role === "contractor") return null;
   const recordBody = `${record.title} ${record.body}`;
   const isPaymentLike = /\b(payment|payments|rent|invoice|charge|balance|outstanding|collection)\b/i.test(recordBody);
-  if (record.sourceKind.includes("maintenance") || record.sourceKind.includes("work_order")) {
+  if (record.sourceKind.includes("maintenance")) {
+    return {
+      href: "/maintenance",
+      label: "Open maintenance workspace",
+      helper: "Open the maintenance workspace to review available maintenance requests.",
+    };
+  }
+  if (record.sourceKind.includes("work_order")) {
     return {
       href: "/work-orders",
       label: "Open related work orders",
-      helper: "Use the work order workspace to find the related maintenance item.",
+      helper: "Open the work order workspace to review available work-order records.",
     };
   }
   if (record.sourceKind.includes("lease")) {

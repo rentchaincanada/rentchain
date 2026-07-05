@@ -231,8 +231,8 @@ describe("UnifiedInboxPage", () => {
       background: "#f8fafc",
       boxShadow: "none",
     });
-    expect(screen.getByText("Use the work order workspace to find the related maintenance item.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open related work orders/i })).toHaveAttribute("href", "/work-orders");
+    expect(screen.getByText("Open the maintenance workspace to review available maintenance requests.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open maintenance workspace/i })).toHaveAttribute("href", "/maintenance");
 
     fireEvent.click(screen.getByRole("tab", { name: /Unread 1/i }));
     fireEvent.click(screen.getByRole("button", { name: /Outstanding rent balance/i }));
@@ -255,6 +255,36 @@ describe("UnifiedInboxPage", () => {
     expect(screen.getAllByText("System notice").length).toBeGreaterThan(0);
     expect(screen.queryByText("Lease renewal ready")).not.toBeInTheDocument();
     expect(screen.queryByText("Outstanding rent balance")).not.toBeInTheDocument();
+  });
+
+  it("keeps true work-order inbox actions on the work-order workspace", async () => {
+    const workOrderRecord = record({
+      id: "work-order-update",
+      audienceRole: "landlord",
+      sourceKind: "landlord.work_order",
+      title: "Work order update",
+      body: "stairs status: in progress",
+      priority: "high",
+      status: "unread",
+      readAt: null,
+    });
+    mocks.fetchUnifiedInbox.mockResolvedValue({
+      ok: true,
+      role: "landlord",
+      items: [workOrderRecord],
+      records: [workOrderRecord],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+
+    render(<UnifiedInboxPage role="landlord" />);
+
+    expect(await screen.findByRole("heading", { name: "Unified inbox" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Work order update/i }));
+
+    expect(screen.getByText("Open the work order workspace to review available work-order records.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open related work orders/i })).toHaveAttribute("href", "/work-orders");
   });
 
   it("persists landlord read state through the API and keeps it after refresh", async () => {
