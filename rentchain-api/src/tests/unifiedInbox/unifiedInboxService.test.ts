@@ -24,7 +24,18 @@ const dbMock = {
 
 vi.mock("../../firebase", () => ({ db: dbMock }));
 
-const PUBLIC_RECORD_KEYS = ["audienceRole", "body", "id", "occurredAt", "priority", "readAt", "sourceKind", "status", "title"];
+const PUBLIC_RECORD_KEYS = [
+  "audienceRole",
+  "body",
+  "id",
+  "occurredAt",
+  "priority",
+  "readAt",
+  "sourceAction",
+  "sourceKind",
+  "status",
+  "title",
+];
 const EXCLUDED_RESPONSE_FIELDS = [
   "sourceId",
   "sourceRef",
@@ -94,6 +105,7 @@ describe("unified inbox service", () => {
     expect(result.items.map((item) => item.audienceRole)).toEqual(["tenant", "tenant"]);
     expect(result.items.map((item) => item.sourceKind)).toEqual(["tenant.viewing", "tenant.message"]);
     expect(result.items.map((item) => Object.keys(item).sort())).toEqual([PUBLIC_RECORD_KEYS, PUBLIC_RECORD_KEYS]);
+    expect(result.items.map((item) => item.sourceAction)).toEqual([null, null]);
     expect(result.records).toEqual(result.items);
     const json = JSON.stringify(result.items);
     expect(json).not.toContain("tenant-workspace-1");
@@ -111,6 +123,20 @@ describe("unified inbox service", () => {
     const landlordResult = await getUnifiedInbox({ role: "landlord", landlordId: "landlord-1" }, {});
     expect(landlordResult.items.map((item) => item.sourceKind)).toEqual(["landlord.viewing", "landlord.work_order"]);
     expect(landlordResult.items.map((item) => Object.keys(item).sort())).toEqual([PUBLIC_RECORD_KEYS, PUBLIC_RECORD_KEYS]);
+    expect(landlordResult.items.map((item) => item.sourceAction)).toEqual([
+      {
+        href: "/applications",
+        label: "Open related applications",
+        helper: "Open the application workspace to find the related application, screening, or viewing record.",
+        routeKind: "applications_workspace",
+      },
+      {
+        href: "/work-orders",
+        label: "Open related work orders",
+        helper: "Open the work order workspace to review available work-order records.",
+        routeKind: "work_order_workspace",
+      },
+    ]);
     expect(JSON.stringify(landlordResult.items)).not.toContain("landlord-1");
     expect(JSON.stringify(landlordResult.items)).not.toContain("work-order-1");
     for (const field of EXCLUDED_RESPONSE_FIELDS) {
@@ -120,6 +146,7 @@ describe("unified inbox service", () => {
     const contractorResult = await getUnifiedInbox({ role: "contractor", contractorId: "contractor-1" }, {});
     expect(contractorResult.items.map((item) => item.sourceKind)).toEqual(["contractor.work_order", "contractor.message"]);
     expect(contractorResult.items.map((item) => Object.keys(item).sort())).toEqual([PUBLIC_RECORD_KEYS, PUBLIC_RECORD_KEYS]);
+    expect(contractorResult.items.map((item) => item.sourceAction)).toEqual([null, null]);
     expect(JSON.stringify(contractorResult.items)).not.toContain("contractor-1");
     expect(JSON.stringify(contractorResult.items)).not.toContain("landlord-1");
     for (const field of EXCLUDED_RESPONSE_FIELDS) {
@@ -141,5 +168,74 @@ describe("unified inbox service", () => {
       status: 400,
       code: "INVALID_SOURCE",
     });
+  });
+
+  it("projects landlord source actions without exposing source lineage", async () => {
+    const { toPublicInboxRecord } = await import("../../services/unifiedInbox/unifiedInboxService");
+    const baseEvent = {
+      rawIdsIncluded: false,
+      tokensIncluded: false,
+      secretsIncluded: false,
+      providerPayloadIncluded: false,
+      storagePathIncluded: false,
+      privateNotesIncluded: false,
+      id: "inbox_v1_safe_public",
+      sourceId: "inbox_v1_hidden_source",
+      audienceRole: "landlord" as const,
+      audienceScopeKey: "scope_v1_hidden",
+      title: "Maintenance update",
+      body: "Status: submitted",
+      priority: "normal" as const,
+      status: "unread" as const,
+      occurredAt: "2026-06-09T12:00:00.000Z",
+      readAt: null,
+      sourceRef: { kind: "landlord.maintenance" as const, ref: "inbox_v1_hidden_source_ref" },
+    };
+
+    const maintenance = toPublicInboxRecord({ ...baseEvent, sourceKind: "landlord.maintenance" });
+    const application = toPublicInboxRecord({
+      ...baseEvent,
+      sourceKind: "landlord.application",
+      title: "Application status updated",
+      body: "Applicant package is ready.",
+      sourceRef: { kind: "landlord.application" as const, ref: "inbox_v1_hidden_application_ref" },
+    });
+    const leasePayment = toPublicInboxRecord({
+      ...baseEvent,
+      sourceKind: "landlord.lease",
+      title: "Outstanding rent balance",
+      body: "Payment follow-up needed.",
+      sourceRef: { kind: "landlord.lease" as const, ref: "inbox_v1_hidden_lease_ref" },
+    });
+    const plainMessage = toPublicInboxRecord({
+      ...baseEvent,
+      sourceKind: "landlord.message",
+      title: "Tenant replied",
+      body: "Thanks for the update.",
+      sourceRef: { kind: "landlord.message" as const, ref: "inbox_v1_hidden_message_ref" },
+    });
+
+    expect(maintenance.sourceAction).toMatchObject({
+      href: "/maintenance",
+      label: "Open maintenance workspace",
+      routeKind: "maintenance_workspace",
+    });
+    expect(application.sourceAction).toMatchObject({
+      href: "/applications",
+      label: "Open related applications",
+      routeKind: "applications_workspace",
+    });
+    expect(leasePayment.sourceAction).toMatchObject({
+      href: "/leases",
+      label: "Open related leases",
+      routeKind: "leases_workspace",
+    });
+    expect(plainMessage.sourceAction).toBeNull();
+
+    const json = JSON.stringify([maintenance, application, leasePayment, plainMessage]);
+    expect(json).not.toContain("sourceId");
+    expect(json).not.toContain("sourceRef");
+    expect(json).not.toContain("audienceScopeKey");
+    expect(json).not.toContain("hidden_source");
   });
 });

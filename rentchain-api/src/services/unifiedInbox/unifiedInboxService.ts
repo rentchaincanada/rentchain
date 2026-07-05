@@ -4,7 +4,7 @@ import {
   deriveLandlordUnifiedInbox,
   deriveTenantUnifiedInbox,
 } from "./deriveUnifiedInbox";
-import type { SourceKind, UnifiedInboxEvent, UnifiedInboxPublicRecord } from "./types";
+import type { SourceKind, UnifiedInboxEvent, UnifiedInboxPublicRecord, UnifiedInboxSourceAction } from "./types";
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
@@ -203,6 +203,68 @@ function applySafeFilters(items: UnifiedInboxEvent[], request: UnifiedInboxReque
   });
 }
 
+function isPaymentLike(item: UnifiedInboxEvent) {
+  return /\b(payment|payments|rent|invoice|charge|balance|outstanding|collection)\b/i.test(`${item.title} ${item.body}`);
+}
+
+function buildLandlordSourceAction(item: UnifiedInboxEvent): UnifiedInboxSourceAction | null {
+  if (item.audienceRole !== "landlord") return null;
+
+  if (item.sourceKind === "landlord.maintenance") {
+    return {
+      href: "/maintenance",
+      label: "Open maintenance workspace",
+      helper: "Open the maintenance workspace to review available maintenance requests.",
+      routeKind: "maintenance_workspace",
+    };
+  }
+
+  if (item.sourceKind === "landlord.work_order") {
+    return {
+      href: "/work-orders",
+      label: "Open related work orders",
+      helper: "Open the work order workspace to review available work-order records.",
+      routeKind: "work_order_workspace",
+    };
+  }
+
+  if (item.sourceKind === "landlord.lease") {
+    const paymentLike = isPaymentLike(item);
+    return {
+      href: "/leases",
+      label: paymentLike ? "Open related leases" : "Open lease workspace",
+      helper: paymentLike
+        ? "Open the lease workspace to find the related summary or payment ledger."
+        : "Open the lease workspace to find the related lease record.",
+      routeKind: "leases_workspace",
+    };
+  }
+
+  if (
+    item.sourceKind === "landlord.application" ||
+    item.sourceKind === "landlord.screening" ||
+    item.sourceKind === "landlord.viewing"
+  ) {
+    return {
+      href: "/applications",
+      label: "Open related applications",
+      helper: "Open the application workspace to find the related application, screening, or viewing record.",
+      routeKind: "applications_workspace",
+    };
+  }
+
+  if (isPaymentLike(item)) {
+    return {
+      href: "/payments",
+      label: "Open payment workspace",
+      helper: "Open Payments to review payment setup, balances, or collection activity.",
+      routeKind: "payment_workspace",
+    };
+  }
+
+  return null;
+}
+
 export function toPublicInboxRecord(item: UnifiedInboxEvent): UnifiedInboxPublicRecord {
   return {
     id: item.id,
@@ -214,6 +276,7 @@ export function toPublicInboxRecord(item: UnifiedInboxEvent): UnifiedInboxPublic
     status: item.status,
     occurredAt: item.occurredAt,
     readAt: item.readAt,
+    sourceAction: buildLandlordSourceAction(item),
   };
 }
 

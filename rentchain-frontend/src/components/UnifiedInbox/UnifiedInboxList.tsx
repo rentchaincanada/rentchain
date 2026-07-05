@@ -1,6 +1,11 @@
 import React from "react";
 import { ArrowUpRight, ChevronRight, Inbox } from "lucide-react";
-import type { UnifiedInboxRecord, UnifiedInboxRole, UnifiedInboxSourceKind } from "../../api/unifiedInboxApi";
+import type {
+  UnifiedInboxRecord,
+  UnifiedInboxRole,
+  UnifiedInboxSourceAction,
+  UnifiedInboxSourceKind,
+} from "../../api/unifiedInboxApi";
 import { Card } from "../ui/Ui";
 import { colors, radius, spacing, text } from "../../styles/tokens";
 
@@ -55,9 +60,23 @@ type WorkspaceAction = {
   helper: string;
 };
 
+function isSafeRelativeHref(value: string) {
+  return value.startsWith("/") && !value.startsWith("//") && !/[<>"'`\\]/.test(value) && !/\/\.\.(?:\/|$)/.test(value);
+}
+
+function sourceActionForRecord(action: UnifiedInboxSourceAction | null | undefined): WorkspaceAction | null {
+  const href = String(action?.href || "").trim();
+  const label = String(action?.label || "").trim();
+  const helper = String(action?.helper || "").trim();
+  if (!href || !label || !helper || !isSafeRelativeHref(href)) return null;
+  return { href, label, helper };
+}
+
 function workspaceForRecord(record: UnifiedInboxRecord, role: UnifiedInboxRole): WorkspaceAction | null {
   if (role === "tenant") return null;
   if (role === "contractor") return null;
+  const sourceAction = sourceActionForRecord(record.sourceAction);
+  if (sourceAction) return sourceAction;
   const recordBody = `${record.title} ${record.body}`;
   const isPaymentLike = /\b(payment|payments|rent|invoice|charge|balance|outstanding|collection)\b/i.test(recordBody);
   if (record.sourceKind.includes("maintenance")) {

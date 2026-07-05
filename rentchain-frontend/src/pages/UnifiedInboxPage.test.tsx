@@ -125,6 +125,40 @@ describe("UnifiedInboxPage", () => {
     expect(screen.getAllByText("Work order").length).toBeGreaterThan(0);
   });
 
+  it("prefers backend-provided safe source actions over broad frontend fallback", async () => {
+    const sourceActionRecord = record({
+      id: "application-safe-action",
+      audienceRole: "landlord",
+      sourceKind: "landlord.application",
+      title: "Application status updated",
+      body: "Applicant package is ready.",
+      sourceAction: {
+        href: "/applications",
+        label: "Open application workspace",
+        helper: "Open the application workspace from the server-projected safe action.",
+        routeKind: "applications_workspace",
+      },
+    });
+    mocks.fetchUnifiedInbox.mockResolvedValue({
+      ok: true,
+      role: "landlord",
+      items: [sourceActionRecord],
+      records: [sourceActionRecord],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+
+    render(<UnifiedInboxPage role="landlord" />);
+
+    expect(await screen.findByRole("heading", { name: "Unified inbox" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Application status updated/i }));
+
+    expect(screen.getByText("Open the application workspace from the server-projected safe action.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open application workspace/i })).toHaveAttribute("href", "/applications");
+    expect(screen.queryByText("Open the application workspace to find the related application, screening, or viewing record.")).not.toBeInTheDocument();
+  });
+
   it("filters landlord inbox records with operational tabs, status, and search", async () => {
     mocks.fetchUnifiedInbox.mockResolvedValue({
       ok: true,
