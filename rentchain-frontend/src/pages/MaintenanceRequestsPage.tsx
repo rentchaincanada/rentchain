@@ -140,6 +140,19 @@ function buildCalendarDays(value: Date) {
   });
 }
 
+function startOfDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+}
+
+function buildCompactCalendarDays(value: Date) {
+  const firstCell = startOfDay(value);
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(firstCell);
+    date.setDate(firstCell.getDate() + index);
+    return date;
+  });
+}
+
 function dayKey(date: Date) {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -183,6 +196,8 @@ export default function MaintenanceRequestsPage() {
   const [vendorCostInput, setVendorCostInput] = React.useState("");
   const [costNote, setCostNote] = React.useState("");
   const [calendarMonth, setCalendarMonth] = React.useState(() => new Date());
+  const [calendarExpanded, setCalendarExpanded] = React.useState(false);
+  const [compactCalendarStart] = React.useState(() => startOfDay(new Date()));
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -486,17 +501,20 @@ export default function MaintenanceRequestsPage() {
   const portfolioRollup = React.useMemo(() => buildMaintenancePortfolioCostRollupView(items), [items]);
   const propertyIntelligence = React.useMemo(() => buildPropertyFinancialIntelligenceView(items), [items]);
   const calendarDays = React.useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
+  const compactCalendarDays = React.useMemo(() => buildCompactCalendarDays(compactCalendarStart), [compactCalendarStart]);
+  const visibleCalendarDays = calendarExpanded ? calendarDays : compactCalendarDays;
   const calendarEventMap = React.useMemo(() => {
     const next = new Map<string, typeof calendarEvents>();
-    calendarDays.forEach((date) => next.set(dayKey(date), []));
+    visibleCalendarDays.forEach((date) => next.set(dayKey(date), []));
     calendarEvents.forEach((event) => {
       const key = dayKey(new Date(event.startAt));
+      if (!next.has(key)) return;
       const list = next.get(key) || [];
       list.push(event);
       next.set(key, list);
     });
     return next;
-  }, [calendarDays, calendarEvents]);
+  }, [visibleCalendarDays, calendarEvents]);
 
   const saveCost = React.useCallback(async () => {
     if (!selected || !selected.workOrderId || !selectedCost?.canRecordCost) return;
@@ -1042,24 +1060,35 @@ export default function MaintenanceRequestsPage() {
             <div>
               <div style={{ fontWeight: 800, color: text.primary }}>Scheduled maintenance calendar</div>
               <div style={{ color: text.muted, marginTop: 4 }}>
-                Read-only month view of scheduled maintenance windows. Select an item to open the related request.
+                {calendarExpanded
+                  ? "Read-only 30-day view of scheduled maintenance windows. Select an item to open the related request."
+                  : "Compact 7-day view of scheduled maintenance windows. Expand when you need the full calendar."}
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <Button
-                variant="secondary"
-                onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-              >
-                Previous
-              </Button>
+              {calendarExpanded ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                >
+                  Previous
+                </Button>
+              ) : null}
               <div style={{ fontWeight: 700, color: text.primary, minWidth: 160, textAlign: "center" }}>
-                {calendarMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+                {calendarExpanded
+                  ? calendarMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" })
+                  : "Next 7 days"}
               </div>
-              <Button
-                variant="secondary"
-                onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-              >
-                Next
+              {calendarExpanded ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                >
+                  Next
+                </Button>
+              ) : null}
+              <Button variant="secondary" onClick={() => setCalendarExpanded((value) => !value)}>
+                {calendarExpanded ? "Show compact 7-day view" : "Show 30-day calendar"}
               </Button>
             </div>
           </div>
@@ -1075,15 +1104,15 @@ export default function MaintenanceRequestsPage() {
                 {label}
               </div>
             ))}
-            {calendarDays.map((date) => {
+            {visibleCalendarDays.map((date) => {
               const key = dayKey(date);
               const dayEvents = calendarEventMap.get(key) || [];
-              const inMonth = date.getMonth() === calendarMonth.getMonth();
+              const inMonth = calendarExpanded ? date.getMonth() === calendarMonth.getMonth() : true;
               return (
                 <div
                   key={key}
                   style={{
-                    minHeight: 120,
+                    minHeight: calendarExpanded ? 120 : 82,
                     border: `1px solid ${colors.border}`,
                     borderRadius: radius.md,
                     padding: 8,
@@ -1126,7 +1155,7 @@ export default function MaintenanceRequestsPage() {
                       );
                     })
                   ) : (
-                    <div style={{ fontSize: 12, color: text.muted }}>No scheduled service</div>
+                    <div style={{ fontSize: 12, color: text.muted }}>{calendarExpanded ? "No scheduled service" : "No service"}</div>
                   )}
                 </div>
               );
