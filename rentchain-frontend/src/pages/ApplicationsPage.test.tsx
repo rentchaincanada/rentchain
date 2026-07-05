@@ -254,6 +254,11 @@ const LocationProbe = () => {
   return <div data-testid="location-search">{location.search}</div>;
 };
 
+const LocationPathProbe = () => {
+  const location = useLocation();
+  return <div data-testid="location-path">{`${location.pathname}${location.search}`}</div>;
+};
+
 afterEach(() => {
   cleanup();
 });
@@ -554,6 +559,40 @@ describe("ApplicationsPage", () => {
     expect(printSource?.textContent).toContain("Stable employment");
     expect(printSource?.textContent).toContain("Viewing requests");
     expect(printSource?.textContent).toContain("Weekend preferred");
+  });
+
+  it("opens the application review summary from the selected application detail header", async () => {
+    mocks.entitlementsMock.mockReturnValue({
+      loading: false,
+      plan: "pro",
+      role: "landlord",
+      isAdmin: false,
+      capabilities: {},
+      hasCapability: () => true,
+      requiredPlanFor: () => "pro",
+      canScreen: true,
+      canViewScreeningHistory: true,
+      canExportPdf: true,
+      hasMoveInReadiness: false,
+      canUseWorkOrders: false,
+      canViewReviewSummary: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <LocationPathProbe />
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    const applicantName = await screen.findByText("Jamie Stone");
+    const applicantRow = applicantName.closest('[role="button"]');
+    expect(applicantRow).toBeTruthy();
+    fireEvent.click(applicantRow as HTMLElement);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Open review summary" }));
+
+    expect(screen.getByTestId("location-path")).toHaveTextContent("/applications/app-1/review-summary");
   });
 
   it("hides cancelled viewing requests by default and preserves active ordering", async () => {
