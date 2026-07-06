@@ -1004,7 +1004,7 @@ export default function LandlordActiveLeasesPage() {
                   <tr key={lease.id} style={{ borderTop: "1px solid #e2e8f0" }}>
                     <td style={{ padding: 12 }}>
                       <div style={{ fontWeight: 700, color: "#0f172a" }}>{lease.propertyName}</div>
-                      <div style={{ color: "#64748b", fontSize: 12 }}>{lease.id}</div>
+                      <div style={{ color: "#64748b", fontSize: 12 }}>Lease workspace</div>
                     </td>
                     <td style={{ padding: 12 }}>{lease.unitNumber || "—"}</td>
                     <td style={{ padding: 12 }}>

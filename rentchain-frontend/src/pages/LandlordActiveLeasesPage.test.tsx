@@ -319,6 +319,8 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.getAllByText(/Rent terms ready for future setup/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Enable rent collection/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View lease" })).toBeInTheDocument();
+    expect(screen.getByText("Lease workspace")).toBeInTheDocument();
+    expect(screen.queryByText("lease-1")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Payment ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("link", { name: "Email" })).toHaveAttribute(
       "href",
