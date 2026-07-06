@@ -188,6 +188,69 @@ describe("ApplicationDecisionSummaryCard", () => {
     expect(onDecision).toHaveBeenCalledWith("approve", "Looks strong overall.");
   });
 
+  it("hides active decision controls for approved applications", () => {
+    const onDecision = vi.fn();
+
+    render(
+      <ApplicationDecisionSummaryCard
+        summary={{
+          applicationId: "app-approved",
+          status: "APPROVED",
+          riskSnapshot: {
+            version: "risk-v1",
+            status: "completed",
+            score: 88,
+            grade: "A",
+            confidence: 0.94,
+            factors: [],
+            flags: [],
+            recommendations: [],
+            updatedAt: "2026-04-01T00:00:00.000Z",
+          },
+        }}
+        onDecision={onDecision}
+      />
+    );
+
+    expect(screen.getByText("Application approved")).toBeInTheDocument();
+    expect(screen.getByText(/This application has already been approved/i)).toBeInTheDocument();
+    expect(screen.getByText(/Continue lease follow-through/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Request More Info" })).not.toBeInTheDocument();
+  });
+
+  it("hides active decision controls for declined applications", () => {
+    const onDecision = vi.fn();
+
+    render(
+      <ApplicationDecisionSummaryCard
+        summary={{
+          applicationId: "app-denied",
+          status: "DENIED",
+          riskSnapshot: {
+            version: "risk-v1",
+            status: "completed",
+            score: 44,
+            grade: "D",
+            confidence: 0.8,
+            factors: [],
+            flags: ["Reference could not be verified"],
+            recommendations: [],
+            updatedAt: "2026-04-01T00:00:00.000Z",
+          },
+        }}
+        onDecision={onDecision}
+      />
+    );
+
+    expect(screen.getByText("Application declined")).toBeInTheDocument();
+    expect(screen.getByText(/This decision has already been recorded/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Request More Info" })).not.toBeInTheDocument();
+  });
+
   it("renders request-more-info content inline inside the decision support panel", () => {
     render(
       <ApplicationDecisionSummaryCard

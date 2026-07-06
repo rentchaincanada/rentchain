@@ -49,6 +49,25 @@ function providerDisplayLabel(provider?: string | null, providerLabel?: string |
   return raw;
 }
 
+function finalDecisionStateForStatus(status?: string | null) {
+  const normalized = String(status || "").trim().toUpperCase();
+  if (["APPROVED", "APPROVE", "ACCEPTED", "CONVERTED"].includes(normalized)) {
+    return {
+      title: "Application approved",
+      description: "This application has already been approved. Pre-decision controls are no longer shown from this review panel.",
+      nextAction: "Continue lease follow-through from the lease workspace when a safe lease route is available.",
+    };
+  }
+  if (["REJECTED", "DECLINED", "DENIED"].includes(normalized)) {
+    return {
+      title: "Application declined",
+      description: "This decision has already been recorded. Pre-decision controls are no longer shown from this review panel.",
+      nextAction: "Keep the application summary available for review history and audit context.",
+    };
+  }
+  return null;
+}
+
 const PillList: React.FC<{ items: string[]; emptyLabel: string }> = ({ items, emptyLabel }) => {
   if (!items.length) {
     return <div style={{ color: text.subtle, fontSize: 12 }}>{emptyLabel}</div>;
@@ -93,6 +112,7 @@ export const ApplicationDecisionSummaryCard: React.FC<ApplicationDecisionSummary
   const decisionSupport = summary?.decisionSupport ?? null;
   const hasContent = Boolean(riskSnapshot || risk || questions.length || screeningRecommendation || screeningSummary?.available || decisionSupport?.summaryLine || onEvaluateRisk);
   const screeningTone = priorityTone(screeningRecommendation?.priority);
+  const finalDecisionState = finalDecisionStateForStatus(summary?.status);
 
   return (
     <section
@@ -135,6 +155,7 @@ export const ApplicationDecisionSummaryCard: React.FC<ApplicationDecisionSummary
             evaluatingRisk={evaluatingRisk}
             onDecision={onDecision}
             submittingDecision={submittingDecision}
+            finalDecisionState={finalDecisionState}
           />
           {requestInfoDrawer}
 

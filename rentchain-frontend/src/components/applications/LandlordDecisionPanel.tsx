@@ -13,6 +13,11 @@ type LandlordDecisionPanelProps = {
   evaluatingRisk?: boolean;
   onDecision?: ((decision: LandlordDecisionAction, notes: string) => void | Promise<void>) | null;
   submittingDecision?: boolean;
+  finalDecisionState?: {
+    title: string;
+    description: string;
+    nextAction?: string | null;
+  } | null;
 };
 
 function formatConfidence(value?: number | null) {
@@ -134,12 +139,43 @@ const ItemList: React.FC<{ title: string; items: string[]; emptyLabel: string; t
   </div>
 );
 
+const FinalDecisionNotice: React.FC<{
+  finalDecisionState: NonNullable<LandlordDecisionPanelProps["finalDecisionState"]>;
+}> = ({ finalDecisionState }) => (
+  <div style={{ display: "grid", gap: 8 }}>
+    <div style={{ color: text.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+      Recorded Decision
+    </div>
+    <div
+      style={{
+        borderRadius: radius.lg,
+        border: `1px solid ${colors.border}`,
+        background: "rgba(248,250,252,0.94)",
+        padding: spacing.md,
+        display: "grid",
+        gap: 6,
+      }}
+    >
+      <div style={{ color: text.primary, fontWeight: 800 }}>{finalDecisionState.title}</div>
+      <div style={{ color: text.secondary, fontSize: 13, lineHeight: 1.6 }}>
+        {finalDecisionState.description}
+      </div>
+      {finalDecisionState.nextAction ? (
+        <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.55 }}>
+          Next step: {finalDecisionState.nextAction}
+        </div>
+      ) : null}
+    </div>
+  </div>
+);
+
 export const LandlordDecisionPanel: React.FC<LandlordDecisionPanelProps> = ({
   riskSnapshot = null,
   onEvaluateRisk = null,
   evaluatingRisk = false,
   onDecision = null,
   submittingDecision = false,
+  finalDecisionState = null,
 }) => {
   const [notes, setNotes] = useState("");
 
@@ -169,11 +205,15 @@ export const LandlordDecisionPanel: React.FC<LandlordDecisionPanelProps> = ({
       <div style={{ display: "grid", gap: 4 }}>
         <div style={{ color: text.primary, fontWeight: 800, fontSize: 16 }}>Landlord Decision Panel</div>
         <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.55 }}>
-          Use the latest Risk Agent snapshot to decide whether to approve, reject, or request more information. These actions stay landlord-triggered and only update the application after you confirm them.
+          {finalDecisionState
+            ? "This application already has a recorded decision. Review the context below without changing the application status from this panel."
+            : "Use the latest Risk Agent snapshot to decide whether to approve, reject, or request more information. These actions stay landlord-triggered and only update the application after you confirm them."}
         </div>
       </div>
 
-      {!riskSnapshot ? (
+      {!riskSnapshot && finalDecisionState ? (
+        <FinalDecisionNotice finalDecisionState={finalDecisionState} />
+      ) : !riskSnapshot ? (
         <div
           style={{
             borderRadius: radius.lg,
@@ -282,80 +322,84 @@ export const LandlordDecisionPanel: React.FC<LandlordDecisionPanelProps> = ({
           <ItemList title="Flags" items={riskSnapshot.flags || []} emptyLabel="No flagged warnings right now." tone="warning" />
           <ItemList title="Next Step Guidance" items={riskSnapshot.recommendations || []} emptyLabel="No next-step guidance right now." />
 
-          <div style={{ display: "grid", gap: 8 }}>
-            <div style={{ color: text.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Decision Actions
+          {finalDecisionState ? (
+            <FinalDecisionNotice finalDecisionState={finalDecisionState} />
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ color: text.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Decision Actions
+              </div>
+              <textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Optional decision notes for your team audit trail"
+                rows={3}
+                style={{
+                  width: "100%",
+                  resize: "vertical",
+                  borderRadius: radius.lg,
+                  border: `1px solid ${colors.border}`,
+                  padding: "10px 12px",
+                  font: "inherit",
+                  color: text.primary,
+                  background: "#fff",
+                }}
+              />
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => void handleDecision("approve")}
+                  disabled={!onDecision || submittingDecision}
+                  style={{
+                    borderRadius: radius.pill,
+                    border: "1px solid rgba(34,197,94,0.28)",
+                    background: "rgba(220,252,231,0.96)",
+                    color: "#166534",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    padding: "9px 14px",
+                    cursor: !onDecision || submittingDecision ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {submittingDecision ? "Saving..." : "Approve"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDecision("reject")}
+                  disabled={!onDecision || submittingDecision}
+                  style={{
+                    borderRadius: radius.pill,
+                    border: "1px solid rgba(239,68,68,0.28)",
+                    background: "rgba(254,226,226,0.96)",
+                    color: "#b91c1c",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    padding: "9px 14px",
+                    cursor: !onDecision || submittingDecision ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDecision("request_info")}
+                  disabled={!onDecision || submittingDecision}
+                  style={{
+                    borderRadius: radius.pill,
+                    border: "1px solid rgba(59,130,246,0.24)",
+                    background: "rgba(239,246,255,0.96)",
+                    color: "#1d4ed8",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    padding: "9px 14px",
+                    cursor: !onDecision || submittingDecision ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Request More Info
+                </button>
+              </div>
             </div>
-            <textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Optional decision notes for your team audit trail"
-              rows={3}
-              style={{
-                width: "100%",
-                resize: "vertical",
-                borderRadius: radius.lg,
-                border: `1px solid ${colors.border}`,
-                padding: "10px 12px",
-                font: "inherit",
-                color: text.primary,
-                background: "#fff",
-              }}
-            />
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={() => void handleDecision("approve")}
-                disabled={!onDecision || submittingDecision}
-                style={{
-                  borderRadius: radius.pill,
-                  border: "1px solid rgba(34,197,94,0.28)",
-                  background: "rgba(220,252,231,0.96)",
-                  color: "#166534",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  padding: "9px 14px",
-                  cursor: !onDecision || submittingDecision ? "not-allowed" : "pointer",
-                }}
-              >
-                {submittingDecision ? "Saving..." : "Approve"}
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleDecision("reject")}
-                disabled={!onDecision || submittingDecision}
-                style={{
-                  borderRadius: radius.pill,
-                  border: "1px solid rgba(239,68,68,0.28)",
-                  background: "rgba(254,226,226,0.96)",
-                  color: "#b91c1c",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  padding: "9px 14px",
-                  cursor: !onDecision || submittingDecision ? "not-allowed" : "pointer",
-                }}
-              >
-                Reject
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleDecision("request_info")}
-                disabled={!onDecision || submittingDecision}
-                style={{
-                  borderRadius: radius.pill,
-                  border: "1px solid rgba(59,130,246,0.24)",
-                  background: "rgba(239,246,255,0.96)",
-                  color: "#1d4ed8",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  padding: "9px 14px",
-                  cursor: !onDecision || submittingDecision ? "not-allowed" : "pointer",
-                }}
-              >
-                Request More Info
-              </button>
-            </div>
-          </div>
+          )}
         </>
       )}
     </div>
