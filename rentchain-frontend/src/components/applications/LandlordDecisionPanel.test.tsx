@@ -85,4 +85,60 @@ describe("LandlordDecisionPanel", () => {
 
     expect(onDecision).toHaveBeenCalledWith("request_info", "Need one more paystub before final call.");
   });
+
+  it("renders recorded final-decision copy instead of active decision actions", () => {
+    const onDecision = vi.fn();
+
+    render(
+      <LandlordDecisionPanel
+        riskSnapshot={{
+          version: "risk-v1",
+          status: "completed",
+          score: 82,
+          grade: "A",
+          confidence: 0.9,
+          factors: [],
+          flags: [],
+          recommendations: [],
+          updatedAt: "2026-04-01T00:00:00.000Z",
+        }}
+        onDecision={onDecision}
+        finalDecisionState={{
+          title: "Application approved",
+          description: "This application has already been approved.",
+          nextAction: "Continue lease follow-through from the lease workspace.",
+        }}
+      />
+    );
+
+    expect(screen.getByText("Recorded Decision")).toBeInTheDocument();
+    expect(screen.getByText("Application approved")).toBeInTheDocument();
+    expect(screen.getByText("This application has already been approved.")).toBeInTheDocument();
+    expect(screen.getByText("Next step: Continue lease follow-through from the lease workspace.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Request More Info" })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Optional decision notes for your team audit trail")).not.toBeInTheDocument();
+  });
+
+  it("renders recorded final-decision copy even without a risk snapshot", () => {
+    const onEvaluateRisk = vi.fn();
+
+    render(
+      <LandlordDecisionPanel
+        riskSnapshot={null}
+        onEvaluateRisk={onEvaluateRisk}
+        finalDecisionState={{
+          title: "Application declined",
+          description: "This decision has already been recorded.",
+          nextAction: "Keep the application summary available for review history.",
+        }}
+      />
+    );
+
+    expect(screen.getByText("Application declined")).toBeInTheDocument();
+    expect(screen.getByText("This decision has already been recorded.")).toBeInTheDocument();
+    expect(screen.queryByText("No risk snapshot is available yet. Evaluate risk first to unlock the decision panel.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Evaluate risk" })).not.toBeInTheDocument();
+  });
 });
