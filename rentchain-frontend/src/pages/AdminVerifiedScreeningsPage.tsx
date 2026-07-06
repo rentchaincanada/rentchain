@@ -30,6 +30,40 @@ type AdminVerifiedScreeningsPageProps = {
   shell?: VerifiedScreeningsShell;
 };
 
+function formatVerifiedScreeningStatus(value?: string | null) {
+  const normalized = String(value || "").trim().toUpperCase();
+  const labels: Record<string, string> = {
+    QUEUED: "Waiting to start",
+    IN_PROGRESS: "In progress",
+    COMPLETE: "Completed",
+    COMPLETED: "Completed",
+    CANCELLED: "Cancelled",
+    CANCELED: "Cancelled",
+    FAILED: "Needs attention",
+    NOT_REQUESTED: "Not requested",
+  };
+  return labels[normalized] || String(value || "Status unavailable").replace(/_/g, " ");
+}
+
+function formatVerifiedScreeningServiceLevel(value?: string | null) {
+  const normalized = String(value || "").trim().toUpperCase();
+  const labels: Record<string, string> = {
+    VERIFIED: "Verified screening",
+    VERIFIED_AI: "Verified screening with assisted review",
+  };
+  return labels[normalized] || String(value || "Screening package").replace(/_/g, " ");
+}
+
+function formatVerifiedScreeningRecommendation(value?: string | null) {
+  const normalized = String(value || "").trim().toUpperCase();
+  const labels: Record<string, string> = {
+    APPROVE: "Approve",
+    DECLINE: "Decline",
+    CONDITIONAL: "Conditional",
+  };
+  return labels[normalized] || "Pending review";
+}
+
 function ScreeningSummaryDetail({ item }: { item: VerifiedScreeningQueueItem }) {
   return (
     <div style={{ display: "grid", gap: spacing.md }}>
@@ -43,8 +77,8 @@ function ScreeningSummaryDetail({ item }: { item: VerifiedScreeningQueueItem }) 
           </div>
         </div>
         <div className="rc-wrap-row">
-          <Pill>{item.serviceLevel}</Pill>
-          <Pill>{item.status}</Pill>
+          <Pill>{formatVerifiedScreeningServiceLevel(item.serviceLevel)}</Pill>
+          <Pill>{formatVerifiedScreeningStatus(item.status)}</Pill>
         </div>
       </div>
 
@@ -61,7 +95,7 @@ function ScreeningSummaryDetail({ item }: { item: VerifiedScreeningQueueItem }) 
         </div>
         <div>
           <div style={{ color: text.muted, fontSize: 12, fontWeight: 700 }}>Recommendation</div>
-          <div>{item.recommendation || "Pending review"}</div>
+          <div>{formatVerifiedScreeningRecommendation(item.recommendation)}</div>
         </div>
         <div>
           <div style={{ color: text.muted, fontSize: 12, fontWeight: 700 }}>AI review</div>
@@ -286,8 +320,8 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
                       <div style={{ fontWeight: 700, color: text.primary }}>{item.applicant?.name || "Applicant"}</div>
                       <div style={{ color: text.muted, fontSize: 12 }}>{item.applicant?.email || "No email"}</div>
                       <div className="rc-wrap-row">
-                        <Pill>{item.status}</Pill>
-                        <Pill>{item.serviceLevel}</Pill>
+                        <Pill>{isAdminAudience ? item.status : formatVerifiedScreeningStatus(item.status)}</Pill>
+                        <Pill>{isAdminAudience ? item.serviceLevel : formatVerifiedScreeningServiceLevel(item.serviceLevel)}</Pill>
                       </div>
                       <div style={{ fontSize: 12, color: text.muted }}>
                         ${(item.totalAmountCents / 100).toFixed(2)} {item.currency}
