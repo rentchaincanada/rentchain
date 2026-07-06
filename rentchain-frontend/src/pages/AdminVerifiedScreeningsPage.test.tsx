@@ -80,6 +80,7 @@ describe("AdminVerifiedScreeningsPage landlord mode", () => {
     );
 
     expect(await screen.findByText("Phil Jones")).toBeInTheDocument();
+    expect(mocks.listVerifiedScreenings).toHaveBeenCalledWith("landlord");
     expect(screen.getByPlaceholderText("Search applicant or email")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Phil Jones/i }));
@@ -151,6 +152,7 @@ describe("AdminVerifiedScreeningsPage admin mode", () => {
     );
 
     expect(await screen.findByText("Phil Jones")).toBeInTheDocument();
+    expect(mocks.listVerifiedScreenings).toHaveBeenCalledWith("admin");
     fireEvent.click(screen.getByRole("button", { name: /Phil Jones/i }));
 
     expect(await screen.findByText("Order ID: order_raw_123")).toBeInTheDocument();

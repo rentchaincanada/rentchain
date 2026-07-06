@@ -143,7 +143,7 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
     try {
       setLoading(true);
       setViewMessage(null);
-      const list = await listVerifiedScreenings();
+      const list = await listVerifiedScreenings(audience);
       setItems(list);
       setViewState(list.length === 0 ? "empty" : "ready");
     } catch (err: any) {
