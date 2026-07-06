@@ -38,13 +38,47 @@ function asNullableString(value: unknown) {
   return text || null;
 }
 
+function verifiedScreeningStatusLabel(value: unknown) {
+  const normalized = String(value || "QUEUED").trim().toUpperCase();
+  const labels: Record<string, string> = {
+    QUEUED: "Waiting to start",
+    IN_PROGRESS: "In progress",
+    COMPLETE: "Completed",
+    COMPLETED: "Completed",
+    CANCELLED: "Cancelled",
+    CANCELED: "Cancelled",
+    FAILED: "Needs attention",
+    NOT_REQUESTED: "Not requested",
+  };
+  return labels[normalized] || "Status unavailable";
+}
+
+function verifiedScreeningPackageLabel(value: unknown) {
+  const normalized = String(value || "VERIFIED").trim().toUpperCase();
+  const labels: Record<string, string> = {
+    VERIFIED: "Verified screening",
+    VERIFIED_AI: "Verified screening with assisted review",
+  };
+  return labels[normalized] || "Verified screening";
+}
+
+function verifiedScreeningRecommendationLabel(value: unknown) {
+  const normalized = String(value || "").trim().toUpperCase();
+  const labels: Record<string, string> = {
+    APPROVE: "Approve",
+    DECLINE: "Decline",
+    CONDITIONAL: "Conditional",
+  };
+  return labels[normalized] || "Pending review";
+}
+
 function projectLandlordVerifiedScreeningItem(data: any, index: number) {
   return {
-    id: `verified-screening-${index + 1}`,
+    displayId: `Screening ${index + 1}`,
     createdAt: asNumber(data?.createdAt),
     updatedAt: asNumber(data?.updatedAt),
-    status: String(data?.status || "QUEUED").toUpperCase(),
-    serviceLevel: String(data?.serviceLevel || "VERIFIED").toUpperCase(),
+    statusLabel: verifiedScreeningStatusLabel(data?.status),
+    packageLabel: verifiedScreeningPackageLabel(data?.serviceLevel),
     applicant: {
       name: asNullableString(data?.applicant?.name) || "Applicant",
       email: asNullableString(data?.applicant?.email) || null,
@@ -55,7 +89,7 @@ function projectLandlordVerifiedScreeningItem(data: any, index: number) {
     currency: String(data?.currency || "CAD").toUpperCase(),
     completedAt: data?.completedAt == null ? null : asNumber(data.completedAt),
     resultSummary: asNullableString(data?.resultSummary),
-    recommendation: asNullableString(data?.recommendation)?.toUpperCase() || null,
+    recommendationLabel: verifiedScreeningRecommendationLabel(data?.recommendation),
   };
 }
 

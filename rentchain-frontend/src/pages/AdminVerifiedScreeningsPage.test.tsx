@@ -48,26 +48,19 @@ describe("AdminVerifiedScreeningsPage landlord mode", () => {
     mocks.user = { id: "landlord-1", role: "landlord", actorRole: "landlord", email: "owner@example.test" };
     mocks.listVerifiedScreenings.mockResolvedValue([
       {
-        id: "screening-1",
+        displayId: "Screening 1",
         createdAt: Date.UTC(2026, 5, 1, 12, 0),
         updatedAt: Date.UTC(2026, 5, 1, 12, 0),
-        status: "COMPLETE",
-        serviceLevel: "VERIFIED",
-        landlordId: "landlord_raw_123",
-        applicationId: "app_raw_123",
-        orderId: "order_raw_123",
-        propertyId: "property_raw_123",
-        unitId: "unit_raw_123",
+        statusLabel: "Completed",
+        packageLabel: "Verified screening",
         applicant: { name: "Phil Jones", email: "phil@example.test" },
         aiIncluded: true,
         scoreAddOn: false,
         totalAmountCents: 4999,
         currency: "CAD",
-        notesInternal: "Internal-only note",
-        reviewer: { email: "reviewer@example.test" },
         completedAt: Date.UTC(2026, 5, 1, 13, 0),
         resultSummary: "Screening review completed.",
-        recommendation: "APPROVE",
+        recommendationLabel: "Approve",
       },
     ]);
   });
@@ -159,11 +152,11 @@ describe("AdminVerifiedScreeningsPage landlord mode", () => {
     mocks.user = { id: "landlord-1", role: "landlord", actorRole: "landlord", email: "owner@example.test" };
     mocks.listVerifiedScreenings.mockResolvedValue([
       {
-        id: "screening-2",
+        displayId: "Screening 2",
         createdAt: Date.UTC(2026, 5, 3, 12, 0),
         updatedAt: Date.UTC(2026, 5, 3, 12, 0),
-        status: "COMPLETE",
-        serviceLevel: "VERIFIED",
+        statusLabel: "Completed",
+        packageLabel: "Verified screening",
         applicant: { name: "Riley Renter", email: "riley@example.test" },
         aiIncluded: false,
         scoreAddOn: false,
@@ -171,7 +164,7 @@ describe("AdminVerifiedScreeningsPage landlord mode", () => {
         currency: "CAD",
         completedAt: Date.UTC(2026, 5, 3, 13, 0),
         resultSummary: "Screening review completed.",
-        recommendation: "APPROVE",
+        recommendationLabel: "Approve",
       },
     ]);
 

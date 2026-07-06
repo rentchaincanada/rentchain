@@ -1,11 +1,14 @@
 import { apiJson } from "../lib/apiClient";
 
 export type VerifiedScreeningQueueItem = {
-  id: string;
+  id?: string;
+  displayId?: string;
   createdAt: number;
   updatedAt: number;
-  status: "QUEUED" | "IN_PROGRESS" | "COMPLETE" | "CANCELLED";
-  serviceLevel: "VERIFIED" | "VERIFIED_AI";
+  status?: "QUEUED" | "IN_PROGRESS" | "COMPLETE" | "CANCELLED";
+  statusLabel?: string;
+  serviceLevel?: "VERIFIED" | "VERIFIED_AI";
+  packageLabel?: string;
   landlordId?: string;
   applicationId?: string;
   orderId?: string;
@@ -20,7 +23,8 @@ export type VerifiedScreeningQueueItem = {
   reviewer?: { email?: string | null } | null;
   completedAt: number | null;
   resultSummary: string | null;
-  recommendation: "APPROVE" | "DECLINE" | "CONDITIONAL" | null;
+  recommendation?: "APPROVE" | "DECLINE" | "CONDITIONAL" | null;
+  recommendationLabel?: string;
 };
 
 export type VerifiedScreeningsAudience = "admin" | "landlord";
