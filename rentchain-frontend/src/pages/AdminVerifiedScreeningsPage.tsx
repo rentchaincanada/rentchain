@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MacShell } from "../components/layout/MacShell";
 import { Card, Section, Button, Pill, Input } from "../components/ui/Ui";
@@ -139,10 +139,12 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
   const isAdminAudience = audience === "admin";
   const pageTitle = isAdminAudience ? "Admin · Verified Screenings" : "Verified Screenings";
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setViewMessage(null);
+      setSelectedId(null);
+      setDetail(null);
       const list = await listVerifiedScreenings(audience);
       setItems(list);
       setViewState(list.length === 0 ? "empty" : "ready");
@@ -171,11 +173,11 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
     } finally {
       setLoading(false);
     }
-  };
+  }, [audience, showToast]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     const loadDetail = async () => {

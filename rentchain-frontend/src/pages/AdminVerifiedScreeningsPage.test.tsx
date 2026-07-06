@@ -108,6 +108,54 @@ describe("AdminVerifiedScreeningsPage landlord mode", () => {
     expect(screen.queryByText(/unit_raw_123/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Internal-only note/i)).not.toBeInTheDocument();
   });
+
+  it("reloads through the admin endpoint when the route audience changes", async () => {
+    const view = render(
+      <MemoryRouter>
+        <AdminVerifiedScreeningsPage audience="landlord" shell="none" />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Phil Jones")).toBeInTheDocument();
+    expect(mocks.listVerifiedScreenings).toHaveBeenCalledWith("landlord");
+
+    mocks.user = { id: "admin-1", role: "admin", actorRole: "admin", email: "admin@example.test" };
+    mocks.listVerifiedScreenings.mockResolvedValue([
+      {
+        id: "admin-screening-1",
+        createdAt: Date.UTC(2026, 5, 2, 12, 0),
+        updatedAt: Date.UTC(2026, 5, 2, 12, 0),
+        status: "IN_PROGRESS",
+        serviceLevel: "VERIFIED_AI",
+        landlordId: "landlord_raw_123",
+        applicationId: "app_raw_456",
+        orderId: "order_raw_456",
+        propertyId: "property_raw_456",
+        unitId: "unit_raw_456",
+        applicant: { name: "Jordan Admincase", email: "jordan@example.test" },
+        aiIncluded: true,
+        scoreAddOn: false,
+        totalAmountCents: 4999,
+        currency: "CAD",
+        notesInternal: "Internal-only note",
+        reviewer: { email: "reviewer@example.test" },
+        completedAt: null,
+        resultSummary: null,
+        recommendation: null,
+      },
+    ]);
+
+    view.rerender(
+      <MemoryRouter>
+        <AdminVerifiedScreeningsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mocks.listVerifiedScreenings).toHaveBeenLastCalledWith("admin");
+    });
+    expect(await screen.findByText("Jordan Admincase")).toBeInTheDocument();
+  });
 });
 
 describe("AdminVerifiedScreeningsPage admin mode", () => {
