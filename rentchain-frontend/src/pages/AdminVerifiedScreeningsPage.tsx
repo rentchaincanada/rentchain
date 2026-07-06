@@ -137,9 +137,18 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
 
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
   const isAdminAudience = audience === "admin";
+  const adminAccessDenied = isAdminAudience && !isAdmin;
   const pageTitle = isAdminAudience ? "Admin · Verified Screenings" : "Verified Screenings";
 
   const load = useCallback(async () => {
+    if (adminAccessDenied) {
+      setItems([]);
+      setSelectedId(null);
+      setDetail(null);
+      setViewMessage("Admin access is required to view this queue.");
+      setViewState("forbidden");
+      return;
+    }
     try {
       setLoading(true);
       setViewMessage(null);
@@ -173,7 +182,7 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
     } finally {
       setLoading(false);
     }
-  }, [audience, showToast]);
+  }, [adminAccessDenied, audience, showToast]);
 
   useEffect(() => {
     void load();
@@ -236,6 +245,22 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
       setSaving(false);
     }
   };
+
+  if (adminAccessDenied) {
+    return renderShell(
+      <Section>
+        <Card elevated style={{ display: "grid", gap: 12 }}>
+          <h1 style={{ margin: 0, fontSize: "1.2rem" }}>Access denied</h1>
+          <div style={{ color: text.muted }}>You do not have admin access for this queue.</div>
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+            <Button type="button" onClick={() => navigate("/verified-screenings")}>
+              Open landlord screening workspace
+            </Button>
+          </div>
+        </Card>
+      </Section>
+    );
+  }
 
   if (viewState !== "ready") {
     const heading =

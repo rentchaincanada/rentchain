@@ -155,6 +155,50 @@ describe("AdminVerifiedScreeningsPage landlord mode", () => {
       expect(mocks.listVerifiedScreenings).toHaveBeenLastCalledWith("admin");
     });
     expect(await screen.findByText("Jordan Admincase")).toBeInTheDocument();
+
+    mocks.user = { id: "landlord-1", role: "landlord", actorRole: "landlord", email: "owner@example.test" };
+    mocks.listVerifiedScreenings.mockResolvedValue([
+      {
+        id: "screening-2",
+        createdAt: Date.UTC(2026, 5, 3, 12, 0),
+        updatedAt: Date.UTC(2026, 5, 3, 12, 0),
+        status: "COMPLETE",
+        serviceLevel: "VERIFIED",
+        applicant: { name: "Riley Renter", email: "riley@example.test" },
+        aiIncluded: false,
+        scoreAddOn: false,
+        totalAmountCents: 3999,
+        currency: "CAD",
+        completedAt: Date.UTC(2026, 5, 3, 13, 0),
+        resultSummary: "Screening review completed.",
+        recommendation: "APPROVE",
+      },
+    ]);
+
+    view.rerender(
+      <MemoryRouter>
+        <AdminVerifiedScreeningsPage audience="landlord" shell="none" />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mocks.listVerifiedScreenings).toHaveBeenLastCalledWith("landlord");
+    });
+    expect(await screen.findByText("Riley Renter")).toBeInTheDocument();
+  });
+
+  it("does not render the admin queue for landlord users", async () => {
+    render(
+      <MemoryRouter>
+        <AdminVerifiedScreeningsPage shell="none" />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Access denied")).toBeInTheDocument();
+    expect(screen.getByText("You do not have admin access for this queue.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open landlord screening workspace" })).toBeInTheDocument();
+    expect(screen.queryByText("Verified Screening Queue")).not.toBeInTheDocument();
+    expect(mocks.listVerifiedScreenings).not.toHaveBeenCalled();
   });
 });
 

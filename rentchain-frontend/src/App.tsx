@@ -1027,11 +1027,11 @@ function App() {
         <Route
           path="/admin/verified-screenings"
           element={
-            <RequireAuth>
+            <RequireAdmin>
               <Suspense fallback={null}>
                 <AdminVerifiedScreeningsPage />
               </Suspense>
-            </RequireAuth>
+            </RequireAdmin>
           }
         />
         <Route
