@@ -407,6 +407,7 @@ function ApplicationReviewSummaryPageBody() {
   const [evaluatingRisk, setEvaluatingRisk] = useState(false);
   const [savingDecision, setSavingDecision] = useState(false);
   const [activeReviewTab, setActiveReviewTab] = useState<ReviewSummaryTab>("overview");
+  const [showLeaseReadinessDetails, setShowLeaseReadinessDetails] = useState(false);
 
   const loadSummary = React.useCallback(async () => {
     if (!entitlements.canViewReviewSummary) {
@@ -442,6 +443,10 @@ function ApplicationReviewSummaryPageBody() {
   useEffect(() => {
     void loadSummary();
   }, [loadSummary]);
+
+  useEffect(() => {
+    setShowLeaseReadinessDetails(false);
+  }, [id]);
 
   const shareUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -658,6 +663,9 @@ function ApplicationReviewSummaryPageBody() {
           })
         : null,
     [signingWorkspace]
+  );
+  const hasLeaseReadinessDetails = Boolean(
+    leaseTransition || leasePreparation || moveInReadiness || executionWorkspace || signingWorkspace || paymentWorkspace
   );
 
   const recentActivity = useMemo(
@@ -1449,6 +1457,52 @@ function ApplicationReviewSummaryPageBody() {
                 </div>
               ) : null}
 
+              {hasLeaseReadinessDetails ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 12,
+                    display: "grid",
+                    gap: 10,
+                    background: "#fff",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <div style={{ fontWeight: 800, color: text.main }}>Detailed lease readiness</div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>
+                        Downstream lease preparation, move-in, signing, and payment readiness stay available here without crowding
+                        the application decision summary.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      aria-expanded={showLeaseReadinessDetails}
+                      aria-controls="review-summary-lease-readiness-details"
+                      onClick={() => setShowLeaseReadinessDetails((current) => !current)}
+                      style={{
+                        minHeight: 38,
+                        padding: "8px 12px",
+                        borderRadius: 8,
+                        border: `1px solid ${colors.border}`,
+                        background: showLeaseReadinessDetails ? "#f8fafc" : "#fff",
+                        color: text.main,
+                        fontWeight: 800,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {showLeaseReadinessDetails ? "Hide lease readiness details" : "Show lease readiness details"}
+                    </button>
+                  </div>
+
+                  <div style={{ fontSize: 12, color: text.subtle }}>
+                    Use the lease workspace for operational follow-through. This summary keeps the application decision and safe handoff
+                    visible first.
+                  </div>
+
+                  {showLeaseReadinessDetails ? (
+                    <div id="review-summary-lease-readiness-details" style={{ display: "grid", gap: 10 }}>
               {leaseTransition ? (
                 <div
                   style={{
@@ -2013,6 +2067,10 @@ function ApplicationReviewSummaryPageBody() {
                       This payment workspace is a structured request and status view only. It does not imply RentChain is holding funds or operating as the payment processor.
                     </div>
                   </div>
+                </div>
+              ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </Card>
