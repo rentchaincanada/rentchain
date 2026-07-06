@@ -185,16 +185,23 @@ describe("verifiedScreeningRoutes", () => {
     expect(res.body?.ok).toBe(true);
     expect(res.body?.data).toHaveLength(1);
     expect(res.body.data[0]).toMatchObject({
-      id: "verified-screening-1",
+      displayId: "Screening 1",
       applicant: { name: "Phil Jones", email: "phil@example.test" },
-      status: "IN_PROGRESS",
-      serviceLevel: "VERIFIED_AI",
+      statusLabel: "In progress",
+      packageLabel: "Verified screening with assisted review",
       totalAmountCents: 4999,
       currency: "CAD",
+      recommendationLabel: "Pending review",
     });
 
     const publicPayload = JSON.stringify(res.body.data[0]);
+    expect(res.body.data[0]).not.toHaveProperty("id");
+    expect(res.body.data[0]).not.toHaveProperty("status");
+    expect(res.body.data[0]).not.toHaveProperty("serviceLevel");
+    expect(res.body.data[0]).not.toHaveProperty("recommendation");
     expect(publicPayload).not.toContain("queue_doc_raw_1");
+    expect(publicPayload).not.toContain("IN_PROGRESS");
+    expect(publicPayload).not.toContain("VERIFIED_AI");
     expect(publicPayload).not.toContain("landlord-1");
     expect(publicPayload).not.toContain("app_raw_123");
     expect(publicPayload).not.toContain("order_raw_123");
@@ -205,6 +212,32 @@ describe("verifiedScreeningRoutes", () => {
     expect(publicPayload).not.toContain("Internal-only support note");
     expect(publicPayload).not.toContain("reviewer@example.test");
     expect(publicPayload).not.toContain("other_app_raw");
+  });
+
+  it("returns landlord-facing labels for completed verified-screening results", async () => {
+    seedVerifiedScreening("queue_doc_raw_1", {
+      status: "COMPLETE",
+      serviceLevel: "VERIFIED",
+      recommendation: "APPROVE",
+    });
+
+    const res = await invokeRouter({
+      method: "GET",
+      url: "/landlord/verified-screenings",
+      authorization: "Bearer landlord",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.[0]).toMatchObject({
+      displayId: "Screening 1",
+      statusLabel: "Completed",
+      packageLabel: "Verified screening",
+      recommendationLabel: "Approve",
+    });
+    const publicPayload = JSON.stringify(res.body.data[0]);
+    expect(publicPayload).not.toContain("COMPLETE");
+    expect(publicPayload).not.toContain("VERIFIED");
+    expect(publicPayload).not.toContain("APPROVE");
   });
 
   it("rejects non-landlord users on the landlord verified-screenings route", async () => {

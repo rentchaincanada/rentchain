@@ -45,6 +45,10 @@ function formatVerifiedScreeningStatus(value?: string | null) {
   return labels[normalized] || String(value || "Status unavailable").replace(/_/g, " ");
 }
 
+function verifiedScreeningStatusDisplay(item: VerifiedScreeningQueueItem) {
+  return item.statusLabel || formatVerifiedScreeningStatus(item.status);
+}
+
 function formatVerifiedScreeningServiceLevel(value?: string | null) {
   const normalized = String(value || "").trim().toUpperCase();
   const labels: Record<string, string> = {
@@ -52,6 +56,10 @@ function formatVerifiedScreeningServiceLevel(value?: string | null) {
     VERIFIED_AI: "Verified screening with assisted review",
   };
   return labels[normalized] || String(value || "Screening package").replace(/_/g, " ");
+}
+
+function verifiedScreeningPackageDisplay(item: VerifiedScreeningQueueItem) {
+  return item.packageLabel || formatVerifiedScreeningServiceLevel(item.serviceLevel);
 }
 
 function formatVerifiedScreeningRecommendation(value?: string | null) {
@@ -62,6 +70,14 @@ function formatVerifiedScreeningRecommendation(value?: string | null) {
     CONDITIONAL: "Conditional",
   };
   return labels[normalized] || "Pending review";
+}
+
+function verifiedScreeningRecommendationDisplay(item: VerifiedScreeningQueueItem) {
+  return item.recommendationLabel || formatVerifiedScreeningRecommendation(item.recommendation);
+}
+
+function verifiedScreeningListKey(item: VerifiedScreeningQueueItem, index: number) {
+  return item.id || item.displayId || `${item.applicant?.email || "screening"}-${item.createdAt || index}`;
 }
 
 function ScreeningSummaryDetail({ item }: { item: VerifiedScreeningQueueItem }) {
@@ -77,8 +93,8 @@ function ScreeningSummaryDetail({ item }: { item: VerifiedScreeningQueueItem }) 
           </div>
         </div>
         <div className="rc-wrap-row">
-          <Pill>{formatVerifiedScreeningServiceLevel(item.serviceLevel)}</Pill>
-          <Pill>{formatVerifiedScreeningStatus(item.status)}</Pill>
+          <Pill>{verifiedScreeningPackageDisplay(item)}</Pill>
+          <Pill>{verifiedScreeningStatusDisplay(item)}</Pill>
         </div>
       </div>
 
@@ -95,7 +111,7 @@ function ScreeningSummaryDetail({ item }: { item: VerifiedScreeningQueueItem }) 
         </div>
         <div>
           <div style={{ color: text.muted, fontSize: 12, fontWeight: 700 }}>Recommendation</div>
-          <div>{formatVerifiedScreeningRecommendation(item.recommendation)}</div>
+          <div>{verifiedScreeningRecommendationDisplay(item)}</div>
         </div>
         <div>
           <div style={{ color: text.muted, fontSize: 12, fontWeight: 700 }}>AI review</div>
@@ -215,7 +231,10 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
   }, [isAdminAudience, items, search]);
 
   const selectedSummary = useMemo(
-    () => (selectedId ? items.find((item) => item.id === selectedId) || null : null),
+    () =>
+      selectedId
+        ? items.find((item, index) => verifiedScreeningListKey(item, index) === selectedId) || null
+        : null,
     [items, selectedId]
   );
 
@@ -228,6 +247,10 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
 
   const handleSave = async () => {
     if (!detail) return;
+    if (!detail.id) {
+      showToast({ message: "Save failed", description: "Missing admin queue identifier.", variant: "error" });
+      return;
+    }
     try {
       setSaving(true);
       const updated = await updateVerifiedScreening(detail.id, {
@@ -328,15 +351,17 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
                 ) : filtered.length === 0 ? (
                   <div style={{ color: text.muted }}>No verified screenings.</div>
                 ) : (
-                  filtered.map((item) => (
+                  filtered.map((item, index) => {
+                    const itemKey = verifiedScreeningListKey(item, index);
+                    return (
                     <button
-                      key={item.id}
+                      key={itemKey}
                       type="button"
-                      onClick={() => setSelectedId(item.id)}
+                      onClick={() => setSelectedId(itemKey)}
                       style={{
                         textAlign: "left",
-                        border: `1px solid ${item.id === selectedId ? colors.accent : colors.border}`,
-                        background: item.id === selectedId ? "rgba(37,99,235,0.08)" : colors.card,
+                        border: `1px solid ${itemKey === selectedId ? colors.accent : colors.border}`,
+                        background: itemKey === selectedId ? "rgba(37,99,235,0.08)" : colors.card,
                         borderRadius: radius.md,
                         padding: "10px 12px",
                         cursor: "pointer",
@@ -347,14 +372,15 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
                       <div style={{ fontWeight: 700, color: text.primary }}>{item.applicant?.name || "Applicant"}</div>
                       <div style={{ color: text.muted, fontSize: 12 }}>{item.applicant?.email || "No email"}</div>
                       <div className="rc-wrap-row">
-                        <Pill>{isAdminAudience ? item.status : formatVerifiedScreeningStatus(item.status)}</Pill>
-                        <Pill>{isAdminAudience ? item.serviceLevel : formatVerifiedScreeningServiceLevel(item.serviceLevel)}</Pill>
+                        <Pill>{isAdminAudience ? item.status : verifiedScreeningStatusDisplay(item)}</Pill>
+                        <Pill>{isAdminAudience ? item.serviceLevel : verifiedScreeningPackageDisplay(item)}</Pill>
                       </div>
                       <div style={{ fontSize: 12, color: text.muted }}>
                         ${(item.totalAmountCents / 100).toFixed(2)} {item.currency}
                       </div>
                     </button>
-                  ))
+                    );
+                  })
                 )}
               </div>
             }
@@ -366,8 +392,8 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
                   className="rc-full-width-mobile"
                 >
                   <option value="">Select screening</option>
-                  {filtered.map((item) => (
-                    <option key={item.id} value={item.id}>
+                  {filtered.map((item, index) => (
+                    <option key={verifiedScreeningListKey(item, index)} value={verifiedScreeningListKey(item, index)}>
                       {item.applicant?.name || "Applicant"}
                     </option>
                   ))}
@@ -412,7 +438,7 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
                     <div style={{ display: "grid", gap: 8 }}>
                       <label style={{ fontSize: 12, fontWeight: 600 }}>Status</label>
                       <select
-                        value={detail.status}
+                        value={detail.status || "QUEUED"}
                         onChange={(e) => setDetail({ ...detail, status: e.target.value as any })}
                         style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${colors.border}` }}
                       >
