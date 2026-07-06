@@ -6,26 +6,34 @@ export type VerifiedScreeningQueueItem = {
   updatedAt: number;
   status: "QUEUED" | "IN_PROGRESS" | "COMPLETE" | "CANCELLED";
   serviceLevel: "VERIFIED" | "VERIFIED_AI";
-  landlordId: string;
-  applicationId: string;
-  orderId: string;
-  propertyId: string;
-  unitId: string | null;
+  landlordId?: string;
+  applicationId?: string;
+  orderId?: string;
+  propertyId?: string;
+  unitId?: string | null;
   applicant: { name: string; email: string };
   aiIncluded: boolean;
   scoreAddOn: boolean;
   totalAmountCents: number;
   currency: string;
-  notesInternal: string | null;
-  reviewer: { email?: string | null } | null;
+  notesInternal?: string | null;
+  reviewer?: { email?: string | null } | null;
   completedAt: number | null;
   resultSummary: string | null;
   recommendation: "APPROVE" | "DECLINE" | "CONDITIONAL" | null;
 };
 
-export async function listVerifiedScreenings(): Promise<VerifiedScreeningQueueItem[]> {
+export type VerifiedScreeningsAudience = "admin" | "landlord";
+
+export async function listVerifiedScreenings(
+  audience: VerifiedScreeningsAudience = "admin"
+): Promise<VerifiedScreeningQueueItem[]> {
+  const path =
+    audience === "landlord"
+      ? "/landlord/verified-screenings"
+      : "/admin/verified-screenings";
   const res = await apiJson<{ ok: boolean; data: VerifiedScreeningQueueItem[] }>(
-    "/admin/verified-screenings"
+    path
   );
   return res?.data || [];
 }

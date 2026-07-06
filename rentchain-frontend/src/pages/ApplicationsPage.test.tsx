@@ -1083,6 +1083,101 @@ describe("ApplicationsPage", () => {
     expect(screen.getAllByRole("button", { name: "Choose applicant" }).length).toBeGreaterThan(0);
   });
 
+  it("renders completed screening details with landlord-safe labels and no raw vendor references", async () => {
+    mocks.entitlementsMock.mockReturnValue({
+      loading: false,
+      plan: "starter",
+      role: "landlord",
+      isAdmin: false,
+      capabilities: {},
+      hasCapability: () => true,
+      requiredPlanFor: () => "starter",
+      canScreen: true,
+      canViewScreeningHistory: true,
+      canExportPdf: true,
+      hasMoveInReadiness: false,
+      canUseWorkOrders: false,
+      canViewReviewSummary: false,
+    });
+    mocks.getTransUnionIntegration.mockResolvedValue({
+      provider: "transunion",
+      status: "connected",
+      version: 1,
+    });
+    mocks.fetchRentalApplication.mockResolvedValue({
+      id: "app-1",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      applicationLinkId: "link-1",
+      createdAt: Date.now(),
+      submittedAt: Date.now(),
+      updatedAt: Date.now(),
+      status: "SUBMITTED",
+      applicant: { firstName: "Jamie", lastName: "Stone", email: "jamie@example.com" },
+      residentialHistory: [],
+      employment: { applicant: {} },
+      consent: { creditConsent: true, referenceConsent: true, dataSharingConsent: true, acceptedAt: Date.now() },
+      screeningStatus: "complete",
+      screeningProvider: "STUB",
+      screening: {
+        requested: true,
+        status: "COMPLETE",
+        serviceLevel: "VERIFIED_AI",
+        orderId: "order_raw_123",
+        provider: "STUB",
+        totalAmountCents: 4999,
+        currency: "CAD",
+        paidAt: "2026-06-01T12:00:00.000Z",
+        result: {
+          riskBand: "Low",
+          matchConfidence: "High",
+          fileFound: true,
+          score: 720,
+          notes: "",
+        },
+      },
+      landlordNote: null,
+    });
+    mocks.fetchScreeningReceipt.mockResolvedValue({
+      ok: true,
+      receipt: {
+        status: "paid",
+        provider: "STUB",
+        inquiryType: "Soft inquiry (no score impact)",
+        consentVersion: "v1",
+        consentTimestamp: "2026-06-01T12:00:00.000Z",
+        referenceId: "provider_ref_raw_123",
+        generatedAt: "2026-06-01T12:05:00.000Z",
+        reportUrl: "https://example.test/report",
+        pdfUrl: "https://example.test/report.pdf",
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    const applicantName = await screen.findByText("Jamie Stone");
+    const applicantRow = applicantName.closest('[role="button"]');
+    expect(applicantRow).toBeTruthy();
+    fireEvent.click(applicantRow as HTMLElement);
+
+    expect(await screen.findByText("Screening package: Verified screening with assisted review")).toBeInTheDocument();
+    expect(screen.getAllByText("Screening partner: Demo screening").length).toBeGreaterThan(0);
+    expect(await screen.findByText("Screening receipt")).toBeInTheDocument();
+    expect(screen.getByText("Pre-approval screening summary recorded.")).toBeInTheDocument();
+
+    expect(screen.queryByText(/Order ID/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/order_raw_123/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Reference ID/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/provider_ref_raw_123/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Copy reference ID/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/STUB/i)).not.toBeInTheDocument();
+  });
+
   it("shows Starter-aligned screening upgrade copy instead of the old Pro gate", async () => {
     const dispatchSpy = vi.spyOn(window, "dispatchEvent");
 

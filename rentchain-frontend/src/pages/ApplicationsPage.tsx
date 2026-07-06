@@ -218,8 +218,25 @@ const formatScreeningStatus = (value?: string | null) => {
 const formatScreeningProviderLabel = (value?: string | null) => {
   const normalized = String(value || "").trim().toLowerCase();
   if (!normalized) return "Configured screening provider";
+  if (normalized === "stub" || normalized === "demo" || normalized === "test") return "Demo screening";
   if (normalized === "transunion" || normalized === "transunion_manual") return "TransUnion";
+  if (/^[a-z0-9]+(?:[_-][a-z0-9]+)+$/i.test(normalized)) {
+    return normalized.replace(/[_-]/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
+  }
   return String(value);
+};
+
+const formatScreeningPackageLabel = (value?: string | null) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return null;
+  const labels: Record<string, string> = {
+    basic: "Basic screening",
+    verify: "Verified screening",
+    verified: "Verified screening",
+    verified_ai: "Verified screening with assisted review",
+    premium: "Premium screening",
+  };
+  return labels[normalized] || normalized.replace(/[_-]/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
 };
 
 function ScreeningProviderSetupCard({
@@ -770,6 +787,9 @@ const ApplicationsPage: React.FC = () => {
       coApplicant: detail.coApplicant || null,
       consent: detail.consent || null,
       decisionSummary,
+      screeningProvider: formatScreeningProviderLabel(
+        detail.screeningProvider || detail.screening?.provider || null
+      ),
       viewingRequests: matchingViewingRequests,
     };
   }, [decisionSummary, detail, properties, showCancelledViewingRequests, viewingRequests]);
@@ -3297,7 +3317,7 @@ const ApplicationsPage: React.FC = () => {
                       ) : null}
                       {screeningStatus?.provider ? (
                         <span style={{ fontSize: 12, color: text.subtle }}>
-                          Provider: {formatScreeningProviderLabel(screeningStatus.provider)}
+                          Screening partner: {formatScreeningProviderLabel(screeningStatus.provider)}
                         </span>
                       ) : null}
                     </div>
@@ -3423,9 +3443,8 @@ const ApplicationsPage: React.FC = () => {
                     {detail.screening?.status === "COMPLETE" && detail.screening.result ? (
                       <div className="rc-applications-screening-grid">
                         {detail.screening.serviceLevel ? (
-                          <div>Service level: {detail.screening.serviceLevel.replace("_", " ")}</div>
+                          <div>Screening package: {formatScreeningPackageLabel(detail.screening.serviceLevel)}</div>
                         ) : null}
-                        {detail.screening.orderId ? <div>Order ID: {detail.screening.orderId}</div> : null}
                         {typeof detail.screening.totalAmountCents === "number" ? (
                           <div>
                             Paid: ${(detail.screening.totalAmountCents / 100).toFixed(2)} {detail.screening.currency || "CAD"}
@@ -3443,13 +3462,13 @@ const ApplicationsPage: React.FC = () => {
                         {detail.screening.paidAt ? (
                           <div>Paid at: {new Date(detail.screening.paidAt).toLocaleString()}</div>
                         ) : null}
-                        <div>Provider: {detail.screening.provider || "STUB"}</div>
+                        <div>Screening partner: {formatScreeningProviderLabel(detail.screening.provider)}</div>
                         <div>Risk band: {detail.screening.result.riskBand}</div>
                         <div>Match confidence: {detail.screening.result.matchConfidence}</div>
                         <div>File found: {detail.screening.result.fileFound ? "Yes" : "No"}</div>
                         {detail.screening.result.score ? <div>Score: {detail.screening.result.score}</div> : null}
                         <div style={{ fontSize: 12, color: text.muted }}>
-                          {detail.screening.result.notes || "This is a pre-approval report (stub)."}
+                          {detail.screening.result.notes || "Pre-approval screening summary recorded."}
                         </div>
                         {detail.screening.ai ? (
                           <div className="rc-applications-ai-panel" style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 8 }}>
@@ -3600,7 +3619,7 @@ const ApplicationsPage: React.FC = () => {
                   <div style={{ display: "grid", gap: 6, fontSize: 12 }}>
                     <div style={{ fontWeight: 700, fontSize: 13 }}>Screening receipt</div>
                     {receiptStatusLabel ? <div>Status: {receiptStatusLabel}</div> : null}
-                    <div>Provider: {formatScreeningProviderLabel(screeningReceipt.provider)}</div>
+                    <div>Screening partner: {formatScreeningProviderLabel(screeningReceipt.provider)}</div>
                     <div>Inquiry type: {screeningReceipt.inquiryType || "Soft inquiry (no score impact)"}</div>
                     <div>
                       Consent: {screeningReceipt.consentVersion || CONSENT_VERSION}
@@ -3608,7 +3627,6 @@ const ApplicationsPage: React.FC = () => {
                         ? ` · ${new Date(screeningReceipt.consentTimestamp).toLocaleString()}`
                         : ""}
                     </div>
-                    {screeningReceipt.referenceId ? <div>Reference ID: {screeningReceipt.referenceId}</div> : null}
                     {screeningReceipt.generatedAt ? (
                       <div>Generated: {new Date(screeningReceipt.generatedAt).toLocaleString()}</div>
                     ) : null}
@@ -3636,18 +3654,6 @@ const ApplicationsPage: React.FC = () => {
                         ) : (
                           <UpgradeCTA featureKey="pdf_export" label="Upgrade for PDF Export" variant="secondary" />
                         )
-                      ) : null}
-                      {screeningReceipt.referenceId ? (
-                        <Button
-                          variant="ghost"
-                          onClick={() => {
-                            if (!screeningReceipt.referenceId) return;
-                            navigator.clipboard.writeText(screeningReceipt.referenceId);
-                            showToast({ message: "Reference ID copied", variant: "success" });
-                          }}
-                        >
-                          Copy reference ID
-                        </Button>
                       ) : null}
                     </div>
                   </div>

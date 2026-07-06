@@ -14,9 +14,75 @@ function ensureAdmin(req: any, res: any) {
   return true;
 }
 
+function resolveLandlordId(req: any) {
+  return String(req.user?.landlordId || req.user?.id || req.user?.uid || "").trim();
+}
+
+function ensureLandlordWorkspace(req: any, res: any) {
+  const role = String(req.user?.role || "").toLowerCase();
+  const landlordId = resolveLandlordId(req);
+  if (!["landlord", "admin"].includes(role) || !landlordId) {
+    res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    return null;
+  }
+  return landlordId;
+}
+
+function asNumber(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function asNullableString(value: unknown) {
+  const text = String(value || "").trim();
+  return text || null;
+}
+
+function projectLandlordVerifiedScreeningItem(data: any, index: number) {
+  return {
+    id: `verified-screening-${index + 1}`,
+    createdAt: asNumber(data?.createdAt),
+    updatedAt: asNumber(data?.updatedAt),
+    status: String(data?.status || "QUEUED").toUpperCase(),
+    serviceLevel: String(data?.serviceLevel || "VERIFIED").toUpperCase(),
+    applicant: {
+      name: asNullableString(data?.applicant?.name) || "Applicant",
+      email: asNullableString(data?.applicant?.email) || null,
+    },
+    aiIncluded: Boolean(data?.aiIncluded),
+    scoreAddOn: Boolean(data?.scoreAddOn),
+    totalAmountCents: asNumber(data?.totalAmountCents),
+    currency: String(data?.currency || "CAD").toUpperCase(),
+    completedAt: data?.completedAt == null ? null : asNumber(data.completedAt),
+    resultSummary: asNullableString(data?.resultSummary),
+    recommendation: asNullableString(data?.recommendation)?.toUpperCase() || null,
+  };
+}
+
 router.use(authenticateJwt);
 
 router.get("/screening/report", handleScreeningReport);
+
+router.get("/landlord/verified-screenings", async (req: any, res) => {
+  try {
+    const landlordId = ensureLandlordWorkspace(req, res);
+    if (!landlordId) return;
+
+    const snap = await db
+      .collection("verifiedScreeningQueue")
+      .where("landlordId", "==", landlordId)
+      .limit(200)
+      .get();
+    const items = snap.docs
+      .map((doc) => doc.data() as any)
+      .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+      .map((item, index) => projectLandlordVerifiedScreeningItem(item, index));
+    return res.json({ ok: true, data: items });
+  } catch (err: any) {
+    console.error("[verified-screenings] landlord list failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "VERIFIED_SCREENINGS_LIST_FAILED" });
+  }
+});
 
 router.get("/admin/verified-screenings", async (req: any, res) => {
   try {

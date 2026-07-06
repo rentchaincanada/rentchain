@@ -223,6 +223,7 @@ async function buildRuntimeOwnershipApp() {
   const adminSecurityIncidentRoutes = (await import("../adminSecurityIncidentRoutes")).default;
   const adminSupportEscalationRoutes = (await import("../adminSupportEscalationRoutes")).default;
   const governedReviewWorkspaceRoutes = (await import("../governedReviewWorkspaceRoutes")).default;
+  const verifiedScreeningRoutes = (await import("../verifiedScreeningRoutes")).default;
   const screeningJobsAdminRoutes = (await import("../screeningJobsAdminRoutes")).default;
   const { stripeWebhookHandler } = await import("../stripeScreeningOrdersWebhookRoutes");
   const { transunionWebhookHandler } = await import("../transunionWebhookRoutes");
@@ -267,6 +268,7 @@ async function buildRuntimeOwnershipApp() {
   app.use("/api/admin", routeSource("adminSecurityIncidentRoutes.ts"), adminSecurityIncidentRoutes);
   app.use("/api/admin", routeSource("adminSupportEscalationRoutes.ts"), adminSupportEscalationRoutes);
   app.use("/api/admin", routeSource("governedReviewWorkspaceRoutes.ts"), governedReviewWorkspaceRoutes);
+  app.use("/api", routeSource("verifiedScreeningRoutes.ts"), verifiedScreeningRoutes);
   app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
   app.use("/api", (_req, res) => {
     res.setHeader("x-route-source", "not-found");
@@ -311,6 +313,9 @@ describe("API route ownership regression", () => {
     const riskAgentMount = source.indexOf('app.use("/api", routeSource("riskAgentRoutes.ts"), riskAgentRoutes)');
     const tenantPortalMount = source.indexOf('app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes)');
     const referralsMount = source.indexOf('app.use("/api", referralsRoutes)');
+    const verifiedScreeningMount = source.indexOf(
+      'app.use("/api", routeSource("verifiedScreeningRoutes.ts"), verifiedScreeningRoutes)'
+    );
     const screeningJobsMount = source.indexOf('app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes)');
     const buildProbeRoute = source.indexOf('app.get("/api/_build", rateLimitDiagnostics');
     const apiCatchall = source.indexOf('app.use("/api", (_req, res) => {');
@@ -332,6 +337,7 @@ describe("API route ownership regression", () => {
     expect(riskAgentMount).toBeGreaterThan(-1);
     expect(tenantPortalMount).toBeGreaterThan(-1);
     expect(referralsMount).toBeGreaterThan(-1);
+    expect(verifiedScreeningMount).toBeGreaterThan(-1);
     expect(screeningJobsMount).toBeGreaterThan(-1);
     expect(buildProbeRoute).toBeGreaterThan(-1);
     expect(apiCatchall).toBeGreaterThan(-1);
@@ -355,6 +361,8 @@ describe("API route ownership regression", () => {
     expect(tenantPortalMount).toBeLessThan(screeningJobsMount);
     expect(telemetryMount).toBeLessThan(screeningJobsMount);
     expect(screeningRoutesMount).toBeLessThan(screeningJobsMount);
+    expect(verifiedScreeningMount).toBeLessThan(screeningJobsMount);
+    expect(verifiedScreeningMount).toBeLessThan(apiCatchall);
     expect(screeningJobsMount).toBeLessThan(apiCatchall);
     expect(source).not.toContain('app.use("/api", routeSource("referralsRoutes.ts"), referralsRoutes)');
   });
@@ -543,6 +551,22 @@ describe("API route ownership regression", () => {
         manualOnly: true,
       })
     );
+  });
+
+  it("keeps landlord verified screenings owned by verified screening routes before screening job fallback", async () => {
+    authState.user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord" };
+    const app = await buildRuntimeOwnershipApp();
+
+    const res = await invokeApp(app, {
+      method: "GET",
+      url: "/api/landlord/verified-screenings",
+      headers: { authorization: "Bearer landlord-token" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-route-source"]).toBe("verifiedScreeningRoutes.ts");
+    expect(res.headers["x-route-source"]).not.toBe("screeningJobsAdminRoutes.ts");
+    expect(res.body).toEqual({ ok: true, data: [] });
   });
 
   it("keeps telemetry and screening history owned by explicit routers before screening job fallback", async () => {

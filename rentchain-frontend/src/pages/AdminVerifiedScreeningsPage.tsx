@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MacShell } from "../components/layout/MacShell";
 import { Card, Section, Button, Pill, Input } from "../components/ui/Ui";
@@ -30,6 +30,40 @@ type AdminVerifiedScreeningsPageProps = {
   shell?: VerifiedScreeningsShell;
 };
 
+function formatVerifiedScreeningStatus(value?: string | null) {
+  const normalized = String(value || "").trim().toUpperCase();
+  const labels: Record<string, string> = {
+    QUEUED: "Waiting to start",
+    IN_PROGRESS: "In progress",
+    COMPLETE: "Completed",
+    COMPLETED: "Completed",
+    CANCELLED: "Cancelled",
+    CANCELED: "Cancelled",
+    FAILED: "Needs attention",
+    NOT_REQUESTED: "Not requested",
+  };
+  return labels[normalized] || String(value || "Status unavailable").replace(/_/g, " ");
+}
+
+function formatVerifiedScreeningServiceLevel(value?: string | null) {
+  const normalized = String(value || "").trim().toUpperCase();
+  const labels: Record<string, string> = {
+    VERIFIED: "Verified screening",
+    VERIFIED_AI: "Verified screening with assisted review",
+  };
+  return labels[normalized] || String(value || "Screening package").replace(/_/g, " ");
+}
+
+function formatVerifiedScreeningRecommendation(value?: string | null) {
+  const normalized = String(value || "").trim().toUpperCase();
+  const labels: Record<string, string> = {
+    APPROVE: "Approve",
+    DECLINE: "Decline",
+    CONDITIONAL: "Conditional",
+  };
+  return labels[normalized] || "Pending review";
+}
+
 function ScreeningSummaryDetail({ item }: { item: VerifiedScreeningQueueItem }) {
   return (
     <div style={{ display: "grid", gap: spacing.md }}>
@@ -43,8 +77,8 @@ function ScreeningSummaryDetail({ item }: { item: VerifiedScreeningQueueItem }) 
           </div>
         </div>
         <div className="rc-wrap-row">
-          <Pill>{item.serviceLevel}</Pill>
-          <Pill>{item.status}</Pill>
+          <Pill>{formatVerifiedScreeningServiceLevel(item.serviceLevel)}</Pill>
+          <Pill>{formatVerifiedScreeningStatus(item.status)}</Pill>
         </div>
       </div>
 
@@ -61,7 +95,7 @@ function ScreeningSummaryDetail({ item }: { item: VerifiedScreeningQueueItem }) 
         </div>
         <div>
           <div style={{ color: text.muted, fontSize: 12, fontWeight: 700 }}>Recommendation</div>
-          <div>{item.recommendation || "Pending review"}</div>
+          <div>{formatVerifiedScreeningRecommendation(item.recommendation)}</div>
         </div>
         <div>
           <div style={{ color: text.muted, fontSize: 12, fontWeight: 700 }}>AI review</div>
@@ -103,13 +137,24 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
 
   const isAdmin = String(user?.role || "").toLowerCase() === "admin";
   const isAdminAudience = audience === "admin";
+  const adminAccessDenied = isAdminAudience && !isAdmin;
   const pageTitle = isAdminAudience ? "Admin · Verified Screenings" : "Verified Screenings";
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    if (adminAccessDenied) {
+      setItems([]);
+      setSelectedId(null);
+      setDetail(null);
+      setViewMessage("Admin access is required to view this queue.");
+      setViewState("forbidden");
+      return;
+    }
     try {
       setLoading(true);
       setViewMessage(null);
-      const list = await listVerifiedScreenings();
+      setSelectedId(null);
+      setDetail(null);
+      const list = await listVerifiedScreenings(audience);
       setItems(list);
       setViewState(list.length === 0 ? "empty" : "ready");
     } catch (err: any) {
@@ -137,11 +182,11 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
     } finally {
       setLoading(false);
     }
-  };
+  }, [adminAccessDenied, audience, showToast]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     const loadDetail = async () => {
@@ -200,6 +245,22 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
       setSaving(false);
     }
   };
+
+  if (adminAccessDenied) {
+    return renderShell(
+      <Section>
+        <Card elevated style={{ display: "grid", gap: 12 }}>
+          <h1 style={{ margin: 0, fontSize: "1.2rem" }}>Access denied</h1>
+          <div style={{ color: text.muted }}>You do not have admin access for this queue.</div>
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+            <Button type="button" onClick={() => navigate("/verified-screenings")}>
+              Open landlord screening workspace
+            </Button>
+          </div>
+        </Card>
+      </Section>
+    );
+  }
 
   if (viewState !== "ready") {
     const heading =
@@ -286,8 +347,8 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
                       <div style={{ fontWeight: 700, color: text.primary }}>{item.applicant?.name || "Applicant"}</div>
                       <div style={{ color: text.muted, fontSize: 12 }}>{item.applicant?.email || "No email"}</div>
                       <div className="rc-wrap-row">
-                        <Pill>{item.status}</Pill>
-                        <Pill>{item.serviceLevel}</Pill>
+                        <Pill>{isAdminAudience ? item.status : formatVerifiedScreeningStatus(item.status)}</Pill>
+                        <Pill>{isAdminAudience ? item.serviceLevel : formatVerifiedScreeningServiceLevel(item.serviceLevel)}</Pill>
                       </div>
                       <div style={{ fontSize: 12, color: text.muted }}>
                         ${(item.totalAmountCents / 100).toFixed(2)} {item.currency}
