@@ -214,7 +214,7 @@ export const pricingStart = {
     "Portfolio-level oversight",
     "Stronger records and evidence workflows",
   ],
-  pricingCta: { label: "View pricing", href: "/site/pricing" },
+  pricingCta: { label: "View pricing", href: "/site/pricing#plan-fit" },
   primaryCta: { label: "Start free", href: "/signup?next=/properties&intent=registry_readiness" },
 };
 

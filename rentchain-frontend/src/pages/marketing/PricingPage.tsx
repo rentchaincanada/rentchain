@@ -214,6 +214,15 @@ const PricingPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!location.hash) return;
+    const targetId = decodeURIComponent(location.hash.slice(1));
+    const timeout = window.setTimeout(() => {
+      document.getElementById(targetId)?.scrollIntoView({ block: "start" });
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [location.hash]);
+
+  useEffect(() => {
     trackSafely("pricing_page_viewed", {
       surface: "marketing_pricing",
       currentPlan,
@@ -359,7 +368,7 @@ const PricingPage: React.FC = () => {
           </div>
         </section>
 
-        <section className="rc-section" aria-labelledby="pricing-plans-title">
+        <section className="rc-section" id="plan-fit" aria-labelledby="pricing-plans-title">
           <div className="rc-container">
             <div className="rc-section-heading">
               <p className="rc-kicker">Plan fit</p>

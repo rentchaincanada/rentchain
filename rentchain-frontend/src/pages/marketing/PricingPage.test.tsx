@@ -60,7 +60,7 @@ describe("Marketing PricingPage", () => {
   });
 
   it("renders the public pricing route with warm brand copy and plan labels", async () => {
-    renderPricing("/site/pricing");
+    const { container } = renderPricing("/site/pricing");
 
     expect(
       screen.getByRole("heading", {
@@ -73,6 +73,9 @@ describe("Marketing PricingPage", () => {
     expect(screen.getByRole("heading", { level: 3, name: "Property Manager / Portfolio" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "Enterprise / Institutional" })).toBeInTheDocument();
     expect(screen.getByText(/EFT/i)).toBeInTheDocument();
+    const planFitSection = container.querySelector("#plan-fit");
+    expect(planFitSection).toBeInTheDocument();
+    expect(planFitSection).toContainElement(screen.getByRole("heading", { name: /Choose the support level/i }));
 
     await waitFor(() =>
       expect(mocks.track).toHaveBeenCalledWith("pricing_page_viewed", {
@@ -82,6 +85,27 @@ describe("Marketing PricingPage", () => {
         route: "/site/pricing",
       })
     );
+  });
+
+  it("anchors direct pricing links to the plan fit section", async () => {
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView as Element["scrollIntoView"];
+
+    try {
+      const { container } = renderPricing("/site/pricing#plan-fit");
+      const planFitSection = container.querySelector("#plan-fit");
+
+      expect(planFitSection).toBeInTheDocument();
+      expect(planFitSection).toContainElement(screen.getByRole("heading", { name: /Choose the support level/i }));
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" }));
+    } finally {
+      if (originalScrollIntoView) {
+        Element.prototype.scrollIntoView = originalScrollIntoView;
+      } else {
+        delete (Element.prototype as Partial<Pick<Element, "scrollIntoView">>).scrollIntoView;
+      }
+    }
   });
 
   it("preserves the signed-out Start free signup and attribution flow", () => {

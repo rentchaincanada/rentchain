@@ -110,6 +110,10 @@ export const pricingPageCss = `
   box-shadow: ${semantic.focusRing};
 }
 
+.rc-pricing-page #plan-fit {
+  scroll-margin-top: 96px;
+}
+
 .rc-pricing-plan-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
