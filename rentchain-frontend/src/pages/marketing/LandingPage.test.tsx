@@ -169,14 +169,14 @@ describe("Marketing LandingPage", () => {
   it("changes the lifecycle active step when a lifecycle control is clicked", () => {
     renderLanding("/");
 
-    expect(screen.getByRole("tab", { name: "Application received" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Viewing scheduled" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Viewing request" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Application & screening" })).toBeInTheDocument();
     expect(screen.getAllByRole("tab")).toHaveLength(8);
 
-    fireEvent.click(screen.getByRole("tab", { name: "Maintenance request" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Tenant request" }));
 
-    expect(screen.getByRole("tab", { name: "Maintenance request" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tabpanel")).toHaveTextContent("A tenant reports an issue from their portal");
+    expect(screen.getByRole("tab", { name: "Tenant request" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel")).toHaveTextContent("Tenants submit maintenance requests from their portal");
   });
 
   it("does not render fake testimonials or unsupported performance metrics", () => {

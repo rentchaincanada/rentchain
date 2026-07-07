@@ -245,25 +245,34 @@ export function TrustFlowSection() {
           </div>
         </RevealOnScroll>
         <div className="rc-trust-flow" aria-label="RentChain role flow">
-          {trustFlow.nodes.slice(0, 2).map((node) => (
-            <RevealOnScroll key={node.role} className="rc-card rc-trust-node">
-              <span className="rc-node-code">{node.code}</span>
-              <h3>{node.role}</h3>
-              <p>{node.blurb}</p>
-            </RevealOnScroll>
-          ))}
+          <div className="rc-trust-role-grid">
+            {trustFlow.nodes.map((node) => (
+              <RevealOnScroll key={node.role} className="rc-card rc-trust-node">
+                <span className="rc-node-code">{node.code}</span>
+                <h3>{node.role}</h3>
+                <p>{node.blurb}</p>
+              </RevealOnScroll>
+            ))}
+          </div>
+          <svg
+            className="rc-trust-connectors"
+            viewBox="0 0 120 120"
+            role="img"
+            aria-label="Role records connect into one shared record"
+            preserveAspectRatio="none"
+          >
+            <path d="M4 18 H48" />
+            <path d="M4 42 H48" />
+            <path d="M4 78 H48" />
+            <path d="M4 102 H48" />
+            <path d="M48 18 V102" />
+            <path d="M48 60 H116" />
+          </svg>
           <RevealOnScroll className="rc-panel rc-trust-hub">
             <p className="rc-kicker">{trustFlow.hubKicker}</p>
             <h3>{trustFlow.hubTitle}</h3>
             <p>{trustFlow.hubBody}</p>
           </RevealOnScroll>
-          {trustFlow.nodes.slice(2).map((node) => (
-            <RevealOnScroll key={node.role} className="rc-card rc-trust-node">
-              <span className="rc-node-code">{node.code}</span>
-              <h3>{node.role}</h3>
-              <p>{node.blurb}</p>
-            </RevealOnScroll>
-          ))}
         </div>
       </div>
     </section>

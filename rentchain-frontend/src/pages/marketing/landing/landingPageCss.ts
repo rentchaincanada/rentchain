@@ -350,8 +350,9 @@ export const landingPageCss = `
 
 .rc-section-title {
   margin: 0;
-  font-size: 2.35rem;
-  line-height: 1.14;
+  font-size: clamp(2rem, 3.9vw, 2.65rem);
+  font-weight: 800;
+  line-height: 1.1;
 }
 
 .rc-section-subtitle {
@@ -384,36 +385,45 @@ export const landingPageCss = `
 
 .rc-trust-flow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.92fr) minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1.15fr) 112px minmax(300px, 0.92fr);
+  gap: 0;
   align-items: center;
+  position: relative;
+}
+
+.rc-trust-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  position: relative;
+  z-index: 2;
+}
+
+.rc-trust-connectors {
+  width: 100%;
+  min-height: 230px;
+  align-self: stretch;
+  position: relative;
+  z-index: 1;
+}
+
+.rc-trust-connectors path {
+  fill: none;
+  stroke: ${colors.pine200};
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .rc-trust-node {
   position: relative;
 }
 
-.rc-trust-node::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  width: 28px;
-  height: 2px;
-  background: ${colors.pine200};
-}
-
-.rc-trust-node:nth-child(odd)::after {
-  right: -28px;
-}
-
-.rc-trust-node:nth-child(even)::after {
-  left: -28px;
-}
-
 .rc-trust-hub {
-  grid-row: span 2;
   border-color: ${colors.pine200};
   background: ${colors.pine50};
+  position: relative;
+  z-index: 2;
 }
 
 .rc-node-code {
@@ -570,8 +580,18 @@ export const landingPageCss = `
   color: ${colors.ink700};
 }
 
+.rc-operational-trust-card {
+  color: ${colors.ink900};
+}
+
 .rc-section--pricing {
   background: ${colors.paper50};
+}
+
+.rc-section--dark .rc-section-title,
+.rc-section--pricing .rc-section-title,
+.rc-final-cta .rc-section-title {
+  font-size: clamp(2.05rem, 4.2vw, 2.8rem);
 }
 
 .rc-pricing-start {
@@ -725,15 +745,15 @@ export const landingPageCss = `
   .rc-pricing-start,
   .rc-trust-flow {
     grid-template-columns: 1fr;
+    gap: 18px;
   }
 
-  .rc-trust-hub {
-    grid-row: auto;
-    order: -1;
-  }
-
-  .rc-trust-node::after {
+  .rc-trust-connectors {
     display: none;
+  }
+
+  .rc-trust-role-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .rc-audience-grid,
@@ -764,7 +784,7 @@ export const landingPageCss = `
   }
 
   .rc-section-title {
-    font-size: 2rem;
+    font-size: clamp(1.85rem, 9vw, 2rem);
   }
 
   .rc-hero-visual {
@@ -774,6 +794,7 @@ export const landingPageCss = `
   .rc-audience-grid,
   .rc-feature-grid,
   .rc-pricing-cards,
+  .rc-trust-role-grid,
   .rc-trust-grid,
   .rc-footer-grid {
     grid-template-columns: 1fr;
