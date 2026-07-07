@@ -160,6 +160,7 @@ export default function TenantInviteRedeemPage() {
 
           {error ? (
             <div
+              role="alert"
               style={{
                 border: "1px solid rgba(180, 35, 24, 0.24)",
                 borderRadius: radius.md,

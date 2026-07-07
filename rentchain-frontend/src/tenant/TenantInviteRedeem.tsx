@@ -96,6 +96,7 @@ export default function TenantInviteRedeem() {
         )}
         {status === "error" && (
           <div
+            role="alert"
             style={{
               padding: 12,
               borderRadius: 10,

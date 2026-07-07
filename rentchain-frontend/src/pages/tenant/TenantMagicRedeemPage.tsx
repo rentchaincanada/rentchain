@@ -107,7 +107,7 @@ export default function TenantMagicRedeemPage() {
           <p style={{ ...tenantEntryBodyStyle, marginTop: 12 }}>Verifying your magic link...</p>
         ) : (
           <>
-            <p style={{ color: tenantEntryPalette.danger, fontWeight: 700 }}>
+            <p role="alert" style={{ color: tenantEntryPalette.danger, fontWeight: 700 }}>
               {error || "This link is invalid or expired."}
             </p>
             <a

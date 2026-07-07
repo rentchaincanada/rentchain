@@ -60,4 +60,37 @@ describe("TenantInviteRedeemPage", () => {
       "/tenant/application?entry=invite&inviteToken=app-1"
     );
   });
+
+  it("keeps invite redeem loading and error states clear", async () => {
+    let rejectInvite: (error: Error) => void = () => {};
+    tenantPortalApi.redeemTenantWorkspaceInvite.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectInvite = reject;
+        })
+    );
+
+    render(
+      <MemoryRouter>
+        <TenantInviteRedeemPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: /Invite token/i }), {
+      target: { value: "expired-token" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Redeem invite/i }));
+
+    expect(screen.getByRole("button", { name: /Redeeming/i })).toBeDisabled();
+
+    rejectInvite(new Error("Invite expired."));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(/We couldn't redeem that invite right now/i);
+    });
+    expect(screen.getByRole("alert")).toHaveStyle({
+      color: "#b42318",
+    });
+    expect(screen.getByRole("button", { name: /Redeem invite/i })).toBeEnabled();
+  });
 });
