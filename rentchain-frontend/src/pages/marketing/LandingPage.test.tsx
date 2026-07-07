@@ -159,7 +159,7 @@ describe("Marketing LandingPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("First property setup")).toBeInTheDocument();
     expect(screen.getByText("Portfolio-level oversight")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View pricing" })).toHaveAttribute("href", "/site/pricing");
+    expect(screen.getByRole("link", { name: "View pricing" })).toHaveAttribute("href", "/site/pricing#plan-fit");
 
     fireEvent.click(screen.getAllByRole("button", { name: "Start free" }).at(-1)!);
 
@@ -192,7 +192,9 @@ describe("Marketing LandingPage", () => {
     const { container } = renderLanding("/");
 
     const footerLinks = Array.from(container.querySelectorAll("footer a"));
+    const footerPricingLink = screen.getByRole("link", { name: "Pricing" });
     expect(footerLinks.length).toBeGreaterThan(0);
+    expect(footerPricingLink).toHaveAttribute("href", "/site/pricing#plan-fit");
     expect(footerLinks.every((link) => link.getAttribute("href") && !link.getAttribute("href")?.startsWith("#"))).toBe(
       true
     );

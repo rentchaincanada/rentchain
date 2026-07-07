@@ -21,6 +21,11 @@ type LandingActionProps = {
   onPrimaryCta: () => void;
 };
 
+type MarketingNavItem = {
+  label: string;
+  href: string;
+};
+
 const dotColors: Record<string, string> = {
   pine500: tokens.colors.pine500,
   pine600: tokens.colors.pine600,
@@ -71,7 +76,10 @@ export function RevealOnScroll({ children, className = "" }: { children: React.R
   );
 }
 
-export function MarketingHeader({ onPrimaryCta }: LandingActionProps) {
+export function MarketingHeader({
+  onPrimaryCta,
+  navItems = header.nav,
+}: LandingActionProps & { navItems?: MarketingNavItem[] }) {
   const [loginOpen, setLoginOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -109,7 +117,7 @@ export function MarketingHeader({ onPrimaryCta }: LandingActionProps) {
         </Link>
 
         <nav className="rc-header-nav" aria-label="Marketing navigation">
-          {header.nav.map((item) => (
+          {navItems.map((item) => (
             <a key={item.label} href={item.href}>
               {item.label}
             </a>
@@ -156,7 +164,7 @@ export function MarketingHeader({ onPrimaryCta }: LandingActionProps) {
       </div>
 
       <div id="rc-mobile-menu" className={`rc-container rc-mobile-menu ${mobileOpen ? "is-open" : ""}`}>
-        {header.nav.map((item) => (
+        {navItems.map((item) => (
           <a key={item.label} className="rc-mobile-link" href={item.href} onClick={() => setMobileOpen(false)}>
             {item.label}
           </a>

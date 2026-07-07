@@ -1,52 +1,177 @@
-import React from "react";
-import { useNavigate } from "react-router-dom";
-import { Button, Card } from "../../components/ui/Ui";
-import { spacing, text } from "../../styles/tokens";
-import { MarketingLayout } from "./MarketingLayout";
-import { useAuth } from "../../context/useAuth";
-import { useCapabilities } from "../../hooks/useCapabilities";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { fetchBillingPricing, type BillingPlanPricing } from "../../api/billingApi";
+import { saveRegistryAcquisitionAttribution } from "../../api/propertiesApi";
 import {
   CANONICAL_TIER_MATRIX,
   DEFAULT_PLANS,
-  PLAN_ORDER,
-  TIER_POSITIONING_COPY,
   type PricingInterval,
   type PricingPlanKey,
 } from "../../constants/pricingPlans";
-import { normalizePlan } from "../../lib/plan";
-import { useLanguage } from "../../context/LanguageContext";
-import { marketingCopy } from "../../content/marketingCopy";
+import { useAuth } from "../../context/useAuth";
 import { track } from "../../lib/analytics";
-import { fetchBillingPricing, type BillingPlanPricing } from "../../api/billingApi";
+import { normalizePlan } from "../../lib/plan";
+import { MarketingFooter, MarketingHeader } from "./landing/LandingSections";
+import { landingPageCss } from "./landing/landingPageCss";
+import { pricingPageCss } from "./pricingPageCss";
 
 type PlanKey = PricingPlanKey;
-const TIMELINE_MARKERS: Record<string, string> = {
-  X: "❌",
-  check: "✅",
-};
-const pricingCardMotionStyle: React.CSSProperties = {
-  transition: "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
-  willChange: "transform, box-shadow",
-};
-const wrappingTextStyle: React.CSSProperties = {
-  whiteSpace: "normal",
-  overflowWrap: "anywhere",
-  wordBreak: "break-word",
+
+type PublicPlan = {
+  key: PlanKey;
+  eyebrow: string;
+  title: string;
+  summary: string;
+  bestFor: string;
+  included: string[];
+  ctaKind: "start" | "upgrade" | "contact";
+  highlighted?: boolean;
 };
 
-function isAtOrAbove(plan: PlanKey, target: PlanKey) {
-  return PLAN_ORDER.indexOf(plan) >= PLAN_ORDER.indexOf(target);
-}
+type UpgradeArea = {
+  title: string;
+  free: string;
+  paid: string;
+};
 
-function displayFeatureValue(value: string) {
-  return TIMELINE_MARKERS[value] || value;
-}
+const publicPlans: PublicPlan[] = [
+  {
+    key: "free",
+    eyebrow: "Start here",
+    title: "Free / Starter",
+    summary:
+      "Set up your first property, organize the basics, and understand the workflow before committing to a paid plan.",
+    bestFor: "Trying RentChain with a simple first property workflow.",
+    included: [
+      "First property setup",
+      "Basic tenant and property organization",
+      "Core workflow preview",
+      "Pay-per-use screening path when available",
+    ],
+    ctaKind: "start",
+  },
+  {
+    key: "starter",
+    eyebrow: "Daily operations",
+    title: "Landlord / Operator",
+    summary:
+      "Coordinate the day-to-day rental workflow when applications, leases, messages, maintenance, and records need more structure.",
+    bestFor: "Independent landlords and small operators managing active rentals.",
+    included: [
+      "Applicant, lease, and tenant workflow support",
+      "Maintenance and work order coordination",
+      "Operational inbox and message context",
+      "Stronger rent and document readiness",
+    ],
+    ctaKind: "upgrade",
+    highlighted: true,
+  },
+  {
+    key: "pro",
+    eyebrow: "Portfolio oversight",
+    title: "Property Manager / Portfolio",
+    summary:
+      "Add stronger records, exports, reporting, and coordination for multi-property or team-based workflows.",
+    bestFor: "Growing portfolios that need clearer handoffs and evidence workflows.",
+    included: [
+      "Portfolio-level oversight",
+      "Team and delegated workflow coordination where available",
+      "Stronger records and evidence workflows",
+      "Exports and review-ready summaries",
+    ],
+    ctaKind: "upgrade",
+  },
+  {
+    key: "elite",
+    eyebrow: "Larger operations",
+    title: "Enterprise / Institutional",
+    summary:
+      "Use RentChain with more support for larger housing operations, governance needs, and custom onboarding conversations.",
+    bestFor: "Operators with governance, reporting, or institutional readiness needs.",
+    included: [
+      "Custom onboarding conversation",
+      "Governance and reporting needs review",
+      "Portfolio visibility and advanced oversight",
+      "Support for stronger records and exports",
+    ],
+    ctaKind: "contact",
+  },
+];
 
-function pricingCardShadow(plan: PlanKey, hovered: boolean) {
-  if (plan === "pro") {
-    return hovered ? "0 22px 42px rgba(37,99,235,0.16)" : "0 16px 34px rgba(37,99,235,0.12)";
+const upgradeAreas: UpgradeArea[] = [
+  {
+    title: "Organization",
+    free: "Start with property and tenant basics.",
+    paid: "Add stronger operating structure as work grows.",
+  },
+  {
+    title: "Maintenance coordination",
+    free: "Preview the operational record.",
+    paid: "Coordinate maintenance and work orders in the workflow.",
+  },
+  {
+    title: "Records and evidence",
+    free: "Keep basic history organized.",
+    paid: "Use stronger records, summaries, and export paths.",
+  },
+  {
+    title: "Team and portfolio visibility",
+    free: "Understand a first-property flow.",
+    paid: "Support larger portfolios and delegated coordination where available.",
+  },
+  {
+    title: "Support and onboarding",
+    free: "Self-serve setup.",
+    paid: "Access deeper workflow and onboarding support as needed.",
+  },
+];
+
+const pricingHeaderNav = [
+  { label: "Home", href: "/site" },
+  { label: "Pricing", href: "/site/pricing" },
+  { label: "Request access", href: "/site/request-access" },
+];
+
+function firstQueryValue(search: URLSearchParams, ...keys: string[]) {
+  for (const key of keys) {
+    const value = search.get(key);
+    if (value && value.trim()) return value.trim();
   }
-  return hovered ? "0 16px 32px rgba(15,23,42,0.10)" : "0 10px 24px rgba(15,23,42,0.06)";
+  return null;
+}
+
+function formatPlanPrice(planKey: PlanKey, interval: PricingInterval, livePricing?: BillingPlanPricing) {
+  if (planKey === "free") return "$0";
+  if (livePricing) {
+    const amountCents =
+      interval === "yearly" ? livePricing.yearlyAmountCents : livePricing.monthlyAmountCents;
+    const amount = `$${(amountCents / 100).toFixed(0)}`;
+    return interval === "yearly" ? `${amount} / year` : `${amount} / month`;
+  }
+  const plan = DEFAULT_PLANS.find((item) => item.key === planKey);
+  if (!plan) return "Pricing available in product";
+  return interval === "yearly" ? `${plan.yearlyPrice} / year` : `${plan.monthlyPrice} / month`;
+}
+
+function trackSafely(eventName: string, props: Record<string, unknown>) {
+  try {
+    track(eventName, props);
+  } catch {
+    // Analytics must never interrupt public pricing.
+  }
+}
+
+function ensureMarketingFonts() {
+  if (typeof document === "undefined" || document.getElementById("rentchain-marketing-fonts")) {
+    return;
+  }
+
+  const link = document.createElement("link");
+  link.id = "rentchain-marketing-fonts";
+  link.rel = "stylesheet";
+  link.href =
+    "https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=Source+Serif+4:wght@600;700&display=swap";
+  document.head.appendChild(link);
 }
 
 function buildBillingUpgradePath(target: Exclude<PlanKey, "free">, interval: PricingInterval) {
@@ -57,131 +182,74 @@ function buildBillingUpgradePath(target: Exclude<PlanKey, "free">, interval: Pri
   return `/billing?${params.toString()}`;
 }
 
-const PLAN_CALLOUT_COPY: Partial<
-  Record<
-    PlanKey,
-    {
-      title: string;
-      description: string;
-      bullets: string[];
-      proofLine?: string;
-    }
-  >
-> = {
-  pro: {
-    title: "Built for operational control",
-    description:
-      "Pro is designed for landlords and teams who need the day-to-day workflow to stay organized, reviewable, and easier to report on.",
-    bullets: [
-      "Keep exports and reporting ready for month-end and stakeholder reviews",
-      "Make screening, compliance, and recordkeeping easier to follow through",
-      "Give team workflows clearer structure as more people and properties get involved",
-    ],
-    proofLine:
-      "Best when workflow volume is growing and you want cleaner operational control before moving into portfolio intelligence.",
-  },
-  elite: {
-    title: "Built for insight-led oversight",
-    description:
-      "Elite is for portfolio operators who want more than operational control. It adds intelligence, deeper visibility, and portfolio-level context for decisions.",
-    bullets: [
-      "See portfolio trends and advanced analytics in one place",
-      "Use AI summaries and audit visibility to review the bigger picture faster",
-      "Support leadership and oversight decisions with stronger portfolio context",
-    ],
-    proofLine:
-      "Best when the question is no longer just what happened, but what needs attention across the portfolio.",
-  },
-};
+function isPaidPlan(plan: PlanKey): plan is Exclude<PlanKey, "free"> {
+  return plan !== "free";
+}
 
 const PricingPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
-  const { caps } = useCapabilities();
-  const { locale } = useLanguage();
-  const copy = marketingCopy[locale];
-  const currentPlan = normalizePlan((caps?.plan as string) || user?.plan || null);
+  const currentPlan = normalizePlan(user?.plan || null);
   const isAuthed = Boolean(user?.id);
-  const [interval, setInterval] = React.useState<PricingInterval>("monthly");
-  const [isMobile, setIsMobile] = React.useState(false);
-  const [isCompactDesktop, setIsCompactDesktop] = React.useState(false);
-  const [pricingByPlan, setPricingByPlan] = React.useState<Partial<Record<BillingPlanPricing["key"], BillingPlanPricing>>>({});
-  const [hoveredPlan, setHoveredPlan] = React.useState<PlanKey | null>(null);
-  const trackedInitialInterval = React.useRef(false);
-  const safeTrack = (eventName: string, props: Record<string, unknown>) => {
-    try {
-      track(eventName, props);
-    } catch {
-      // telemetry must never interrupt UX
-    }
-  };
-  const mobileSectionStyle: React.CSSProperties = {
-    width: "100%",
-    maxWidth: isMobile ? 520 : "100%",
-    margin: "0 auto",
-    padding: 0,
-    boxSizing: "border-box",
-  };
+  const [interval, setInterval] = useState<PricingInterval>("monthly");
+  const [pricingByPlan, setPricingByPlan] = useState<
+    Partial<Record<BillingPlanPricing["key"], BillingPlanPricing>>
+  >({});
+  const trackedInitialInterval = useRef(false);
 
-  React.useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mobileMedia = window.matchMedia("(max-width: 767px)");
-    const compactDesktopMedia = window.matchMedia("(max-width: 1279px)");
-    const update = () => {
-      setIsMobile(mobileMedia.matches);
-      setIsCompactDesktop(!mobileMedia.matches && compactDesktopMedia.matches);
+  const acquisition = useMemo(() => {
+    const search = new URLSearchParams(location.search);
+    return {
+      source: firstQueryValue(search, "utm_source", "source"),
+      medium: firstQueryValue(search, "utm_medium", "medium"),
+      campaign: firstQueryValue(search, "utm_campaign", "campaign"),
+      variant: firstQueryValue(search, "utm_content", "variant"),
     };
-    update();
-    const mobileLegacy = mobileMedia as MediaQueryList & {
-      addListener?: (listener: () => void) => void;
-      removeListener?: (listener: () => void) => void;
-    };
-    const compactLegacy = compactDesktopMedia as MediaQueryList & {
-      addListener?: (listener: () => void) => void;
-      removeListener?: (listener: () => void) => void;
-    };
-    if (typeof mobileLegacy.addEventListener === "function" && typeof compactLegacy.addEventListener === "function") {
-      mobileLegacy.addEventListener("change", update);
-      compactLegacy.addEventListener("change", update);
-      return () => {
-        mobileLegacy.removeEventListener("change", update);
-        compactLegacy.removeEventListener("change", update);
-      };
-    }
-    if (typeof mobileLegacy.addListener === "function") {
-      mobileLegacy.addListener(update);
-      compactLegacy.addListener?.(update);
-      return () => {
-        mobileLegacy.removeListener?.(update);
-        compactLegacy.removeListener?.(update);
-      };
-    }
+  }, [location.search]);
+
+  useEffect(() => {
+    document.title = "Pricing - RentChain";
+    ensureMarketingFonts();
   }, []);
 
-  React.useEffect(() => {
-    safeTrack("pricing_page_viewed", {
+  useEffect(() => {
+    if (!location.hash) return;
+    const targetId = decodeURIComponent(location.hash.slice(1));
+    const timeout = window.setTimeout(() => {
+      document.getElementById(targetId)?.scrollIntoView({ block: "start" });
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [location.hash]);
+
+  useEffect(() => {
+    trackSafely("pricing_page_viewed", {
       surface: "marketing_pricing",
       currentPlan,
       interval,
-      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+      route: location.pathname,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!trackedInitialInterval.current) {
       trackedInitialInterval.current = true;
       return;
     }
-    safeTrack("pricing_interval_changed", {
+    trackSafely("pricing_interval_changed", {
       surface: "marketing_pricing",
       currentPlan,
       interval,
-      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+      route: location.pathname,
     });
-  }, [currentPlan, interval]);
+  }, [currentPlan, interval, location.pathname]);
 
-  React.useEffect(() => {
+  useEffect(() => {
+    if (!isAuthed) {
+      setPricingByPlan({});
+      return;
+    }
     let active = true;
     fetchBillingPricing()
       .then((res) => {
@@ -198,463 +266,262 @@ const PricingPage: React.FC = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [isAuthed]);
 
-  const renderPrice = (planKey: PlanKey) => {
-    const plan = DEFAULT_PLANS.find((item) => item.key === planKey);
-    if (!plan) return "-";
-    if (planKey === "free") {
-      const value = interval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
-      return value;
+  const handleStartFree = (locationName = "pricing") => {
+    saveRegistryAcquisitionAttribution({
+      ...acquisition,
+      landingPath: `${location.pathname}${location.search}`,
+    });
+
+    trackSafely("registry_landing_cta_clicked", {
+      source: acquisition.source,
+      medium: acquisition.medium,
+      campaign: acquisition.campaign,
+      variant: acquisition.variant,
+      location: locationName,
+    });
+
+    if (user?.id) {
+      navigate("/properties?intent=registry_readiness");
+      return;
     }
-    const billingPlan = pricingByPlan[planKey];
-    if (billingPlan) {
-      const amountCents =
-        interval === "yearly" ? billingPlan.yearlyAmountCents : billingPlan.monthlyAmountCents;
-      const value = `$${(amountCents / 100).toFixed(0)}`;
-      return interval === "yearly"
-        ? locale === "fr"
-          ? `${value} / an`
-          : `${value} / year`
-        : locale === "fr"
-        ? `${value} / mois`
-        : `${value} / month`;
-    }
-    const value = interval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
-    return interval === "yearly"
-      ? locale === "fr"
-        ? `${value} / an`
-        : `${value} / year`
-      : locale === "fr"
-        ? `${value} / mois`
-        : `${value} / month`;
+
+    navigate("/signup?next=/properties&intent=registry_readiness");
   };
 
-  const handleStartFree = () => {
-    navigate("/signup");
-  };
-
-  const handleUpgrade = (plan: Exclude<PlanKey, "free">) => {
-    if (plan === "pro") {
-      safeTrack("pricing_timeline_cta_clicked", { surface: "marketing" });
+  const handlePlanAction = (plan: PublicPlan) => {
+    if (plan.ctaKind === "start") {
+      handleStartFree("pricing_plan_free");
+      return;
     }
-    const action = !isAuthed
-      ? "login_redirect"
-      : isAtOrAbove(currentPlan, plan)
-        ? "manage_existing_plan"
-        : "open_billing_hub";
-    safeTrack("pricing_plan_cta_clicked", {
+    if (plan.ctaKind === "contact") {
+      trackSafely("pricing_enterprise_cta_clicked", {
+        surface: "marketing_pricing",
+        currentPlan,
+        interval,
+        route: location.pathname,
+      });
+      navigate("/site/request-access");
+      return;
+    }
+    if (!isPaidPlan(plan.key)) return;
+
+    const action = isAuthed ? "open_billing_hub" : "signup_redirect";
+    trackSafely("pricing_plan_cta_clicked", {
       surface: "marketing_pricing",
       currentPlan,
-      targetPlan: plan,
+      targetPlan: plan.key,
       interval,
       action,
-      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+      route: location.pathname,
     });
+
     if (!isAuthed) {
-      navigate("/login?next=/site/pricing");
+      handleStartFree(`pricing_plan_${plan.key}`);
       return;
     }
-    if (isAtOrAbove(currentPlan, plan)) {
-      navigate("/billing");
-      return;
-    }
-    navigate(buildBillingUpgradePath(plan, interval));
+
+    navigate(buildBillingUpgradePath(plan.key, interval));
   };
 
-  const planCtaLabel = (plan: Exclude<PlanKey, "free">) => {
-    if (!isAuthed) return `Start with ${copy.pricing.tierLabels[plan]}`;
-    if (isAuthed && isAtOrAbove(currentPlan, plan)) return "Manage plan";
-    return `See ${copy.pricing.tierLabels[plan]} in billing`;
-  };
-
-  const planCtaSupport = (plan: Exclude<PlanKey, "free">) => {
-    if (!isAuthed) return "Start inside the product first, then review this plan in billing only when you want more support.";
-    if (isAtOrAbove(currentPlan, plan)) return "Open billing to manage your current subscription details.";
-    return `Billing will show the ${copy.pricing.tierLabels[plan]} plan details before secure checkout opens, so you can understand the fit before deciding.`;
+  const planCtaLabel = (plan: PublicPlan) => {
+    if (plan.ctaKind === "contact") return "Request access";
+    if (plan.ctaKind === "start") return "Start free";
+    if (!isAuthed) return "Start free first";
+    return `Review ${CANONICAL_TIER_MATRIX[plan.key].label} in billing`;
   };
 
   return (
-    <MarketingLayout>
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 1400,
-          margin: "0 auto",
-          display: "grid",
-          gap: isMobile ? spacing.md : "28px",
-          overflow: "visible",
-          padding: isMobile ? `0 ${spacing.md}px ${spacing.lg}px` : `${spacing.md} 32px calc(${spacing.lg} + 12px)`,
-          boxSizing: "border-box",
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.1 }}>
-            {copy.pricing.headline}
-          </h1>
-          <p
-            style={{
-              marginTop: spacing.sm,
-              color: text.muted,
-              maxWidth: 860,
-              fontWeight: 600,
-              fontSize: "1.05rem",
-            }}
-          >
-            {copy.pricing.subheadline}
-          </p>
-          <p style={{ margin: `${spacing.xs} 0 0`, color: text.muted, fontSize: "0.92rem" }}>
-            Start on Free to try the basics, move to Starter for daily rental work, step up to Pro for stronger control, and use Elite for deeper portfolio oversight.
-          </p>
-          <p style={{ margin: `${spacing.xs} 0 0`, color: text.secondary, fontSize: "0.92rem", fontWeight: 600 }}>
-            Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight.
-          </p>
-          <p style={{ margin: `${spacing.xs} 0 0`, color: text.secondary, fontSize: "0.92rem" }}>
-            You can start and explore before committing to a paid plan. Pricing is here to show what opens next once the workflow is working for you.
-          </p>
-        </div>
-
-        <div
-          style={{
-            background: "#f3f7ff",
-            borderRadius: isMobile ? 20 : 24,
-            padding: isMobile ? 12 : 20,
-            boxSizing: "border-box",
-            ...mobileSectionStyle,
-          }}
-        >
-          <div
-            className="rc-pricing-grid"
-            style={{
-              display: "grid",
-              columnGap: isMobile ? 0 : "32px",
-              rowGap: isMobile ? spacing.md : "24px",
-              gridTemplateColumns: isMobile ? "1fr" : isCompactDesktop ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
-              alignItems: "stretch",
-            }}
-          >
-          <Card style={{ gridColumn: "1 / -1" }}>
-            <div
-              style={{
-                display: "inline-flex",
-                gap: 8,
-                border: "1px solid rgba(15,23,42,0.12)",
-                borderRadius: 999,
-                padding: 4,
-              }}
-            >
-              <Button
-                type="button"
-                variant={interval === "monthly" ? "primary" : "ghost"}
-                onClick={() => setInterval("monthly")}
-                style={{ padding: "6px 12px" }}
-              >
-                {copy.pricing.intervalLabels.monthly}
-              </Button>
-              <Button
-                type="button"
-                variant={interval === "yearly" ? "primary" : "ghost"}
-                onClick={() => setInterval("yearly")}
-                style={{ padding: "6px 12px" }}
-              >
-                {copy.pricing.intervalLabels.yearly}
-              </Button>
+    <div className="rc-landing rc-pricing-page">
+      <style>{`${landingPageCss}\n${pricingPageCss}`}</style>
+      <MarketingHeader onPrimaryCta={() => handleStartFree("pricing_header")} navItems={pricingHeaderNav} />
+      <main>
+        <section className="rc-pricing-hero" aria-labelledby="pricing-hero-title">
+          <div className="rc-container rc-pricing-hero__inner">
+            <div>
+              <p className="rc-kicker">Pricing</p>
+              <h1 id="pricing-hero-title">
+                Start free. Grow when your rental operations need more support.
+              </h1>
+              <p className="rc-pricing-hero__body">
+                Set up your first property, understand the workflow, and decide whether paid tools
+                are worth it once you see the value in practice.
+              </p>
+              <div className="rc-cta-row">
+                <button type="button" className="rc-button rc-button--accent" onClick={() => handleStartFree("pricing_hero")}>
+                  Start free
+                </button>
+                <Link className="rc-link-button rc-link-button--ghost" to="/site/request-access">
+                  Request access
+                </Link>
+              </div>
             </div>
-          </Card>
+            <aside className="rc-pricing-hero__note" aria-label="Pricing note">
+              <span>Start simple</span>
+              <strong>No pressure to choose a paid plan before the workflow is clear.</strong>
+              <p>
+                Paid plans add deeper operational tools, portfolio oversight, and stronger records
+                as your rental work becomes more complex.
+              </p>
+            </aside>
+          </div>
+        </section>
 
-          {PLAN_ORDER.map((plan) => (
-            <Card
-              key={plan}
-              elevated={plan === "pro"}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 16,
-                width: "100%",
-                minWidth: 0,
-                minHeight: isMobile ? "unset" : 0,
-                height: "100%",
-                padding: isMobile ? 18 : 22,
-                position: "relative",
-                isolation: "isolate",
-                overflow: "visible",
-                zIndex: hoveredPlan === plan ? 2 : 1,
-                transform: !isMobile && hoveredPlan === plan ? "translateY(-3px)" : "translateY(0)",
-                border:
-                  plan === "pro" ? "1px solid rgba(37,99,235,0.28)" : "1px solid rgba(15,23,42,0.08)",
-                background:
-                  plan === "pro"
-                    ? "linear-gradient(180deg, rgba(37,99,235,0.06) 0%, #ffffff 28%)"
-                    : "#ffffff",
-                boxShadow: pricingCardShadow(plan, !isMobile && hoveredPlan === plan),
-                justifySelf: "stretch",
-                ...(plan === "pro"
-                  ? {
-                      padding: isMobile ? 18 : 24,
-                    }
-                  : null),
-                ...pricingCardMotionStyle,
-              }}
-              onMouseEnter={() => !isMobile && setHoveredPlan(plan)}
-              onMouseLeave={() => setHoveredPlan((current) => (current === plan ? null : current))}
-              onFocus={() => setHoveredPlan(plan)}
-              onBlur={() => setHoveredPlan((current) => (current === plan ? null : current))}
-            >
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
-                <div style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.15, ...wrappingTextStyle }}>
-                  {copy.pricing.tierLabels[plan]}
-                </div>
-                {plan !== "free" ? (
-                  <span
-                    style={{
-                      border:
-                        plan === "pro" || plan === "elite"
-                          ? "1px solid rgba(37,99,235,0.4)"
-                          : "1px solid rgba(15,23,42,0.18)",
-                      borderRadius: 999,
-                      padding: "4px 12px",
-                      fontSize: "0.74rem",
-                      fontWeight: 700,
-                      color: plan === "pro" || plan === "elite" ? "#1d4ed8" : text.primary,
-                      background:
-                        plan === "pro" || plan === "elite"
-                          ? "linear-gradient(180deg, rgba(37,99,235,0.14), rgba(37,99,235,0.08))"
-                          : "rgba(15,23,42,0.06)",
-                      ...wrappingTextStyle,
-                    }}
-                  >
-                    {TIER_POSITIONING_COPY[plan].badge}
-                  </span>
-                ) : null}
-              </div>
-              <div style={{ color: text.muted, fontSize: "0.94rem", lineHeight: 1.65, minHeight: isMobile ? "auto" : 62, ...wrappingTextStyle }}>
-                {plan === "free"
-                  ? "For landlords getting started and wanting to try the basics with one property."
-                  : TIER_POSITIONING_COPY[plan].audience}
-              </div>
-              <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, ...wrappingTextStyle }}>{renderPrice(plan)}</div>
-              <ul
-                style={{
-                  margin: 0,
-                  paddingLeft: "1.1rem",
-                  color: text.muted,
-                  lineHeight: 1.75,
-                  display: "grid",
-                  gap: 8,
-                  minWidth: 0,
-                  flex: "0 0 auto",
-                }}
+        <section className="rc-section" id="plan-fit" aria-labelledby="pricing-plans-title">
+          <div className="rc-container">
+            <div className="rc-section-heading">
+              <p className="rc-kicker">Plan fit</p>
+              <h2 className="rc-section-title" id="pricing-plans-title">
+                Choose the support level that matches the workflow.
+              </h2>
+              <p className="rc-section-subtitle">
+                Pricing below follows the current product plan structure. Live checkout pricing is
+                used when available.
+              </p>
+            </div>
+
+            <div className="rc-pricing-interval" role="group" aria-label="Billing interval">
+              <button
+                type="button"
+                className={interval === "monthly" ? "is-active" : ""}
+                aria-pressed={interval === "monthly"}
+                onClick={() => setInterval("monthly")}
               >
-                {CANONICAL_TIER_MATRIX[plan].features.map((feature) => (
-                  <li key={`${plan}-${feature}`} style={{ fontSize: "0.92rem", ...wrappingTextStyle }}>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              {plan === "pro" || plan === "elite" ? (
-                <div
-                  style={{
-                    border: "1px solid rgba(37,99,235,0.28)",
-                    borderRadius: 12,
-                    background: "rgba(37,99,235,0.06)",
-                    padding: "12px 14px",
-                    display: "grid",
-                    gap: 8,
-                    minWidth: 0,
-                    flex: "0 0 auto",
-                  }}
+                Monthly
+              </button>
+              <button
+                type="button"
+                className={interval === "yearly" ? "is-active" : ""}
+                aria-pressed={interval === "yearly"}
+                onClick={() => setInterval("yearly")}
+              >
+                Annual
+              </button>
+            </div>
+
+            <div className="rc-pricing-plan-grid">
+              {publicPlans.map((plan) => (
+                <article
+                  key={plan.key}
+                  className={`rc-pricing-plan ${plan.highlighted ? "is-highlighted" : ""}`}
                 >
-                  <div style={{ fontWeight: 700, color: text.primary, lineHeight: 1.25, ...wrappingTextStyle }}>
-                    {PLAN_CALLOUT_COPY[plan]?.title || copy.pricing.timelineSection.title}
+                  <div>
+                    <p className="rc-pricing-plan__eyebrow">{plan.eyebrow}</p>
+                    <h3>{plan.title}</h3>
+                    <p>{plan.summary}</p>
                   </div>
-                  <div style={{ color: text.muted, fontSize: "0.89rem", lineHeight: 1.6, ...wrappingTextStyle }}>
-                    {PLAN_CALLOUT_COPY[plan]?.description || copy.pricing.timelineSection.description}
+                  <div className="rc-pricing-plan__price">
+                    <strong>{formatPlanPrice(plan.key, interval, pricingByPlan[plan.key])}</strong>
+                    <span>{plan.key === "free" ? "No subscription required" : "Billed through the product when selected"}</span>
                   </div>
-                  <ul
-                    style={{
-                      margin: 0,
-                      paddingLeft: "1rem",
-                      color: text.muted,
-                      fontSize: "0.85rem",
-                      lineHeight: 1.65,
-                      display: "grid",
-                      gap: 6,
-                    }}
-                  >
-                    {(PLAN_CALLOUT_COPY[plan]?.bullets || copy.pricing.timelineSection.bullets).map((bullet) => (
-                      <li key={`${plan}-${bullet}`} style={wrappingTextStyle}>
-                        {bullet}
-                      </li>
+                  <div className="rc-pricing-plan__fit">
+                    <span>Best for</span>
+                    <strong>{plan.bestFor}</strong>
+                  </div>
+                  <ul>
+                    {plan.included.map((item) => (
+                      <li key={item}>{item}</li>
                     ))}
                   </ul>
-                  {PLAN_CALLOUT_COPY[plan]?.proofLine ? (
-                    <div style={{ color: text.muted, fontSize: "0.82rem", lineHeight: 1.55, ...wrappingTextStyle }}>
-                      {PLAN_CALLOUT_COPY[plan]?.proofLine}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-              {plan !== "free" ? (
-                <div
-                  style={{
-                    color: text.muted,
-                    fontSize: "0.89rem",
-                    lineHeight: 1.65,
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    background: "rgba(15,23,42,0.03)",
-                    border: "1px solid rgba(15,23,42,0.06)",
-                    ...wrappingTextStyle,
-                  }}
-                >
-                  {TIER_POSITIONING_COPY[plan].support}
-                </div>
-              ) : null}
-              <div style={{ marginTop: isMobile ? spacing.sm : "auto", paddingTop: spacing.sm, width: "100%" }}>
-                {plan === "free" ? (
-                  <Button type="button" onClick={handleStartFree} style={{ width: "100%" }}>
-                    {copy.pricing.ctaStartFree}
-                  </Button>
-                ) : (
-                  <div style={{ display: "grid", gap: 8, width: "100%" }}>
-                    <Button type="button" onClick={() => handleUpgrade(plan)} style={{ width: "100%" }}>
-                      {planCtaLabel(plan)}
-                    </Button>
-                    <div style={{ color: text.muted, fontSize: "0.82rem", lineHeight: 1.55, ...wrappingTextStyle }}>
-                      {planCtaSupport(plan)}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
-          ))}
-          </div>
-        </div>
-
-        <div style={{ ...mobileSectionStyle, marginTop: spacing.lg }}>
-          <Card style={{ padding: isMobile ? spacing.md : undefined }}>
-            <h2 style={{ marginTop: 0, marginBottom: spacing.sm }}>{copy.pricing.comparisonTitle}</h2>
-            {isMobile ? (
-              <div style={{ display: "grid", gap: spacing.md }}>
-                {PLAN_ORDER.map((plan) => (
-                  <div
-                    key={`mobile-compare-${plan}`}
-                    style={{
-                      border: "1px solid rgba(15,23,42,0.12)",
-                      borderRadius: 12,
-                      padding: "12px 14px",
-                      display: "grid",
-                      gap: 8,
-                    }}
+                  <button
+                    type="button"
+                    className={`rc-button ${
+                      plan.highlighted ? "rc-button--primary" : plan.ctaKind === "contact" ? "rc-button--ghost" : "rc-button--accent"
+                    }`}
+                    onClick={() => handlePlanAction(plan)}
                   >
-                    <div style={{ fontWeight: 800, fontSize: "1rem" }}>{copy.pricing.tierLabels[plan]}</div>
-                    {copy.pricing.featureGroups.map((group) => (
-                      <div key={`mobile-${plan}-${group.title}`} style={{ display: "grid", gap: 2 }}>
-                        <div style={{ color: text.secondary, fontWeight: 600, fontSize: "0.86rem" }}>{group.title}</div>
-                        <div style={{ color: text.muted, fontSize: "0.92rem" }}>{displayFeatureValue(group.items[plan])}</div>
-                      </div>
-                    ))}
-                    <div style={{ display: "grid", gap: 2 }}>
-                      <div style={{ color: text.secondary, fontWeight: 600, fontSize: "0.86rem" }}>
-                        {copy.pricing.screeningRow.label}
-                      </div>
-                      <div style={{ color: text.muted, fontSize: "0.92rem" }}>
-                        {copy.pricing.screeningRow.values[plan]} - {copy.pricing.screeningRow.subtext}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ width: "100%", overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-                  <thead>
-                    <tr>
-                      <th
-                        style={{
-                          textAlign: "left",
-                          padding: "10px 12px",
-                          borderBottom: "1px solid rgba(15,23,42,0.12)",
-                        }}
-                      >
-                        {copy.pricing.capabilityTitle}
-                      </th>
-                      {PLAN_ORDER.map((plan) => (
-                        <th
-                          key={`heading-${plan}`}
-                          style={{
-                            textAlign: "left",
-                            padding: "10px 12px",
-                            borderBottom: "1px solid rgba(15,23,42,0.12)",
-                          }}
-                        >
-                          {copy.pricing.tierLabels[plan]}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {copy.pricing.featureGroups.map((group) => (
-                      <tr key={group.title}>
-                        <td
-                          style={{
-                            padding: "10px 12px",
-                            borderBottom: "1px solid rgba(15,23,42,0.08)",
-                            fontWeight: 600,
-                          }}
-                        >
-                          {group.title}
-                        </td>
-                        {PLAN_ORDER.map((plan) => (
-                          <td
-                            key={`${group.title}-${plan}`}
-                            style={{ padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.08)" }}
-                          >
-                            {displayFeatureValue(group.items[plan])}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                    <tr>
-                      <td
-                        style={{
-                          padding: "10px 12px",
-                          borderBottom: "1px solid rgba(15,23,42,0.08)",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {copy.pricing.screeningRow.label}
-                        <div style={{ color: text.muted, fontWeight: 400, fontSize: "0.85rem" }}>
-                          {copy.pricing.screeningRow.subtext}
-                        </div>
-                      </td>
-                      {PLAN_ORDER.map((plan) => (
-                        <td
-                          key={`screening-${plan}`}
-                          style={{ padding: "10px 12px", borderBottom: "1px solid rgba(15,23,42,0.08)" }}
-                        >
-                          {copy.pricing.screeningRow.values[plan]}
-                        </td>
-                      ))}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-        </div>
+                    {planCtaLabel(plan)}
+                  </button>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
 
-        <div style={{ ...mobileSectionStyle, marginTop: spacing.lg }}>
-          <Card style={{ padding: isMobile ? spacing.md : undefined }}>
-            <h2 style={{ marginTop: 0 }}>{copy.pricing.faqTitle}</h2>
-            <details open style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 12, padding: "12px 14px" }}>
-              <summary style={{ cursor: "pointer", fontWeight: 700 }}>{copy.pricing.faqQuestion}</summary>
-              <p style={{ margin: `${spacing.sm} 0 0`, color: text.muted }}>{copy.pricing.faqAnswer}</p>
-            </details>
-          </Card>
-        </div>
-      </div>
-    </MarketingLayout>
+        <section className="rc-section rc-section--band" aria-labelledby="pricing-upgrade-title">
+          <div className="rc-container">
+            <div className="rc-section-heading">
+              <p className="rc-kicker">What changes when you upgrade</p>
+              <h2 className="rc-section-title" id="pricing-upgrade-title">
+                Upgrade when the workflow needs more support.
+              </h2>
+            </div>
+            <div className="rc-pricing-upgrade-grid">
+              {upgradeAreas.map((area) => (
+                <article className="rc-card rc-pricing-upgrade-card" key={area.title}>
+                  <h3>{area.title}</h3>
+                  <dl>
+                    <div>
+                      <dt>Free</dt>
+                      <dd>{area.free}</dd>
+                    </div>
+                    <div>
+                      <dt>Paid plans</dt>
+                      <dd>{area.paid}</dd>
+                    </div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="rc-section" aria-labelledby="pricing-trust-title">
+          <div className="rc-container rc-pricing-trust">
+            <div>
+              <p className="rc-kicker">Billing honesty</p>
+              <h2 className="rc-section-title" id="pricing-trust-title">
+                Clear starting point. Conservative promises.
+              </h2>
+            </div>
+            <div className="rc-pricing-trust__cards">
+              <article className="rc-card">
+                <h3>No pressure to start</h3>
+                <p>Use the free path to understand the workflow before deciding whether a paid plan is useful.</p>
+              </article>
+              <article className="rc-card">
+                <h3>Availability can vary</h3>
+                <p>
+                  Region-specific tools may vary by province. Screening, payment, EFT, and legal
+                  workflows may depend on provider availability and local requirements.
+                </p>
+              </article>
+              <article className="rc-card">
+                <h3>Records over promises</h3>
+                <p>
+                  RentChain supports clearer operating records and review workflows without
+                  guaranteeing legal, screening, revenue, or dispute outcomes.
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section className="rc-section" aria-labelledby="pricing-final-title">
+          <div className="rc-container">
+            <div className="rc-final-cta">
+              <p className="rc-kicker">Ready when you are</p>
+              <h2 className="rc-section-title" id="pricing-final-title">
+                Start free, then grow only when the workflow needs it.
+              </h2>
+              <p className="rc-section-subtitle">
+                Begin with the first property workflow or request access for a larger operating context.
+              </p>
+              <div className="rc-cta-row">
+                <button type="button" className="rc-button rc-button--accent" onClick={() => handleStartFree("pricing_final")}>
+                  Start free
+                </button>
+                <Link className="rc-link-button rc-link-button--dark" to="/site/request-access">
+                  Request access
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+      <MarketingFooter />
+    </div>
   );
 };
 
