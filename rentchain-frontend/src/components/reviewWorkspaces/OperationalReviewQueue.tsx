@@ -47,8 +47,8 @@ function metadata(labelText: string, value: string | null | undefined) {
   if (!value) return null;
   return (
     <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
-      <span style={{ color: "#64748b", fontSize: 13, fontWeight: 900, textTransform: "uppercase", lineHeight: 1.4 }}>{labelText}</span>
-      <span style={{ color: "#0f172a", fontSize: 15, fontWeight: 900, overflowWrap: "anywhere", lineHeight: 1.4 }}>{value}</span>
+      <span style={{ color: "#63594d", fontSize: 13, fontWeight: 900, textTransform: "uppercase", lineHeight: 1.4 }}>{labelText}</span>
+      <span style={{ color: "#211c17", fontSize: 15, fontWeight: 900, overflowWrap: "anywhere", lineHeight: 1.4 }}>{value}</span>
     </div>
   );
 }
@@ -56,7 +56,7 @@ function metadata(labelText: string, value: string | null | undefined) {
 function compactMetadata(labelText: string, value: string | null | undefined) {
   if (!value) return null;
   return (
-    <span style={{ color: "#334155", fontSize: 13, fontWeight: 800, lineHeight: 1.35 }}>
+    <span style={{ color: "#3f382f", fontSize: 13, fontWeight: 800, lineHeight: 1.35 }}>
       {labelText}: {value}
     </span>
   );
@@ -89,6 +89,11 @@ function metadataItemsForItem(item: OperationalReviewQueueItem, display: ReturnT
 
 const REVIEW_CARD_MIN_WIDTH = 280;
 const REVIEW_CARD_GRID_GAP = 10;
+const reviewCardSurface: React.CSSProperties = {
+  border: "1px solid rgba(91,70,48,0.16)",
+  background: "#fff6e8",
+  boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
+};
 
 function cardsPerReviewRowForWidth(width: number) {
   if (!Number.isFinite(width) || width <= 0) return 2;
@@ -131,7 +136,7 @@ const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({
       style={{
         borderRadius: 8,
         padding: 12,
-        border: "1px solid rgba(15, 23, 42, 0.08)",
+        ...reviewCardSurface,
         display: "grid",
         gap: 12,
         minWidth: 0,
@@ -141,10 +146,10 @@ const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({
       <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <span style={pillStyle("#fef3c7", "#92400e", "#fde68a")}>{item.reviewPriority}</span>
-          <span style={{ color: "#64748b", fontSize: 12, fontWeight: 900 }}>{display.workspaceType}</span>
+          <span style={{ color: "#63594d", fontSize: 12, fontWeight: 900 }}>{display.workspaceType}</span>
         </div>
-        <strong style={{ color: "#0f172a", fontSize: 15 }}>{display.title}</strong>
-        <span style={{ color: "#475569", fontSize: 13 }}>{display.context}</span>
+        <strong style={{ color: "#211c17", fontSize: 15 }}>{display.title}</strong>
+        <span style={{ color: "#3f382f", fontSize: 13 }}>{display.context}</span>
       </div>
 
       <div
@@ -161,7 +166,7 @@ const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({
       </div>
 
       <Link to={item.destination} style={{
-        color: "#2563eb",
+        color: "#245842",
         fontSize: 14,
         fontWeight: 900,
         padding: "8px 0",
@@ -181,9 +186,9 @@ const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({
         aria-label={`${isExpanded ? "Hide details and manual controls" : "Details and manual controls"} for ${display.title}`}
         onClick={() => onToggleDetails(item)}
         style={{
-          border: `1px solid ${isExpanded ? "#93c5fd" : "#dbe3ef"}`,
-          background: isExpanded ? "#eff6ff" : "#ffffff",
-          color: "#1d4ed8",
+          border: `1px solid ${isExpanded ? "rgba(36,88,66,0.42)" : "rgba(91,70,48,0.24)"}`,
+          background: isExpanded ? "rgba(36,88,66,0.12)" : "#fffaf1",
+          color: "#245842",
           borderRadius: 6,
           padding: "8px 12px",
           minHeight: 44,
@@ -242,8 +247,7 @@ const OperationalReviewQueueDetailsPanel = memo(function OperationalReviewQueueD
       style={{
         borderRadius: 10,
         padding: 14,
-        border: "1px solid #bfdbfe",
-        background: "#f8fbff",
+        ...reviewCardSurface,
         display: "grid",
         gap: 12,
         minWidth: 0,
@@ -252,19 +256,19 @@ const OperationalReviewQueueDetailsPanel = memo(function OperationalReviewQueueD
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}>
         <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
-          <span style={{ color: "#1d4ed8", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>
+          <span style={{ color: "#245842", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>
             Details and manual controls
           </span>
-          <strong style={{ color: "#0f172a", fontSize: 16, overflowWrap: "anywhere" }}>{display.title}</strong>
-          <span style={{ color: "#475569", fontSize: 13, lineHeight: 1.5 }}>{display.context}</span>
+          <strong style={{ color: "#211c17", fontSize: 16, overflowWrap: "anywhere" }}>{display.title}</strong>
+          <span style={{ color: "#3f382f", fontSize: 13, lineHeight: 1.5 }}>{display.context}</span>
         </div>
         <button
           type="button"
           onClick={onClose}
           style={{
-            border: "1px solid #cbd5e1",
-            background: "#ffffff",
-            color: "#334155",
+            border: "1px solid rgba(91,70,48,0.24)",
+            background: "#fffaf1",
+            color: "#3f382f",
             borderRadius: 6,
             padding: "8px 12px",
             minHeight: 44,
@@ -299,17 +303,17 @@ const OperationalReviewQueueDetailsPanel = memo(function OperationalReviewQueueD
       />
 
       <div style={{ display: "grid", gap: 5 }}>
-        <span style={{ color: "#334155", fontSize: 12, fontWeight: 900 }}>Related resource context</span>
+        <span style={{ color: "#3f382f", fontSize: 12, fontWeight: 900 }}>Related resource context</span>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <span
             style={{
-              border: "1px solid #dbe3ef",
+              border: "1px solid rgba(91,70,48,0.18)",
               borderRadius: 999,
               padding: "8px 12px",
-              color: "#475569",
+              color: "#3f382f",
               fontSize: 13,
               fontWeight: 800,
-              background: "#fff",
+              background: "#fffaf1",
               minHeight: 44,
               display: "inline-flex",
               alignItems: "center",
@@ -380,8 +384,7 @@ export const OperationalReviewQueue = memo(function OperationalReviewQueue({
       style={{
         borderRadius: 10,
         padding: 14,
-        border: "1px solid #dbe3ef",
-        background: "#ffffff",
+        ...reviewCardSurface,
         display: "grid",
         gap: 12,
         minWidth: 0,
@@ -390,15 +393,15 @@ export const OperationalReviewQueue = memo(function OperationalReviewQueue({
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}>
         <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
-          <strong style={{ color: "#0f172a", fontSize: 16 }}>Operational review queue</strong>
-          <span style={{ color: "#475569", fontSize: 13, lineHeight: 1.5 }}>
+          <strong style={{ color: "#211c17", fontSize: 16 }}>Operational review queue</strong>
+          <span style={{ color: "#3f382f", fontSize: 13, lineHeight: 1.5 }}>
             Manual intake visibility for reviewable operational work. This queue does not create workspaces, route work automatically,
             or change source records.
           </span>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={pillStyle("#dbeafe", "#1d4ed8", "#bfdbfe")}>{items.length} reviewable</span>
-          <span style={pillStyle("#f8fafc", "#475569", "#dbe3ef")}>{assignedCount} assigned</span>
+          <span style={pillStyle("rgba(36,88,66,0.12)", "#245842", "rgba(36,88,66,0.28)")}>{items.length} reviewable</span>
+          <span style={pillStyle("#fffaf1", "#63594d", "rgba(91,70,48,0.18)")}>{assignedCount} assigned</span>
         </div>
       </div>
 
@@ -446,7 +449,7 @@ export const OperationalReviewQueue = memo(function OperationalReviewQueue({
           })}
         </div>
       ) : (
-        <div style={{ color: "#64748b", fontSize: 13, lineHeight: 1.5 }}>
+        <div style={{ color: "#63594d", fontSize: 13, lineHeight: 1.5 }}>
           No reviewable operational queue items match the current filters. Adjust the triage view or reset filters to review the full
           operational queue.
         </div>

@@ -12,12 +12,66 @@
 }
 
 .rc-landlord-shell {
+  --rc-landlord-bg:
+    radial-gradient(circle at top left, rgba(184, 130, 62, 0.16) 0, rgba(247, 241, 231, 0) 34%),
+    linear-gradient(180deg, #fbf6ed 0%, #f7f1e7 48%, #f4eadc 100%);
+  --rc-landlord-panel: rgba(255, 252, 246, 0.96);
+  --rc-landlord-card: #fffaf1;
+  --rc-landlord-card-strong: #fff6e8;
+  --rc-landlord-border: rgba(91, 70, 48, 0.16);
+  --rc-landlord-border-strong: rgba(91, 70, 48, 0.26);
+  --rc-landlord-text: #211c17;
+  --rc-landlord-muted: #63594d;
+  --rc-landlord-pine: #245842;
+  --rc-landlord-pine-soft: rgba(36, 88, 66, 0.12);
+  --rc-landlord-danger: #a33a2f;
+  --rc-landlord-shadow: 0 16px 36px rgba(59, 44, 28, 0.14);
+  --rc-landlord-shadow-soft: 0 10px 24px rgba(59, 44, 28, 0.1);
   min-height: 100vh;
   position: relative;
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
   box-sizing: border-box;
+  color: var(--rc-landlord-text);
+  background: #f7f1e7;
+  background-image: var(--rc-landlord-bg);
+}
+
+.rc-landlord-shell .app-root {
+  background-color: #f7f1e7 !important;
+  background-image: var(--rc-landlord-bg) !important;
+}
+
+.rc-landlord-shell .rc-mac-shell-main {
+  background: transparent;
+}
+
+.rc-landlord-loading-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", sans-serif;
+  font-size: 0.95rem;
+  color: #211c17;
+  background:
+    radial-gradient(circle at top left, rgba(184, 130, 62, 0.16) 0, rgba(247, 241, 231, 0) 38%),
+    linear-gradient(180deg, #fbf6ed 0%, #f4eadc 100%);
+  padding: 24px;
+}
+
+.rc-landlord-loading-card {
+  width: min(420px, 90vw);
+  background: rgba(255, 252, 246, 0.96);
+  border: 1px solid rgba(91, 70, 48, 0.16);
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: 0 16px 36px rgba(59, 44, 28, 0.14);
+}
+
+.rc-landlord-loading-copy {
+  color: #63594d;
 }
 
 .rc-landlord-topnav {
@@ -29,9 +83,10 @@
   z-index: 2400;
   box-sizing: border-box;
   isolation: isolate;
-  background: #ffffff;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.1);
-  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.16);
+  background: var(--rc-landlord-panel);
+  border-bottom: 1px solid var(--rc-landlord-border);
+  box-shadow: var(--rc-landlord-shadow);
+  backdrop-filter: blur(16px);
 }
 
 .rc-landlord-topnav .rc-top-nav {
@@ -40,10 +95,28 @@
   top: auto !important;
   z-index: auto !important;
   min-height: calc(var(--rc-landlord-desktop-topnav-height) + env(safe-area-inset-top, 0px));
+  background: transparent !important;
+  border-bottom-color: var(--rc-landlord-border) !important;
+  box-shadow: none !important;
 }
 
 .rc-landlord-topnav .rc-top-nav-inner {
   min-height: var(--rc-landlord-desktop-topnav-height);
+}
+
+.rc-landlord-topnav .rc-top-nav-role,
+.rc-landlord-topnav .rc-top-nav-optional-action,
+.rc-landlord-topnav .rc-top-nav-workspace-button {
+  border-color: var(--rc-landlord-border) !important;
+  background: var(--rc-landlord-card) !important;
+  color: var(--rc-landlord-text) !important;
+  box-shadow: 0 6px 16px rgba(59, 44, 28, 0.08) !important;
+}
+
+.rc-landlord-topnav .rc-top-nav-optional-action:hover,
+.rc-landlord-topnav .rc-top-nav-workspace-button:hover {
+  border-color: var(--rc-landlord-border-strong) !important;
+  background: var(--rc-landlord-card-strong) !important;
 }
 
 .rc-landlord-workspace-bar {
@@ -55,10 +128,10 @@
   min-height: var(--rc-landlord-workspace-bar-height);
   height: var(--rc-landlord-workspace-bar-height);
   padding: 6px max(20px, env(safe-area-inset-right, 0px)) 8px max(20px, env(safe-area-inset-left, 0px));
-  border-top: 1px solid rgba(15, 23, 42, 0.06);
-  border-bottom: 1px solid rgba(15, 23, 42, 0.14);
-  background: #f8fafc;
-  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+  border-top: 1px solid rgba(91, 70, 48, 0.1);
+  border-bottom: 1px solid var(--rc-landlord-border-strong);
+  background: rgba(250, 243, 232, 0.94);
+  box-shadow: var(--rc-landlord-shadow-soft);
   box-sizing: border-box;
   max-width: 100%;
   overflow: hidden;
@@ -70,14 +143,14 @@
   gap: 8px;
   flex: 0 0 auto;
   min-width: 0;
-  color: #475569;
+  color: var(--rc-landlord-muted);
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
 }
 
 .rc-landlord-workspace-context strong {
-  color: #0f172a;
+  color: var(--rc-landlord-text);
   font-size: 14px;
 }
 
@@ -97,11 +170,11 @@
 
 .rc-landlord-workspace-links a {
   flex: 0 0 auto;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--rc-landlord-border);
   border-radius: 999px;
   padding: 7px 10px;
-  background: #ffffff;
-  color: #475569;
+  background: var(--rc-landlord-card);
+  color: var(--rc-landlord-muted);
   font-size: 12px;
   font-weight: 800;
   line-height: 1;
@@ -110,9 +183,10 @@
 }
 
 .rc-landlord-workspace-links a.active {
-  border-color: rgba(37, 99, 235, 0.32);
-  background: rgba(37, 99, 235, 0.1);
-  color: #1d4ed8;
+  border-color: rgba(36, 88, 66, 0.36);
+  background: var(--rc-landlord-pine-soft);
+  color: var(--rc-landlord-pine);
+  box-shadow: inset 0 -2px 0 rgba(36, 88, 66, 0.28);
 }
 
 @media (min-width: 821px) and (max-width: 1180px) {
@@ -169,8 +243,9 @@
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: #ffffff;
+  border: 1px solid var(--rc-landlord-border);
+  background: var(--rc-landlord-card);
+  box-shadow: 0 6px 16px rgba(59, 44, 28, 0.1);
   align-items: center;
   justify-content: center;
   gap: 4px;
@@ -185,9 +260,9 @@
   min-height: 36px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(37, 99, 235, 0.35);
-  background: rgba(37, 99, 235, 0.12);
-  color: #111827;
+  border: 1px solid rgba(36, 88, 66, 0.36);
+  background: var(--rc-landlord-pine-soft);
+  color: var(--rc-landlord-text);
   font-size: 12px;
   font-weight: 700;
   z-index: 30;
@@ -197,7 +272,7 @@
   display: block;
   width: 18px;
   height: 2px;
-  background: #111827;
+  background: var(--rc-landlord-text);
 }
 
 .rc-landlord-backdrop {
@@ -206,7 +281,7 @@
   right: 0;
   bottom: 0;
   left: 0;
-  background: rgba(15, 23, 42, 0.35);
+  background: rgba(33, 28, 23, 0.38);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
@@ -226,8 +301,9 @@
   height: auto;
   max-height: calc(100vh - 24px);
   width: min(320px, 88vw);
-  background: #ffffff;
-  box-shadow: -12px 0 24px rgba(15, 23, 42, 0.12);
+  background: var(--rc-landlord-panel);
+  border: 1px solid var(--rc-landlord-border);
+  box-shadow: -12px 0 28px rgba(59, 44, 28, 0.16);
   transform: translateX(100%);
   transition: transform 0.2s ease;
   z-index: 50;
@@ -251,7 +327,7 @@
   font-weight: 700;
   position: sticky;
   top: 0;
-  background: #ffffff;
+  background: var(--rc-landlord-panel);
   padding-bottom: 8px;
   z-index: 1;
 }
@@ -278,28 +354,30 @@
 
 .rc-landlord-drawer-links button {
   text-align: left;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--rc-landlord-border);
   border-radius: 12px;
   padding: 10px 12px;
-  background: #f8fafc;
+  background: var(--rc-landlord-card);
+  color: var(--rc-landlord-text);
   font-weight: 600;
 }
 
 .rc-landlord-drawer-links button.active {
-  border-color: rgba(37, 99, 235, 0.35);
-  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(36, 88, 66, 0.36);
+  background: var(--rc-landlord-pine-soft);
+  color: var(--rc-landlord-pine);
 }
 
 .rc-landlord-drawer-divider {
   height: 1px;
-  background: rgba(15, 23, 42, 0.08);
+  background: var(--rc-landlord-border);
 }
 
 .rc-landlord-drawer-signout {
   border: none;
   background: transparent;
   font-weight: 600;
-  color: #ef4444;
+  color: var(--rc-landlord-danger);
   cursor: pointer;
   text-align: left;
   padding: 8px 4px;
@@ -311,8 +389,9 @@
   bottom: 0;
   left: 0;
   right: 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-  background: #ffffff;
+  border-top: 1px solid var(--rc-landlord-border);
+  background: var(--rc-landlord-panel);
+  box-shadow: 0 -10px 28px rgba(59, 44, 28, 0.12);
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
   grid-template-columns: repeat(6, 1fr);
   z-index: 20;
@@ -330,16 +409,16 @@
   min-width: 0;
   min-height: 52px;
   padding: 6px 2px;
-  color: #6b7280;
+  color: var(--rc-landlord-muted);
   font-size: 11px;
   font-weight: 600;
   border-radius: 10px;
 }
 
 .rc-landlord-mobile-tabbar button.active {
-  color: #111827;
+  color: var(--rc-landlord-pine);
   font-weight: 700;
-  background: rgba(37, 99, 235, 0.08);
+  background: var(--rc-landlord-pine-soft);
 }
 
 .rc-landlord-mobile-tabbar-label {
@@ -356,7 +435,7 @@
   width: 8px;
   height: 8px;
   border-radius: 8px;
-  background: #ef4444;
+  background: var(--rc-landlord-danger);
   margin-left: 4px;
 }
 
@@ -394,9 +473,9 @@
       max(16px, env(safe-area-inset-right, 0px))
       8px
       max(16px, env(safe-area-inset-left, 0px));
-    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+    border-bottom: 1px solid var(--rc-landlord-border);
+    background: rgba(255, 252, 246, 0.96);
+    box-shadow: var(--rc-landlord-shadow-soft);
     backdrop-filter: blur(12px);
     width: 100%;
     max-width: 100%;
@@ -411,9 +490,9 @@
     margin-left: auto;
     padding: 0 10px;
     border-radius: 999px;
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    background: #f8fafc;
-    color: #475569;
+    border: 1px solid var(--rc-landlord-border);
+    background: var(--rc-landlord-card);
+    color: var(--rc-landlord-muted);
     font-size: 12px;
     font-weight: 800;
   }
@@ -425,10 +504,10 @@
     width: 42px;
     height: 42px;
     border-radius: 14px;
-    border: 1px solid rgba(15, 23, 42, 0.1);
-    background: #ffffff;
-    color: #0f172a;
-    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+    border: 1px solid var(--rc-landlord-border);
+    background: var(--rc-landlord-card);
+    color: var(--rc-landlord-text);
+    box-shadow: 0 6px 16px rgba(59, 44, 28, 0.1);
   }
 
   .rc-landlord-account-badge {
@@ -513,7 +592,7 @@
     max-height: min(calc(100vh - 32px - env(safe-area-inset-bottom, 0px)), 560px);
     max-height: min(calc(100dvh - 32px - env(safe-area-inset-bottom, 0px)), 560px);
     border-radius: 20px;
-    box-shadow: 0 -18px 40px rgba(15, 23, 42, 0.18);
+    box-shadow: 0 -18px 40px rgba(59, 44, 28, 0.18);
     transform: translateY(calc(100% + 24px));
     padding: 16px 14px;
   }

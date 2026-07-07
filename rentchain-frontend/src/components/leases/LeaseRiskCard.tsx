@@ -22,15 +22,15 @@ interface LeaseRiskCardProps {
 
 const cardSurface: React.CSSProperties = {
   borderRadius: 16,
-  border: "1px solid rgba(148,163,184,0.28)",
-  background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96))",
-  boxShadow: "0 14px 32px rgba(15,23,42,0.06)",
+  border: "1px solid rgba(91,70,48,0.16)",
+  background: "linear-gradient(180deg, #fff6e8 0%, #fffaf1 100%)",
+  boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
 };
 
-const titleColor = "#0f172a";
-const bodyColor = "#334155";
-const metaColor = "#475569";
-const subtleColor = "#64748b";
+const titleColor = "#211c17";
+const bodyColor = "#3f382f";
+const metaColor = "#63594d";
+const subtleColor = "#7a6b5a";
 
 export const LeaseRiskCard: React.FC<LeaseRiskCardProps> = ({
   risk,
@@ -113,9 +113,9 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
   <div
     style={{
       borderRadius: 12,
-      border: "1px solid rgba(148,163,184,0.22)",
+      border: "1px solid rgba(91,70,48,0.16)",
       padding: "10px 12px",
-      background: "rgba(248,250,252,0.92)",
+      background: "#fffaf1",
     }}
   >
     <div style={{ color: subtleColor, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 700 }}>{label}</div>
@@ -137,8 +137,8 @@ const ChipList: React.FC<{ items: string[] }> = ({ items }) => (
         key={item}
         style={{
           borderRadius: 999,
-          border: "1px solid rgba(148,163,184,0.24)",
-          background: "rgba(248,250,252,0.96)",
+          border: "1px solid rgba(91,70,48,0.16)",
+          background: "#fffaf1",
           color: bodyColor,
           fontSize: 12,
           fontWeight: 600,

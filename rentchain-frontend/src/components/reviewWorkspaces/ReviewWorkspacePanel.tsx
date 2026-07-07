@@ -49,8 +49,8 @@ function safeLabel(value: string, fallback: string) {
 function metadataCell(labelText: string, value: string) {
   return (
     <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
-      <span style={{ color: "#64748b", fontSize: 13, fontWeight: 900, textTransform: "uppercase", lineHeight: 1.4 }}>{labelText}</span>
-      <span style={{ color: "#0f172a", fontSize: 15, fontWeight: 900, overflowWrap: "anywhere", lineHeight: 1.4 }}>{value}</span>
+      <span style={{ color: "#63594d", fontSize: 13, fontWeight: 900, textTransform: "uppercase", lineHeight: 1.4 }}>{labelText}</span>
+      <span style={{ color: "#211c17", fontSize: 15, fontWeight: 900, overflowWrap: "anywhere", lineHeight: 1.4 }}>{value}</span>
     </div>
   );
 }
@@ -70,8 +70,9 @@ export function ReviewWorkspacePanel({
       style={{
         borderRadius: 8,
         padding: 12,
-        background: "#f8fafc",
-        border: "1px solid #dbe3ef",
+        background: "#fff6e8",
+        border: "1px solid rgba(91,70,48,0.16)",
+        boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
         display: "grid",
         gap: 10,
         minWidth: 0,
@@ -79,16 +80,16 @@ export function ReviewWorkspacePanel({
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "start" }}>
         <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
-          <strong style={{ color: "#0f172a", fontSize: 14 }}>Review workspace readiness</strong>
-          <span style={{ color: "#475569", fontSize: 13, lineHeight: 1.45 }}>
+          <strong style={{ color: "#211c17", fontSize: 14 }}>Review workspace readiness</strong>
+          <span style={{ color: "#3f382f", fontSize: 13, lineHeight: 1.45 }}>
             Manual-only review context. This panel does not create a workspace, route work automatically, or change source records.
           </span>
         </div>
         <span
           style={{
-            border: "1px solid #bfdbfe",
-            background: "#dbeafe",
-            color: "#1d4ed8",
+            border: "1px solid rgba(36,88,66,0.28)",
+            background: "rgba(36,88,66,0.12)",
+            color: "#245842",
             borderRadius: 999,
             padding: "8px 12px",
             fontSize: 13,
@@ -130,13 +131,13 @@ export function ReviewWorkspacePanel({
       />
 
       <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
-        <span style={{ color: "#334155", fontSize: 12, fontWeight: 900 }}>Scoped evidence linkage</span>
+        <span style={{ color: "#3f382f", fontSize: 12, fontWeight: 900 }}>Scoped evidence linkage</span>
         {workspace.evidenceLinks.length ? (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {workspace.evidenceLinks.map((link) =>
               link.destination ? (
                 <Link key={`${link.label}:${link.destination}`} to={link.destination} style={{
-                  color: "#2563eb",
+                  color: "#245842",
                   fontSize: 14,
                   fontWeight: 900,
                   padding: "8px 0",
@@ -151,7 +152,7 @@ export function ReviewWorkspacePanel({
                 </Link>
               ) : (
                 <span key={link.label} style={{
-                  color: "#475569",
+                  color: "#3f382f",
                   fontSize: 14,
                   fontWeight: 800,
                   padding: "8px 0",
@@ -166,25 +167,25 @@ export function ReviewWorkspacePanel({
             )}
           </div>
         ) : (
-          <span style={{ color: "#64748b", fontSize: 13 }}>Evidence can be attached during a manual review handoff.</span>
+          <span style={{ color: "#63594d", fontSize: 13 }}>Evidence can be attached during a manual review handoff.</span>
         )}
       </div>
 
       <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
-        <span style={{ color: "#334155", fontSize: 12, fontWeight: 900 }}>Related resources</span>
+        <span style={{ color: "#3f382f", fontSize: 12, fontWeight: 900 }}>Related resources</span>
         {workspace.relatedResources.length ? (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {workspace.relatedResources.map((resource) => (
               <span
                 key={`${resource.resourceType}:${resource.label}`}
                 style={{
-                  border: "1px solid #e2e8f0",
+                  border: "1px solid rgba(91,70,48,0.18)",
                   borderRadius: 999,
                   padding: "8px 12px",
-                  color: "#475569",
+                  color: "#3f382f",
                   fontSize: 13,
                   fontWeight: 800,
-                  background: "#fff",
+                  background: "#fffaf1",
                   minHeight: 44,
                   display: "inline-flex",
                   alignItems: "center",
@@ -196,11 +197,11 @@ export function ReviewWorkspacePanel({
             ))}
           </div>
         ) : (
-          <span style={{ color: "#64748b", fontSize: 13 }}>No related resources are displayed outside the scoped source workflow.</span>
+          <span style={{ color: "#63594d", fontSize: 13 }}>No related resources are displayed outside the scoped source workflow.</span>
         )}
       </div>
 
-      <div style={{ color: "#64748b", fontSize: 12 }}>
+      <div style={{ color: "#63594d", fontSize: 12 }}>
         Internal workspace reference: Manual review handoff preview
       </div>
     </Card>

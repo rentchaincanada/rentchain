@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { colors, radius, text } from "../../styles/tokens";
+import { radius, text } from "../../styles/tokens";
 import { listTenantEvents, type TenantEvent } from "../../api/tenantEvents";
 
 type Props = {
@@ -83,8 +83,9 @@ export const TenantActivityPanel: React.FC<Props> = ({ tenantId, refreshKey = 0 
         marginTop: 12,
         borderRadius: 16,
         padding: 12,
-        backgroundColor: colors.panel,
-        border: `1px solid ${colors.border}`,
+        backgroundColor: "#fff6e8",
+        border: "1px solid rgba(91,70,48,0.16)",
+        boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
         display: "flex",
         flexDirection: "column",
         gap: 8,
@@ -96,7 +97,7 @@ export const TenantActivityPanel: React.FC<Props> = ({ tenantId, refreshKey = 0 
           fontSize: 12,
           textTransform: "uppercase",
           letterSpacing: 0.08,
-          color: text.muted,
+          color: "#63594d",
           marginBottom: 2,
           display: "flex",
           justifyContent: "space-between",
@@ -110,7 +111,7 @@ export const TenantActivityPanel: React.FC<Props> = ({ tenantId, refreshKey = 0 
           style={{
             border: "none",
             background: "none",
-            color: text.muted,
+            color: "#245842",
             cursor: loading ? "not-allowed" : "pointer",
             padding: 0,
             fontSize: 12,
@@ -173,8 +174,8 @@ export const TenantActivityPanel: React.FC<Props> = ({ tenantId, refreshKey = 0 
                     flex: 1,
                     borderRadius: 10,
                     padding: "6px 8px",
-                    backgroundColor: colors.card,
-                    border: `1px solid ${colors.border}`,
+                    backgroundColor: "#fffaf1",
+                    border: "1px solid rgba(91,70,48,0.16)",
                     display: "flex",
                     justifyContent: "space-between",
                     gap: 8,
@@ -195,8 +196,8 @@ export const TenantActivityPanel: React.FC<Props> = ({ tenantId, refreshKey = 0 
                             marginLeft: 6,
                             padding: "2px 6px",
                             borderRadius: "999px",
-                            border: `1px solid ${colors.border}`,
-                            color: text.muted,
+                            border: "1px solid rgba(91,70,48,0.16)",
+                            color: "#63594d",
                             fontSize: 10,
                             fontWeight: 700,
                             whiteSpace: "nowrap",
@@ -241,9 +242,9 @@ export const TenantActivityPanel: React.FC<Props> = ({ tenantId, refreshKey = 0 
           style={{
             alignSelf: "flex-start",
             borderRadius: radius.pill,
-            border: `1px solid ${colors.border}`,
-            background: colors.card,
-            color: text.primary,
+            border: "1px solid rgba(91,70,48,0.24)",
+            background: "#fffaf1",
+            color: "#211c17",
             padding: "6px 10px",
             cursor: loading ? "not-allowed" : "pointer",
           }}

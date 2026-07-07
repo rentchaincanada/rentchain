@@ -82,6 +82,26 @@ const EMPTY_TENANT_NOTE: TenantNoteState = {
   note: "",
 };
 
+const landlordWorkspaceTheme = {
+  card: "#fffaf1",
+  cardStrong: "#fff6e8",
+  border: "rgba(91, 70, 48, 0.16)",
+  borderStrong: "rgba(91, 70, 48, 0.3)",
+  pine: "#245842",
+  pineSoft: "rgba(36, 88, 66, 0.12)",
+  charcoal: "#211c17",
+};
+const tenantWorkspaceSectionStyle: React.CSSProperties = {
+  background: "#fff6e8",
+  border: "1px solid rgba(91, 70, 48, 0.16)",
+  boxShadow: "0 10px 24px rgba(59, 44, 28, 0.08)",
+};
+const tenantWorkspaceCardStyle: React.CSSProperties = {
+  background: "#fffaf1",
+  border: "1px solid rgba(91, 70, 48, 0.16)",
+  boxShadow: "0 8px 18px rgba(59, 44, 28, 0.07)",
+};
+
 const MOVE_OUT_REASON_LABEL: Record<MoveOutReason, string> = {
   LEASE_TERM_END: "Lease term end",
   EARLY_LEASE_END: "Early lease end",
@@ -215,13 +235,13 @@ function TenantLeaseLink({
   if (!link) return <>{children}</>;
   if (link.external) {
     return (
-      <a href={link.href} target="_blank" rel="noreferrer" style={{ fontWeight: 700, color: "#2563eb" }}>
+      <a href={link.href} target="_blank" rel="noreferrer" style={{ fontWeight: 700, color: landlordWorkspaceTheme.pine }}>
         {children}
       </a>
     );
   }
   return (
-    <Link to={link.href} style={{ fontWeight: 700, color: "#2563eb" }}>
+    <Link to={link.href} style={{ fontWeight: 700, color: landlordWorkspaceTheme.pine }}>
       {children}
     </Link>
   );
@@ -673,12 +693,13 @@ const loadTenants = useCallback(async () => {
             </div>
           </div>
           <button
+            className="rc-tenants-action-button"
             onClick={handleInviteAction}
             style={{
               padding: "10px 12px",
               borderRadius: radius.sm,
-              border: `1px solid ${inviteEnabled ? colors.border : "#f5d0fe"}`,
-              background: inviteEnabled ? colors.panel : "#faf5ff",
+              border: `1px solid ${inviteEnabled ? landlordWorkspaceTheme.borderStrong : "rgba(184,130,62,0.34)"}`,
+              background: inviteEnabled ? landlordWorkspaceTheme.card : "rgba(184,130,62,0.12)",
               cursor: "pointer",
               minHeight: 44,
               boxShadow:
@@ -709,8 +730,8 @@ const loadTenants = useCallback(async () => {
         {!inviteEnabled ? (
           <div className="rc-tenants-upgrade-card" role="status">
             <div>
-              <div style={{ fontWeight: 850, color: "#581c87" }}>Tenant invites require Starter</div>
-              <div style={{ marginTop: 3, fontSize: 13, color: "#6b21a8", lineHeight: 1.4 }}>
+              <div style={{ fontWeight: 850, color: "#7a4b12" }}>Tenant invites require Starter</div>
+              <div style={{ marginTop: 3, fontSize: 13, color: "#7a4b12", lineHeight: 1.4 }}>
                 Upgrade before creating invite links. The invite form stays locked on this plan.
               </div>
             </div>
@@ -767,13 +788,13 @@ const loadTenants = useCallback(async () => {
                   return (
                     <div
                       key={tenant.id}
-                      className="rc-tenants-list-item"
+                      className={`rc-tenants-list-item${isSelected ? " rc-tenants-list-item--selected" : ""}`}
                       style={{
                         width: "100%",
                         textAlign: "left",
                         border: "1px solid",
-                        borderColor: isSelected ? colors.accent : colors.border,
-                        background: isSelected ? "rgba(96,165,250,0.08)" : colors.card,
+                        borderColor: isSelected ? landlordWorkspaceTheme.borderStrong : landlordWorkspaceTheme.border,
+                        background: isSelected ? landlordWorkspaceTheme.pineSoft : landlordWorkspaceTheme.card,
                         borderRadius: radius.md,
                         padding: "12px 12px",
                         color: text.primary,
@@ -823,7 +844,7 @@ const loadTenants = useCallback(async () => {
                         </div>
                       </button>
 
-                      <div style={{ display: "grid", gap: 6, borderTop: `1px solid ${colors.border}`, paddingTop: 8 }}>
+                      <div style={{ display: "grid", gap: 6, borderTop: `1px solid ${landlordWorkspaceTheme.border}`, paddingTop: 8 }}>
                         <div style={{ fontSize: 12, color: text.muted, fontWeight: 600 }}>Registered units</div>
                         {tenancies.length === 0 ? (
                           <div style={{ fontSize: 12, color: text.muted }}>No registered units</div>
@@ -842,7 +863,7 @@ const loadTenants = useCallback(async () => {
                                         style={{
                                           border: "none",
                                           background: "transparent",
-                                          color: colors.accent,
+                                          color: landlordWorkspaceTheme.pine,
                                           cursor: "pointer",
                                           fontSize: 12,
                                           padding: 0,
@@ -876,12 +897,13 @@ const loadTenants = useCallback(async () => {
                                   </div>
                                   <button
                                     type="button"
+                                    className="rc-tenants-action-button rc-tenants-action-button--small"
                                     onClick={() => openOccupancyEditor(String(tenant.id), tenancy)}
                                     style={{
                                       fontSize: 11,
                                       borderRadius: radius.md,
-                                      border: `1px solid ${colors.border}`,
-                                      background: colors.panel,
+                                      border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                                      background: landlordWorkspaceTheme.card,
                                       color: text.primary,
                                       padding: "4px 8px",
                                       cursor: "pointer",
@@ -932,7 +954,7 @@ const loadTenants = useCallback(async () => {
           detail={
             <div className="rc-tenants-detail">
               {selectedTenant && selectedTenantLinkage ? (
-                <Section>
+                <Section style={tenantWorkspaceSectionStyle}>
                   <div style={{ display: "grid", gap: 12 }}>
                     <div
                       style={{
@@ -954,12 +976,13 @@ const loadTenants = useCallback(async () => {
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <button
                           type="button"
+                          className="rc-tenants-action-button"
                           onClick={openTenantEdit}
                           style={{
                             padding: "8px 10px",
                             borderRadius: radius.md,
-                            border: `1px solid ${colors.border}`,
-                            background: colors.card,
+                            border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                            background: landlordWorkspaceTheme.card,
                             color: text.primary,
                             cursor: "pointer",
                           }}
@@ -968,12 +991,13 @@ const loadTenants = useCallback(async () => {
                         </button>
                         <button
                           type="button"
+                          className="rc-tenants-action-button"
                           onClick={openTenantNote}
                           style={{
                             padding: "8px 10px",
                             borderRadius: radius.md,
-                            border: `1px solid ${colors.border}`,
-                            background: colors.card,
+                            border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                            background: landlordWorkspaceTheme.card,
                             color: text.primary,
                             cursor: "pointer",
                           }}
@@ -982,12 +1006,13 @@ const loadTenants = useCallback(async () => {
                         </button>
                         <button
                           type="button"
+                          className="rc-tenants-action-button"
                           onClick={handleInviteAction}
                           style={{
                             padding: "8px 10px",
                             borderRadius: radius.md,
-                            border: `1px solid ${inviteEnabled ? colors.border : "#f5d0fe"}`,
-                            background: inviteEnabled ? colors.card : "#faf5ff",
+                            border: `1px solid ${inviteEnabled ? landlordWorkspaceTheme.borderStrong : "rgba(184,130,62,0.34)"}`,
+                            background: inviteEnabled ? landlordWorkspaceTheme.card : "rgba(184,130,62,0.12)",
                             color: text.primary,
                             cursor: "pointer",
                           }}
@@ -1003,31 +1028,31 @@ const loadTenants = useCallback(async () => {
                         gap: 10,
                       }}
                     >
-                      <Card>
+                      <Card style={tenantWorkspaceCardStyle}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Lifecycle</div>
                         <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
                           {tenantLifecycleLabel(selectedTenant)}
                         </div>
                       </Card>
-                      <Card>
+                      <Card style={tenantWorkspaceCardStyle}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Property</div>
                         <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
                           {selectedTenantLinkage.propertyLabel}
                         </div>
                       </Card>
-                      <Card>
+                      <Card style={tenantWorkspaceCardStyle}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Unit</div>
                         <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
                           {selectedTenantLinkage.unitLabel}
                         </div>
                       </Card>
-                      <Card>
+                      <Card style={tenantWorkspaceCardStyle}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Current lease link</div>
                         <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
                           <TenantLeaseLink link={selectedLeaseLink}>{selectedTenantLinkage.leaseLabel}</TenantLeaseLink>
                         </div>
                       </Card>
-                      <Card>
+                      <Card style={tenantWorkspaceCardStyle}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Active registered units</div>
                         <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
                           {selectedTenantLinkage.activeTenancyCount}
@@ -1039,8 +1064,8 @@ const loadTenants = useCallback(async () => {
                 </Section>
               ) : null}
               {selectedTenant && selectedTenantLinkage ? (
-                <Section>
-                  <Card>
+                <Section style={tenantWorkspaceSectionStyle}>
+                  <Card style={tenantWorkspaceCardStyle}>
                     <div style={{ display: "grid", gap: 12 }}>
                       <div
                         style={{
@@ -1068,6 +1093,7 @@ const loadTenants = useCallback(async () => {
                             <button
                               key={label}
                               type="button"
+                              className="rc-tenants-action-button"
                               disabled={!selectedLeaseLedgerPath}
                               onClick={() => {
                                 if (selectedLeaseLedgerPath) navigate(selectedLeaseLedgerPath);
@@ -1075,8 +1101,8 @@ const loadTenants = useCallback(async () => {
                               style={{
                                 padding: "8px 10px",
                                 borderRadius: radius.md,
-                                border: `1px solid ${colors.border}`,
-                                background: selectedLeaseLedgerPath ? colors.card : colors.panel,
+                                border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                                background: selectedLeaseLedgerPath ? landlordWorkspaceTheme.card : landlordWorkspaceTheme.cardStrong,
                                 color: selectedLeaseLedgerPath ? text.primary : text.muted,
                                 cursor: selectedLeaseLedgerPath ? "pointer" : "not-allowed",
                               }}
@@ -1121,7 +1147,7 @@ const loadTenants = useCallback(async () => {
                   </Card>
                 </Section>
               ) : null}
-              <Section style={{ minHeight: 0 }}>
+              <Section style={{ ...tenantWorkspaceSectionStyle, minHeight: 0 }}>
                 {!selectedTenantId && <div style={{ fontSize: 13, color: text.muted }}>Select a tenant from the list to see details.</div>}
                 {selectedTenantId && !tenantExists && !loading && (
                   <div
@@ -1138,6 +1164,7 @@ const loadTenants = useCallback(async () => {
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
                         type="button"
+                        className="rc-tenants-action-button"
                         onClick={() => {
                           setSelectedTenantId(null);
                           navigate("/tenants");
@@ -1145,8 +1172,8 @@ const loadTenants = useCallback(async () => {
                         style={{
                           padding: "6px 10px",
                           borderRadius: radius.md,
-                          border: `1px solid ${colors.border}`,
-                          background: colors.card,
+                          border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                          background: landlordWorkspaceTheme.card,
                           color: text.primary,
                         }}
                       >
@@ -1154,12 +1181,13 @@ const loadTenants = useCallback(async () => {
                       </button>
                       <button
                         type="button"
+                        className="rc-tenants-action-button"
                         onClick={() => navigate(0)}
                         style={{
                           padding: "6px 10px",
                           borderRadius: radius.md,
-                          border: `1px solid ${colors.border}`,
-                          background: colors.card,
+                          border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                          background: landlordWorkspaceTheme.card,
                           color: text.primary,
                         }}
                       >
@@ -1173,11 +1201,11 @@ const loadTenants = useCallback(async () => {
                 )}
               </Section>
 
-              <Section>
+              <Section style={tenantWorkspaceSectionStyle}>
                 <TenantLeasePanel tenantId={tenantExists ? selectedTenantId : null} />
               </Section>
 
-              <Section>
+              <Section style={tenantWorkspaceSectionStyle}>
                 <TenantPaymentsPanel tenantId={tenantExists ? selectedTenantId : null} />
               </Section>
             </div>
@@ -1267,9 +1295,9 @@ const loadTenants = useCallback(async () => {
                   style={{
                     padding: "8px 10px",
                     borderRadius: radius.md,
-                    border: `1px solid ${colors.accent}`,
-                    background: "rgba(37, 99, 235, 0.12)",
-                    color: colors.accent,
+                    border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                    background: landlordWorkspaceTheme.pineSoft,
+                    color: landlordWorkspaceTheme.pine,
                     cursor: "pointer",
                     opacity: savingTenantProfile ? 0.7 : 1,
                   }}
@@ -1330,9 +1358,9 @@ const loadTenants = useCallback(async () => {
                   style={{
                     padding: "8px 10px",
                     borderRadius: radius.md,
-                    border: `1px solid ${colors.accent}`,
-                    background: "rgba(37, 99, 235, 0.12)",
-                    color: colors.accent,
+                    border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                    background: landlordWorkspaceTheme.pineSoft,
+                    color: landlordWorkspaceTheme.pine,
                     cursor: "pointer",
                     opacity: savingTenantNote ? 0.7 : 1,
                   }}
@@ -1455,9 +1483,9 @@ const loadTenants = useCallback(async () => {
                   style={{
                     padding: "8px 10px",
                     borderRadius: radius.md,
-                    border: `1px solid ${colors.accent}`,
-                    background: "rgba(37, 99, 235, 0.12)",
-                    color: colors.accent,
+                    border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                    background: landlordWorkspaceTheme.pineSoft,
+                    color: landlordWorkspaceTheme.pine,
                     cursor: "pointer",
                     opacity: savingTenancyId === occupancyEditor.tenancy?.id ? 0.7 : 1,
                   }}

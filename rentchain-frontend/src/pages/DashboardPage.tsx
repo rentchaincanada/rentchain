@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { MacShell } from "../components/layout/MacShell";
 import { Card, SkeletonBlock } from "../components/ui/Ui";
-import { colors, spacing, text } from "../styles/tokens";
+import { colors, layout, spacing, text } from "../styles/tokens";
 import {
   fetchLandlordDecisionQueue,
   type LandlordDecisionQueueItem,
@@ -59,6 +59,28 @@ const sectionCard: React.CSSProperties = {
   display: "grid",
   gap: spacing.md,
   minWidth: 0,
+  background: "#fffaf1",
+  border: "1px solid rgba(91, 70, 48, 0.16)",
+  boxShadow: "0 12px 28px rgba(59, 44, 28, 0.1)",
+};
+
+const dashboardTheme = {
+  page:
+    "radial-gradient(circle at top left, rgba(184, 130, 62, 0.14) 0, rgba(247, 241, 231, 0) 30%), linear-gradient(180deg, #fbf6ed 0%, #f7f1e7 48%, #f4eadc 100%)",
+  card: "#fffaf1",
+  cardSubtle: "#fff6e8",
+  border: "rgba(91, 70, 48, 0.16)",
+  borderStrong: "rgba(91, 70, 48, 0.28)",
+  text: "#211c17",
+  muted: "#63594d",
+  subtle: "#847668",
+  pine: "#245842",
+  pineSoft: "rgba(36, 88, 66, 0.12)",
+  amber: "#9f6a1d",
+  amberSoft: "#fff4df",
+  neutralSoft: "#f3efe8",
+  neutralBorder: "#d9cbbc",
+  neutralText: "#4e463d",
 };
 
 const compactButton: React.CSSProperties = {
@@ -69,9 +91,9 @@ const compactButton: React.CSSProperties = {
   minHeight: 38,
   padding: "8px 12px",
   borderRadius: 8,
-  border: `1px solid ${colors.borderStrong}`,
-  background: "#fff",
-  color: text.primary,
+  border: `1px solid ${dashboardTheme.borderStrong}`,
+  background: dashboardTheme.card,
+  color: dashboardTheme.text,
   fontWeight: 750,
   textDecoration: "none",
   fontSize: 14,
@@ -104,7 +126,11 @@ function stateStyle(state: MetricState): React.CSSProperties {
   if (state === "degraded") {
     return { background: "#fffbeb", color: "#92400e", border: "1px solid #fde68a" };
   }
-  return { background: "#f8fafc", color: "#64748b", border: "1px solid #cbd5e1" };
+  return {
+    background: dashboardTheme.neutralSoft,
+    color: dashboardTheme.neutralText,
+    border: `1px solid ${dashboardTheme.neutralBorder}`,
+  };
 }
 
 function severityStyle(severity: LandlordDecisionQueueSeverity): React.CSSProperties {
@@ -112,8 +138,18 @@ function severityStyle(severity: LandlordDecisionQueueSeverity): React.CSSProper
   if (severity === "warning" || severity === "needs_review") {
     return { background: "#fff7ed", color: "#9a3412", border: "1px solid #fed7aa" };
   }
-  if (severity === "upcoming") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
-  return { background: "#f8fafc", color: "#475569", border: "1px solid #cbd5e1" };
+  if (severity === "upcoming") {
+    return {
+      background: dashboardTheme.neutralSoft,
+      color: dashboardTheme.neutralText,
+      border: `1px solid ${dashboardTheme.neutralBorder}`,
+    };
+  }
+  return {
+    background: dashboardTheme.neutralSoft,
+    color: dashboardTheme.neutralText,
+    border: `1px solid ${dashboardTheme.neutralBorder}`,
+  };
 }
 
 function workspaceLabel(workspace: LandlordDecisionQueueWorkspace): string {
@@ -371,8 +407,8 @@ function SectionHeader({
             borderRadius: 8,
             display: "grid",
             placeItems: "center",
-            background: "#eef2ff",
-            color: "#1d4ed8",
+            background: dashboardTheme.pineSoft,
+            color: dashboardTheme.pine,
           }}
         >
           {icon}
@@ -461,13 +497,13 @@ function HeroKpi({ label, value, emphasis = false }: { label: string; value: str
         gap: 6,
         padding: "12px 14px",
         borderRadius: 8,
-        border: `1px solid ${emphasis ? "rgba(37,99,235,0.32)" : colors.border}`,
-        background: emphasis ? "#eff6ff" : "#fff",
+        border: `1px solid ${emphasis ? "rgba(36, 88, 66, 0.32)" : dashboardTheme.border}`,
+        background: emphasis ? dashboardTheme.pineSoft : dashboardTheme.cardSubtle,
         minWidth: 0,
       }}
     >
-      <div style={{ color: text.muted, fontSize: 13, fontWeight: 800, whiteSpace: "nowrap" }}>{label}</div>
-      <div style={{ color: text.primary, fontSize: 30, lineHeight: 1, fontWeight: 900, whiteSpace: "nowrap" }}>{value}</div>
+      <div style={{ color: dashboardTheme.muted, fontSize: 13, fontWeight: 800, whiteSpace: "nowrap" }}>{label}</div>
+      <div style={{ color: dashboardTheme.text, fontSize: 30, lineHeight: 1, fontWeight: 900, whiteSpace: "nowrap" }}>{value}</div>
     </div>
   );
 }
@@ -512,19 +548,19 @@ function PortfolioCountsRow({
               minHeight: 90,
               padding: 12,
               borderRadius: 8,
-              border: `1px solid ${colors.border}`,
-              background: "#fff",
-              color: text.primary,
+              border: `1px solid ${dashboardTheme.border}`,
+              background: dashboardTheme.card,
+              color: dashboardTheme.text,
               textDecoration: "none",
               minWidth: 0,
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-              <span style={{ color: "#1d4ed8", lineHeight: 0 }}>{card.icon}</span>
+              <span style={{ color: dashboardTheme.pine, lineHeight: 0 }}>{card.icon}</span>
               <ArrowRight size={15} color={text.subtle} />
             </div>
             <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
-              <div style={{ color: text.muted, fontSize: 12, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.label}</div>
+              <div style={{ color: dashboardTheme.muted, fontSize: 12, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.label}</div>
               <div style={{ fontSize: 26, lineHeight: 1, fontWeight: 900, whiteSpace: "nowrap" }}>{isUnavailable ? "—" : formatCount(card.value)}</div>
             </div>
           </Link>
@@ -569,13 +605,13 @@ function FinancialSnapshotSection({ portfolio }: { portfolio: LandlordPortfolioS
               borderRadius: "50%",
               background:
                 total > 0
-                  ? `conic-gradient(#2563eb 0 ${collectedDegrees}deg, #f59e0b ${collectedDegrees}deg ${collectedDegrees + outstandingDegrees}deg, #cbd5e1 ${collectedDegrees + outstandingDegrees}deg 360deg)`
-                  : "#e2e8f0",
+                  ? `conic-gradient(${dashboardTheme.pine} 0 ${collectedDegrees}deg, #f59e0b ${collectedDegrees}deg ${collectedDegrees + outstandingDegrees}deg, #d6cbbb ${collectedDegrees + outstandingDegrees}deg 360deg)`
+                  : dashboardTheme.neutralBorder,
               display: "grid",
               placeItems: "center",
             }}
           >
-            <div style={{ width: 92, height: 92, borderRadius: "50%", background: "#fff", display: "grid", placeItems: "center", textAlign: "center", padding: 8 }}>
+            <div style={{ width: 92, height: 92, borderRadius: "50%", background: dashboardTheme.card, display: "grid", placeItems: "center", textAlign: "center", padding: 8 }}>
               <div>
                 <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1 }}>{formatPercent(financial.rentCollectionRate)}</div>
                 <div style={{ color: text.muted, fontSize: 12, fontWeight: 800 }}>Collected</div>
@@ -583,9 +619,9 @@ function FinancialSnapshotSection({ portfolio }: { portfolio: LandlordPortfolioS
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", color: text.muted, fontSize: 12 }}>
-            <LegendDot color="#2563eb" label="Collected" />
+            <LegendDot color={dashboardTheme.pine} label="Collected" />
             <LegendDot color="#f59e0b" label="Outstanding" />
-            <LegendDot color="#cbd5e1" label="Vacancy" />
+            <LegendDot color="#d6cbbb" label="Vacancy" />
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 145px), 1fr))", gap: spacing.sm }}>
@@ -621,9 +657,9 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 
 function FinancialValue({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: "grid", gap: 6, padding: 12, borderRadius: 8, border: `1px solid ${colors.border}`, background: "#fff", minWidth: 0 }}>
-      <div style={{ color: text.muted, fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>{label}</div>
-      <div style={{ color: text.primary, fontSize: 20, fontWeight: 900, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
+    <div style={{ display: "grid", gap: 6, padding: 12, borderRadius: 8, border: `1px solid ${dashboardTheme.border}`, background: dashboardTheme.cardSubtle, minWidth: 0 }}>
+      <div style={{ color: dashboardTheme.muted, fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>{label}</div>
+      <div style={{ color: dashboardTheme.text, fontSize: 20, fontWeight: 900, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
     </div>
   );
 }
@@ -669,9 +705,9 @@ function DecisionRow({ item }: { item: LandlordDecisionQueueItem }) {
         gap: 12,
         alignItems: "start",
         padding: 12,
-        border: `1px solid ${colors.border}`,
+        border: `1px solid ${dashboardTheme.border}`,
         borderRadius: 8,
-        background: "#fff",
+        background: dashboardTheme.card,
       }}
     >
       <div style={{ display: "grid", gap: 7, minWidth: 0 }}>
@@ -679,7 +715,7 @@ function DecisionRow({ item }: { item: LandlordDecisionQueueItem }) {
         <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.35, overflowWrap: "anywhere" }}>
           {decisionContextLabel(item)}
         </div>
-        <div style={{ color: "#334155", fontSize: 13, lineHeight: 1.45, overflowWrap: "anywhere" }}>
+        <div style={{ color: dashboardTheme.neutralText, fontSize: 13, lineHeight: 1.45, overflowWrap: "anywhere" }}>
           {decisionReason(item)}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -795,9 +831,9 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
               ...compactButton,
               minHeight: 34,
               padding: "6px 10px",
-              background: view === option ? "#eff6ff" : "#fff",
-              borderColor: view === option ? "#bfdbfe" : colors.borderStrong,
-              color: view === option ? "#1d4ed8" : text.primary,
+              background: view === option ? dashboardTheme.pineSoft : dashboardTheme.card,
+              borderColor: view === option ? "rgba(36, 88, 66, 0.32)" : dashboardTheme.borderStrong,
+              color: view === option ? dashboardTheme.pine : dashboardTheme.text,
             }}
           >
             {option === "week" ? "7-day view" : "Month view"}
@@ -826,8 +862,8 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
                 minWidth: view === "week" ? 78 : 0,
                 padding: view === "week" ? 10 : 8,
                 borderRadius: 8,
-                border: `1px solid ${isSameCalendarDay(day, today) ? "#bfdbfe" : colors.border}`,
-                background: isSameCalendarDay(day, today) ? "#eff6ff" : "#fff",
+                border: `1px solid ${isSameCalendarDay(day, today) ? "rgba(36, 88, 66, 0.32)" : dashboardTheme.border}`,
+                background: isSameCalendarDay(day, today) ? dashboardTheme.pineSoft : dashboardTheme.card,
               }}
             >
               <div style={{ display: "grid", gap: 2 }}>
@@ -841,7 +877,7 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
                   key={item.id}
                   to={operationalHref(item)}
                   style={{
-                    color: "#1d4ed8",
+                    color: dashboardTheme.pine,
                     fontSize: 12,
                     fontWeight: 800,
                     lineHeight: 1.25,
@@ -856,7 +892,7 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
                 </Link>
               ))}
               {view === "month" && dayItems.length > 0 ? (
-                <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 99, background: "#2563eb" }} />
+                <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 99, background: dashboardTheme.pine }} />
               ) : null}
             </div>
           );
@@ -897,14 +933,14 @@ function WorkspaceRoutingSection() {
               minHeight: 88,
               padding: 14,
               borderRadius: 8,
-              border: `1px solid ${colors.border}`,
-              background: "#fff",
-              color: text.primary,
+              border: `1px solid ${dashboardTheme.border}`,
+              background: dashboardTheme.card,
+              color: dashboardTheme.text,
               textDecoration: "none",
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-              <span style={{ color: "#1d4ed8" }}>{route.icon}</span>
+              <span style={{ color: dashboardTheme.pine }}>{route.icon}</span>
               <ArrowRight size={16} color={text.subtle} />
             </div>
             <div>
@@ -1015,7 +1051,18 @@ export default function DashboardPage() {
 
   return (
     <MacShell title="RentChain · Dashboard 2.0" showTopNav={false} maxWidth={1320}>
-      <div style={{ display: "grid", gap: spacing.lg, minWidth: 0 }}>
+      <div
+        style={{
+          display: "grid",
+          gap: spacing.lg,
+          minWidth: 0,
+          background: dashboardTheme.page,
+          margin: `-${spacing.lg} calc(-1 * ${layout.pagePadding}) -${spacing.xxl}`,
+          padding: `${spacing.lg} ${layout.pagePadding} ${spacing.xxl}`,
+          boxShadow: "0 0 0 100vmax #f7f1e7",
+          clipPath: "inset(0 -100vmax)",
+        }}
+      >
         <div
           data-testid="dashboard-operational-grid"
           style={{

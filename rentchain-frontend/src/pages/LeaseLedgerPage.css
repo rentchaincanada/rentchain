@@ -5,6 +5,12 @@
   width: min(100%, 1180px);
   margin: 0 auto;
   padding: clamp(12px, 3vw, 24px);
+  border: 1px solid rgba(91, 70, 48, 0.14);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at top left, rgba(184, 130, 62, 0.1) 0, rgba(247, 241, 231, 0) 34%),
+    linear-gradient(180deg, #fffaf1 0%, #f7f1e7 100%);
+  box-shadow: 0 16px 36px rgba(59, 44, 28, 0.1);
 }
 
 .lease-ledger-page *,
@@ -29,9 +35,10 @@
   gap: 12px;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(91, 70, 48, 0.16);
   border-radius: 12px;
-  background: #fff;
+  background: #fff6e8;
+  box-shadow: 0 10px 24px rgba(59, 44, 28, 0.08);
   padding: 12px;
 }
 
@@ -74,7 +81,7 @@
 
 .lease-ledger-advanced-reference {
   margin-top: 4px;
-  color: #64748b;
+  color: #63594d;
   font-size: 12px;
 }
 
@@ -87,9 +94,10 @@
   display: grid;
   gap: 10px;
   min-width: 0;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(91, 70, 48, 0.16);
   border-radius: 12px;
-  background: #fff;
+  background: #fff6e8;
+  box-shadow: 0 10px 24px rgba(59, 44, 28, 0.08);
   padding: 12px;
 }
 
@@ -102,9 +110,9 @@
 .lease-ledger-decision-summary > div,
 .lease-ledger-next-action {
   min-width: 0;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(91, 70, 48, 0.16);
   border-radius: 10px;
-  background: #f8fafc;
+  background: #fffaf1;
   padding: 10px;
 }
 
@@ -113,7 +121,7 @@
 .lease-ledger-obligation-card span,
 .lease-ledger-entry-card span {
   display: block;
-  color: #64748b;
+  color: #63594d;
   font-size: 12px;
   font-weight: 700;
 }
@@ -122,7 +130,7 @@
 .lease-ledger-next-action strong,
 .lease-ledger-obligation-card strong,
 .lease-ledger-entry-card strong {
-  color: #0f172a;
+  color: #211c17;
   overflow-wrap: anywhere;
 }
 
@@ -156,9 +164,10 @@
   display: grid;
   gap: 10px;
   min-width: 0;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(91, 70, 48, 0.16);
   border-radius: 12px;
-  background: #fff;
+  background: #fff6e8;
+  box-shadow: 0 10px 24px rgba(59, 44, 28, 0.08);
   padding: 12px;
 }
 

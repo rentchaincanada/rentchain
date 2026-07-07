@@ -166,6 +166,18 @@ function isVisibleLease(lease: LandlordActiveLease) {
   return lease.hiddenFromActiveLists !== true && !isTargetedHiddenLeaseId(lease.id);
 }
 
+const leaseWorkspaceTheme = {
+  card: "#fffaf1",
+  cardStrong: "#fff6e8",
+  border: "rgba(91, 70, 48, 0.16)",
+  borderStrong: "rgba(91, 70, 48, 0.3)",
+  pine: "#245842",
+  pineSoft: "rgba(36, 88, 66, 0.12)",
+  neutralText: "#4e463d",
+  neutralSoft: "#f3efe8",
+  charcoal: "#211c17",
+};
+
 function statusBadge(status: string | null | undefined) {
   return (
     <span
@@ -173,8 +185,8 @@ function statusBadge(status: string | null | undefined) {
         display: "inline-flex",
         padding: "4px 8px",
         borderRadius: 999,
-        background: "#eff6ff",
-        color: "#1d4ed8",
+        background: leaseWorkspaceTheme.pineSoft,
+        color: leaseWorkspaceTheme.pine,
         fontSize: 12,
         fontWeight: 700,
       }}
@@ -207,7 +219,7 @@ function renderOccupancyDisplay(lease: LandlordActiveLease) {
   const label = occupancyDisplayLabel(lease);
   if (!label) return null;
   return (
-    <div style={{ color: label === "Review needed" ? "#92400e" : "#64748b", fontSize: 12, marginTop: 6 }}>
+    <div style={{ color: label === "Review needed" ? "#92400e" : leaseWorkspaceTheme.neutralText, fontSize: 12, marginTop: 6 }}>
       Occupancy: <strong>{label}</strong>
     </div>
   );
@@ -228,7 +240,7 @@ function renderStateCoherence(lease: LandlordActiveLease) {
         display: "grid",
         gap: 3,
         marginTop: 6,
-        color: needsReview ? "#92400e" : "#475569",
+        color: needsReview ? "#92400e" : leaseWorkspaceTheme.neutralText,
         fontSize: 12,
       }}
     >
@@ -307,10 +319,10 @@ function renderLifecycleSummary(lease: LandlordActiveLease) {
   if (!lifecycle) return null;
   return (
     <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>{lifecycle.lifecycleLabel}</div>
-      <div style={{ color: "#64748b", fontSize: 12 }}>{lifecycleNextActionLabel(lifecycle.requiredNextAction)}</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: leaseWorkspaceTheme.charcoal }}>{lifecycle.lifecycleLabel}</div>
+      <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>{lifecycleNextActionLabel(lifecycle.requiredNextAction)}</div>
       {typeof lifecycle.daysUntilExpiry === "number" ? (
-        <div style={{ color: "#64748b", fontSize: 12 }}>
+        <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>
           {lifecycle.daysUntilExpiry === 0
             ? "Lease ends today"
             : lifecycle.daysUntilExpiry === 1
@@ -382,10 +394,10 @@ function renderJurisdictionPolicyGuidance(lease: LandlordActiveLease) {
         alignItems: "center",
         marginTop: 8,
         padding: "8px 10px",
-        border: "1px solid #bfdbfe",
+        border: `1px solid ${leaseWorkspaceTheme.border}`,
         borderRadius: 10,
-        background: "#eff6ff",
-        color: "#1e3a8a",
+        background: leaseWorkspaceTheme.cardStrong,
+        color: leaseWorkspaceTheme.neutralText,
         fontSize: 12,
       }}
     >
@@ -401,9 +413,9 @@ function renderJurisdictionPolicyGuidance(lease: LandlordActiveLease) {
             minHeight: 24,
             padding: "3px 8px",
             borderRadius: 999,
-            border: "1px solid #bfdbfe",
-            background: "#fff",
-            color: policy.severity === "warning" || policy.severity === "critical" ? "#92400e" : "#1d4ed8",
+            border: `1px solid ${policy.severity === "warning" || policy.severity === "critical" ? "#fed7aa" : leaseWorkspaceTheme.borderStrong}`,
+            background: policy.severity === "warning" || policy.severity === "critical" ? "#fff7ed" : leaseWorkspaceTheme.card,
+            color: policy.severity === "warning" || policy.severity === "critical" ? "#92400e" : leaseWorkspaceTheme.pine,
             fontWeight: 800,
             textDecoration: "none",
           }}
@@ -411,7 +423,7 @@ function renderJurisdictionPolicyGuidance(lease: LandlordActiveLease) {
           {compactPolicyActionLabel(policy.policyKey, policy.label)}
         </Link>
       ))}
-      <div style={{ color: "#475569" }}>Verify local requirements.</div>
+      <div style={{ color: leaseWorkspaceTheme.neutralText }}>Verify local requirements.</div>
     </div>
   );
 }
@@ -655,68 +667,76 @@ export default function LandlordActiveLeasesPage() {
           {canOpenPrimaryDocument ? (
             <button
               type="button"
+              className="rc-lease-action-button"
               onClick={() => void openLeaseDocument(lease)}
               disabled={documentBusyLeaseId === lease.id}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+              style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${leaseWorkspaceTheme.borderStrong}`, background: leaseWorkspaceTheme.card, textDecoration: "none", color: leaseWorkspaceTheme.charcoal }}
             >
               {documentBusyLeaseId === lease.id ? "Opening..." : "View lease"}
             </button>
           ) : primaryDocumentUrl ? (
             <button
               type="button"
+              className="rc-lease-action-button"
               disabled
               title="Use Preview Lease Document in the lease signing panel for generated draft lease PDFs."
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#64748b" }}
+              style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${leaseWorkspaceTheme.border}`, background: leaseWorkspaceTheme.neutralSoft, color: leaseWorkspaceTheme.neutralText }}
             >
               Use Preview Lease Document
             </button>
           ) : (
             <button
               type="button"
+              className="rc-lease-action-button"
               disabled
               title={scheduleAUrl ? "Only Schedule A is available for this record." : "No primary lease PDF is attached to this record."}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#64748b" }}
+              style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${leaseWorkspaceTheme.border}`, background: leaseWorkspaceTheme.neutralSoft, color: leaseWorkspaceTheme.neutralText }}
             >
               Primary lease document unavailable
             </button>
           )}
           <Link
             to={summaryPath}
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", textDecoration: "none" }}
+            className="rc-lease-action-button"
+            style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${leaseWorkspaceTheme.borderStrong}`, background: leaseWorkspaceTheme.card, color: leaseWorkspaceTheme.charcoal, textDecoration: "none" }}
           >
             Lease summary
           </Link>
           {scheduleAUrl ? (
             <button
               type="button"
+              className="rc-lease-action-button"
               onClick={() => void openLeaseDocument(lease, "schedule-a")}
               disabled={documentBusyLeaseId === lease.id}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+              style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${leaseWorkspaceTheme.borderStrong}`, background: leaseWorkspaceTheme.card, textDecoration: "none", color: leaseWorkspaceTheme.charcoal }}
             >
               {documentBusyLeaseId === lease.id ? "Opening..." : "View Schedule A"}
             </button>
           ) : null}
-          <Link to={ledgerPath} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}>
+          <Link to={ledgerPath} className="rc-lease-action-button" style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${leaseWorkspaceTheme.borderStrong}`, background: leaseWorkspaceTheme.card, textDecoration: "none", color: leaseWorkspaceTheme.charcoal }}>
             Payment ledger
           </Link>
           {emailHref ? (
             <a
               href={emailHref}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+              className="rc-lease-action-button"
+              style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${leaseWorkspaceTheme.borderStrong}`, background: leaseWorkspaceTheme.card, textDecoration: "none", color: leaseWorkspaceTheme.charcoal }}
             >
               Email
             </a>
           ) : (
             <button
               type="button"
+              className="rc-lease-action-button"
               disabled
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#94a3b8" }}
+              style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${leaseWorkspaceTheme.border}`, background: leaseWorkspaceTheme.neutralSoft, color: "#8a8176" }}
             >
               Email
             </button>
           )}
           <button
             type="button"
+            className="rc-lease-action-button"
             onClick={() => {
               if (canOpenPrimaryDocument) {
                 void openLeaseDocument(lease);
@@ -725,15 +745,16 @@ export default function LandlordActiveLeasesPage() {
               downloadLeaseSummaryPdf(lease);
             }}
             disabled={documentBusyLeaseId === lease.id}
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+            style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${leaseWorkspaceTheme.borderStrong}`, background: leaseWorkspaceTheme.card, color: leaseWorkspaceTheme.charcoal }}
           >
             Save
           </button>
           {view === "archived" ? (
             <button
               type="button"
+              className="rc-lease-action-button"
               onClick={() => void handleRestore(lease)}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+              style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${leaseWorkspaceTheme.borderStrong}`, background: leaseWorkspaceTheme.card, color: leaseWorkspaceTheme.charcoal }}
             >
               Restore
             </button>
@@ -742,25 +763,28 @@ export default function LandlordActiveLeasesPage() {
               {canEnableRentCollection ? (
                 <button
                   type="button"
+                  className="rc-lease-action-button rc-lease-action-button--primary"
                   onClick={() => void handleEnableRentCollection(lease)}
                   disabled={paymentRailBusyLeaseId === lease.id}
-                  style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+                  style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${leaseWorkspaceTheme.borderStrong}`, background: leaseWorkspaceTheme.pine, color: "#fffaf1" }}
                 >
                   {paymentRailBusyLeaseId === lease.id ? "Enabling..." : "Enable rent collection"}
                 </button>
               ) : shouldReviewPaymentSetup ? (
                 <Link
                   to={rentPaymentSetupPath}
+                  className="rc-lease-action-button"
                   title={paymentSetupReason || lease.paymentReadiness?.readinessDescription || "Review payment setup details."}
-                  style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", textDecoration: "none" }}
+                  style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${leaseWorkspaceTheme.borderStrong}`, background: leaseWorkspaceTheme.card, color: leaseWorkspaceTheme.charcoal, textDecoration: "none" }}
                 >
                   {paymentSetupReviewLabel(lease)}
                 </Link>
               ) : null}
               <button
                 type="button"
+                className="rc-lease-action-button"
                 onClick={() => void handleArchive(lease)}
-                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+                style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${leaseWorkspaceTheme.borderStrong}`, background: leaseWorkspaceTheme.card, color: leaseWorkspaceTheme.charcoal }}
               >
                 Archive lease
               </button>
@@ -768,7 +792,7 @@ export default function LandlordActiveLeasesPage() {
           )}
         </div>
         {paymentSetupReason ? (
-          <div style={{ color: "#64748b", fontSize: 12 }}>Payment setup: {paymentSetupReason}</div>
+          <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>Payment setup: {paymentSetupReason}</div>
         ) : null}
         {view !== "archived" ? <LeaseSigningDashboard leaseId={lease.id} tenantEmail={lease.tenantEmail} /> : null}
       </div>
@@ -779,8 +803,8 @@ export default function LandlordActiveLeasesPage() {
     <div className="rc-leases-page" style={{ display: "grid", gap: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div style={{ display: "grid", gap: 6 }}>
-          <div style={{ fontSize: 24, fontWeight: 800 }}>Lease operations</div>
-          <div style={{ color: "#475569", fontSize: 14 }}>
+          <div style={{ color: leaseWorkspaceTheme.charcoal, fontSize: 24, fontWeight: 800 }}>Lease operations</div>
+          <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 14 }}>
             Keep canonical lease records visible, reconcile occupied units missing leases, and use the ledger and archive views safely.
           </div>
         </div>
@@ -788,7 +812,7 @@ export default function LandlordActiveLeasesPage() {
           type="button"
           className="no-print"
           onClick={() => void printSummaryDocument("summary")}
-          style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #E5E7EB", background: "#FFFFFF", fontWeight: 900, cursor: "pointer" }}
+          style={{ padding: "8px 10px", borderRadius: 12, border: `1px solid ${leaseWorkspaceTheme.borderStrong}`, background: leaseWorkspaceTheme.card, color: leaseWorkspaceTheme.charcoal, fontWeight: 900, cursor: "pointer" }}
         >
           Print / Save PDF
         </button>
@@ -835,9 +859,9 @@ export default function LandlordActiveLeasesPage() {
           style={{
             padding: "8px 12px",
             borderRadius: 10,
-            border: "1px solid #cbd5e1",
-            background: view === "active" ? "#0f172a" : "#fff",
-            color: view === "active" ? "#fff" : "#0f172a",
+            border: `1px solid ${view === "active" ? leaseWorkspaceTheme.charcoal : leaseWorkspaceTheme.borderStrong}`,
+            background: view === "active" ? leaseWorkspaceTheme.charcoal : leaseWorkspaceTheme.card,
+            color: view === "active" ? "#fffaf1" : leaseWorkspaceTheme.charcoal,
           }}
         >
           Active leases
@@ -848,9 +872,9 @@ export default function LandlordActiveLeasesPage() {
           style={{
             padding: "8px 12px",
             borderRadius: 10,
-            border: "1px solid #cbd5e1",
-            background: view === "archived" ? "#0f172a" : "#fff",
-            color: view === "archived" ? "#fff" : "#0f172a",
+            border: `1px solid ${view === "archived" ? leaseWorkspaceTheme.charcoal : leaseWorkspaceTheme.borderStrong}`,
+            background: view === "archived" ? leaseWorkspaceTheme.charcoal : leaseWorkspaceTheme.card,
+            color: view === "archived" ? "#fffaf1" : leaseWorkspaceTheme.charcoal,
           }}
         >
           View archive
@@ -858,7 +882,7 @@ export default function LandlordActiveLeasesPage() {
       </div>
 
       <label style={{ display: "grid", gap: 6, maxWidth: 420 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>Search leases</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: leaseWorkspaceTheme.charcoal }}>Search leases</span>
         <input
           aria-label="Search leases"
           value={searchQuery}
@@ -867,9 +891,9 @@ export default function LandlordActiveLeasesPage() {
           style={{
             padding: "10px 12px",
             borderRadius: 10,
-            border: "1px solid #cbd5e1",
-            background: "#fff",
-            color: "#0f172a",
+            border: `1px solid ${leaseWorkspaceTheme.borderStrong}`,
+            background: leaseWorkspaceTheme.card,
+            color: leaseWorkspaceTheme.charcoal,
           }}
         />
       </label>
@@ -884,9 +908,9 @@ export default function LandlordActiveLeasesPage() {
       {error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
 
       {!entitlements.loading && leasesEnabled && !loading && view === "active" && candidates.length > 0 ? (
-        <div style={{ display: "grid", gap: 10, border: "1px solid #e2e8f0", borderRadius: 12, background: "#fff", padding: 16 }}>
-          <div style={{ fontWeight: 800, color: "#0f172a" }}>Occupied units missing lease records</div>
-          <div style={{ color: "#64748b", fontSize: 13 }}>
+        <div style={{ display: "grid", gap: 10, border: `1px solid ${leaseWorkspaceTheme.border}`, borderRadius: 12, background: leaseWorkspaceTheme.card, padding: 16 }}>
+          <div style={{ fontWeight: 800, color: leaseWorkspaceTheme.charcoal }}>Occupied units missing lease records</div>
+          <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 13 }}>
             Units remain the occupancy source of truth. Convert these occupied reference states into real lease records only when you are ready.
           </div>
           {candidates.map((candidate) => (
@@ -895,24 +919,25 @@ export default function LandlordActiveLeasesPage() {
               style={{
                 display: "grid",
                 gap: 8,
-                border: "1px solid #e2e8f0",
+                border: `1px solid ${leaseWorkspaceTheme.border}`,
                 borderRadius: 10,
                 padding: 12,
+                background: leaseWorkspaceTheme.cardStrong,
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                 <div>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>
+                  <div style={{ fontWeight: 700, color: leaseWorkspaceTheme.charcoal }}>
                     {candidate.propertyName} · Unit {candidate.unitNumber}
                   </div>
-                  <div style={{ color: "#475569", fontSize: 13 }}>
+                  <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 13 }}>
                     {candidate.occupantName || "Occupant name missing"} · {formatCurrency(candidate.monthlyRent)}
                     {candidate.leaseEndDate ? ` · Ends ${formatDate(candidate.leaseEndDate)}` : ""}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {candidate.leaseDocument?.url ? (
-                    <span style={{ color: "#64748b", fontSize: 13 }}>
+                    <span style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 13 }}>
                       Lease document link expired and needs regeneration.
                     </span>
                   ) : null}
@@ -924,9 +949,9 @@ export default function LandlordActiveLeasesPage() {
                       style={{
                         padding: "6px 10px",
                         borderRadius: 8,
-                        border: "1px solid #cbd5e1",
-                        background: "#fff",
-                        color: "#0f172a",
+                        border: `1px solid ${leaseWorkspaceTheme.borderStrong}`,
+                        background: leaseWorkspaceTheme.card,
+                        color: leaseWorkspaceTheme.charcoal,
                       }}
                     >
                       Convert to lease
@@ -937,9 +962,9 @@ export default function LandlordActiveLeasesPage() {
                       style={{
                         padding: "6px 10px",
                         borderRadius: 8,
-                        border: "1px solid #cbd5e1",
-                        background: "#fff",
-                        color: "#0f172a",
+                        border: `1px solid ${leaseWorkspaceTheme.borderStrong}`,
+                        background: leaseWorkspaceTheme.card,
+                        color: leaseWorkspaceTheme.charcoal,
                         textDecoration: "none",
                       }}
                     >
@@ -963,9 +988,9 @@ export default function LandlordActiveLeasesPage() {
           style={{
             padding: 16,
             borderRadius: 12,
-            border: "1px solid #e2e8f0",
-            background: "#fff",
-            color: "#475569",
+            border: `1px solid ${leaseWorkspaceTheme.border}`,
+            background: leaseWorkspaceTheme.card,
+            color: leaseWorkspaceTheme.neutralText,
           }}
         >
           {view === "archived" ? "No archived leases yet." : "No active leases were found for this landlord yet."}
@@ -977,9 +1002,9 @@ export default function LandlordActiveLeasesPage() {
           style={{
             padding: 16,
             borderRadius: 12,
-            border: "1px solid #e2e8f0",
-            background: "#fff",
-            color: "#475569",
+            border: `1px solid ${leaseWorkspaceTheme.border}`,
+            background: leaseWorkspaceTheme.card,
+            color: leaseWorkspaceTheme.neutralText,
           }}
         >
           No leases match your search.
@@ -987,10 +1012,10 @@ export default function LandlordActiveLeasesPage() {
       ) : null}
 
       {!entitlements.loading && leasesEnabled && !loading && !error && filteredLeases.length > 0 && !isNarrowLayout ? (
-        <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 12, background: "#fff" }}>
+        <div style={{ overflowX: "auto", border: `1px solid ${leaseWorkspaceTheme.border}`, borderRadius: 12, background: leaseWorkspaceTheme.card }}>
           <table style={{ width: "100%", minWidth: 1040, borderCollapse: "collapse" }}>
             <thead>
-              <tr style={{ background: "#f8fafc", color: "#475569" }}>
+              <tr style={{ background: leaseWorkspaceTheme.cardStrong, color: leaseWorkspaceTheme.neutralText }}>
                 {["Property", "Unit", "Tenant", "Status", "Rent", "Term", "Actions"].map((label) => (
                   <th key={label} style={{ textAlign: "left", padding: 12, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
                     {label}
@@ -1001,25 +1026,25 @@ export default function LandlordActiveLeasesPage() {
             <tbody>
               {filteredLeases.map((lease) => {
                 return (
-                  <tr key={lease.id} style={{ borderTop: "1px solid #e2e8f0" }}>
+                  <tr key={lease.id} style={{ borderTop: `1px solid ${leaseWorkspaceTheme.border}` }}>
                     <td style={{ padding: 12 }}>
-                      <div style={{ fontWeight: 700, color: "#0f172a" }}>{lease.propertyName}</div>
-                      <div style={{ color: "#64748b", fontSize: 12 }}>Lease workspace</div>
+                      <div style={{ fontWeight: 700, color: leaseWorkspaceTheme.charcoal }}>{lease.propertyName}</div>
+                      <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>Lease workspace</div>
                     </td>
                     <td style={{ padding: 12 }}>{lease.unitNumber || "—"}</td>
                     <td style={{ padding: 12 }}>
                       <div>{lease.tenantName || "Tenant not linked"}</div>
-                      <div style={{ color: "#64748b", fontSize: 12 }}>{lease.tenantEmail || "No email on file"}</div>
+                      <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>{lease.tenantEmail || "No email on file"}</div>
                     </td>
                     <td style={{ padding: 12 }}>
                       <div>{statusBadge(lease.status)}</div>
                       {renderOccupancyDisplay(lease)}
                       {lease.leaseExecution ? (
                         <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: leaseWorkspaceTheme.charcoal }}>
                             {lease.leaseExecution.executionLabel}
                           </div>
-                          <div style={{ color: "#64748b", fontSize: 12 }}>
+                          <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>
                             {executionNextActionLabel(lease.leaseExecution.requiredNextAction)}
                           </div>
                         </div>
@@ -1028,16 +1053,16 @@ export default function LandlordActiveLeasesPage() {
                       {renderStateCoherence(lease)}
                       {renderJurisdictionPolicyGuidance(lease)}
                       {lease.archivedAt ? (
-                        <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
+                        <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12, marginTop: 4 }}>
                           Archived {formatDate(lease.archivedAt)}
                         </div>
                       ) : null}
                       {lease.paymentReadiness ? (
                         <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: leaseWorkspaceTheme.charcoal }}>
                             {lease.paymentReadiness.readinessLabel}
                           </div>
-                          <div style={{ color: "#64748b", fontSize: 12 }}>
+                          <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>
                             {paymentReadinessChecklist(lease)}
                           </div>
                         </div>
@@ -1062,15 +1087,15 @@ export default function LandlordActiveLeasesPage() {
                             });
                             return (
                               <>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: leaseWorkspaceTheme.charcoal }}>
                             {lease.rentPaymentSummary.paymentRail.enabled ? "Rent collection enabled" : "Rent collection not enabled"}
                           </div>
-                          <div style={{ color: "#64748b", fontSize: 12 }}>
+                          <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>
                             {paymentStatusLabel}
                           </div>
-                          <div style={{ color: "#64748b", fontSize: 12 }}>{paymentGuidance}</div>
+                          <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>{paymentGuidance}</div>
                           {(lease.rentPaymentSummary.paymentExperience?.history || []).length ? (
-                            <div style={{ color: "#64748b", fontSize: 12 }}>
+                            <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>
                               {lease.rentPaymentSummary.paymentExperience.history
                                 .slice(0, 2)
                                 .map((entry) => prettyRentPaymentStatus(entry.status))
@@ -1086,7 +1111,7 @@ export default function LandlordActiveLeasesPage() {
                     <td style={{ padding: 12 }}>{formatCurrency(lease.monthlyRent)}</td>
                     <td style={{ padding: 12 }}>
                       <div>{formatDate(lease.startDate)}</div>
-                      <div style={{ color: "#64748b", fontSize: 12 }}>to {formatDate(lease.endDate)}</div>
+                      <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>to {formatDate(lease.endDate)}</div>
                     </td>
                     <td style={{ padding: 12 }}>{renderLeaseActions(lease)}</td>
                   </tr>
@@ -1106,54 +1131,54 @@ export default function LandlordActiveLeasesPage() {
               style={{
                 display: "grid",
                 gap: 12,
-                border: "1px solid #e2e8f0",
+                border: `1px solid ${leaseWorkspaceTheme.border}`,
                 borderRadius: 12,
-                background: "#fff",
+                background: leaseWorkspaceTheme.card,
                 padding: 14,
               }}
             >
               <div style={{ display: "grid", gap: 4 }}>
-                <div style={{ fontWeight: 800, color: "#0f172a" }}>{lease.propertyName || "Property"}</div>
-                <div style={{ color: "#475569", fontSize: 13 }}>
+                <div style={{ fontWeight: 800, color: leaseWorkspaceTheme.charcoal }}>{lease.propertyName || "Property"}</div>
+                <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 13 }}>
                   Unit {lease.unitNumber || "—"} • {lease.tenantName || "Tenant not linked"}
                 </div>
               </div>
               <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
                 <div>
-                  <div style={{ color: "#64748b", fontSize: 12 }}>Status</div>
+                  <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>Status</div>
                   <div style={{ marginTop: 6 }}>{statusBadge(lease.status)}</div>
                   {renderOccupancyDisplay(lease)}
                 </div>
                 <div>
-                  <div style={{ color: "#64748b", fontSize: 12 }}>Rent</div>
-                  <div style={{ color: "#0f172a", fontWeight: 700, marginTop: 6 }}>{formatCurrency(lease.monthlyRent)}</div>
+                  <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>Rent</div>
+                  <div style={{ color: leaseWorkspaceTheme.charcoal, fontWeight: 700, marginTop: 6 }}>{formatCurrency(lease.monthlyRent)}</div>
                 </div>
                 <div>
-                  <div style={{ color: "#64748b", fontSize: 12 }}>Term</div>
-                  <div style={{ color: "#0f172a", marginTop: 6 }}>
+                  <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>Term</div>
+                  <div style={{ color: leaseWorkspaceTheme.charcoal, marginTop: 6 }}>
                     {formatDate(lease.startDate)} to {formatDate(lease.endDate)}
                   </div>
                 </div>
                 <div>
-                  <div style={{ color: "#64748b", fontSize: 12 }}>Payment readiness</div>
-                  <div style={{ color: "#0f172a", marginTop: 6 }}>
+                  <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>Payment readiness</div>
+                  <div style={{ color: leaseWorkspaceTheme.charcoal, marginTop: 6 }}>
                     {lease.paymentReadiness?.readinessLabel || "Payment readiness unavailable"}
                   </div>
                 </div>
                 <div>
-                  <div style={{ color: "#64748b", fontSize: 12 }}>Lifecycle</div>
-                  <div style={{ color: "#0f172a", marginTop: 6 }}>
+                  <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>Lifecycle</div>
+                  <div style={{ color: leaseWorkspaceTheme.charcoal, marginTop: 6 }}>
                     {lease.leaseLifecycleSummary?.lifecycleLabel || "No lifecycle status available"}
                   </div>
                 </div>
               </div>
               {lease.leaseLifecycleSummary ? (
-                <div style={{ color: "#64748b", fontSize: 12 }}>
+                <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>
                   {lifecycleNextActionLabel(lease.leaseLifecycleSummary.requiredNextAction)}
                 </div>
               ) : null}
               {lease.paymentReadiness ? (
-                <div style={{ color: "#64748b", fontSize: 12 }}>{paymentReadinessChecklist(lease)}</div>
+                <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>{paymentReadinessChecklist(lease)}</div>
               ) : null}
               {renderStateCoherence(lease)}
               {renderJurisdictionPolicyGuidance(lease)}
@@ -1184,9 +1209,9 @@ export default function LandlordActiveLeasesPage() {
             style={{
               width: "min(520px, 96vw)",
               borderRadius: 16,
-              border: "1px solid #e2e8f0",
-              background: "#fff",
-              boxShadow: "0 20px 50px rgba(15,23,42,0.2)",
+              border: `1px solid ${leaseWorkspaceTheme.borderStrong}`,
+              background: leaseWorkspaceTheme.card,
+              boxShadow: "0 20px 50px rgba(59, 44, 28, 0.18)",
               padding: 18,
               display: "grid",
               gap: 10,
@@ -1196,7 +1221,7 @@ export default function LandlordActiveLeasesPage() {
             <div style={{ fontSize: 18, fontWeight: 800 }}>
               Convert reference to lease
             </div>
-            <div style={{ color: "#475569", fontSize: 13 }}>
+            <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 13 }}>
               This creates a real lease record. The unit reference document stays as supporting context and does not remain the lease truth.
             </div>
             {convertError ? (

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { RiskScoreBadge } from "@/components/leases/RiskScoreBadge";
 import type { PropertyCredibilitySummary } from "@/types/credibilitySummary";
-import { colors, radius, spacing, text } from "@/styles/tokens";
+import { radius, spacing, text } from "@/styles/tokens";
 
 interface PropertyCredibilitySummaryCardProps {
   summary?: PropertyCredibilitySummary | null;
@@ -34,8 +34,8 @@ const MetricTile: React.FC<{ label: string; value: React.ReactNode; caption?: Re
   <div
     style={{
       borderRadius: radius.lg,
-      border: `1px solid ${colors.border}`,
-      background: "rgba(255,255,255,0.94)",
+      border: "1px solid rgba(91,70,48,0.16)",
+      background: "#fffaf1",
       padding: spacing.md,
       display: "grid",
       gap: 6,
@@ -51,16 +51,30 @@ const MetricTile: React.FC<{ label: string; value: React.ReactNode; caption?: Re
 
 export const PropertyCredibilitySummaryCard: React.FC<PropertyCredibilitySummaryCardProps> = ({ summary, leaseHref = "/leases" }) => {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const cardSurface: React.CSSProperties = {
+    borderRadius: radius.lg,
+    border: "1px solid rgba(91,70,48,0.16)",
+    background: "#fff6e8",
+    boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
+    padding: spacing.md,
+    display: "grid",
+  };
+  const detailButtonStyle: React.CSSProperties = {
+    border: "1px solid rgba(91,70,48,0.28)",
+    background: "#fffaf1",
+    borderRadius: radius.md,
+    color: "#211c17",
+    cursor: "pointer",
+    fontSize: 12,
+    fontWeight: 750,
+    padding: "6px 10px",
+  };
 
   if (!summary || summary.healthStatus === "unknown") {
     return (
       <section
         style={{
-          borderRadius: radius.lg,
-          border: `1px solid ${colors.border}`,
-          background: "rgba(255,255,255,0.96)",
-          padding: spacing.md,
-          display: "grid",
+          ...cardSurface,
           gap: detailsOpen ? spacing.md : 0,
         }}
       >
@@ -72,16 +86,7 @@ export const PropertyCredibilitySummaryCard: React.FC<PropertyCredibilitySummary
           <button
             type="button"
             onClick={() => setDetailsOpen((value) => !value)}
-            style={{
-              border: `1px solid ${colors.borderStrong}`,
-              background: "#fff",
-              borderRadius: radius.md,
-              color: text.primary,
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 750,
-              padding: "6px 10px",
-            }}
+            style={detailButtonStyle}
           >
             {detailsOpen ? "Hide details" : "View details"}
           </button>
@@ -91,14 +96,14 @@ export const PropertyCredibilitySummaryCard: React.FC<PropertyCredibilitySummary
             <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.5 }}>
               This summary reflects current lease and tenant credibility signals for this property. Decision support only.
             </div>
-            <a href={leaseHref} style={{ color: "#2563eb", fontSize: 13, fontWeight: 700 }}>
+            <a href={leaseHref} style={{ color: "#245842", fontSize: 13, fontWeight: 700 }}>
               View related leases
             </a>
             <div
               style={{
                 borderRadius: radius.lg,
-                border: `1px dashed ${colors.borderStrong}`,
-                background: "rgba(248,250,252,0.92)",
+                border: "1px dashed rgba(91,70,48,0.28)",
+                background: "#fffaf1",
                 padding: spacing.md,
                 color: text.muted,
                 fontSize: 13,
@@ -118,11 +123,7 @@ export const PropertyCredibilitySummaryCard: React.FC<PropertyCredibilitySummary
   return (
     <section
       style={{
-        borderRadius: radius.lg,
-        border: `1px solid ${colors.border}`,
-        background: "rgba(255,255,255,0.96)",
-        padding: spacing.md,
-        display: "grid",
+        ...cardSurface,
         gap: detailsOpen ? spacing.md : 0,
       }}
     >
@@ -152,16 +153,7 @@ export const PropertyCredibilitySummaryCard: React.FC<PropertyCredibilitySummary
           <button
             type="button"
             onClick={() => setDetailsOpen((value) => !value)}
-            style={{
-              border: `1px solid ${colors.borderStrong}`,
-              background: "#fff",
-              borderRadius: radius.md,
-              color: text.primary,
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 750,
-              padding: "6px 10px",
-            }}
+            style={detailButtonStyle}
           >
             {detailsOpen ? "Hide details" : "View details"}
           </button>
@@ -173,7 +165,7 @@ export const PropertyCredibilitySummaryCard: React.FC<PropertyCredibilitySummary
           <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.5 }}>
             This summary reflects current lease and tenant credibility signals for this property. Decision support only.
           </div>
-          <a href={leaseHref} style={{ color: "#2563eb", fontSize: 13, fontWeight: 700 }}>
+          <a href={leaseHref} style={{ color: "#245842", fontSize: 13, fontWeight: 700 }}>
             View related leases
           </a>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: spacing.md }}>

@@ -221,6 +221,29 @@ export const InviteTenantModal: React.FC<Props> = ({
 
   if (!open) return null;
   const selectedUnitRequiresLease = unitId ? units.find((u) => u.id === unitId)?.inviteEligible === false : false;
+  const fieldStyle: React.CSSProperties = {
+    padding: "9px 11px",
+    borderRadius: 10,
+    border: "1px solid rgba(91,70,48,0.24)",
+    background: "#fffaf1",
+    color: "#211c17",
+    fontSize: 14,
+  };
+  const labelStyle: React.CSSProperties = { color: "#3f382f", fontSize: 13, fontWeight: 700 };
+  const helperStyle: React.CSSProperties = { color: "#63594d", fontSize: 12, lineHeight: 1.45 };
+  const secondaryButtonStyle: React.CSSProperties = {
+    padding: "8px 12px",
+    border: "1px solid rgba(91,70,48,0.28)",
+    background: "#fffaf1",
+    color: "#211c17",
+  };
+  const primaryButtonStyle: React.CSSProperties = {
+    padding: "8px 12px",
+    border: "1px solid rgba(36,88,66,0.42)",
+    background: "#245842",
+    color: "#fffaf1",
+  };
+  const linkStyle: React.CSSProperties = { color: "#245842", fontWeight: 700, textDecoration: "underline" };
 
   const promptInviteUpgrade = (source: string, currentPlan?: string | null) => {
     dispatchUpgradePrompt({
@@ -363,7 +386,7 @@ export const InviteTenantModal: React.FC<Props> = ({
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.4)",
+        background: "rgba(33,28,23,0.52)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -374,15 +397,16 @@ export const InviteTenantModal: React.FC<Props> = ({
       <div
         className="rc-modal-shell"
         style={{
-          background: "#fff",
-          borderRadius: 12,
-          border: "1px solid #e5e7eb",
+          background: "#fffaf1",
+          borderRadius: 16,
+          border: "1px solid rgba(91,70,48,0.2)",
+          boxShadow: "0 24px 64px rgba(59,44,28,0.24)",
         }}
       >
         <div className="rc-modal-body" style={{ padding: 16, display: "grid", gap: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontWeight: 700 }}>Invite tenant</div>
-          <Button style={{ padding: "6px 10px" }} onClick={onClose}>
+          <div style={{ color: "#211c17", fontWeight: 800 }}>Invite tenant</div>
+          <Button style={secondaryButtonStyle} onClick={onClose}>
             Close
           </Button>
         </div>
@@ -395,14 +419,14 @@ export const InviteTenantModal: React.FC<Props> = ({
               gap: 10,
               padding: 12,
               borderRadius: 12,
-              border: "1px solid #f5d0fe",
-              background: "#faf5ff",
-              color: "#581c87",
+              border: "1px solid rgba(184,130,62,0.34)",
+              background: "rgba(184,130,62,0.12)",
+              color: "#5b462f",
             }}
           >
             <div style={{ fontWeight: 750 }}>Upgrade required</div>
             <div style={{ fontSize: 13, lineHeight: 1.45 }}>{inviteUpgradeMessage}</div>
-            <Button type="button" onClick={handleUpgradeRequired} style={{ justifySelf: "start" }}>
+            <Button type="button" onClick={handleUpgradeRequired} style={{ ...primaryButtonStyle, justifySelf: "start" }}>
               Unlock tenant invites
             </Button>
           </div>
@@ -410,16 +434,11 @@ export const InviteTenantModal: React.FC<Props> = ({
           <>
 
         <div style={{ display: "grid", gap: 6 }}>
-          <label style={{ fontSize: 13 }}>Property</label>
+          <label style={labelStyle}>Property</label>
           <select
             value={propertyId}
             onChange={(e) => setPropertyId(e.target.value)}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid #d1d5db",
-              fontSize: 14,
-            }}
+            style={fieldStyle}
             disabled={loadingProperties}
           >
             <option value="">{loadingProperties ? "Loading properties..." : "Select property"}</option>
@@ -432,16 +451,11 @@ export const InviteTenantModal: React.FC<Props> = ({
         </div>
 
         <div style={{ display: "grid", gap: 6 }}>
-          <label style={{ fontSize: 13 }}>Unit</label>
+          <label style={labelStyle}>Unit</label>
           <select
             value={unitId}
             onChange={(e) => setUnitId(e.target.value)}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid #d1d5db",
-              fontSize: 14,
-            }}
+            style={fieldStyle}
             disabled={!propertyId || loadingUnits || units.length === 0}
           >
             <option value="">
@@ -459,9 +473,9 @@ export const InviteTenantModal: React.FC<Props> = ({
             ))}
           </select>
           {propertyId && !loadingUnits && units.length === 0 ? (
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
+            <div style={helperStyle}>
               No units found.{" "}
-              <a href="/properties" style={{ color: "#2563eb", textDecoration: "underline" }}>
+              <a href="/properties" style={linkStyle}>
                 Create a unit first
               </a>
             </div>
@@ -470,51 +484,41 @@ export const InviteTenantModal: React.FC<Props> = ({
           !loadingUnits &&
           units.length > 0 &&
           units.every((unit) => !unit.inviteEligible) ? (
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
+            <div style={helperStyle}>
               {copy.addLeaseLaterHint}{" "}
-              <a href="/properties" style={{ color: "#2563eb", textDecoration: "underline" }}>
+              <a href="/properties" style={linkStyle}>
                 {copy.managePropertyDetails}
               </a>
             </div>
           ) : null}
           {selectedUnitRequiresLease ? (
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
+            <div style={helperStyle}>
               {copy.missingLeaseHint}
             </div>
           ) : null}
           {selectedUnitRequiresLease ? (
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
+            <div style={helperStyle}>
               {copy.createLeasePackHint}
             </div>
           ) : null}
         </div>
 
         <div style={{ display: "grid", gap: 6 }}>
-          <label style={{ fontSize: 13 }}>Tenant email</label>
+          <label style={labelStyle}>Tenant email</label>
           <input
             value={tenantEmail}
             onChange={(e) => setTenantEmail(e.target.value)}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid #d1d5db",
-              fontSize: 14,
-            }}
+            style={fieldStyle}
             placeholder="name@example.com"
           />
         </div>
 
         <div style={{ display: "grid", gap: 6 }}>
-          <label style={{ fontSize: 13 }}>Tenant name (optional)</label>
+          <label style={labelStyle}>Tenant name (optional)</label>
           <input
             value={tenantName}
             onChange={(e) => setTenantName(e.target.value)}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid #d1d5db",
-              fontSize: 14,
-            }}
+            style={fieldStyle}
           />
         </div>
 
@@ -552,9 +556,9 @@ export const InviteTenantModal: React.FC<Props> = ({
             style={{
               padding: 10,
               borderRadius: 8,
-              border: "1px solid #e5e7eb",
-              background: "#f8fafc",
-              color: "#6b7280",
+              border: "1px solid rgba(91,70,48,0.18)",
+              background: "#fff6e8",
+              color: "#63594d",
               fontSize: 12,
             }}
           >
@@ -567,22 +571,22 @@ export const InviteTenantModal: React.FC<Props> = ({
             style={{
               padding: 10,
               borderRadius: 8,
-              border: "1px solid #e5e7eb",
-              background: "#f8fafc",
+              border: "1px solid rgba(91,70,48,0.18)",
+              background: "#fff6e8",
               display: "grid",
               gap: 6,
               fontSize: 12,
             }}
           >
             <div style={{ fontWeight: 700 }}>Invite link</div>
-            <div style={{ wordBreak: "break-all", color: "#6b7280" }}>{inviteUrl}</div>
+            <div style={{ wordBreak: "break-all", color: "#63594d" }}>{inviteUrl}</div>
             <div style={{ display: "flex", gap: 8 }}>
-              <Button onClick={copyInviteLink} style={{ padding: "6px 10px" }}>
+              <Button onClick={copyInviteLink} style={secondaryButtonStyle}>
                 Copy
               </Button>
               <Button
                 onClick={() => window.open(inviteUrl, "_blank")}
-                style={{ padding: "6px 10px" }}
+                style={secondaryButtonStyle}
               >
                 Open
               </Button>
@@ -591,13 +595,13 @@ export const InviteTenantModal: React.FC<Props> = ({
         )}
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <Button onClick={onClose} style={{ padding: "8px 12px" }}>
+          <Button onClick={onClose} style={secondaryButtonStyle}>
             Cancel
           </Button>
           <Button
             onClick={sendInvite}
             disabled={loading || !tenantEmail || !propertyId || !unitId}
-            style={{ padding: "8px 12px" }}
+            style={primaryButtonStyle}
           >
             {loading ? "Sending..." : "Send invite"}
           </Button>

@@ -236,33 +236,10 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
 
   if (navLoading) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily:
-            "system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', sans-serif",
-          fontSize: "0.95rem",
-          color: "#0f172a",
-          background:
-            "radial-gradient(circle at top left, rgba(37,99,235,0.08) 0, rgba(14,165,233,0.06) 45%, rgba(255,255,255,0.9) 100%)",
-          padding: "24px",
-        }}
-      >
-        <div
-          style={{
-            width: "min(420px, 90vw)",
-            background: "rgba(255,255,255,0.9)",
-            border: "1px solid rgba(15,23,42,0.08)",
-            borderRadius: 16,
-            padding: "20px 22px",
-            boxShadow: "0 12px 30px rgba(15,23,42,0.12)",
-          }}
-        >
+      <div className="rc-landlord-loading-shell">
+        <div className="rc-landlord-loading-card">
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Loading your workspace...</div>
-          <div style={{ color: "#475569" }}>Confirming your account role.</div>
+          <div className="rc-landlord-loading-copy">Confirming your account role.</div>
         </div>
       </div>
     );

@@ -44,6 +44,18 @@ import { printSummaryDocument } from "../utils/printSummary";
 import { UpgradeCTA } from "../components/billing/UpgradeCTA";
 import { FREE_TIER_UPGRADE_GUIDANCE } from "../constants/tiers";
 
+const landlordWorkspaceTheme = {
+  card: "#fffaf1",
+  cardStrong: "#fff6e8",
+  border: "rgba(91, 70, 48, 0.16)",
+  borderStrong: "rgba(91, 70, 48, 0.3)",
+  pine: "#245842",
+  pineSoft: "rgba(36, 88, 66, 0.12)",
+  charcoal: "#211c17",
+  muted: "#63594d",
+  warmPanel: "#fbf6ed",
+};
+
 function isPersistedUnitIdValue(value: any) {
   const id = String(value || "").trim();
   return Boolean(id) && !/^placeholder-/i.test(id);
@@ -606,7 +618,7 @@ const PropertiesPage: React.FC = () => {
   return (
     <MacShell title="RentChain Properties" showTopNav={false}>
       <div
-        className="page-content"
+        className="page-content rc-properties-page"
         style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}
       >
         <div className="rc-properties-header">
@@ -629,6 +641,11 @@ const PropertiesPage: React.FC = () => {
               type="button"
               onClick={openAddPropertyForm}
               className="rc-properties-add-button"
+              style={{
+                background: landlordWorkspaceTheme.charcoal,
+                color: "#fff",
+                boxShadow: "0 10px 22px rgba(59, 44, 28, 0.14)",
+              }}
             >
               Add Property
             </Button>
@@ -652,13 +669,13 @@ const PropertiesPage: React.FC = () => {
                   border:
                     actionReqCount > 0
                       ? "1px solid rgba(239,68,68,0.45)"
-                      : "1px solid rgba(148,163,184,0.35)",
+                      : `1px solid ${landlordWorkspaceTheme.borderStrong}`,
                   fontSize: 12,
                   fontWeight: 600,
                   background:
                     actionReqCount > 0
                       ? "rgba(239,68,68,0.12)"
-                      : "rgba(148,163,184,0.1)",
+                      : landlordWorkspaceTheme.pineSoft,
                   color: actionReqCount > 0 ? "#dc2626" : text.muted,
                   cursor: "pointer",
                   display: "inline-flex",
@@ -677,7 +694,7 @@ const PropertiesPage: React.FC = () => {
                     width: 8,
                     height: 8,
                     borderRadius: 999,
-                    background: actionReqCount > 0 ? "#dc2626" : "rgba(148,163,184,0.7)",
+                    background: actionReqCount > 0 ? "#dc2626" : landlordWorkspaceTheme.pine,
                     display: "inline-block",
                   }}
                 />
@@ -691,8 +708,9 @@ const PropertiesPage: React.FC = () => {
               style={{
                 padding: "8px 10px",
                 borderRadius: 12,
-                border: "1px solid rgba(148,163,184,0.35)",
-                background: "transparent",
+                border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                background: landlordWorkspaceTheme.card,
+                color: landlordWorkspaceTheme.charcoal,
                 cursor: "pointer",
                 fontWeight: 850,
                 fontSize: 12,
@@ -752,8 +770,9 @@ const PropertiesPage: React.FC = () => {
               style={{
                 padding: "8px 10px",
                 borderRadius: 12,
-                border: "1px solid rgba(148,163,184,0.35)",
-                background: "transparent",
+                border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                background: landlordWorkspaceTheme.card,
+                color: landlordWorkspaceTheme.charcoal,
                 cursor: "pointer",
                 fontWeight: 900,
                 fontSize: 12,
@@ -767,7 +786,7 @@ const PropertiesPage: React.FC = () => {
 
         <div ref={addPropertyRef}>
           {isAddPropertyOpen ? (
-            <Card elevated>
+            <Card elevated className="rc-properties-inner-card">
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
                 <div>
                   <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>
@@ -811,22 +830,36 @@ const PropertiesPage: React.FC = () => {
 
         <Card
           elevated
+          className="rc-properties-foundation-card"
           style={{
             display: "flex",
             flexDirection: "column",
             gap: spacing.lg,
+            background: landlordWorkspaceTheme.card,
+            border: `1px solid ${landlordWorkspaceTheme.border}`,
+            boxShadow: "0 12px 28px rgba(59, 44, 28, 0.1)",
           }}
         >
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button
-              variant={propertyView === "active" ? "primary" : "ghost"}
+              variant="ghost"
               onClick={() => setPropertyView("active")}
+              style={{
+                background: propertyView === "active" ? landlordWorkspaceTheme.charcoal : landlordWorkspaceTheme.card,
+                color: propertyView === "active" ? "#fff" : landlordWorkspaceTheme.charcoal,
+                border: `1px solid ${propertyView === "active" ? landlordWorkspaceTheme.charcoal : landlordWorkspaceTheme.borderStrong}`,
+              }}
             >
               Active properties
             </Button>
             <Button
-              variant={propertyView === "archived" ? "primary" : "ghost"}
+              variant="ghost"
               onClick={() => setPropertyView("archived")}
+              style={{
+                background: propertyView === "archived" ? landlordWorkspaceTheme.charcoal : landlordWorkspaceTheme.card,
+                color: propertyView === "archived" ? "#fff" : landlordWorkspaceTheme.charcoal,
+                border: `1px solid ${propertyView === "archived" ? landlordWorkspaceTheme.charcoal : landlordWorkspaceTheme.borderStrong}`,
+              }}
             >
               Archived properties
             </Button>
@@ -845,8 +878,8 @@ const PropertiesPage: React.FC = () => {
                 gap: 10,
                 padding: 14,
                 borderRadius: radius.lg,
-                border: "1px solid rgba(14,165,233,0.26)",
-                background: "rgba(240,249,255,0.94)",
+                border: `1px solid ${landlordWorkspaceTheme.border}`,
+                background: landlordWorkspaceTheme.warmPanel,
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -889,9 +922,9 @@ const PropertiesPage: React.FC = () => {
                     <span
                       style={{
                         borderRadius: radius.pill,
-                        border: "1px solid rgba(14,165,233,0.28)",
-                        background: "rgba(14,165,233,0.1)",
-                        color: "#0369a1",
+                        border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                        background: landlordWorkspaceTheme.pineSoft,
+                        color: landlordWorkspaceTheme.pine,
                         fontSize: 12,
                         fontWeight: 800,
                         padding: "3px 8px",
@@ -915,8 +948,8 @@ const PropertiesPage: React.FC = () => {
                 gap: 10,
                 padding: 16,
                 borderRadius: radius.lg,
-                border: "1px solid rgba(37,99,235,0.18)",
-                background: "linear-gradient(180deg, rgba(239,246,255,0.9) 0%, rgba(255,255,255,0.98) 100%)",
+                border: `1px solid ${landlordWorkspaceTheme.border}`,
+                background: `linear-gradient(180deg, ${landlordWorkspaceTheme.cardStrong} 0%, ${landlordWorkspaceTheme.card} 100%)`,
               }}
             >
               <div style={{ color: text.primary, fontSize: 20, fontWeight: 800 }}>
@@ -937,7 +970,11 @@ const PropertiesPage: React.FC = () => {
                       track("empty_state_cta_clicked", { pageKey: "properties", ctaKey: "add_property" });
                       openAddPropertyForm();
                     }}
-                    style={{ width: "fit-content" }}
+                    style={{
+                      width: "fit-content",
+                      background: landlordWorkspaceTheme.charcoal,
+                      color: "#fff",
+                    }}
                   >
                     Add your first property
                   </Button>
@@ -1049,7 +1086,7 @@ const PropertiesPage: React.FC = () => {
           ) : null}
 
           <div
-            className="mac-card-soft"
+            className="mac-card-soft rc-properties-detail-card"
             style={{
               background: colors.panel,
               borderRadius: radius.lg,
@@ -1119,6 +1156,11 @@ const PropertiesPage: React.FC = () => {
                       type="button"
                       className="no-print"
                       onClick={() => void printSummaryDocument("summary")}
+                      style={{
+                        background: landlordWorkspaceTheme.card,
+                        color: landlordWorkspaceTheme.charcoal,
+                        border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                      }}
                     >
                       Print / Save PDF
                     </Button>
@@ -1192,7 +1234,7 @@ const PropertiesPage: React.FC = () => {
             </div>
 
           <div
-            className="mac-card-soft"
+            className="mac-card-soft rc-properties-activity-card"
             style={{
               background: colors.panel,
               borderRadius: radius.lg,
@@ -1201,10 +1243,12 @@ const PropertiesPage: React.FC = () => {
             }}
           >
             {selectedProperty ? (
-              <PropertyActivityPanel
-                key={selectedProperty.id}
-                propertyId={selectedProperty.id}
-              />
+              <div className="rc-properties-activity-panel">
+                <PropertyActivityPanel
+                  key={selectedProperty.id}
+                  propertyId={selectedProperty.id}
+                />
+              </div>
             ) : (
               <Card style={{ padding: spacing.md, margin: 0 }}>
                 <div style={{ color: text.muted, fontSize: "0.95rem" }}>
@@ -1215,7 +1259,7 @@ const PropertiesPage: React.FC = () => {
           </div>
           {selectedProperty ? (
             <div
-              className="mac-card-soft"
+              className="mac-card-soft rc-properties-action-card"
               id="action-requests-panel"
               style={{
                 background: colors.panel,
@@ -1231,7 +1275,7 @@ const PropertiesPage: React.FC = () => {
               />
             </div>
           ) : null}
-          <Section>
+          <Section className="rc-properties-action-list">
             <div
               style={{
                 display: "flex",
@@ -1272,6 +1316,11 @@ const PropertiesPage: React.FC = () => {
               <EmptyState
                 title="No action requests"
                 body="This property has no open operational requests right now."
+                style={{
+                  border: "1px solid rgba(91,70,48,0.16)",
+                  background: "#fff6e8",
+                  boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
+                }}
               />
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1414,7 +1463,7 @@ const ActionRequestModal: React.FC<ActionRequestModalProps> = ({
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(15,23,42,0.75)",
+        background: "rgba(33,28,23,0.68)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -1496,13 +1545,22 @@ const ActionRequestModal: React.FC<ActionRequestModalProps> = ({
               variant="secondary"
               onClick={onAcknowledge}
               disabled={updating}
+              style={{
+                background: landlordWorkspaceTheme.card,
+                color: landlordWorkspaceTheme.charcoal,
+                border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+              }}
             >
               Acknowledge
             </Button>
             <Button
-              variant="primary"
               onClick={onResolve}
               disabled={updating}
+              style={{
+                background: landlordWorkspaceTheme.pine,
+                color: "#fffaf1",
+                border: `1px solid ${landlordWorkspaceTheme.pine}`,
+              }}
             >
               Resolve
             </Button>
@@ -1561,26 +1619,28 @@ const UnitsModal = ({
     minWidth: 0,
     boxSizing: "border-box" as const,
     borderRadius: 8,
-    border: "1px solid rgba(148,163,184,0.45)",
+    border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
     padding: "7px 8px",
+    background: landlordWorkspaceTheme.card,
+    color: landlordWorkspaceTheme.charcoal,
   };
   const activeOccupancyFieldStyle = {
     ...baseFieldStyle,
-    border: "1px solid rgba(37,99,235,0.45)",
-    background: "white",
-    color: "#0f172a",
+    border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+    background: landlordWorkspaceTheme.card,
+    color: landlordWorkspaceTheme.charcoal,
   };
   const inactiveOccupancyFieldStyle = {
     ...baseFieldStyle,
-    background: "rgba(241,245,249,0.85)",
-    color: "#64748b",
+    background: landlordWorkspaceTheme.warmPanel,
+    color: landlordWorkspaceTheme.muted,
   };
   return (
     <div
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(15,23,42,0.55)",
+        background: "rgba(33,28,23,0.58)",
         zIndex: 200,
         display: "flex",
         alignItems: "center",
@@ -1589,26 +1649,26 @@ const UnitsModal = ({
       }}
     >
       <div
-        className="rc-modal-shell"
+        className="rc-modal-shell rc-properties-units-modal"
         style={{
-          background: "white",
+          background: landlordWorkspaceTheme.card,
           width: "min(1180px, calc(100vw - 24px))",
           maxHeight: "min(860px, calc(100vh - 24px))",
           display: "flex",
           flexDirection: "column",
           borderRadius: 12,
-          border: "1px solid rgba(148,163,184,0.35)",
-          boxShadow: "0 25px 60px rgba(15,23,42,0.25)",
+          border: `1px solid ${landlordWorkspaceTheme.border}`,
+          boxShadow: "0 25px 60px rgba(59,44,28,0.2)",
           overflow: "hidden",
         }}
       >
-        <div style={{ padding: 16, borderBottom: "1px solid rgba(148,163,184,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        <div style={{ padding: 16, borderBottom: `1px solid ${landlordWorkspaceTheme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <div style={{ fontWeight: 800, fontSize: "1rem" }}>Add Units</div>
           <button
             onClick={onClose}
             style={{
-              border: "1px solid rgba(148,163,184,0.35)",
-              background: "transparent",
+              border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+              background: landlordWorkspaceTheme.card,
               borderRadius: 10,
               padding: "6px 10px",
               cursor: "pointer",
@@ -1640,7 +1700,7 @@ const UnitsModal = ({
                       style={{
                         textAlign: "left",
                         padding: "8px",
-                        borderBottom: "1px solid rgba(148,163,184,0.35)",
+                        borderBottom: `1px solid ${landlordWorkspaceTheme.border}`,
                         fontSize: 12,
                       }}
                     >
@@ -1743,8 +1803,8 @@ const UnitsModal = ({
                         style={{
                           padding: "6px 10px",
                           borderRadius: 8,
-	                          border: "1px solid rgba(148,163,184,0.35)",
-	                          background: "transparent",
+	                          border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+	                          background: landlordWorkspaceTheme.card,
 	                          cursor: "pointer",
 	                          whiteSpace: "nowrap",
 	                        }}
@@ -1886,15 +1946,15 @@ const UnitsModal = ({
           ) : null}
         </div>
 
-        <div className="rc-modal-footer" style={{ padding: 16, borderTop: "1px solid rgba(148,163,184,0.2)", display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <div className="rc-modal-footer" style={{ padding: 16, borderTop: `1px solid ${landlordWorkspaceTheme.border}`, display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
           <button
             type="button"
             onClick={addRow}
             style={{
               padding: "8px 10px",
               borderRadius: 10,
-              border: "1px solid rgba(148,163,184,0.35)",
-              background: "transparent",
+              border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+              background: landlordWorkspaceTheme.card,
               cursor: "pointer",
             }}
           >
@@ -1907,8 +1967,9 @@ const UnitsModal = ({
               style={{
                 padding: "8px 12px",
                 borderRadius: 10,
-                border: "1px solid rgba(148,163,184,0.35)",
-                background: "transparent",
+                border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                background: landlordWorkspaceTheme.card,
+                color: landlordWorkspaceTheme.charcoal,
                 cursor: "pointer",
               }}
             >
@@ -1921,9 +1982,9 @@ const UnitsModal = ({
               style={{
                 padding: "8px 12px",
                 borderRadius: 10,
-                border: "1px solid rgba(59,130,246,0.45)",
-                background: "rgba(59,130,246,0.12)",
-                color: "#2563eb",
+                border: `1px solid ${landlordWorkspaceTheme.borderStrong}`,
+                background: landlordWorkspaceTheme.pineSoft,
+                color: landlordWorkspaceTheme.pine,
                 cursor: saving ? "not-allowed" : "pointer",
                 opacity: saving ? 0.7 : 1,
               }}

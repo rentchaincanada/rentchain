@@ -1044,7 +1044,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
 
   return (
     <>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="rc-property-detail-stack" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Header */}
       <div className="rc-property-header" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
@@ -1527,17 +1527,18 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       {activeLeases.length > 0 && (
         <div
           style={{
-            borderRadius: 12,
-            border: "1px solid rgba(148,163,184,0.16)",
-            background: "rgba(255,255,255,0.03)",
-            padding: 12,
+            borderRadius: 16,
+            border: "1px solid rgba(91,70,48,0.16)",
+            background: "linear-gradient(180deg, #fff6e8 0%, #fffaf1 100%)",
+            boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
+            padding: 14,
             display: "grid",
-            gap: 10,
+            gap: 12,
           }}
         >
           <div style={{ display: "grid", gap: 4 }}>
-            <div style={{ color: "#0f172a", fontWeight: 700 }}>Lease risk overview</div>
-            <div style={{ color: "#4b5563", fontSize: "0.82rem" }}>
+            <div style={{ color: "#211c17", fontWeight: 800 }}>Lease risk overview</div>
+            <div style={{ color: "#63594d", fontSize: "0.82rem", lineHeight: 1.5 }}>
               This score helps identify payment and stability risk using available lease data.
             </div>
           </div>
@@ -1552,16 +1553,17 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                   gap: 10,
                   flexWrap: "wrap",
                   padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid rgba(148,163,184,0.14)",
-                  background: "rgba(248,250,252,0.9)",
+                  borderRadius: 12,
+                  border: "1px solid rgba(91,70,48,0.14)",
+                  background: "#fffaf1",
+                  boxShadow: "0 6px 14px rgba(59,44,28,0.05)",
                 }}
               >
                 <div style={{ display: "grid", gap: 2 }}>
-                  <div style={{ color: "#0f172a", fontWeight: 700 }}>
+                  <div style={{ color: "#211c17", fontWeight: 800 }}>
                     {resolveLeaseRiskUnitLabel(lease, displayedUnits)}
                   </div>
-                  <div style={{ color: "#475569", fontSize: 12 }}>
+                  <div style={{ color: "#63594d", fontSize: 12, lineHeight: 1.45 }}>
                     {formatCurrency(resolveLeaseRiskRent(lease, displayedUnits))} / month
                     {lease.riskConfidence != null ? " • " + Math.round(lease.riskConfidence * 100) + "% confidence" : ""}
                   </div>
@@ -1574,11 +1576,11 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                       onClick={() => navigate(`/leases/${encodeURIComponent(String(lease.id))}/ledger`)}
                       style={{
                         padding: "6px 10px",
-                        borderRadius: 8,
-                        border: "1px solid #dbeafe",
-                        background: "#eff6ff",
-                        color: "#1d4ed8",
-                        fontWeight: 700,
+                        borderRadius: 999,
+                        border: "1px solid rgba(36,88,66,0.28)",
+                        background: "rgba(36,88,66,0.1)",
+                        color: "#245842",
+                        fontWeight: 800,
                         cursor: "pointer",
                         fontSize: "0.8rem",
                       }}
@@ -1604,14 +1606,14 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         <div
           style={{
             borderRadius: 12,
-            border: "1px solid rgba(59,130,246,0.35)",
-            background: "rgba(59,130,246,0.08)",
+            border: "1px solid rgba(91,70,48,0.16)",
+            background: "linear-gradient(180deg, #fff6e8 0%, #fffaf1 100%)",
             padding: 12,
-            color: "#0f172a",
+            color: "#211c17",
           }}
         >
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Upgrade to manage your rentals</div>
-          <div style={{ fontSize: "0.9rem", color: "#475569", marginBottom: 10 }}>
+          <div style={{ fontSize: "0.9rem", color: "#63594d", marginBottom: 10 }}>
             RentChain Screening is free. Rental management starts on {unitsRequiredPlanLabel}.
           </div>
           <button
@@ -1624,7 +1626,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         </div>
       ) : (
         <>
-          <div style={{ color: "#4b5563", fontSize: "0.82rem", marginBottom: 8 }}>
+          <div
+            className="rc-property-context-note"
+            style={{ color: "#63594d", fontSize: "0.82rem", marginBottom: 8 }}
+          >
             The unit table shows configured unit rents. Active lease rent totals are shown separately above.
           </div>
           {showOccupancyPrompt ? (
@@ -1634,8 +1639,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 marginBottom: 12,
                 padding: "12px 14px",
                 borderRadius: 14,
-                border: "1px solid rgba(37,99,235,0.18)",
-                background: "rgba(37,99,235,0.06)",
+                border: "1px solid rgba(36,88,66,0.18)",
+                background: "rgba(36,88,66,0.08)",
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
@@ -1644,10 +1649,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               }}
             >
               <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
-                <div style={{ fontWeight: 750, color: "#0f172a" }}>
+                <div style={{ fontWeight: 750, color: "#211c17" }}>
                   Current occupancy
                 </div>
-                <div style={{ color: "#475569", fontSize: "0.85rem", lineHeight: 1.35 }}>
+                <div style={{ color: "#3f382f", fontSize: "0.85rem", lineHeight: 1.35 }}>
                   Mark active tenants now; full lease setup can come later.
                 </div>
               </div>

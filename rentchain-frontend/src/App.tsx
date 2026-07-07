@@ -250,26 +250,26 @@ const AuthLoadingScreen = () => (
       fontFamily:
         "system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', sans-serif",
       fontSize: "0.95rem",
-      color: "#0f172a",
+      color: "#211c17",
       background:
-        "radial-gradient(circle at top left, rgba(37,99,235,0.08) 0, rgba(14,165,233,0.06) 45%, rgba(255,255,255,0.9) 100%)",
+        "radial-gradient(circle at top left, rgba(184,130,62,0.16) 0, rgba(247,241,231,0) 38%), linear-gradient(180deg, #fbf6ed 0%, #f4eadc 100%)",
       padding: "24px",
     }}
   >
     <div
       style={{
         width: "min(420px, 90vw)",
-        background: "rgba(255,255,255,0.9)",
-        border: "1px solid rgba(15,23,42,0.08)",
+        background: "rgba(255,252,246,0.96)",
+        border: "1px solid rgba(91,70,48,0.16)",
         borderRadius: 16,
         padding: "20px 22px",
-        boxShadow: "0 12px 30px rgba(15,23,42,0.12)",
+        boxShadow: "0 16px 36px rgba(59,44,28,0.14)",
       }}
     >
       <div style={{ fontWeight: 700, marginBottom: 8 }}>
         Loading your workspace...
       </div>
-      <div style={{ color: "#475569", marginBottom: 16 }}>
+      <div style={{ color: "#63594d", marginBottom: 16 }}>
         Restoring your session and syncing data.
       </div>
       <div style={{ display: "grid", gap: 10 }}>
@@ -277,14 +277,14 @@ const AuthLoadingScreen = () => (
           style={{
             height: 12,
             borderRadius: 999,
-            background: "rgba(15,23,42,0.08)",
+            background: "rgba(91,70,48,0.12)",
           }}
         />
         <div
           style={{
             height: 12,
             borderRadius: 999,
-            background: "rgba(15,23,42,0.08)",
+            background: "rgba(91,70,48,0.12)",
             width: "80%",
           }}
         />
@@ -292,7 +292,7 @@ const AuthLoadingScreen = () => (
           style={{
             height: 12,
             borderRadius: 999,
-            background: "rgba(15,23,42,0.08)",
+            background: "rgba(91,70,48,0.12)",
             width: "60%",
           }}
         />
