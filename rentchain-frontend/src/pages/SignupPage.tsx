@@ -1,10 +1,24 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Card, Input, Button } from "../components/ui/Ui";
-import { colors, spacing, text } from "../styles/tokens";
+import { spacing } from "../styles/tokens";
 import { useAuth } from "../context/useAuth";
 import { resolvePostAuthDestination } from "../lib/authDestination";
 import { trackAuthEvent } from "../lib/authAnalytics";
+import {
+  authBannerStyle,
+  authBodyStyle,
+  authCardStyle,
+  authEyebrowStyle,
+  authHeadingStyle,
+  authInputProps,
+  authLabelTextStyle,
+  authLinkStyle,
+  authMutedLinkStyle,
+  authPalette,
+  authPrimaryButtonStyle,
+  authShellStyle,
+} from "../components/auth/authPageStyles";
 
 function maskEmail(value: string): string {
   const email = String(value || "").trim().toLowerCase();
@@ -185,39 +199,19 @@ const SignupPage: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        backgroundColor: colors.bg,
-        backgroundImage: colors.bgAmbient,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "clamp(16px, 5vw, 40px)",
-      }}
-    >
-      <Card elevated style={{ width: "min(520px, 94vw)", padding: spacing.lg }}>
-        <div style={{ marginBottom: spacing.xs, color: text.subtle, fontSize: "0.9rem" }}>
+    <div style={authShellStyle}>
+      <Card elevated style={authCardStyle("min(520px, 94vw)")}>
+        <div style={authEyebrowStyle}>
           RentChain
         </div>
-        <h1 style={{ marginTop: 0, marginBottom: spacing.xs, fontSize: "1.7rem" }}>
+        <h1 style={authHeadingStyle}>
           Create your RentChain account
         </h1>
-        <p style={{ marginTop: 0, color: text.muted }}>
+        <p style={authBodyStyle}>
           Create an account to access your RentChain workspace.
         </p>
         {inviteBanner ? (
-          <div
-            style={{
-              marginBottom: spacing.sm,
-              padding: "8px 12px",
-              borderRadius: 10,
-              background: "rgba(37,99,235,0.08)",
-              border: "1px solid rgba(37,99,235,0.25)",
-              color: "#1d4ed8",
-              fontSize: "0.9rem",
-            }}
-          >
+          <div style={authBannerStyle("info")}>
             <div style={{ fontWeight: 700, marginBottom: 4 }}>{inviteBanner.title}</div>
             <div>{inviteBanner.body}</div>
           </div>
@@ -225,63 +219,75 @@ const SignupPage: React.FC = () => {
 
         <form onSubmit={onSubmit} style={{ display: "grid", gap: spacing.sm }}>
           <label style={{ display: "grid", gap: spacing.xs }}>
-            <span style={{ color: text.muted, fontSize: "0.9rem" }}>Full name (optional)</span>
-            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Your name" />
+            <span style={authLabelTextStyle}>Full name (optional)</span>
+            <Input
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Your name"
+              {...authInputProps()}
+            />
           </label>
           <label style={{ display: "grid", gap: spacing.xs }}>
-            <span style={{ color: text.muted, fontSize: "0.9rem" }}>Email</span>
+            <span style={authLabelTextStyle}>Email</span>
             <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               autoComplete="email"
+              {...authInputProps()}
               required
             />
           </label>
           <label style={{ display: "grid", gap: spacing.xs }}>
-            <span style={{ color: text.muted, fontSize: "0.9rem" }}>Password</span>
+            <span style={authLabelTextStyle}>Password</span>
             <Input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="At least 6 characters"
               autoComplete="new-password"
+              {...authInputProps()}
               required
             />
           </label>
           <label style={{ display: "grid", gap: spacing.xs }}>
-            <span style={{ color: text.muted, fontSize: "0.9rem" }}>Confirm password</span>
+            <span style={authLabelTextStyle}>Confirm password</span>
             <Input
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Re-enter password"
               autoComplete="new-password"
+              {...authInputProps()}
               required
             />
           </label>
 
-          <Button type="submit" disabled={submitting || isLoading} style={{ justifyContent: "center" }}>
+          <Button
+            type="submit"
+            disabled={submitting || isLoading}
+            style={{ ...authPrimaryButtonStyle, justifyContent: "center" }}
+          >
             {submitting ? "Creating account..." : "Create free account"}
           </Button>
         </form>
 
-        <div style={{ marginTop: spacing.sm, minHeight: "1.2rem", color: error ? colors.danger : text.muted }}>
+        <div style={{ marginTop: spacing.sm, minHeight: "1.2rem", color: error ? authPalette.danger : authPalette.muted }}>
           {error || "Already have an account? Sign in below."}
         </div>
 
         <div style={{ marginTop: spacing.sm, display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
           <Link
             to={nextPath !== "/dashboard" ? `/login?next=${encodeURIComponent(nextPath)}` : "/login"}
-            style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}
+            style={authLinkStyle}
           >
             Go to login
           </Link>
-          <Link to="/request-access" style={{ color: text.muted, textDecoration: "none" }}>
+          <Link to="/request-access" style={authMutedLinkStyle}>
             Request access
           </Link>
-          <Link to="/invite" style={{ color: text.muted, textDecoration: "none" }}>
+          <Link to="/invite" style={authMutedLinkStyle}>
             I have an invite
           </Link>
         </div>

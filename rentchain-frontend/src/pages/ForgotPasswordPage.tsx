@@ -2,8 +2,20 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { Card, Input, Button } from "@/components/ui/Ui";
-import { colors, spacing, text } from "@/styles/tokens";
+import { spacing } from "@/styles/tokens";
 import { getFirebaseAuth } from "@/lib/firebase";
+import {
+  authBodyStyle,
+  authCardStyle,
+  authEyebrowStyle,
+  authHeadingStyle,
+  authInputProps,
+  authLabelTextStyle,
+  authLinkStyle,
+  authPalette,
+  authPrimaryButtonStyle,
+  authShellStyle,
+} from "@/components/auth/authPageStyles";
 
 const SUCCESS_MESSAGE = "If an account exists, a reset email has been sent.";
 
@@ -55,45 +67,28 @@ const ForgotPasswordPage: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        backgroundColor: colors.bg,
-        backgroundImage: colors.bgAmbient,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: spacing.xl,
-      }}
-    >
-      <Card elevated style={{ width: "100%", maxWidth: 460, padding: spacing.lg }}>
-        <div style={{ marginBottom: spacing.xs, color: text.subtle, fontSize: "0.9rem" }}>
+    <div style={{ ...authShellStyle, padding: spacing.xl }}>
+      <Card elevated style={authCardStyle("min(460px, 100%)")}>
+        <div style={authEyebrowStyle}>
           RentChain Secure Access
         </div>
-        <h1
-          style={{
-            fontSize: "1.6rem",
-            fontWeight: 700,
-            marginBottom: spacing.md,
-            letterSpacing: "-0.01em",
-            color: text.primary,
-          }}
-        >
+        <h1 style={{ ...authHeadingStyle, marginBottom: spacing.md }}>
           Reset your password
         </h1>
-        <p style={{ marginTop: 0, marginBottom: spacing.sm, color: text.muted }}>
+        <p style={{ ...authBodyStyle, marginBottom: spacing.sm }}>
           Enter your email to receive a password reset link.
         </p>
 
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
           <label style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
-            <span style={{ fontSize: "0.9rem", color: text.muted }}>Email</span>
+            <span style={authLabelTextStyle}>Email</span>
             <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               autoComplete="email"
+              {...authInputProps()}
               required
             />
           </label>
@@ -102,6 +97,7 @@ const ForgotPasswordPage: React.FC = () => {
             type="submit"
             disabled={submitting}
             style={{
+              ...authPrimaryButtonStyle,
               width: "100%",
               opacity: submitting ? 0.8 : 1,
               cursor: submitting ? "not-allowed" : "pointer",
@@ -117,14 +113,14 @@ const ForgotPasswordPage: React.FC = () => {
             marginTop: spacing.sm,
             minHeight: "1.2rem",
             fontSize: "0.9rem",
-            color: error ? colors.danger : text.muted,
+            color: error ? authPalette.danger : authPalette.muted,
           }}
         >
           {error ? error : success ? success : "We will email you a reset link."}
         </div>
 
         <div style={{ marginTop: spacing.sm }}>
-          <Link to="/login" style={{ color: colors.accent, fontWeight: 600, fontSize: "0.9rem" }}>
+          <Link to="/login" style={{ ...authLinkStyle, fontSize: "0.9rem" }}>
             Back to login
           </Link>
         </div>

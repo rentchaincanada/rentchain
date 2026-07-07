@@ -3,6 +3,15 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { Button, Card } from "../../components/ui/Ui";
 import { acceptContractorInvite, getPublicContractorInvite, type PublicContractorInviteStatus } from "../../api/workOrdersApi";
 import { useAuth } from "../../context/useAuth";
+import {
+  authBodyStyle,
+  authCardStyle,
+  authGhostButtonStyle,
+  authPalette,
+  authPrimaryButtonStyle,
+  authSecondaryButtonStyle,
+  authShellStyle,
+} from "../../components/auth/authPageStyles";
 
 export default function ContractorInviteAcceptPage() {
   const { user, logout } = useAuth();
@@ -53,28 +62,28 @@ export default function ContractorInviteAcceptPage() {
   }, [token]);
 
   return (
-    <div style={{ minHeight: "70vh", display: "grid", placeItems: "center", padding: 16 }}>
-      <Card style={{ width: "min(620px, 100%)", display: "grid", gap: 10 }}>
-        <div style={{ fontWeight: 700, fontSize: "1.08rem" }}>Contractor Invite</div>
+    <div style={authShellStyle}>
+      <Card style={{ ...authCardStyle("min(620px, 94vw)"), display: "grid", gap: 10 }}>
+        <div style={{ fontWeight: 760, fontSize: "1.08rem", color: authPalette.ink }}>Contractor Invite</div>
         {inviteMeta?.landlordName ? (
-          <div style={{ color: "#334155" }}>
+          <div style={{ color: authPalette.charcoal }}>
             Invite from: <strong>{inviteMeta.landlordName}</strong>
           </div>
         ) : null}
         {inviteMeta?.emailMasked ? (
-          <div style={{ color: "#64748b" }}>Invited email: {inviteMeta.emailMasked}</div>
+          <div style={{ color: authPalette.muted }}>Invited email: {inviteMeta.emailMasked}</div>
         ) : null}
-        {inviteStatus === "loading" ? <div style={{ color: "#64748b" }}>Checking invite...</div> : null}
-        {!token ? <div style={{ color: "#991b1b" }}>Invitation not found</div> : null}
+        {inviteStatus === "loading" ? <div style={{ color: authPalette.muted }}>Checking invite...</div> : null}
+        {!token ? <div style={{ color: authPalette.danger }}>Invitation not found</div> : null}
         {inviteStatus === "expired" ? (
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>This invitation has expired</div>
-            <div>This contractor invitation is no longer active.</div>
-            <div>Please contact the landlord who invited you and ask them to resend the invitation.</div>
+            <div style={authBodyStyle}>This contractor invitation is no longer active.</div>
+            <div style={authBodyStyle}>Please contact the landlord who invited you and ask them to resend the invitation.</div>
             <Link to="/login">
-              <Button>Back to sign in</Button>
+              <Button style={authPrimaryButtonStyle}>Back to sign in</Button>
             </Link>
-            <div style={{ color: "#64748b", fontSize: "0.95rem" }}>
+            <div style={{ color: authPalette.muted, fontSize: "0.95rem" }}>
               If you already have a contractor account, you can still sign in to RentChain.
             </div>
           </div>
@@ -82,14 +91,14 @@ export default function ContractorInviteAcceptPage() {
         {inviteStatus === "accepted" ? (
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>This invitation has already been accepted</div>
-            <div>This contractor invitation is no longer available.</div>
-            <div>If this is your account, sign in to continue to your contractor dashboard.</div>
+            <div style={authBodyStyle}>This contractor invitation is no longer available.</div>
+            <div style={authBodyStyle}>If this is your account, sign in to continue to your contractor dashboard.</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Link to={`/login?next=${encodeURIComponent("/contractor")}`}>
-                <Button>Sign in</Button>
+                <Button style={authPrimaryButtonStyle}>Sign in</Button>
               </Link>
               <Link to="/contractor">
-                <Button variant="secondary">Go to Contractor Dashboard</Button>
+                <Button variant="secondary" style={authSecondaryButtonStyle}>Go to Contractor Dashboard</Button>
               </Link>
             </div>
           </div>
@@ -98,10 +107,10 @@ export default function ContractorInviteAcceptPage() {
         {inviteStatus === "not_found" ? (
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Invitation not found</div>
-            <div>This contractor invitation link is invalid or no longer available.</div>
-            <div>Please check the link in your email or contact the landlord who invited you.</div>
+            <div style={authBodyStyle}>This contractor invitation link is invalid or no longer available.</div>
+            <div style={authBodyStyle}>Please check the link in your email or contact the landlord who invited you.</div>
             <Link to="/login">
-              <Button>Back to sign in</Button>
+              <Button style={authPrimaryButtonStyle}>Back to sign in</Button>
             </Link>
           </div>
         ) : null}
@@ -109,17 +118,17 @@ export default function ContractorInviteAcceptPage() {
         {inviteStatus === "valid" && !user && redeemState !== "done" ? (
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>You’ve been invited to join RentChain as a contractor</div>
-            <div>A landlord has invited you to join RentChain to view and manage assigned work orders.</div>
-            <div>Create a contractor account or sign in to accept this invitation.</div>
+            <div style={authBodyStyle}>A landlord has invited you to join RentChain to view and manage assigned work orders.</div>
+            <div style={authBodyStyle}>Create a contractor account or sign in to accept this invitation.</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Link to={`/signup?next=${encodeURIComponent(nextPath)}`}>
-                <Button>Create contractor account</Button>
+                <Button style={authPrimaryButtonStyle}>Create contractor account</Button>
               </Link>
               <Link to={`/login?next=${encodeURIComponent(nextPath)}`}>
-                <Button variant="secondary">Sign in</Button>
+                <Button variant="secondary" style={authSecondaryButtonStyle}>Sign in</Button>
               </Link>
             </div>
-            <div style={{ color: "#64748b", fontSize: "0.95rem" }}>
+            <div style={{ color: authPalette.muted, fontSize: "0.95rem" }}>
               By continuing, you’ll be able to view assigned jobs, update work progress, and manage your contractor profile in RentChain.
             </div>
           </div>
@@ -128,10 +137,11 @@ export default function ContractorInviteAcceptPage() {
         {inviteStatus === "valid" && !!user && blockedRole && redeemState !== "done" ? (
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>This invitation needs a contractor account</div>
-            <div>You’re currently signed in with an account that cannot accept this contractor invitation.</div>
-            <div>To continue, sign out and create a contractor account, or sign in with an existing contractor account.</div>
+            <div style={authBodyStyle}>You’re currently signed in with an account that cannot accept this contractor invitation.</div>
+            <div style={authBodyStyle}>To continue, sign out and create a contractor account, or sign in with an existing contractor account.</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Button
+                style={authPrimaryButtonStyle}
                 onClick={async () => {
                   await logout();
                   navigate(nextPath, { replace: true });
@@ -141,6 +151,7 @@ export default function ContractorInviteAcceptPage() {
               </Button>
               <Button
                 variant="secondary"
+                style={authSecondaryButtonStyle}
                 onClick={async () => {
                   await logout();
                   navigate(`/login?next=${encodeURIComponent(nextPath)}`, { replace: true });
@@ -149,7 +160,7 @@ export default function ContractorInviteAcceptPage() {
                 Use another account
               </Button>
             </div>
-            <div style={{ color: "#64748b", fontSize: "0.95rem" }}>
+            <div style={{ color: authPalette.muted, fontSize: "0.95rem" }}>
               This helps keep landlord and contractor access separate and secure.
             </div>
           </div>
@@ -158,11 +169,12 @@ export default function ContractorInviteAcceptPage() {
         {inviteStatus === "valid" && !!user && !blockedRole && redeemState !== "done" && redeemState !== "error" ? (
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Accept contractor invitation</div>
-            <div>You’re signed in and ready to accept this invitation.</div>
-            <div>Once accepted, you’ll be able to view assigned work orders and manage your contractor profile in RentChain.</div>
+            <div style={authBodyStyle}>You’re signed in and ready to accept this invitation.</div>
+            <div style={authBodyStyle}>Once accepted, you’ll be able to view assigned work orders and manage your contractor profile in RentChain.</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Button
                 disabled={redeemState === "saving"}
+                style={authPrimaryButtonStyle}
                 onClick={async () => {
                   if (!token) return;
                   setRedeemState("saving");
@@ -178,7 +190,7 @@ export default function ContractorInviteAcceptPage() {
               >
                 {redeemState === "saving" ? "Accepting..." : "Accept invitation"}
               </Button>
-              <Button variant="secondary" onClick={() => navigate("/", { replace: true })}>
+              <Button variant="secondary" onClick={() => navigate("/", { replace: true })} style={authGhostButtonStyle}>
                 Cancel
               </Button>
             </div>
@@ -188,14 +200,14 @@ export default function ContractorInviteAcceptPage() {
         {redeemState === "done" ? (
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Invitation accepted</div>
-            <div>Your contractor account is now connected to RentChain.</div>
-            <div>You can now view assigned jobs, track progress, and manage your contractor profile.</div>
+            <div style={authBodyStyle}>Your contractor account is now connected to RentChain.</div>
+            <div style={authBodyStyle}>You can now view assigned jobs, track progress, and manage your contractor profile.</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Link to="/contractor">
-                <Button>Go to Contractor Dashboard</Button>
+                <Button style={authPrimaryButtonStyle}>Go to Contractor Dashboard</Button>
               </Link>
               <Link to="/contractor/jobs">
-                <Button variant="secondary">View Jobs</Button>
+                <Button variant="secondary" style={authSecondaryButtonStyle}>View Jobs</Button>
               </Link>
             </div>
           </div>
@@ -204,13 +216,13 @@ export default function ContractorInviteAcceptPage() {
         {redeemState === "error" ? (
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>We couldn’t complete your invitation</div>
-            <div>Something went wrong while accepting your contractor invitation.</div>
-            <div>Please try again. If the issue continues, contact support or ask the landlord to resend the invitation.</div>
-            {error ? <div style={{ color: "#991b1b" }}>{error}</div> : null}
+            <div style={authBodyStyle}>Something went wrong while accepting your contractor invitation.</div>
+            <div style={authBodyStyle}>Please try again. If the issue continues, contact support or ask the landlord to resend the invitation.</div>
+            {error ? <div style={{ color: authPalette.danger }}>{error}</div> : null}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Button onClick={() => setRedeemState("idle")}>Try again</Button>
+              <Button onClick={() => setRedeemState("idle")} style={authPrimaryButtonStyle}>Try again</Button>
               <Link to={`/login?next=${encodeURIComponent(nextPath)}`}>
-                <Button variant="secondary">Sign in</Button>
+                <Button variant="secondary" style={authSecondaryButtonStyle}>Sign in</Button>
               </Link>
             </div>
           </div>

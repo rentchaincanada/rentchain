@@ -94,6 +94,34 @@ describe("LoginForm", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Invalid email or password");
   });
 
+  it("uses the warm neutral auth theme without blue primary links or controls", () => {
+    renderForm();
+
+    const email = screen.getByLabelText("Email");
+    const submit = screen.getByRole("button", { name: "Sign in" });
+    const forgot = screen.getByRole("link", { name: "Forgot password?" });
+
+    expect(email).toHaveStyle({
+      background: "#fffdf8",
+    });
+    expect(email).toHaveStyle("border-color: rgba(105, 82, 49, 0.22)");
+    fireEvent.focus(email);
+    expect(email).toHaveStyle({
+      borderColor: "rgba(63, 54, 37, 0.72)",
+      boxShadow: "0 0 0 3px rgba(105, 82, 49, 0.22)",
+    });
+    expect(submit).toHaveStyle({
+      background: "#171411",
+      color: "#fffaf1",
+    });
+    expect(forgot).toHaveStyle({
+      color: "#171411",
+    });
+    expect(screen.getByText("Landlord access")).toHaveStyle({
+      background: "#dfe4d5",
+    });
+  });
+
   it("can disable submit separately from loading state", () => {
     renderForm({ disabled: true, submitLabel: "Email me a login link" });
 
