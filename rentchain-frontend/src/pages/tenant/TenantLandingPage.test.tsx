@@ -13,9 +13,8 @@ describe("TenantLandingPage", () => {
       </MemoryRouter>
     );
 
-    expect(
-      screen.getByText(/Your rental profile\. Secure, organized, and in your control\./i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Access your rental workspace\./i)).toBeInTheDocument();
+    expect(screen.getByText(/View your lease, payments, messages, requests, and documents/i)).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Log in \/ Continue/i }).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Create free account/i)).not.toBeInTheDocument();
   });

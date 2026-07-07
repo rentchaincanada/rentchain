@@ -287,9 +287,7 @@ describe("Routes: /tenant", () => {
       </MemoryRouter>
     );
 
-    expect(
-      await screen.findByText(/Your rental profile\. Secure, organized, and in your control\./i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Access your rental workspace\./i)).toBeInTheDocument();
     expect(screen.queryByText(/Create free account/i)).not.toBeInTheDocument();
   });
 

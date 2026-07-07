@@ -1,31 +1,24 @@
 import React from "react";
+import {
+  tenantEntryBodyStyle,
+  tenantEntryCardStyle,
+  tenantEntryPalette,
+  tenantEntryShellStyle,
+} from "./tenantEntryStyles";
 
 export default function TenantPortalComingSoon() {
   return (
-    <div
-      style={{
-        minHeight: "60vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-      }}
-    >
+    <div style={tenantEntryShellStyle}>
       <div
         style={{
-          maxWidth: 520,
-          width: "100%",
-          border: "1px solid rgba(0,0,0,0.08)",
-          borderRadius: 12,
-          padding: 18,
-          background: "white",
+          ...tenantEntryCardStyle("min(520px, 92vw)"),
           textAlign: "center",
         }}
       >
-        <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>
+        <div style={{ color: tenantEntryPalette.ink, fontSize: 22, fontWeight: 800, marginBottom: 8 }}>
           Tenant portal coming soon
         </div>
-        <div style={{ opacity: 0.75 }}>
+        <div style={tenantEntryBodyStyle}>
           We're preparing the tenant experience. Please check back later or contact your landlord for details.
         </div>
       </div>

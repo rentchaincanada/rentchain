@@ -8,6 +8,7 @@ describe("TenantPortalComingSoon", () => {
 
     expect(screen.getByText("Tenant portal coming soon")).toBeInTheDocument();
     expect(screen.getByText(/contact your landlord for details/i)).toBeInTheDocument();
+    expect(screen.getByText(/preparing the tenant experience/i)).toBeInTheDocument();
     expect(screen.queryByText(/VITE_TENANT_PORTAL_ENABLED/i)).not.toBeInTheDocument();
   });
 });

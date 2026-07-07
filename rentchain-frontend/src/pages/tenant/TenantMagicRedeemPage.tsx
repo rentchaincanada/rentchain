@@ -8,6 +8,13 @@ import {
   TENANT_DEFAULT_DESTINATION,
 } from "../../lib/authDestination";
 import { fingerprintToken, trackAuthEvent } from "../../lib/authAnalytics";
+import {
+  tenantEntryBodyStyle,
+  tenantEntryCardStyle,
+  tenantEntryPalette,
+  tenantEntryPrimaryLinkStyle,
+  tenantEntryShellStyle,
+} from "./tenantEntryStyles";
 
 export default function TenantMagicRedeemPage() {
   const location = useLocation();
@@ -77,37 +84,44 @@ export default function TenantMagicRedeemPage() {
 
   if (status === "ok") {
     return (
-      <div style={{ padding: 24 }}>
-        <h2>Signing you inƒ?İ</h2>
+      <div style={tenantEntryShellStyle}>
+        <div style={tenantEntryCardStyle()}>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: tenantEntryPalette.ink }}>
+            Signing you in...
+          </h1>
+          <p style={{ ...tenantEntryBodyStyle, marginTop: 8 }}>
+            We are preparing your tenant workspace.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 520, margin: "48px auto", textAlign: "center" }}>
-      <h2 style={{ marginBottom: 12 }}>Tenant Magic Link</h2>
-      {status === "pending" ? (
-        <p style={{ color: "#6b7280" }}>Verifying your magic linkƒ?İ</p>
-      ) : (
-        <>
-          <p style={{ color: "#b91c1c" }}>{error || "This link is invalid or expired."}</p>
-          <a
-            href={`/tenant/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}
-            style={{
-              display: "inline-block",
-              marginTop: 12,
-              padding: "10px 12px",
-              borderRadius: 10,
-              background: "#2563eb",
-              color: "#fff",
-              textDecoration: "none",
-              fontWeight: 700,
-            }}
-          >
-            Request a new link
-          </a>
-        </>
-      )}
+    <div style={tenantEntryShellStyle}>
+      <div style={{ ...tenantEntryCardStyle(), textAlign: "center" }}>
+        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: tenantEntryPalette.ink }}>
+          Tenant magic link
+        </h1>
+        {status === "pending" ? (
+          <p style={{ ...tenantEntryBodyStyle, marginTop: 12 }}>Verifying your magic link...</p>
+        ) : (
+          <>
+            <p role="alert" style={{ color: tenantEntryPalette.danger, fontWeight: 700 }}>
+              {error || "This link is invalid or expired."}
+            </p>
+            <a
+              href={`/tenant/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}
+              style={{
+                ...tenantEntryPrimaryLinkStyle,
+                marginTop: 12,
+              }}
+            >
+              Request a new link
+            </a>
+          </>
+        )}
+      </div>
     </div>
   );
 }

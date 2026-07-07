@@ -73,4 +73,34 @@ describe("TenantLoginPageV2", () => {
       screen.getByText("If an account exists for that email, we sent a login link.")
     ).toBeInTheDocument();
   });
+
+  it("keeps tenant login loading and error states readable", async () => {
+    let rejectRequest: (error: Error) => void = () => {};
+    mocks.apiFetch.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRequest = reject;
+        })
+    );
+
+    render(
+      <MemoryRouter>
+        <TenantLoginPageV2 />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "tenant@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Email me a login link" }));
+
+    expect(screen.getByRole("button", { name: "Sending..." })).toBeDisabled();
+
+    rejectRequest(new Error("Couldn’t send link. Please try again."));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Couldn’t send link. Please try again.");
+    });
+    expect(screen.getByRole("button", { name: "Email me a login link" })).toBeEnabled();
+  });
 });
