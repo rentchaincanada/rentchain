@@ -52,6 +52,9 @@ describe("TenantInviteRedeemPage", () => {
       expect(tenantPortalApi.redeemTenantWorkspaceInvite).toHaveBeenCalledWith("token-123");
     });
     expect(await screen.findByText(/Invite redeemed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your tenant workspace is connected/i)).toBeInTheDocument();
+    expect(screen.queryByText("prop-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("app-1")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Continue to application readiness/i })).toHaveAttribute(
       "href",
       "/tenant/application?entry=invite&inviteToken=app-1"

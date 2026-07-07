@@ -4,6 +4,13 @@ import { setTenantToken } from "./tenantAuth";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
 import { apiFetch } from "../lib/apiClient";
 import { clearAuthToken } from "../lib/authToken";
+import {
+  tenantEntryBodyStyle,
+  tenantEntryCardStyle,
+  tenantEntryGhostButtonStyle,
+  tenantEntryPalette,
+  tenantEntryShellStyle,
+} from "../pages/tenant/tenantEntryStyles";
 
 export default function TenantInviteRedeem() {
   const { token } = useParams();
@@ -62,46 +69,56 @@ export default function TenantInviteRedeem() {
   }, [token, nav]);
 
   return (
-    <div style={{ maxWidth: 640, margin: "0 auto", padding: "24px 16px" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Joining RentChain</h1>
-      {status === "loading" && (
-        <p style={{ color: "#6b7280", fontSize: 14 }}>Redeeming invite…</p>
-      )}
-      {status === "idle" && (
-        <p style={{ color: "#6b7280", fontSize: 14 }}>Preparing…</p>
-      )}
-      {status === "ok" && (
-        <div style={{ padding: 12, borderRadius: 10, border: "1px solid #e5e7eb" }}>
-          <p style={{ fontSize: 14 }}>Invite redeemed. Redirecting…</p>
-        </div>
-      )}
-      {status === "error" && (
-        <div
-          style={{
-            padding: 12,
-            borderRadius: 10,
-            border: "1px solid #fecdd3",
-            background: "#fef2f2",
-            color: "#b91c1c",
-            fontSize: 14,
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Couldn’t redeem invite</div>
-          <div style={{ color: "#b91c1c" }}>{err}</div>
-          <button
-            onClick={() => nav("/", { replace: true })}
+    <div style={tenantEntryShellStyle}>
+      <div style={tenantEntryCardStyle()}>
+        <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: tenantEntryPalette.ink }}>
+          Joining RentChain
+        </h1>
+        {status === "loading" && (
+          <p style={{ ...tenantEntryBodyStyle, marginTop: 8 }}>Redeeming invite...</p>
+        )}
+        {status === "idle" && (
+          <p style={{ ...tenantEntryBodyStyle, marginTop: 8 }}>Preparing...</p>
+        )}
+        {status === "ok" && (
+          <div
             style={{
-              marginTop: 10,
-              padding: "8px 12px",
-              borderRadius: 8,
-              border: "1px solid #e5e7eb",
-              cursor: "pointer",
+              marginTop: 14,
+              padding: 12,
+              borderRadius: 12,
+              border: `1px solid ${tenantEntryPalette.sageBorder}`,
+              background: tenantEntryPalette.sage,
+              color: tenantEntryPalette.ink,
             }}
           >
-            Back to Home
-          </button>
-        </div>
-      )}
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Invite redeemed. Redirecting...</p>
+          </div>
+        )}
+        {status === "error" && (
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 10,
+              border: "1px solid rgba(180, 35, 24, 0.24)",
+              background: "rgba(254, 242, 242, 0.92)",
+              color: tenantEntryPalette.danger,
+              fontSize: 14,
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Couldn’t redeem invite</div>
+            <div style={{ color: tenantEntryPalette.danger }}>{err}</div>
+            <button
+              onClick={() => nav("/", { replace: true })}
+              style={{
+                ...tenantEntryGhostButtonStyle,
+                marginTop: 10,
+              }}
+            >
+              Back to Home
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,66 +1,23 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { TENANT_DEFAULT_DESTINATION } from "../../lib/authDestination";
+import {
+  tenantEntryBadgeStyle,
+  tenantEntryBodyStyle,
+  tenantEntryContainerStyle,
+  tenantEntryInfoCardStyle,
+  tenantEntryPalette,
+  tenantEntryPrimaryLinkStyle,
+  tenantEntrySecondaryLinkStyle,
+  tenantEntryShellStyle,
+} from "./tenantEntryStyles";
 
 const tenantLoginPath = `/tenant/login?next=${encodeURIComponent(TENANT_DEFAULT_DESTINATION)}`;
 
-const primaryLinkStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 46,
-  padding: "0 18px",
-  borderRadius: 999,
-  textDecoration: "none",
-  fontWeight: 700,
-  background: "#0f172a",
-  color: "#f8fafc",
-  boxShadow: "0 16px 28px rgba(15, 23, 42, 0.16)",
-};
-
-const secondaryLinkStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 46,
-  padding: "0 18px",
-  borderRadius: 999,
-  textDecoration: "none",
-  fontWeight: 700,
-  border: "1px solid rgba(15, 23, 42, 0.12)",
-  color: "#0f172a",
-  background: "rgba(255,255,255,0.84)",
-};
-
-const infoCardStyle: React.CSSProperties = {
-  borderRadius: 20,
-  border: "1px solid rgba(148, 163, 184, 0.24)",
-  background: "rgba(255,255,255,0.84)",
-  boxShadow: "0 20px 48px rgba(148, 163, 184, 0.12)",
-  padding: "20px 22px",
-  display: "grid",
-  gap: 10,
-};
-
 export default function TenantLandingPage() {
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background:
-          "radial-gradient(circle at top left, rgba(14, 165, 233, 0.14) 0, rgba(255,255,255,0.96) 46%, rgba(240,249,255,0.92) 100%)",
-        color: "#0f172a",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 1120,
-          margin: "0 auto",
-          padding: "clamp(24px, 5vw, 48px) clamp(16px, 4vw, 32px) 56px",
-          display: "grid",
-          gap: 32,
-        }}
-      >
+    <div style={tenantEntryShellStyle}>
+      <div style={tenantEntryContainerStyle}>
         <header
           style={{
             display: "flex",
@@ -73,7 +30,7 @@ export default function TenantLandingPage() {
           <Link
             to="/"
             style={{
-              color: "#0f172a",
+              color: tenantEntryPalette.ink,
               textDecoration: "none",
               fontWeight: 800,
               letterSpacing: "-0.02em",
@@ -83,10 +40,10 @@ export default function TenantLandingPage() {
             RentChain
           </Link>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link to={tenantLoginPath} style={secondaryLinkStyle}>
+            <Link to={tenantLoginPath} style={tenantEntrySecondaryLinkStyle}>
               Log in / Continue
             </Link>
-            <Link to={`${tenantLoginPath}&intent=create-profile`} style={secondaryLinkStyle}>
+            <Link to={`${tenantLoginPath}&intent=create-profile`} style={tenantEntrySecondaryLinkStyle}>
               Get started
             </Link>
           </div>
@@ -102,18 +59,7 @@ export default function TenantLandingPage() {
         >
           <div style={{ display: "grid", gap: 18 }}>
             <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                width: "fit-content",
-                borderRadius: 999,
-                background: "rgba(255,255,255,0.72)",
-                border: "1px solid rgba(148, 163, 184, 0.28)",
-                color: "#0369a1",
-                padding: "8px 12px",
-                fontSize: "0.88rem",
-                fontWeight: 700,
-              }}
+              style={tenantEntryBadgeStyle}
             >
               Tenant portal
             </div>
@@ -125,51 +71,50 @@ export default function TenantLandingPage() {
                   lineHeight: 1.04,
                   letterSpacing: "-0.04em",
                   maxWidth: 640,
+                  color: tenantEntryPalette.ink,
                 }}
               >
-                Your rental profile. Secure, organized, and in your control.
+                Access your rental workspace.
               </h1>
               <p
                 style={{
-                  margin: 0,
+                  ...tenantEntryBodyStyle,
                   maxWidth: 620,
                   fontSize: "1.05rem",
-                  lineHeight: 1.7,
-                  color: "#334155",
                 }}
               >
-                Access your rental history, documents, and profile details in one place. Share
-                information when needed.
+                View your lease, payments, messages, requests, and documents in one place. Use the
+                link from your landlord or property manager to continue.
               </p>
             </div>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <Link to={tenantLoginPath} style={primaryLinkStyle}>
+              <Link to={tenantLoginPath} style={tenantEntryPrimaryLinkStyle}>
                 Log in / Continue
               </Link>
-              <Link to="/tenant/dashboard" style={secondaryLinkStyle}>
+              <Link to="/tenant/dashboard" style={tenantEntrySecondaryLinkStyle}>
                 Preview dashboard
               </Link>
             </div>
           </div>
 
           <div style={{ display: "grid", gap: 14 }}>
-            <div style={infoCardStyle}>
+            <div style={tenantEntryInfoCardStyle}>
               <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>What you can manage here</div>
-              <div style={{ color: "#475569", lineHeight: 1.6 }}>
+              <div style={{ color: tenantEntryPalette.muted, lineHeight: 1.6 }}>
                 Keep your profile current, keep documents organized, and return to your rental
-                history whenever a landlord asks you to share information.
+                workspace when you need to review the record.
               </div>
             </div>
-            <div style={infoCardStyle}>
+            <div style={tenantEntryInfoCardStyle}>
               <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>Designed for tenants first</div>
-              <div style={{ color: "#475569", lineHeight: 1.6 }}>
-                No sales prompts, no landlord setup language, and no pressure to navigate a
-                property-management workflow just to manage your rental identity.
+              <div style={{ color: tenantEntryPalette.muted, lineHeight: 1.6 }}>
+                Tenant access stays focused on the rental information connected to your current
+                invite, application, or tenancy.
               </div>
             </div>
-            <div style={infoCardStyle}>
+            <div style={tenantEntryInfoCardStyle}>
               <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>When you are ready</div>
-              <div style={{ color: "#475569", lineHeight: 1.6 }}>
+              <div style={{ color: tenantEntryPalette.muted, lineHeight: 1.6 }}>
                 Continue into your dashboard to review profile details, application progress,
                 documents, messages, and account history.
               </div>

@@ -6,10 +6,16 @@ import {
   type TenantWorkspaceContext,
 } from "../../api/tenantPortal";
 import { TenantInfoCard, TenantSurfaceShell } from "./TenantWorkspaceShared";
-import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
+import { radius, spacing, text as textTokens } from "../../styles/tokens";
 import { buildTenantApplicationEntryPath } from "./tenantApplicationFlow";
 import { buildTenantWorkspaceModeView } from "./tenantWorkspaceMode";
 import TenantWorkspaceModeBanner from "./TenantWorkspaceModeBanner";
+import {
+  tenantEntryGhostButtonStyle,
+  tenantEntryLinkStyle,
+  tenantEntryPalette,
+  tenantEntryPrimaryLinkStyle,
+} from "./tenantEntryStyles";
 
 function canLoadWorkspaceModeContext() {
   return (
@@ -129,12 +135,12 @@ export default function TenantInviteRedeemPage() {
 
   return (
     <TenantSurfaceShell
-      title="Redeem Invite"
-      subtitle="Redeem a one-time tenancy invite from inside your authenticated tenant workspace. Invite redemption stays server-scoped and follows the backend token lifecycle rules."
+      title="Redeem invite"
+      subtitle="Use an invite from your landlord or property manager to connect this tenant workspace."
     >
       <TenantWorkspaceModeBanner view={modeView} />
 
-      <TenantInfoCard heading="Invite Redemption" accent="#0f766e">
+      <TenantInfoCard heading="Invite redemption" accent={tenantEntryPalette.charcoal}>
         <form onSubmit={submit} style={{ display: "grid", gap: spacing.md }}>
           <label style={{ display: "grid", gap: 8 }}>
             <span style={{ color: textTokens.muted }}>Invite token</span>
@@ -145,9 +151,9 @@ export default function TenantInviteRedeemPage() {
               style={{
                 padding: "11px 12px",
                 borderRadius: radius.md,
-                border: `1px solid ${colors.border}`,
-                background: colors.panel,
-                color: textTokens.primary,
+                border: `1px solid ${tenantEntryPalette.fieldBorder}`,
+                background: tenantEntryPalette.field,
+                color: tenantEntryPalette.ink,
               }}
             />
           </label>
@@ -155,10 +161,10 @@ export default function TenantInviteRedeemPage() {
           {error ? (
             <div
               style={{
-                border: `1px solid ${colors.borderStrong}`,
+                border: "1px solid rgba(180, 35, 24, 0.24)",
                 borderRadius: radius.md,
-                background: "#fff7ed",
-                color: "#9a3412",
+                background: "rgba(254, 242, 242, 0.92)",
+                color: tenantEntryPalette.danger,
                 padding: "10px 12px",
               }}
             >
@@ -169,22 +175,24 @@ export default function TenantInviteRedeemPage() {
           {success ? (
             <div
               style={{
-                border: `1px solid ${colors.border}`,
+                border: `1px solid ${tenantEntryPalette.sageBorder}`,
                 borderRadius: radius.md,
-                background: "#ecfdf5",
-                color: "#166534",
+                background: tenantEntryPalette.sage,
+                color: tenantEntryPalette.ink,
                 padding: "12px 14px",
                 display: "grid",
                 gap: 6,
               }}
             >
               <div style={{ fontWeight: 800 }}>Invite redeemed</div>
-              <div>Status: {success.status || "redeemed"}</div>
-              {success.propertyId ? <div>Property: {success.propertyId}</div> : null}
-              {success.applicationId ? <div>Application: {success.applicationId}</div> : null}
+              <div>Your tenant workspace is connected. Continue when you are ready.</div>
               <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-                <Link to={nextApplicationPath}>Continue to application readiness</Link>
-                <Link to="/tenant">Return to workspace</Link>
+                <Link to={nextApplicationPath} style={tenantEntryLinkStyle}>
+                  Continue to application readiness
+                </Link>
+                <Link to="/tenant" style={tenantEntryLinkStyle}>
+                  Return to workspace
+                </Link>
               </div>
             </div>
           ) : null}
@@ -196,16 +204,23 @@ export default function TenantInviteRedeemPage() {
               style={{
                 padding: "10px 14px",
                 borderRadius: radius.md,
-                border: `1px solid ${colors.border}`,
-                background: colors.card,
-                color: textTokens.primary,
-                fontWeight: 700,
+                border: 0,
+                ...tenantEntryPrimaryLinkStyle,
+                minHeight: "auto",
                 cursor: submitting ? "not-allowed" : "pointer",
+                opacity: submitting ? 0.72 : 1,
               }}
             >
               {submitting ? "Redeeming..." : "Redeem invite"}
             </button>
-            <Link to="/tenant" style={{ alignSelf: "center" }}>
+            <Link
+              to="/tenant"
+              style={{
+                ...tenantEntryGhostButtonStyle,
+                alignSelf: "center",
+                textDecoration: "none",
+              }}
+            >
               Back to workspace
             </Link>
           </div>
