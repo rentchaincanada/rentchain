@@ -11,6 +11,7 @@ import {
   hero,
   lifecycle,
   operationalTrust,
+  pricingStart,
   trustFlow,
   whyRentChain,
 } from "./landingContent";
@@ -471,11 +472,53 @@ export function OperationalTrustSection() {
         </div>
         <div className="rc-trust-grid">
           {operationalTrust.cards.map((card) => (
-            <RevealOnScroll key={card.title} className="rc-card">
+            <RevealOnScroll key={card.title} className="rc-card rc-operational-trust-card">
               <h3>{card.title}</h3>
               <p>{card.body}</p>
             </RevealOnScroll>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function PricingStartSection({ onPrimaryCta }: LandingActionProps) {
+  return (
+    <section className="rc-section rc-section--pricing" id="pricing-start" aria-labelledby="pricing-start-title">
+      <div className="rc-container rc-pricing-start">
+        <div>
+          <p className="rc-kicker">{pricingStart.kicker}</p>
+          <h2 className="rc-section-title" id="pricing-start-title">
+            {pricingStart.title}
+          </h2>
+          <p className="rc-section-subtitle">{pricingStart.body}</p>
+          <div className="rc-cta-row">
+            <Link className="rc-link-button rc-link-button--primary" to={pricingStart.pricingCta.href}>
+              {pricingStart.pricingCta.label}
+            </Link>
+            <button type="button" className="rc-button rc-button--accent" onClick={onPrimaryCta}>
+              {pricingStart.primaryCta.label}
+            </button>
+          </div>
+        </div>
+        <div className="rc-pricing-cards" aria-label="Pricing overview">
+          <div className="rc-card rc-pricing-card">
+            <h3>{pricingStart.freeTitle}</h3>
+            <ul>
+              {pricingStart.freeItems.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="rc-card rc-pricing-card">
+            <h3>{pricingStart.paidTitle}</h3>
+            <ul>
+              {pricingStart.paidItems.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
     </section>

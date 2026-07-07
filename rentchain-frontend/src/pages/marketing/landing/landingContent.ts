@@ -116,11 +116,29 @@ export const audiences = {
 
 export const lifecycle = {
   kicker: "Platform overview",
-  title: "One continuous lifecycle, from lease to renewal",
+  title: "One continuous lifecycle, from application to renewal",
   subtitle:
     "Every step writes to the same record. Tap through the lifecycle to see how nothing falls through the cracks.",
   autoAdvanceMs: 3800,
   steps: [
+    {
+      label: "Application received",
+      title: "Application received",
+      meta: "Mar 28 · applicant record",
+      amount: "Review ready",
+      status: "info" as LifecycleStatus,
+      statusLabel: "Intake",
+      body: "A rental application starts the operating record with applicant details, property context, notes, and review history in one place.",
+    },
+    {
+      label: "Viewing scheduled",
+      title: "Viewing scheduled",
+      meta: "Mar 30 · 2:30 p.m.",
+      amount: "Confirmed",
+      status: "pending" as LifecycleStatus,
+      statusLabel: "Scheduled",
+      body: "Viewing requests and confirmations stay connected to the application, so the next step is visible before a lease is prepared.",
+    },
     {
       label: "Lease created",
       title: "Lease created",
@@ -158,24 +176,6 @@ export const lifecycle = {
       body: "A tenant reports an issue from their portal. It lands as a work order — timestamped, attributed, and ready to route.",
     },
     {
-      label: "Contractor assigned",
-      title: "Contractor assigned",
-      meta: "May 9 · Rivera Plumbing",
-      amount: "Approved",
-      status: "info" as LifecycleStatus,
-      statusLabel: "Assigned",
-      body: "The manager approves and assigns the right contractor. The approval chain is part of the record, not a side conversation.",
-    },
-    {
-      label: "Work completed",
-      title: "Work completed",
-      meta: "May 11 · photos + invoice",
-      amount: "$320.00",
-      status: "verified" as LifecycleStatus,
-      statusLabel: "Verified",
-      body: "The contractor uploads evidence of completed work and the invoice. The record shows what happened, when it happened, and what was approved.",
-    },
-    {
       label: "Evidence generated",
       title: "Evidence generated",
       meta: "May 11 · signed bundle",
@@ -194,6 +194,28 @@ export const lifecycle = {
       body: "When it is time to renew, the full operating history is already there. Continuity, not a fresh start from scratch.",
     },
   ],
+};
+
+export const pricingStart = {
+  kicker: "Start free",
+  title: "Start free. Grow when the workflow needs more support.",
+  body:
+    "Set up your first property, understand the workflow, and decide whether paid tools are worth it once you see the value in practice.",
+  freeTitle: "Free includes",
+  freeItems: [
+    "First property setup",
+    "Basic tenant/property organization",
+    "Core workflow preview",
+  ],
+  paidTitle: "Paid plans add",
+  paidItems: [
+    "Deeper operational tools",
+    "Filing and compliance support where available",
+    "Portfolio-level oversight",
+    "Stronger records and evidence workflows",
+  ],
+  pricingCta: { label: "View pricing", href: "/site/pricing" },
+  primaryCta: { label: "Start free", href: "/signup?next=/properties&intent=registry_readiness" },
 };
 
 export const features = {
@@ -358,6 +380,7 @@ export const landingContent = {
   whyRentChain,
   audiences,
   lifecycle,
+  pricingStart,
   features,
   operationalTrust,
   aboutVision,
