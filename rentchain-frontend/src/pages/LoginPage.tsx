@@ -2,9 +2,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
-import { colors, text } from "../styles/tokens";
 import { Button } from "../components/ui/Ui";
 import { LoginForm } from "../components/auth/LoginForm";
+import { authGhostButtonStyle, authLinkStyle, authMutedLinkStyle } from "../components/auth/authPageStyles";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
 import { getAuthToken } from "../lib/authToken";
 import { useToast } from "../components/ui/ToastProvider";
@@ -249,7 +249,7 @@ export const LoginPage: React.FC = () => {
             type="button"
             variant="ghost"
             onClick={handleDemoLogin}
-            style={{ width: "100%" }}
+            style={{ ...authGhostButtonStyle, width: "100%" }}
           >
             Login as Demo (dev)
           </Button>
@@ -259,17 +259,17 @@ export const LoginPage: React.FC = () => {
         <>
           <Link
             to={nextPath !== "/dashboard" ? `/signup?next=${encodeURIComponent(nextPath)}` : "/signup"}
-            style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}
+            style={authLinkStyle}
           >
             Create free account
           </Link>
-          <Link to="/tenant" style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}>
+          <Link to="/tenant" style={authLinkStyle}>
             Are you a tenant? Access your profile
           </Link>
-          <Link to="/request-access" style={{ color: text.muted, textDecoration: "none" }}>
+          <Link to="/request-access" style={authMutedLinkStyle}>
             Request access
           </Link>
-          <Link to="/invite" style={{ color: text.muted, textDecoration: "none" }}>
+          <Link to="/invite" style={authMutedLinkStyle}>
             Have an invite?
           </Link>
         </>

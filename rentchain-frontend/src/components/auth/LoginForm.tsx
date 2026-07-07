@@ -1,7 +1,21 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Button, Card, Input } from "../ui/Ui";
-import { colors, spacing, text } from "../../styles/tokens";
+import { spacing } from "../../styles/tokens";
+import {
+  authBannerStyle,
+  authBodyStyle,
+  authCardStyle,
+  authEyebrowStyle,
+  authHeadingStyle,
+  authInputProps,
+  authLabelTextStyle,
+  authLinkStyle,
+  authPalette,
+  authPrimaryButtonStyle,
+  authRoleBadgeStyle,
+  authShellStyle,
+} from "./authPageStyles";
 
 export type LoginFormBanner = {
   title: string;
@@ -33,33 +47,12 @@ type LoginFormProps = {
   children?: React.ReactNode;
 };
 
-const shellStyle: React.CSSProperties = {
-  minHeight: "100vh",
-  backgroundColor: colors.bg,
-  backgroundImage: colors.bgAmbient,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "clamp(16px, 5vw, 40px)",
-  overflowX: "hidden",
-};
-
 const fieldLabelStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: spacing.xs,
   width: "100%",
 };
-
-const bannerStyle = (tone: LoginFormBanner["tone"] = "info"): React.CSSProperties => ({
-  marginBottom: spacing.sm,
-  padding: "8px 12px",
-  borderRadius: 10,
-  background: tone === "warning" ? "rgba(239,68,68,0.08)" : "rgba(37,99,235,0.08)",
-  border: tone === "warning" ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(37,99,235,0.25)",
-  color: tone === "warning" ? colors.danger : "#1d4ed8",
-  fontSize: "0.9rem",
-});
 
 export const LoginForm: React.FC<LoginFormProps> = ({
   eyebrow = "RentChain Secure Access",
@@ -85,46 +78,27 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   children,
 }) => {
   return (
-    <div style={shellStyle}>
-      <Card elevated style={{ width: "min(460px, 92vw)", padding: spacing.lg }}>
-        <div style={{ marginBottom: spacing.xs, color: text.subtle, fontSize: "0.9rem" }}>
+    <div style={authShellStyle}>
+      <Card elevated style={authCardStyle()}>
+        <div style={authEyebrowStyle}>
           {eyebrow}
         </div>
         <h1
-          style={{
-            fontSize: "1.6rem",
-            fontWeight: 700,
-            marginBottom: spacing.xs,
-            letterSpacing: "-0.01em",
-            color: text.primary,
-          }}
+          style={authHeadingStyle}
         >
           {title}
         </h1>
         {roleLabel ? (
-          <div
-            style={{
-              display: "inline-flex",
-              width: "fit-content",
-              marginBottom: spacing.sm,
-              padding: "5px 10px",
-              borderRadius: 999,
-              border: `1px solid ${colors.border}`,
-              background: colors.accentSoft,
-              color: text.primary,
-              fontSize: "0.82rem",
-              fontWeight: 700,
-            }}
-          >
+          <div style={authRoleBadgeStyle}>
             {roleLabel}
           </div>
         ) : null}
-        <p style={{ marginTop: 0, marginBottom: spacing.sm, color: text.muted }}>
+        <p style={{ ...authBodyStyle, marginBottom: spacing.sm }}>
           {subtitle}
         </p>
 
         {banner ? (
-          <div style={bannerStyle(banner.tone)}>
+          <div style={authBannerStyle(banner.tone)}>
             <div style={{ fontWeight: 700, marginBottom: 4 }}>{banner.title}</div>
             <div>{banner.body}</div>
           </div>
@@ -135,7 +109,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           style={{ display: "flex", flexDirection: "column", gap: spacing.sm, width: "100%" }}
         >
           <label style={fieldLabelStyle}>
-            <span style={{ fontSize: "0.9rem", color: text.muted }}>Email</span>
+            <span style={authLabelTextStyle}>Email</span>
             <Input
               type="email"
               value={email}
@@ -143,14 +117,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({
               onClick={(event) => event.stopPropagation()}
               placeholder="you@example.com"
               autoComplete="email"
-              style={{ width: "100%" }}
+              {...authInputProps({ width: "100%" })}
               required
             />
           </label>
 
           {passwordRequired ? (
             <label style={fieldLabelStyle}>
-              <span style={{ fontSize: "0.9rem", color: text.muted }}>Password</span>
+              <span style={authLabelTextStyle}>Password</span>
               <Input
                 type="password"
                 value={password}
@@ -158,7 +132,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
                 onClick={(event) => event.stopPropagation()}
                 placeholder="Password"
                 autoComplete="current-password"
-                style={{ width: "100%" }}
+                {...authInputProps({ width: "100%" })}
                 required
               />
             </label>
@@ -168,7 +142,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <Link
                 to="/forgot-password"
-                style={{ color: colors.accent, fontWeight: 600, fontSize: "0.9rem" }}
+                style={{ ...authLinkStyle, fontSize: "0.9rem" }}
               >
                 Forgot password?
               </Link>
@@ -181,6 +155,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
             type="submit"
             disabled={isLoading || disabled}
             style={{
+              ...authPrimaryButtonStyle,
               width: "100%",
               opacity: isLoading || disabled ? 0.8 : 1,
               cursor: isLoading || disabled ? "not-allowed" : "pointer",
@@ -200,7 +175,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
             marginTop: spacing.sm,
             minHeight: "1.2rem",
             fontSize: "0.9rem",
-            color: error ? colors.danger : text.muted,
+            color: error ? authPalette.danger : authPalette.muted,
           }}
         >
           {error || statusMessage || subtitle}
@@ -208,7 +183,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
 
         {footer ? (
           <div style={{ marginTop: spacing.sm, display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-            {footer}
+            <div style={{ display: "contents", color: authPalette.muted }}>{footer}</div>
           </div>
         ) : null}
       </Card>

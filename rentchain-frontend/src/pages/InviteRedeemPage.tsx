@@ -1,10 +1,23 @@
 import React, { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Card, Input, Button } from "../components/ui/Ui";
-import { colors, spacing, text } from "../styles/tokens";
+import { spacing } from "../styles/tokens";
 import { useAuth } from "../context/useAuth";
 import { apiFetch } from "../api/http";
 import { setAuthToken } from "../lib/authToken";
+import {
+  authBodyStyle,
+  authCardStyle,
+  authEyebrowStyle,
+  authHeadingStyle,
+  authInputProps,
+  authLabelTextStyle,
+  authLinkStyle,
+  authMutedLinkStyle,
+  authPalette,
+  authPrimaryButtonStyle,
+  authShellStyle,
+} from "../components/auth/authPageStyles";
 
 type InviteRedeemResponse = {
   ok: boolean;
@@ -79,74 +92,77 @@ const InviteRedeemPage: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        backgroundColor: colors.bg,
-        backgroundImage: colors.bgAmbient,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "clamp(16px, 5vw, 40px)",
-      }}
-    >
-      <Card elevated style={{ width: "min(540px, 94vw)", padding: spacing.lg }}>
-        <div style={{ marginBottom: spacing.xs, color: text.subtle, fontSize: "0.9rem" }}>
+    <div style={authShellStyle}>
+      <Card elevated style={authCardStyle("min(540px, 94vw)")}>
+        <div style={authEyebrowStyle}>
           RentChain
         </div>
-        <h1 style={{ marginTop: 0, marginBottom: spacing.xs, fontSize: "1.7rem" }}>I have an invite</h1>
-        <p style={{ marginTop: 0, color: text.muted }}>
+        <h1 style={authHeadingStyle}>I have an invite</h1>
+        <p style={authBodyStyle}>
           Redeem your invite code to activate your account.
         </p>
 
         <form onSubmit={redeem} style={{ display: "grid", gap: spacing.sm }}>
           <label style={{ display: "grid", gap: spacing.xs }}>
-            <span style={{ color: text.muted, fontSize: "0.9rem" }}>Invite code</span>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste invite code" required />
+            <span style={authLabelTextStyle}>Invite code</span>
+            <Input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="Paste invite code"
+              {...authInputProps()}
+              required
+            />
           </label>
           <label style={{ display: "grid", gap: spacing.xs }}>
-            <span style={{ color: text.muted, fontSize: "0.9rem" }}>Email</span>
+            <span style={authLabelTextStyle}>Email</span>
             <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               autoComplete="email"
+              {...authInputProps()}
             />
           </label>
           <label style={{ display: "grid", gap: spacing.xs }}>
-            <span style={{ color: text.muted, fontSize: "0.9rem" }}>Full name (optional)</span>
-            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Your name" />
+            <span style={authLabelTextStyle}>Full name (optional)</span>
+            <Input
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Your name"
+              {...authInputProps()}
+            />
           </label>
           <label style={{ display: "grid", gap: spacing.xs }}>
-            <span style={{ color: text.muted, fontSize: "0.9rem" }}>Password</span>
+            <span style={authLabelTextStyle}>Password</span>
             <Input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Choose a password"
               autoComplete="new-password"
+              {...authInputProps()}
               required
             />
           </label>
 
-          <Button type="submit" disabled={submitting} style={{ justifyContent: "center" }}>
+          <Button type="submit" disabled={submitting} style={{ ...authPrimaryButtonStyle, justifyContent: "center" }}>
             {submitting ? "Redeeming..." : "Redeem invite"}
           </Button>
         </form>
 
-        <div style={{ marginTop: spacing.sm, minHeight: "1.2rem", color: error ? colors.danger : text.muted }}>
+        <div style={{ marginTop: spacing.sm, minHeight: "1.2rem", color: error ? authPalette.danger : authPalette.muted }}>
           {error || "Need access without a code? Use Request access."}
         </div>
 
         <div style={{ marginTop: spacing.sm, display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-          <Link to="/request-access" style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}>
+          <Link to="/request-access" style={authLinkStyle}>
             Request access
           </Link>
-          <Link to="/signup" style={{ color: text.muted, textDecoration: "none" }}>
+          <Link to="/signup" style={authMutedLinkStyle}>
             Sign up (Free)
           </Link>
-          <Link to="/login" style={{ color: text.muted, textDecoration: "none" }}>
+          <Link to="/login" style={authMutedLinkStyle}>
             Login
           </Link>
         </div>

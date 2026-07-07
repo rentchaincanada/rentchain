@@ -3,26 +3,19 @@ import { Link, useLocation } from "react-router-dom";
 import { apiFetch } from "../../api/apiFetch";
 import { LoginForm } from "../../components/auth/LoginForm";
 import {
+  authBodyStyle,
+  authCardStyle,
+  authGhostButtonStyle,
+  authLinkStyle,
+  authPalette,
+  authSecondaryButtonStyle,
+  authShellStyle,
+} from "../../components/auth/authPageStyles";
+import {
   resolveTenantPostAuthDestination,
   TENANT_DEFAULT_DESTINATION,
 } from "../../lib/authDestination";
 import { trackAuthEvent } from "../../lib/authAnalytics";
-
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        border: "1px solid rgba(0,0,0,0.08)",
-        borderRadius: 12,
-        padding: 16,
-        boxShadow: "0 6px 20px rgba(0,0,0,0.06)",
-        background: "white",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
 
 const TenantLoginPageV2: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -90,8 +83,8 @@ const TenantLoginPageV2: React.FC = () => {
             : null
         }
         footer={
-          <div style={{ fontSize: 13, color: "#64748b" }}>
-            Have an invite link? Open it to accept your invite. <Link to="/">Back to main</Link>
+          <div style={{ fontSize: 13, color: authPalette.muted }}>
+            Have an invite link? Open it to accept your invite. <Link to="/" style={authLinkStyle}>Back to main</Link>
           </div>
         }
       />
@@ -99,24 +92,22 @@ const TenantLoginPageV2: React.FC = () => {
   }
 
   return (
-    <div style={{ maxWidth: 480, margin: "48px auto", padding: 16 }}>
-      <Card>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Tenant login</h1>
-        <p style={{ marginTop: 8, opacity: 0.75 }}>We will email you a one-time login link.</p>
+    <div style={authShellStyle}>
+      <div style={authCardStyle("min(480px, 92vw)")}>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: authPalette.ink }}>Tenant login</h1>
+        <p style={{ ...authBodyStyle, marginTop: 8 }}>We will email you a one-time login link.</p>
           <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
-            <div style={{ color: "green", fontWeight: 700 }}>
+            <div style={{ color: "#365314", fontWeight: 700 }}>
               If an account exists for that email, we sent a login link.
             </div>
-            <div style={{ color: "#6b7280", fontSize: 13 }}>Check your spam/junk folder.</div>
+            <div style={{ color: authPalette.muted, fontSize: 13 }}>Check your spam/junk folder.</div>
             <div style={{ display: "flex", gap: 8 }}>
               <a
                 href={next || "/tenant"}
                 style={{
+                  ...authSecondaryButtonStyle,
                   padding: "10px 12px",
                   borderRadius: 10,
-                  border: "1px solid rgba(0,0,0,0.15)",
-                  background: "#f3f4f6",
-                  color: "#111",
                   fontWeight: 700,
                   textDecoration: "none",
                 }}
@@ -127,11 +118,9 @@ const TenantLoginPageV2: React.FC = () => {
                 type="button"
                 onClick={() => setSent(false)}
                 style={{
+                  ...authGhostButtonStyle,
                   padding: "10px 12px",
                   borderRadius: 10,
-                  border: "1px solid rgba(0,0,0,0.15)",
-                  background: "white",
-                  color: "#111",
                   fontWeight: 700,
                   cursor: "pointer",
                 }}
@@ -140,7 +129,7 @@ const TenantLoginPageV2: React.FC = () => {
               </button>
             </div>
           </div>
-      </Card>
+      </div>
     </div>
   );
 };
