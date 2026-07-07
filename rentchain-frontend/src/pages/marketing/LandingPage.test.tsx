@@ -192,7 +192,9 @@ describe("Marketing LandingPage", () => {
     const { container } = renderLanding("/");
 
     const footerLinks = Array.from(container.querySelectorAll("footer a"));
+    const footerPricingLink = screen.getByRole("link", { name: "Pricing" });
     expect(footerLinks.length).toBeGreaterThan(0);
+    expect(footerPricingLink).toHaveAttribute("href", "/site/pricing#plan-fit");
     expect(footerLinks.every((link) => link.getAttribute("href") && !link.getAttribute("href")?.startsWith("#"))).toBe(
       true
     );

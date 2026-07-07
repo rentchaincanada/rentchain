@@ -338,7 +338,7 @@ export const footer = {
       heading: "Platform",
       links: [
         { label: "Features", href: "/site" },
-        { label: "Pricing", href: "/site/pricing" },
+        { label: "Pricing", href: "/site/pricing#plan-fit" },
         { label: "Trust", href: "/trust" },
         { label: "Security", href: "/security" },
       ],
