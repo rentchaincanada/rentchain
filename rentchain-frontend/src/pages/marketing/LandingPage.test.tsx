@@ -32,6 +32,7 @@ function renderLanding(initialEntry = "/") {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/site" element={<LandingPage />} />
+        <Route path="/login" element={<div data-testid="login-page">Login page</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -147,13 +148,35 @@ describe("Marketing LandingPage", () => {
     );
   });
 
+  it("renders a conservative pricing start section with real pricing and CTA routes", () => {
+    renderLanding("/");
+
+    expect(
+      screen.getByRole("heading", {
+        level: 2,
+        name: /Start free\. Grow when the workflow needs more support\./i,
+      })
+    ).toBeInTheDocument();
+    expect(screen.getByText("First property setup")).toBeInTheDocument();
+    expect(screen.getByText("Portfolio-level oversight")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View pricing" })).toHaveAttribute("href", "/site/pricing");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Start free" }).at(-1)!);
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/signup?next=/properties&intent=registry_readiness");
+  });
+
   it("changes the lifecycle active step when a lifecycle control is clicked", () => {
     renderLanding("/");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Maintenance request" }));
+    expect(screen.getByRole("tab", { name: "Viewing request" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Application & screening" })).toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(8);
 
-    expect(screen.getByRole("tab", { name: "Maintenance request" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tabpanel")).toHaveTextContent("A tenant reports an issue from their portal");
+    fireEvent.click(screen.getByRole("tab", { name: "Tenant request" }));
+
+    expect(screen.getByRole("tab", { name: "Tenant request" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel")).toHaveTextContent("Tenants submit maintenance requests from their portal");
   });
 
   it("does not render fake testimonials or unsupported performance metrics", () => {
@@ -173,5 +196,12 @@ describe("Marketing LandingPage", () => {
     expect(footerLinks.every((link) => link.getAttribute("href") && !link.getAttribute("href")?.startsWith("#"))).toBe(
       true
     );
+  });
+
+  it("does not mount landing page styles on the login route", () => {
+    const { container } = renderLanding("/login?role=landlord");
+
+    expect(screen.getByTestId("login-page")).toBeInTheDocument();
+    expect(container.querySelector(".rc-landing")).not.toBeInTheDocument();
   });
 });

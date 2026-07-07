@@ -350,8 +350,9 @@ export const landingPageCss = `
 
 .rc-section-title {
   margin: 0;
-  font-size: 2.35rem;
-  line-height: 1.14;
+  font-size: clamp(2rem, 3.9vw, 2.65rem);
+  font-weight: 800;
+  line-height: 1.1;
 }
 
 .rc-section-subtitle {
@@ -384,48 +385,72 @@ export const landingPageCss = `
 
 .rc-trust-flow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.92fr) minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1.15fr) 112px minmax(300px, 0.92fr);
+  gap: 0;
   align-items: center;
+  position: relative;
+}
+
+.rc-trust-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  position: relative;
+  z-index: 2;
+}
+
+.rc-trust-connectors {
+  width: 100%;
+  min-height: 230px;
+  align-self: stretch;
+  position: relative;
+  z-index: 1;
+}
+
+.rc-trust-connectors path {
+  fill: none;
+  stroke: ${colors.pine200};
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .rc-trust-node {
   position: relative;
 }
 
-.rc-trust-node::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  width: 28px;
-  height: 2px;
-  background: ${colors.pine200};
-}
-
-.rc-trust-node:nth-child(odd)::after {
-  right: -28px;
-}
-
-.rc-trust-node:nth-child(even)::after {
-  left: -28px;
-}
-
 .rc-trust-hub {
-  grid-row: span 2;
   border-color: ${colors.pine200};
   background: ${colors.pine50};
+  position: relative;
+  z-index: 2;
 }
 
 .rc-node-code {
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 44px;
   height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: 999px;
   margin-bottom: 12px;
+  padding: 0;
   background: ${colors.pine700};
   color: ${colors.white};
   font-weight: 850;
+  line-height: 1;
+  text-align: center;
+}
+
+.rc-ledger-row .rc-node-code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: ${colors.white};
+  font-size: 0.86rem;
+  line-height: 1;
 }
 
 .rc-comparison {
@@ -482,7 +507,7 @@ export const landingPageCss = `
 
 .rc-lifecycle {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
   gap: 24px;
   align-items: start;
 }
@@ -498,7 +523,7 @@ export const landingPageCss = `
   border: 1px solid var(--rc-line);
   border-radius: 12px;
   background: ${colors.white};
-  padding: 12px 14px;
+  padding: 11px 13px;
   color: ${colors.ink700};
   cursor: pointer;
   font-weight: 750;
@@ -511,7 +536,7 @@ export const landingPageCss = `
 }
 
 .rc-lifecycle-panel {
-  min-height: 360px;
+  min-height: 330px;
 }
 
 .rc-status {
@@ -549,6 +574,71 @@ export const landingPageCss = `
   border: 1px solid rgba(242, 241, 234, 0.14);
   border-radius: 10px;
   padding: 12px;
+}
+
+.rc-operational-trust-card p {
+  color: ${colors.ink700};
+}
+
+.rc-operational-trust-card {
+  color: ${colors.ink900};
+}
+
+.rc-section--pricing {
+  background: ${colors.paper50};
+}
+
+.rc-section--dark .rc-section-title,
+.rc-section--pricing .rc-section-title,
+.rc-final-cta .rc-section-title {
+  font-size: clamp(2.05rem, 4.2vw, 2.8rem);
+}
+
+.rc-pricing-start {
+  display: grid;
+  grid-template-columns: minmax(0, 0.88fr) minmax(320px, 1.12fr);
+  gap: 28px;
+  align-items: center;
+}
+
+.rc-pricing-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.rc-pricing-card {
+  min-height: 100%;
+}
+
+.rc-pricing-card h3 {
+  margin-top: 0;
+}
+
+.rc-pricing-card ul {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rc-pricing-card li {
+  position: relative;
+  padding-left: 18px;
+  color: ${colors.ink700};
+  line-height: 1.55;
+}
+
+.rc-pricing-card li::before {
+  content: "";
+  position: absolute;
+  top: 0.68em;
+  left: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: ${colors.amber500};
 }
 
 .rc-about-grid {
@@ -652,21 +742,23 @@ export const landingPageCss = `
   .rc-hero__inner,
   .rc-lifecycle,
   .rc-about-grid,
+  .rc-pricing-start,
   .rc-trust-flow {
     grid-template-columns: 1fr;
+    gap: 18px;
   }
 
-  .rc-trust-hub {
-    grid-row: auto;
-    order: -1;
-  }
-
-  .rc-trust-node::after {
+  .rc-trust-connectors {
     display: none;
+  }
+
+  .rc-trust-role-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .rc-audience-grid,
   .rc-feature-grid,
+  .rc-pricing-cards,
   .rc-trust-grid,
   .rc-footer-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -692,7 +784,7 @@ export const landingPageCss = `
   }
 
   .rc-section-title {
-    font-size: 2rem;
+    font-size: clamp(1.85rem, 9vw, 2rem);
   }
 
   .rc-hero-visual {
@@ -701,6 +793,8 @@ export const landingPageCss = `
 
   .rc-audience-grid,
   .rc-feature-grid,
+  .rc-pricing-cards,
+  .rc-trust-role-grid,
   .rc-trust-grid,
   .rc-footer-grid {
     grid-template-columns: 1fr;

@@ -11,6 +11,7 @@ import {
   hero,
   lifecycle,
   operationalTrust,
+  pricingStart,
   trustFlow,
   whyRentChain,
 } from "./landingContent";
@@ -244,25 +245,34 @@ export function TrustFlowSection() {
           </div>
         </RevealOnScroll>
         <div className="rc-trust-flow" aria-label="RentChain role flow">
-          {trustFlow.nodes.slice(0, 2).map((node) => (
-            <RevealOnScroll key={node.role} className="rc-card rc-trust-node">
-              <span className="rc-node-code">{node.code}</span>
-              <h3>{node.role}</h3>
-              <p>{node.blurb}</p>
-            </RevealOnScroll>
-          ))}
+          <div className="rc-trust-role-grid">
+            {trustFlow.nodes.map((node) => (
+              <RevealOnScroll key={node.role} className="rc-card rc-trust-node">
+                <span className="rc-node-code">{node.code}</span>
+                <h3>{node.role}</h3>
+                <p>{node.blurb}</p>
+              </RevealOnScroll>
+            ))}
+          </div>
+          <svg
+            className="rc-trust-connectors"
+            viewBox="0 0 120 120"
+            role="img"
+            aria-label="Role records connect into one shared record"
+            preserveAspectRatio="none"
+          >
+            <path d="M4 18 H48" />
+            <path d="M4 42 H48" />
+            <path d="M4 78 H48" />
+            <path d="M4 102 H48" />
+            <path d="M48 18 V102" />
+            <path d="M48 60 H116" />
+          </svg>
           <RevealOnScroll className="rc-panel rc-trust-hub">
             <p className="rc-kicker">{trustFlow.hubKicker}</p>
             <h3>{trustFlow.hubTitle}</h3>
             <p>{trustFlow.hubBody}</p>
           </RevealOnScroll>
-          {trustFlow.nodes.slice(2).map((node) => (
-            <RevealOnScroll key={node.role} className="rc-card rc-trust-node">
-              <span className="rc-node-code">{node.code}</span>
-              <h3>{node.role}</h3>
-              <p>{node.blurb}</p>
-            </RevealOnScroll>
-          ))}
         </div>
       </div>
     </section>
@@ -471,11 +481,53 @@ export function OperationalTrustSection() {
         </div>
         <div className="rc-trust-grid">
           {operationalTrust.cards.map((card) => (
-            <RevealOnScroll key={card.title} className="rc-card">
+            <RevealOnScroll key={card.title} className="rc-card rc-operational-trust-card">
               <h3>{card.title}</h3>
               <p>{card.body}</p>
             </RevealOnScroll>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function PricingStartSection({ onPrimaryCta }: LandingActionProps) {
+  return (
+    <section className="rc-section rc-section--pricing" id="pricing-start" aria-labelledby="pricing-start-title">
+      <div className="rc-container rc-pricing-start">
+        <div>
+          <p className="rc-kicker">{pricingStart.kicker}</p>
+          <h2 className="rc-section-title" id="pricing-start-title">
+            {pricingStart.title}
+          </h2>
+          <p className="rc-section-subtitle">{pricingStart.body}</p>
+          <div className="rc-cta-row">
+            <Link className="rc-link-button rc-link-button--primary" to={pricingStart.pricingCta.href}>
+              {pricingStart.pricingCta.label}
+            </Link>
+            <button type="button" className="rc-button rc-button--accent" onClick={onPrimaryCta}>
+              {pricingStart.primaryCta.label}
+            </button>
+          </div>
+        </div>
+        <div className="rc-pricing-cards" aria-label="Pricing overview">
+          <div className="rc-card rc-pricing-card">
+            <h3>{pricingStart.freeTitle}</h3>
+            <ul>
+              {pricingStart.freeItems.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="rc-card rc-pricing-card">
+            <h3>{pricingStart.paidTitle}</h3>
+            <ul>
+              {pricingStart.paidItems.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
     </section>

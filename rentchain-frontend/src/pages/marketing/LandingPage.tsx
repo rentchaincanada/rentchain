@@ -13,6 +13,7 @@ import {
   MarketingFooter,
   MarketingHeader,
   OperationalTrustSection,
+  PricingStartSection,
   TrustFlowSection,
   WhyRentChainSection,
 } from "./landing/LandingSections";
@@ -97,6 +98,7 @@ const LandingPage: React.FC = () => {
         <LifecycleSection />
         <FeatureShowcaseSection />
         <OperationalTrustSection />
+        <PricingStartSection onPrimaryCta={handlePrimaryCta} />
         <AboutVisionSection />
         <FinalCtaSection onPrimaryCta={handlePrimaryCta} />
       </main>
