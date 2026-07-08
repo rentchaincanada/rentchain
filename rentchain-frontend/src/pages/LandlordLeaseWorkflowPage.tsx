@@ -17,6 +17,18 @@ type WorkflowConfig = {
   }>;
 };
 
+const workflowTheme = {
+  paper: "#f7f1e7",
+  card: "#fffaf1",
+  cardStrong: "#fff6e8",
+  border: "rgba(91, 70, 48, 0.18)",
+  borderStrong: "rgba(91, 70, 48, 0.3)",
+  charcoal: "#211c17",
+  muted: "#63594d",
+  subtle: "#7a6b5c",
+  pine: "#245842",
+} as const;
+
 const WORKFLOWS: Record<WorkflowKey, WorkflowConfig> = {
   execution: {
     key: "execution",
@@ -249,11 +261,11 @@ export default function LandlordLeaseWorkflowPage() {
     <div data-testid="lease-workflow-page" style={workflowPageStyle}>
       <section style={workflowOverviewStyle} aria-label="Workflow overview">
         <div style={{ display: "grid", gap: 6 }}>
-          <div style={{ fontSize: 12, color: "#2563eb", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0 }}>
+          <div style={{ fontSize: 12, color: workflowTheme.pine, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0 }}>
             {workflow.eyebrow}
           </div>
-          <h1 style={{ margin: 0, fontSize: 26, letterSpacing: 0, color: "#0f172a" }}>{workflow.title}</h1>
-          <div style={{ color: "#475569", lineHeight: 1.6 }}>{workflow.purpose}</div>
+          <h1 style={{ margin: 0, fontSize: 26, letterSpacing: 0, color: workflowTheme.charcoal }}>{workflow.title}</h1>
+          <div style={{ color: workflowTheme.muted, lineHeight: 1.6 }}>{workflow.purpose}</div>
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -280,7 +292,7 @@ export default function LandlordLeaseWorkflowPage() {
               {workflow.facts.map((fact) => (
                 <div key={fact.label} style={{ display: "grid", gap: 4 }}>
                   <dt style={termStyle}>{fact.label}</dt>
-                  <dd style={{ margin: 0, color: "#0f172a" }}>{fact.value(lease)}</dd>
+                  <dd style={{ margin: 0, color: workflowTheme.charcoal }}>{fact.value(lease)}</dd>
                 </div>
               ))}
             </dl>
@@ -288,7 +300,7 @@ export default function LandlordLeaseWorkflowPage() {
 
           <section style={panelStyle} aria-label="Workflow review checklist">
             <h2 style={sectionHeadingStyle}>Review before action</h2>
-            <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 8, color: "#334155", lineHeight: 1.55 }}>
+            <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 8, color: workflowTheme.muted, lineHeight: 1.55 }}>
               {workflow.reviewItems.map((item) => (
                 <li key={item}>{item}</li>
               ))}
@@ -298,7 +310,7 @@ export default function LandlordLeaseWorkflowPage() {
           {workflow.key === "renewal" ? (
             <section style={panelStyle} aria-label="Renewal operator inputs">
               <h2 style={sectionHeadingStyle}>Renewal operator inputs</h2>
-              <div style={{ color: "#334155", lineHeight: 1.6 }}>
+              <div style={{ color: workflowTheme.muted, lineHeight: 1.6 }}>
                 Use the portfolio renewal workbench to review unit-specific renewal inputs such as proposed rent,
                 term dates, response deadline, and renewal recommendation before preparing tenant-facing notices.
               </div>
@@ -310,10 +322,10 @@ export default function LandlordLeaseWorkflowPage() {
 
           <section style={panelStyle} aria-label="Jurisdiction context">
             <h2 style={sectionHeadingStyle}>Jurisdiction context</h2>
-            <div style={{ color: "#334155", lineHeight: 1.6 }}>
+            <div style={{ color: workflowTheme.muted, lineHeight: 1.6 }}>
               {policy ? policy.recommendation : "No specific jurisdiction policy is available for this workflow yet."}
             </div>
-            <div style={{ marginTop: 10, color: "#475569", lineHeight: 1.6 }}>
+            <div style={{ marginTop: 10, color: workflowTheme.subtle, lineHeight: 1.6 }}>
               Workflow guidance is operational only. Verify current provincial requirements and official forms before acting.
               RentChain does not provide legal advice or guarantee enforceability.
             </div>
@@ -327,44 +339,51 @@ export default function LandlordLeaseWorkflowPage() {
 const buttonLinkStyle: React.CSSProperties = {
   padding: "8px 10px",
   borderRadius: 8,
-  border: "1px solid #cbd5e1",
+  border: `1px solid ${workflowTheme.borderStrong}`,
   textDecoration: "none",
-  color: "#0f172a",
-  background: "#fff",
+  color: workflowTheme.pine,
+  background: workflowTheme.card,
   fontWeight: 700,
+  boxShadow: "0 6px 16px rgba(59, 44, 28, 0.08)",
 };
 
 const workflowPageStyle: React.CSSProperties = {
   width: "100%",
   maxWidth: 1040,
   margin: "0 auto",
-  padding: "0 16px 24px",
+  padding: "16px",
   boxSizing: "border-box",
   display: "grid",
   gap: 16,
+  border: `1px solid ${workflowTheme.border}`,
+  borderRadius: 20,
+  background: `radial-gradient(circle at top left, rgba(184, 130, 62, 0.14) 0, rgba(247, 241, 231, 0) 34%), linear-gradient(180deg, ${workflowTheme.card} 0%, ${workflowTheme.paper} 100%)`,
+  boxShadow: "0 16px 36px rgba(59, 44, 28, 0.12)",
 };
 
 const workflowOverviewStyle: React.CSSProperties = {
-  border: "1px solid #dbe4ee",
-  borderRadius: 8,
-  background: "#f8fafc",
+  border: `1px solid ${workflowTheme.border}`,
+  borderRadius: 14,
+  background: workflowTheme.cardStrong,
   padding: 18,
   display: "grid",
   gap: 14,
+  boxShadow: "0 10px 24px rgba(59, 44, 28, 0.08)",
 };
 
 const panelStyle: React.CSSProperties = {
-  border: "1px solid #dbe4ee",
-  borderRadius: 8,
-  background: "#fff",
+  border: `1px solid ${workflowTheme.border}`,
+  borderRadius: 14,
+  background: workflowTheme.card,
   padding: 16,
   display: "grid",
   gap: 12,
+  boxShadow: "0 8px 18px rgba(59, 44, 28, 0.07)",
 };
 
 const sectionHeadingStyle: React.CSSProperties = {
   margin: 0,
-  color: "#0f172a",
+  color: workflowTheme.charcoal,
   fontSize: 18,
   letterSpacing: 0,
 };
@@ -372,7 +391,7 @@ const sectionHeadingStyle: React.CSSProperties = {
 const termStyle: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 800,
-  color: "#64748b",
+  color: workflowTheme.subtle,
   textTransform: "uppercase",
   letterSpacing: 0,
 };

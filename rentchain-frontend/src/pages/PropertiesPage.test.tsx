@@ -226,6 +226,26 @@ describe("PropertiesPage", () => {
     expect(screen.getAllByRole("button", { name: "Upgrade to Starter" }).length).toBeGreaterThan(0);
   });
 
+  it("renders action request filters with route-local warm active states", async () => {
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Free tier property workflow")).toBeInTheDocument();
+
+    const filterButtons = Array.from(document.querySelectorAll(".rc-action-request-filter-button"));
+    expect(filterButtons).toHaveLength(4);
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("data-active", "true");
+    expect(screen.getByRole("button", { name: "New" })).toHaveAttribute("data-active", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Resolved" }));
+
+    expect(screen.getByRole("button", { name: "Resolved" })).toHaveAttribute("data-active", "true");
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("data-active", "false");
+  });
+
   it("shows a print action when a property is selected", async () => {
     render(
       <MemoryRouter>

@@ -146,8 +146,8 @@ describe("LandlordLeaseWorkflowPage", () => {
       boxSizing: "border-box",
     });
     expect(screen.getByLabelText("Workflow overview")).toHaveStyle({
-      background: "#f8fafc",
-      borderRadius: "8px",
+      background: "#fff6e8",
+      borderRadius: "14px",
     });
   });
 

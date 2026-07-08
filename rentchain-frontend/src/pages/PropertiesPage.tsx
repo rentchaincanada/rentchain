@@ -1289,13 +1289,22 @@ const PropertiesPage: React.FC = () => {
                 {["all", "new", "acknowledged", "resolved"].map((status) => (
                   <Button
                     key={status}
-                    variant={actionFilter === status ? "primary" : "ghost"}
+                    className="rc-action-request-filter-button"
+                    data-active={actionFilter === status ? "true" : "false"}
+                    variant="ghost"
                     onClick={() =>
                       setActionFilter(
                         status as ActionRequestStatus | "all"
                       )
                     }
-                    style={{ padding: "4px 10px", fontSize: 12 }}
+                    style={{
+                      padding: "4px 10px",
+                      fontSize: 12,
+                      background: actionFilter === status ? landlordWorkspaceTheme.pine : landlordWorkspaceTheme.card,
+                      color: actionFilter === status ? "#fff" : landlordWorkspaceTheme.charcoal,
+                      border: `1px solid ${actionFilter === status ? landlordWorkspaceTheme.pine : landlordWorkspaceTheme.borderStrong}`,
+                      boxShadow: actionFilter === status ? "0 6px 16px rgba(36, 88, 66, 0.18)" : "none",
+                    }}
                   >
                     {status === "all"
                       ? "All"
