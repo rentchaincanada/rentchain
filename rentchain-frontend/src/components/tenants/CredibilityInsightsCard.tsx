@@ -1,7 +1,7 @@
 import React from "react";
 import { RiskScoreBadge } from "@/components/leases/RiskScoreBadge";
 import type { CredibilityInsights, CredibilityTrend } from "@/types/credibilityInsights";
-import { colors, radius, shadows, spacing, text } from "@/styles/tokens";
+import { radius, spacing, text } from "@/styles/tokens";
 
 interface CredibilityInsightsCardProps {
   insights?: CredibilityInsights | null;
@@ -63,8 +63,8 @@ const ItemList: React.FC<{ items: string[]; emptyLabel: string }> = ({ items, em
             alignItems: "center",
             padding: "5px 9px",
             borderRadius: radius.pill,
-            border: `1px solid ${colors.border}`,
-            background: "rgba(248,250,252,0.96)",
+            border: "1px solid rgba(91,70,48,0.16)",
+            background: "#fffaf1",
             color: text.secondary,
             fontSize: 12,
             fontWeight: 600,
@@ -94,8 +94,9 @@ const InsightSection: React.FC<{
     <div
       style={{
         borderRadius: radius.lg,
-        border: `1px solid ${colors.border}`,
-        background: "rgba(255,255,255,0.96)",
+        border: "1px solid rgba(91,70,48,0.16)",
+        background: "#fffaf1",
+        boxShadow: "0 8px 18px rgba(59,44,28,0.06)",
         padding: spacing.md,
         display: "grid",
         gap: spacing.sm,
@@ -159,9 +160,9 @@ export const CredibilityInsightsCard: React.FC<CredibilityInsightsCardProps> = (
     <section
       style={{
         borderRadius: radius.xl,
-        border: `1px solid ${colors.borderStrong}`,
-        background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96))",
-        boxShadow: shadows.soft,
+        border: "1px solid rgba(91,70,48,0.16)",
+        background: "linear-gradient(180deg, #fff6e8 0%, #fffaf1 100%)",
+        boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
         padding: spacing.lg,
         display: "grid",
         gap: spacing.md,
@@ -178,8 +179,8 @@ export const CredibilityInsightsCard: React.FC<CredibilityInsightsCardProps> = (
         <div
           style={{
             borderRadius: radius.lg,
-            border: `1px dashed ${colors.borderStrong}`,
-            background: "rgba(248,250,252,0.92)",
+            border: "1px dashed rgba(91,70,48,0.28)",
+            background: "#fffaf1",
             padding: spacing.md,
             color: text.muted,
             fontSize: 13,

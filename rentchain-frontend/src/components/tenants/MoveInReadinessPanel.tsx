@@ -21,7 +21,7 @@ function overallTone(status: MoveInReadiness["overallStatus"]) {
     case "complete":
       return { label: "Complete", bg: "rgba(220,252,231,0.92)", border: "rgba(34,197,94,0.28)", color: "#166534" };
     case "ready_for_keys":
-      return { label: "Ready for keys", bg: "rgba(219,234,254,0.95)", border: "rgba(59,130,246,0.28)", color: "#1d4ed8" };
+      return { label: "Ready for keys", bg: "rgba(36,88,66,0.12)", border: "rgba(36,88,66,0.28)", color: "#245842" };
     case "blocked":
       return { label: "Blocked", bg: "rgba(254,226,226,0.95)", border: "rgba(239,68,68,0.28)", color: "#b91c1c" };
     case "in_progress":
@@ -38,7 +38,7 @@ function itemTone(status: MoveInReadinessItemStatus) {
     case "blocked":
       return { bg: "rgba(254,226,226,0.95)", border: "rgba(239,68,68,0.24)", color: "#b91c1c" };
     case "submitted":
-      return { bg: "rgba(224,231,255,0.95)", border: "rgba(99,102,241,0.24)", color: "#4338ca" };
+      return { bg: "rgba(36,88,66,0.1)", border: "rgba(36,88,66,0.22)", color: "#245842" };
     case "pending":
       return { bg: "rgba(254,249,195,0.95)", border: "rgba(234,179,8,0.22)", color: "#a16207" };
     case "not_required":
@@ -108,7 +108,7 @@ export const MoveInReadinessPanel: React.FC<{
       style={{
         borderRadius: radius.xl,
         border: `1px solid ${colors.borderStrong}`,
-        background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96))",
+        background: "linear-gradient(180deg, rgba(255,250,241,0.98), rgba(251,246,237,0.96))",
         boxShadow: shadows.soft,
         padding: spacing.lg,
         display: "grid",

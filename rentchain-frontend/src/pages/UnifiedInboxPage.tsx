@@ -52,6 +52,17 @@ const TABS: Array<{ id: InboxTab; label: string }> = [
   { id: "system", label: "System" },
 ];
 
+const landlordInboxTheme = {
+  card: "#fffaf1",
+  cardStrong: "#fff6e8",
+  panel: "#fbf6ed",
+  border: "rgba(91, 70, 48, 0.16)",
+  borderStrong: "rgba(91, 70, 48, 0.3)",
+  pine: "#245842",
+  pineSoft: "rgba(36, 88, 66, 0.12)",
+  shadow: "0 12px 28px rgba(59, 44, 28, 0.1)",
+};
+
 function normalize(value: string) {
   return value.trim().toLowerCase();
 }
@@ -155,6 +166,7 @@ export default function UnifiedInboxPage({ role }: Props) {
   }, [filteredRecords, openedRecordId, safeRecords]);
   const unreadCount = safeRecords.filter((record) => record.status === "unread").length;
   const priorityCount = safeRecords.filter((record) => record.priority === "critical" || record.priority === "high").length;
+  const isLandlord = role === "landlord";
   const markRecordRead = React.useCallback(
     async (record: UnifiedInboxRecord) => {
       setOpenedRecordId(record.id);
@@ -189,12 +201,34 @@ export default function UnifiedInboxPage({ role }: Props) {
         width: "calc(100% - 32px)",
       }}
     >
-      <Card elevated style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
+      <Card
+        elevated
+        style={{
+          background: isLandlord ? landlordInboxTheme.card : undefined,
+          borderColor: isLandlord ? landlordInboxTheme.border : undefined,
+          boxShadow: isLandlord ? landlordInboxTheme.shadow : undefined,
+          display: "flex",
+          justifyContent: "space-between",
+          gap: spacing.md,
+          flexWrap: "wrap",
+        }}
+      >
         <div style={{ display: "grid", gap: 6, maxWidth: 760 }}>
           <h1 style={{ margin: 0, color: text.primary, fontSize: "1.55rem" }}>{titleForRole(role)}</h1>
           <div style={{ color: text.muted, lineHeight: 1.55 }}>{subtitleForRole(role)}</div>
         </div>
-        <Button type="button" variant="ghost" onClick={() => void load()} disabled={loading} style={{ alignSelf: "flex-start" }}>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => void load()}
+          disabled={loading}
+          style={{
+            alignSelf: "flex-start",
+            background: isLandlord ? landlordInboxTheme.cardStrong : undefined,
+            borderColor: isLandlord ? landlordInboxTheme.borderStrong : undefined,
+            color: isLandlord ? "#211c17" : undefined,
+          }}
+        >
           <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
             <RefreshCcw size={16} aria-hidden="true" />
             Refresh
@@ -227,7 +261,15 @@ export default function UnifiedInboxPage({ role }: Props) {
             </Card>
           ) : null}
 
-          <Card style={{ display: "grid", gap: spacing.md }}>
+          <Card
+            style={{
+              background: isLandlord ? landlordInboxTheme.card : undefined,
+              borderColor: isLandlord ? landlordInboxTheme.border : undefined,
+              boxShadow: isLandlord ? landlordInboxTheme.shadow : undefined,
+              display: "grid",
+              gap: spacing.md,
+            }}
+          >
             <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }} role="tablist" aria-label="Inbox views">
               {TABS.map((tab) => {
                 const selected = activeTab === tab.id;
@@ -244,21 +286,25 @@ export default function UnifiedInboxPage({ role }: Props) {
                       setActiveTab(tab.id);
                     }}
                     style={{
-                      border: selected ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
+                      border: selected
+                        ? `1px solid ${isLandlord ? landlordInboxTheme.borderStrong : colors.accent}`
+                        : `1px solid ${isLandlord ? landlordInboxTheme.border : colors.border}`,
                       borderRadius: 999,
-                      background: selected ? "#eff6ff" : colors.card,
-                      color: selected ? colors.accent : text.secondary,
+                      background: selected ? (isLandlord ? landlordInboxTheme.pineSoft : "#eff6ff") : isLandlord ? landlordInboxTheme.card : colors.card,
+                      color: selected ? (isLandlord ? landlordInboxTheme.pine : colors.accent) : text.secondary,
                       cursor: "pointer",
                       display: "inline-flex",
                       alignItems: "center",
                       gap: 8,
                       fontWeight: 800,
                       minHeight: 38,
+                      outline: selected && isLandlord ? "2px solid rgba(36, 88, 66, 0.18)" : undefined,
+                      outlineOffset: selected && isLandlord ? 2 : undefined,
                       padding: "8px 12px",
                     }}
                   >
                     <span>{tab.label}</span>
-                    <span style={{ color: selected ? colors.accent : text.subtle, fontSize: 12 }}>{count}</span>
+                    <span style={{ color: selected ? (isLandlord ? landlordInboxTheme.pine : colors.accent) : text.subtle, fontSize: 12 }}>{count}</span>
                   </button>
                 );
               })}
@@ -292,6 +338,8 @@ export default function UnifiedInboxPage({ role }: Props) {
                       border: `1px solid ${colors.border}`,
                       borderRadius: radius.md,
                       color: text.primary,
+                      background: isLandlord ? landlordInboxTheme.cardStrong : undefined,
+                      borderColor: isLandlord ? landlordInboxTheme.borderStrong : colors.border,
                       minHeight: 42,
                       padding: "9px 12px 9px 36px",
                       width: "100%",
@@ -313,6 +361,8 @@ export default function UnifiedInboxPage({ role }: Props) {
                     border: `1px solid ${colors.border}`,
                     borderRadius: radius.md,
                     color: text.primary,
+                    background: isLandlord ? landlordInboxTheme.cardStrong : undefined,
+                    borderColor: isLandlord ? landlordInboxTheme.borderStrong : colors.border,
                     minHeight: 42,
                     padding: "9px 12px",
                     width: "100%",
@@ -339,6 +389,8 @@ export default function UnifiedInboxPage({ role }: Props) {
                     border: `1px solid ${colors.border}`,
                     borderRadius: radius.md,
                     color: text.primary,
+                    background: isLandlord ? landlordInboxTheme.cardStrong : undefined,
+                    borderColor: isLandlord ? landlordInboxTheme.borderStrong : colors.border,
                     minHeight: 42,
                     padding: "9px 12px",
                     width: "100%",
@@ -353,7 +405,19 @@ export default function UnifiedInboxPage({ role }: Props) {
               </label>
             </div>
 
-            <div style={{ display: "flex", gap: spacing.md, flexWrap: "wrap", color: text.muted, fontSize: "0.92rem" }}>
+            <div
+              style={{
+                background: isLandlord ? landlordInboxTheme.panel : undefined,
+                border: isLandlord ? `1px solid ${landlordInboxTheme.border}` : undefined,
+                borderRadius: isLandlord ? radius.md : undefined,
+                color: text.muted,
+                display: "flex",
+                flexWrap: "wrap",
+                fontSize: "0.92rem",
+                gap: spacing.md,
+                padding: isLandlord ? "10px 12px" : undefined,
+              }}
+            >
               <span>
                 Showing <strong style={{ color: text.primary }}>{filteredRecords.length}</strong> of {safeRecords.length}
               </span>

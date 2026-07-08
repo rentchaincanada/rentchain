@@ -41,15 +41,15 @@ type TaskErrorState =
 
 const panelSurface: React.CSSProperties = {
   borderRadius: 16,
-  border: "1px solid rgba(148,163,184,0.28)",
-  background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96))",
-  boxShadow: "0 12px 28px rgba(15,23,42,0.06)",
+  border: "1px solid rgba(91,70,48,0.16)",
+  background: "linear-gradient(180deg, #fff6e8 0%, #fffaf1 100%)",
+  boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
 };
 
 const insetPanelSurface: React.CSSProperties = {
   borderRadius: 14,
-  border: "1px solid rgba(148,163,184,0.22)",
-  background: "rgba(248,250,252,0.9)",
+  border: "1px solid rgba(91,70,48,0.16)",
+  background: "#fffaf1",
 };
 
 const automationTitleStyle: React.CSSProperties = {

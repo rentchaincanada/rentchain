@@ -146,21 +146,22 @@ export function PaymentCsvImportPreviewCard({ onImportComplete }: { onImportComp
     <section
       aria-label="Payment CSV import assistant"
       style={{
-        border: "1px solid #dbeafe",
-        background: "#eff6ff",
+        border: "1px solid rgba(91,70,48,0.16)",
+        background: "#fff6e8",
         borderRadius: 12,
         padding: 12,
         display: "grid",
         gap: 12,
+        boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ fontWeight: 800, color: "#0f172a" }}>AI-assisted payment CSV import</div>
-          <div style={{ color: "#475569", fontSize: 13, maxWidth: 760 }}>
+          <div style={{ fontWeight: 800, color: "#211c17" }}>AI-assisted payment CSV import</div>
+          <div style={{ color: "#63594d", fontSize: 13, maxWidth: 760 }}>
             Upload tenant payment rows for review. This preview matches tenants and leases, but it does not write payments or ledger entries.
           </div>
-          <div style={{ color: "#475569", fontSize: 13, maxWidth: 760 }}>
+          <div style={{ color: "#63594d", fontSize: 13, maxWidth: 760 }}>
             Accepted columns: tenant name (or first/last name), amount, payment date. Property/unit recommended.
           </div>
           <pre
@@ -169,9 +170,9 @@ export function PaymentCsvImportPreviewCard({ onImportComplete }: { onImportComp
               margin: "4px 0 0",
               padding: 8,
               borderRadius: 8,
-              background: "#fff",
-              border: "1px solid #bfdbfe",
-              color: "#334155",
+              background: "#fffaf1",
+              border: "1px solid rgba(91,70,48,0.18)",
+              color: "#3f382f",
               fontSize: 12,
               overflowX: "auto",
               maxWidth: 760,
@@ -241,9 +242,9 @@ export function PaymentCsvImportPreviewCard({ onImportComplete }: { onImportComp
 
           <div
             style={{
-              border: "1px solid #bfdbfe",
+              border: "1px solid rgba(91,70,48,0.18)",
               borderRadius: 10,
-              background: "#fff",
+              background: "#fffaf1",
               padding: 10,
               display: "flex",
               justifyContent: "space-between",
@@ -252,7 +253,7 @@ export function PaymentCsvImportPreviewCard({ onImportComplete }: { onImportComp
               alignItems: "center",
             }}
           >
-            <div style={{ color: "#475569", fontSize: 13 }}>
+            <div style={{ color: "#63594d", fontSize: 13 }}>
               This will create payment records and append ledger entries for selected rows. This cannot overwrite existing ledger history.
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -278,7 +279,7 @@ export function PaymentCsvImportPreviewCard({ onImportComplete }: { onImportComp
             </div>
           ) : null}
 
-          <div style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#fff", padding: 10 }}>
+          <div style={{ border: "1px solid rgba(91,70,48,0.18)", borderRadius: 10, background: "#fffaf1", padding: 10 }}>
             <div style={{ fontWeight: 700, marginBottom: 8 }}>Rows grouped by property</div>
             <div style={{ display: "grid", gap: 6 }}>
               {preview.summary.groupedByProperty.map((group) => (
@@ -292,10 +293,10 @@ export function PaymentCsvImportPreviewCard({ onImportComplete }: { onImportComp
             </div>
           </div>
 
-          <div style={{ overflowX: "auto", border: "1px solid #bfdbfe", borderRadius: 10, background: "#fff" }}>
+          <div style={{ overflowX: "auto", border: "1px solid rgba(91,70,48,0.18)", borderRadius: 10, background: "#fffaf1" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 920 }}>
               <thead>
-                <tr style={{ textAlign: "left", color: "#475569", fontSize: 12 }}>
+                <tr style={{ textAlign: "left", color: "#63594d", fontSize: 12 }}>
                   <th style={cellStyle}>Import</th>
                   <th style={cellStyle}>Status</th>
                   <th style={cellStyle}>Tenant</th>
@@ -313,7 +314,7 @@ export function PaymentCsvImportPreviewCard({ onImportComplete }: { onImportComp
                     const basisLabel = matchBasisLabel(row);
                     const eligible = isImportEligible(row);
                     return (
-                      <tr key={row.rowId} style={{ borderTop: "1px solid #e2e8f0" }}>
+                      <tr key={row.rowId} style={{ borderTop: "1px solid rgba(91,70,48,0.14)" }}>
                         <td style={cellStyle}>
                           <input
                             aria-label={`Select row ${row.sourceRowNumber}`}
@@ -342,17 +343,17 @@ export function PaymentCsvImportPreviewCard({ onImportComplete }: { onImportComp
                         </td>
                         <td style={cellStyle}>
                           <div style={{ fontWeight: 700 }}>{row.matchedTenantName || row.tenantName || "Unmatched tenant"}</div>
-                          {row.tenantEmail ? <div style={{ color: "#64748b", fontSize: 12 }}>{row.tenantEmail}</div> : null}
+                          {row.tenantEmail ? <div style={{ color: "#63594d", fontSize: 12 }}>{row.tenantEmail}</div> : null}
                         </td>
                         <td style={cellStyle}>
                           <div>{row.propertyLabel || row.property || "Unresolved property"}</div>
-                          <div style={{ color: "#64748b", fontSize: 12 }}>{row.unitLabel || row.unit || "Unit not resolved"}</div>
+                          <div style={{ color: "#63594d", fontSize: 12 }}>{row.unitLabel || row.unit || "Unit not resolved"}</div>
                         </td>
                         <td style={cellStyle}>{row.amountDisplay || "-"}</td>
                         <td style={cellStyle}>{row.paymentDate || "-"}</td>
                         <td style={cellStyle}>
                           <div>{row.method || "Method not provided"}</div>
-                          <div style={{ color: "#64748b", fontSize: 12 }}>{row.reference || "No reference"}</div>
+                          <div style={{ color: "#63594d", fontSize: 12 }}>{row.reference || "No reference"}</div>
                         </td>
                         <td style={cellStyle}>
                           <div>{row.reason}</div>
@@ -367,7 +368,7 @@ export function PaymentCsvImportPreviewCard({ onImportComplete }: { onImportComp
             </table>
           </div>
 
-          <div style={{ color: "#475569", fontSize: 13 }}>
+          <div style={{ color: "#63594d", fontSize: 13 }}>
             Preview is read-only until you click Import selected payments. High-confidence rows are preselected. Review-required rows can be selected manually. Blocked, ambiguous, invalid, and duplicate rows are not imported.
           </div>
         </div>
@@ -378,8 +379,8 @@ export function PaymentCsvImportPreviewCard({ onImportComplete }: { onImportComp
 
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#fff", padding: 10 }}>
-      <div style={{ color: "#64748b", fontSize: 12 }}>{label}</div>
+    <div style={{ border: "1px solid rgba(91,70,48,0.18)", borderRadius: 10, background: "#fffaf1", padding: 10 }}>
+      <div style={{ color: "#63594d", fontSize: 12 }}>{label}</div>
       <strong>{value}</strong>
     </div>
   );

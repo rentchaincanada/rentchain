@@ -35,20 +35,45 @@ const SOURCE_LABELS: Record<UnifiedInboxSourceKind, string> = {
   "contractor.message": "Message",
 };
 
+const landlordInboxTheme = {
+  card: "#fffaf1",
+  cardStrong: "#fff6e8",
+  detail: "#fbf6ed",
+  border: "rgba(91, 70, 48, 0.16)",
+  borderStrong: "rgba(91, 70, 48, 0.3)",
+  pine: "#245842",
+  pineSoft: "rgba(36, 88, 66, 0.12)",
+  neutralText: "#4e463d",
+  neutralSoft: "#f3efe8",
+  neutralBorder: "#d9cbbc",
+  charcoal: "#211c17",
+};
+
 function roleTitle(role: UnifiedInboxRole) {
   if (role === "tenant") return "Tenant inbox";
   if (role === "contractor") return "Contractor inbox";
   return "Landlord inbox";
 }
 
-function statusTone(status: UnifiedInboxRecord["status"]) {
+function statusTone(status: UnifiedInboxRecord["status"], role: UnifiedInboxRole) {
+  if (role === "landlord") {
+    if (status === "resolved") return { color: "#166534", background: "#dcfce7" };
+    if (status === "archived" || status === "muted") return { color: landlordInboxTheme.neutralText, background: landlordInboxTheme.neutralSoft };
+    if (status === "read") return { color: landlordInboxTheme.pine, background: landlordInboxTheme.pineSoft };
+    return { color: "#9a3412", background: "#ffedd5" };
+  }
   if (status === "resolved") return { color: "#166534", background: "#dcfce7" };
   if (status === "archived" || status === "muted") return { color: "#475569", background: "#f1f5f9" };
   if (status === "read") return { color: "#1d4ed8", background: "#dbeafe" };
   return { color: "#9a3412", background: "#ffedd5" };
 }
 
-function priorityTone(priority: UnifiedInboxRecord["priority"]) {
+function priorityTone(priority: UnifiedInboxRecord["priority"], role: UnifiedInboxRole) {
+  if (role === "landlord") {
+    if (priority === "critical" || priority === "high") return { color: "#991b1b", background: "#fee2e2" };
+    if (priority === "low") return { color: landlordInboxTheme.neutralText, background: landlordInboxTheme.neutralSoft };
+    return { color: landlordInboxTheme.neutralText, background: landlordInboxTheme.neutralSoft };
+  }
   if (priority === "critical" || priority === "high") return { color: "#991b1b", background: "#fee2e2" };
   if (priority === "low") return { color: "#475569", background: "#f1f5f9" };
   return { color: "#075985", background: "#e0f2fe" };
@@ -171,8 +196,9 @@ export function UnifiedInboxList({ records, role, onOpenRecord }: Props) {
     <div style={{ display: "grid", gap: spacing.sm }}>
       {safeRecords.map((record) => {
         const active = record.id === selected?.id;
-        const priority = priorityTone(record.priority);
-        const status = statusTone(record.status);
+        const isLandlord = role === "landlord";
+        const priority = priorityTone(record.priority, role);
+        const status = statusTone(record.status, role);
         const selectedWorkspace = active ? workspaceForRecord(record, role) : null;
         return (
           <React.Fragment key={record.id}>
@@ -186,14 +212,19 @@ export function UnifiedInboxList({ records, role, onOpenRecord }: Props) {
               aria-expanded={active}
               style={{
                 textAlign: "left",
-                border: active ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
+                border: active
+                  ? `1px solid ${isLandlord ? landlordInboxTheme.borderStrong : colors.accent}`
+                  : `1px solid ${isLandlord ? landlordInboxTheme.border : colors.border}`,
                 borderRadius: radius.md,
-                background: active ? "#eff6ff" : colors.card,
+                background: active ? (isLandlord ? landlordInboxTheme.cardStrong : "#eff6ff") : isLandlord ? landlordInboxTheme.card : colors.card,
                 color: text.primary,
                 padding: spacing.md,
                 display: "grid",
                 gap: spacing.sm,
                 cursor: "pointer",
+                outline: active && isLandlord ? "2px solid rgba(36, 88, 66, 0.2)" : undefined,
+                outlineOffset: active && isLandlord ? 2 : undefined,
+                boxShadow: active && isLandlord ? "0 0 0 3px rgba(36, 88, 66, 0.08)" : "none",
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.sm }}>
@@ -218,9 +249,9 @@ export function UnifiedInboxList({ records, role, onOpenRecord }: Props) {
               <Card
                 data-testid="unified-inbox-detail-panel"
                 style={{
-                  background: "#f8fafc",
-                  borderColor: "rgba(37, 99, 235, 0.16)",
-                  borderLeft: `3px solid ${colors.accent}`,
+                  background: isLandlord ? landlordInboxTheme.detail : "#f8fafc",
+                  borderColor: isLandlord ? landlordInboxTheme.border : "rgba(37, 99, 235, 0.16)",
+                  borderLeft: `3px solid ${isLandlord ? landlordInboxTheme.pine : colors.accent}`,
                   boxShadow: "none",
                   display: "grid",
                   gap: spacing.md,
@@ -261,7 +292,7 @@ export function UnifiedInboxList({ records, role, onOpenRecord }: Props) {
                         href={selectedWorkspace.href}
                         style={{
                           alignItems: "center",
-                          background: colors.accent,
+                          background: isLandlord ? landlordInboxTheme.charcoal : colors.accent,
                           borderRadius: 999,
                           color: "#fff",
                           display: "inline-flex",

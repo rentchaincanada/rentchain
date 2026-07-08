@@ -109,8 +109,10 @@ export function ActionRequestsPanel({
     <div
       style={{
         padding: 16,
-        border: "1px solid rgba(148,163,184,0.25)",
+        border: "1px solid rgba(91,70,48,0.16)",
         borderRadius: 16,
+        background: "#fff6e8",
+        boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
       }}
     >
       <div
@@ -130,8 +132,9 @@ export function ActionRequestsPanel({
             style={{
               padding: "8px 10px",
               borderRadius: 12,
-              border: "1px solid rgba(148,163,184,0.35)",
-              background: "transparent",
+              border: "1px solid rgba(91,70,48,0.28)",
+              background: "#fffaf1",
+              color: "#211c17",
               cursor: "pointer",
               fontWeight: 650,
               fontSize: 12,
@@ -147,8 +150,9 @@ export function ActionRequestsPanel({
             style={{
               padding: "8px 10px",
               borderRadius: 12,
-              border: "1px solid rgba(148,163,184,0.35)",
-              background: "transparent",
+              border: "1px solid rgba(91,70,48,0.28)",
+              background: "#fffaf1",
+              color: "#211c17",
               cursor: "pointer",
               fontWeight: 650,
               fontSize: 12,
@@ -176,7 +180,15 @@ export function ActionRequestsPanel({
       )}
 
       {!loading && !err && sorted.length === 0 && (
-        <div style={{ opacity: 0.75 }}>
+        <div
+          style={{
+            padding: 12,
+            borderRadius: 12,
+            border: "1px dashed rgba(91,70,48,0.28)",
+            background: "#fffaf1",
+            color: "#63594d",
+          }}
+        >
           No action requests yet for this property.
         </div>
       )}
@@ -189,7 +201,8 @@ export function ActionRequestsPanel({
               style={{
                 padding: 12,
                 borderRadius: 14,
-                border: "1px solid rgba(148,163,184,0.25)",
+                border: "1px solid rgba(91,70,48,0.16)",
+                background: "#fffaf1",
               }}
             >
               <div

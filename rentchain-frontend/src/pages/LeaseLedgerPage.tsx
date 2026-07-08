@@ -108,24 +108,24 @@ function totalOutstandingObligationCents(
 }
 
 const obligationStatusCopy: Record<PaymentObligationStatus, { label: string; bg: string; color: string; border: string }> = {
-  expected: { label: "Expected", bg: "#eff6ff", color: "#1d4ed8", border: "#bfdbfe" },
+  expected: { label: "Expected", bg: "#fffaf1", color: "#63594d", border: "rgba(91,70,48,0.18)" },
   pending: { label: "Pending", bg: "#fef9c3", color: "#854d0e", border: "#fde68a" },
   paid: { label: "Paid", bg: "#dcfce7", color: "#166534", border: "#bbf7d0" },
   underpaid: { label: "Underpaid", bg: "#ffedd5", color: "#9a3412", border: "#fed7aa" },
-  overpaid: { label: "Overpaid", bg: "#e0f2fe", color: "#075985", border: "#bae6fd" },
+  overpaid: { label: "Overpaid", bg: "rgba(36,88,66,0.1)", color: "#245842", border: "rgba(36,88,66,0.22)" },
   failed: { label: "Failed", bg: "#fee2e2", color: "#991b1b", border: "#fecaca" },
   missing: { label: "Missing", bg: "#fef3c7", color: "#92400e", border: "#fde68a" },
-  manual_review_required: { label: "Manual review", bg: "#fae8ff", color: "#86198f", border: "#f5d0fe" },
-  unknown: { label: "Unknown", bg: "#f1f5f9", color: "#334155", border: "#cbd5e1" },
+  manual_review_required: { label: "Manual review", bg: "#fff6e8", color: "#5b462f", border: "rgba(184,130,62,0.34)" },
+  unknown: { label: "Unknown", bg: "#fffaf1", color: "#63594d", border: "rgba(91,70,48,0.18)" },
 };
 
 const delinquencySignalCopy: Record<DelinquencySignalType, { label: string; reason: string; bg: string; color: string; border: string }> = {
-  rent_due: { label: "Rent due", reason: "Rent is due by the due date", bg: "#eff6ff", color: "#1d4ed8", border: "#bfdbfe" },
+  rent_due: { label: "Rent due", reason: "Rent is due by the due date", bg: "#fffaf1", color: "#63594d", border: "rgba(91,70,48,0.18)" },
   overdue: { label: "Overdue", reason: "Rent past due date", bg: "#fee2e2", color: "#991b1b", border: "#fecaca" },
   partially_paid: { label: "Underpaid", reason: "Partial payment received", bg: "#ffedd5", color: "#9a3412", border: "#fed7aa" },
   failed_payment: { label: "Failed", reason: "Payment did not complete", bg: "#fee2e2", color: "#991b1b", border: "#fecaca" },
   missing_payment: { label: "Missing", reason: "No rent payment found after due date", bg: "#fef3c7", color: "#92400e", border: "#fde68a" },
-  manual_review_required: { label: "Manual review required", reason: "Payment mismatch or incomplete evidence", bg: "#fae8ff", color: "#86198f", border: "#f5d0fe" },
+  manual_review_required: { label: "Manual review required", reason: "Payment mismatch or incomplete evidence", bg: "#fff6e8", color: "#5b462f", border: "rgba(184,130,62,0.34)" },
 };
 
 const obligationFallbackReason: Record<PaymentObligationStatus, string> = {
@@ -428,10 +428,10 @@ function DecisionRow({
         <strong>{copy.label}</strong>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>Financial signal</span>
+        <span style={{ color: "#63594d", fontSize: 12, fontWeight: 800 }}>Financial signal</span>
         <DecisionBadge severity={decision.severity} label={copy.badge} />
-        <span style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>Workflow status</span>
-        <span style={{ border: "1px solid #cbd5e1", borderRadius: 999, padding: "3px 8px", fontSize: 12, fontWeight: 800 }}>
+        <span style={{ color: "#63594d", fontSize: 12, fontWeight: 800 }}>Workflow status</span>
+        <span style={{ border: "1px solid rgba(91,70,48,0.18)", background: "#fffaf1", borderRadius: 999, padding: "3px 8px", fontSize: 12, fontWeight: 800 }}>
           {decisionStatusCopy[decision.status || "detected"]}
         </span>
       </div>
@@ -477,7 +477,7 @@ function DecisionRow({
         )}
       </div>
       {decision.latestAction ? (
-        <div style={{ color: "#64748b", fontSize: 12 }}>Last action: {decisionStatusCopy[decision.latestAction.nextStatus]}</div>
+        <div style={{ color: "#63594d", fontSize: 12 }}>Last action: {decisionStatusCopy[decision.latestAction.nextStatus]}</div>
       ) : null}
       <DecisionContextPanel
         decision={summary.displayDecision}
@@ -1027,27 +1027,27 @@ export default function LeaseLedgerPage() {
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
         <label style={{ display: "grid", gap: 4 }}>
-          <span style={{ fontSize: 12, color: "#334155" }}>From</span>
+          <span style={{ fontSize: 12, color: "#3f382f" }}>From</span>
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
         </label>
         <label style={{ display: "grid", gap: 4 }}>
-          <span style={{ fontSize: 12, color: "#334155" }}>To</span>
+          <span style={{ fontSize: 12, color: "#3f382f" }}>To</span>
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </label>
         <button onClick={loadLedger}>Apply</button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
-        <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
-          <div style={{ fontSize: 12, color: "#64748b" }}>Charges</div>
+        <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 10, padding: 10, background: "#fff6e8", boxShadow: "0 10px 24px rgba(59,44,28,0.08)" }}>
+          <div style={{ fontSize: 12, color: "#63594d" }}>Charges</div>
           <strong>{formatCurrencyCents(totals.chargesCents)}</strong>
         </div>
-        <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
-          <div style={{ fontSize: 12, color: "#64748b" }}>Payments</div>
+        <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 10, padding: 10, background: "#fff6e8", boxShadow: "0 10px 24px rgba(59,44,28,0.08)" }}>
+          <div style={{ fontSize: 12, color: "#63594d" }}>Payments</div>
           <strong>{formatCurrencyCents(totals.paymentsCents)}</strong>
         </div>
-        <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
-          <div style={{ fontSize: 12, color: "#64748b" }}>Balance</div>
+        <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 10, padding: 10, background: "#fff6e8", boxShadow: "0 10px 24px rgba(59,44,28,0.08)" }}>
+          <div style={{ fontSize: 12, color: "#63594d" }}>Balance</div>
           <strong>{formatCurrencyCents(totals.balanceCents)}</strong>
         </div>
       </div>
@@ -1066,8 +1066,8 @@ export default function LeaseLedgerPage() {
       <section className="lease-ledger-csv-card">
         <div className="lease-ledger-csv-card-header">
           <div>
-            <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>AI-assisted payment CSV import</div>
-            <div style={{ color: "#475569", fontSize: 13, marginTop: 3 }}>
+            <div style={{ fontSize: "1rem", fontWeight: 800, color: "#211c17" }}>AI-assisted payment CSV import</div>
+            <div style={{ color: "#63594d", fontSize: 13, marginTop: 3 }}>
               Upload payment rows when you need assisted matching.
             </div>
           </div>
@@ -1083,21 +1083,21 @@ export default function LeaseLedgerPage() {
       </section>
 
       {lease?.leaseExecution ? (
-        <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 12, background: "#fff", display: "grid", gap: 8 }}>
-          <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>Lease execution</div>
-          <div style={{ fontWeight: 800 }}>{lease.leaseExecution.executionLabel}</div>
-          <div style={{ color: "#475569" }}>{lease.leaseExecution.executionDescription}</div>
+        <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 10, padding: 12, background: "#fff6e8", boxShadow: "0 10px 24px rgba(59,44,28,0.08)", display: "grid", gap: 8 }}>
+          <div style={{ fontSize: 12, color: "#63594d", textTransform: "uppercase", letterSpacing: "0.04em" }}>Lease execution</div>
+          <div style={{ color: "#211c17", fontWeight: 800 }}>{lease.leaseExecution.executionLabel}</div>
+          <div style={{ color: "#3f382f" }}>{lease.leaseExecution.executionDescription}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
             <div>
-              <div style={{ fontSize: 12, color: "#64748b" }}>Tenant signature</div>
+              <div style={{ fontSize: 12, color: "#63594d" }}>Tenant signature</div>
               <strong>{lease.leaseExecution.tenantSignatureStatus.replace(/_/g, " ")}</strong>
             </div>
             <div>
-              <div style={{ fontSize: 12, color: "#64748b" }}>Landlord signature</div>
+              <div style={{ fontSize: 12, color: "#63594d" }}>Landlord signature</div>
               <strong>{lease.leaseExecution.landlordSignatureStatus.replace(/_/g, " ")}</strong>
             </div>
             <div>
-              <div style={{ fontSize: 12, color: "#64748b" }}>Next action</div>
+              <div style={{ fontSize: 12, color: "#63594d" }}>Next action</div>
               <strong>{executionNextActionLabel(lease.leaseExecution.requiredNextAction)}</strong>
             </div>
           </div>
@@ -1107,10 +1107,10 @@ export default function LeaseLedgerPage() {
       <section style={{ display: "grid", gap: 10 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: "1rem" }}>Decisions</h2>
-          <div style={{ color: "#64748b", fontSize: 13, marginTop: 3 }}>
+          <div style={{ color: "#63594d", fontSize: 13, marginTop: 3 }}>
             Read-only decisions derived from detected lease and payment signals.
           </div>
-          <div style={{ color: "#475569", fontSize: 13, marginTop: 4 }}>
+          <div style={{ color: "#3f382f", fontSize: 13, marginTop: 4 }}>
             These actions manage operational review workflow only. They do not change lease balances, payment records, or ledger history.
           </div>
         </div>
@@ -1129,8 +1129,8 @@ export default function LeaseLedgerPage() {
                 <div style={{ fontSize: 12, color: "#9a3412" }}>Active warning decisions</div>
                 <strong>{decisionSummary.warning}</strong>
               </div>
-              <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 12, color: "#64748b" }}>Active decision count</div>
+              <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 10, padding: 10, background: "#fff6e8" }}>
+                <div style={{ fontSize: 12, color: "#63594d" }}>Active decision count</div>
                 <strong>{decisionSummary.total}</strong>
               </div>
             </div>
@@ -1155,7 +1155,7 @@ export default function LeaseLedgerPage() {
       <section style={{ display: "grid", gap: 10 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: "1rem" }}>Financial delinquency summary</h2>
-          <div style={{ color: "#64748b", fontSize: 13, marginTop: 3 }}>
+          <div style={{ color: "#63594d", fontSize: 13, marginTop: 3 }}>
             Read-only detection based on obligation ledger signals.
           </div>
         </div>
@@ -1172,8 +1172,8 @@ export default function LeaseLedgerPage() {
             <div style={{ fontSize: 12, color: "#9a3412" }}>Underpaid</div>
             <strong>{delinquencySummary?.partiallyPaidCount || 0}</strong>
           </div>
-          <div style={{ border: "1px solid #f5d0fe", borderRadius: 10, padding: 10, background: "#fdf4ff" }}>
-            <div style={{ fontSize: 12, color: "#86198f" }}>Manual Review</div>
+          <div style={{ border: "1px solid rgba(91,70,48,0.18)", borderRadius: 10, padding: 10, background: "#fff6e8" }}>
+            <div style={{ fontSize: 12, color: "#63594d" }}>Manual Review</div>
             <strong>{delinquencySummary?.manualReviewCount || 0}</strong>
           </div>
         </div>
@@ -1187,61 +1187,61 @@ export default function LeaseLedgerPage() {
       <section style={{ display: "grid", gap: 10 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: "1rem" }}>Payment obligations</h2>
-          <div style={{ color: "#64748b", fontSize: 13, marginTop: 3 }}>
+          <div style={{ color: "#63594d", fontSize: 13, marginTop: 3 }}>
             Read-only view of expected rent, execution records, and reconciliation evidence.
           </div>
-          <div style={{ color: "#475569", fontSize: 13, marginTop: 4 }}>
+          <div style={{ color: "#3f382f", fontSize: 13, marginTop: 4 }}>
             Obligation status is financial truth from payments and reconciliation. Decision workflow actions do not change these values.
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
-          <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
-            <div style={{ fontSize: 12, color: "#64748b" }}>Expected</div>
+          <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 10, padding: 10, background: "#fff6e8" }}>
+            <div style={{ fontSize: 12, color: "#63594d" }}>Expected</div>
             <strong>{formatCurrencyCents(obligationSummary?.expectedAmountCents || 0)}</strong>
           </div>
-          <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
-            <div style={{ fontSize: 12, color: "#64748b" }}>Paid</div>
+          <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 10, padding: 10, background: "#fff6e8" }}>
+            <div style={{ fontSize: 12, color: "#63594d" }}>Paid</div>
             <strong>{formatCurrencyCents(obligationSummary?.paidAmountCents || 0)}</strong>
           </div>
-          <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
-            <div style={{ fontSize: 12, color: "#64748b" }}>Outstanding</div>
+          <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 10, padding: 10, background: "#fff6e8" }}>
+            <div style={{ fontSize: 12, color: "#63594d" }}>Outstanding</div>
             <strong>{formatCurrencyCents(obligationSummary?.outstandingAmountCents || 0)}</strong>
           </div>
-          <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
-            <div style={{ fontSize: 12, color: "#64748b" }}>Manual Review</div>
+          <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 10, padding: 10, background: "#fff6e8" }}>
+            <div style={{ fontSize: 12, color: "#63594d" }}>Manual Review</div>
             <strong>{obligationSummary?.manualReviewCount || 0}</strong>
           </div>
         </div>
         {obligationRows.length === 0 ? (
-          <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, color: "#64748b", background: "#fff" }}>
+          <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 12, padding: 12, color: "#63594d", background: "#fff6e8" }}>
             Obligation ledger is not available yet for this lease.
           </div>
         ) : (
           <>
-          <div className="lease-ledger-obligations-table" style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 12 }}>
+          <div className="lease-ledger-obligations-table" style={{ overflowX: "auto", border: "1px solid rgba(91,70,48,0.16)", borderRadius: 12, background: "#fffaf1" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1080 }}>
               <thead>
-                <tr style={{ background: "#f8fafc" }}>
+                <tr style={{ background: "#f4eadc" }}>
                   {["Period", "Due date", "Expected", "Paid", "Outstanding", "Financial status", "Financial signal", "Evidence"].map((h) => (
-                    <th key={h} style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #e2e8f0" }}>{h}</th>
+                    <th key={h} style={{ textAlign: "left", padding: 10, borderBottom: "1px solid rgba(91,70,48,0.16)" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {obligationRows.map((row) => (
                   <tr key={row.rowId}>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatPeriod(row)}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatDate(row.dueDate)}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatCurrencyCents(row.expectedAmountCents)}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatCurrencyCents(row.paidAmountCents)}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatCurrencyCents(obligationOutstandingCents(row))}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatPeriod(row)}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatDate(row.dueDate)}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatCurrencyCents(row.expectedAmountCents)}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatCurrencyCents(row.paidAmountCents)}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatCurrencyCents(obligationOutstandingCents(row))}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>
                       <ObligationStatusBadge status={row.obligationStatus || "unknown"} />
                     </td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9", minWidth: 220 }}>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)", minWidth: 220 }}>
                       <DelinquencyIndicators row={row} signals={delinquencySignals} />
                     </td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9", color: "#475569" }}>{prettyEvidenceStatus(row)}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)", color: "#3f382f" }}>{prettyEvidenceStatus(row)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1261,34 +1261,34 @@ export default function LeaseLedgerPage() {
       {loading ? (
         <div>Loading ledger…</div>
       ) : entries.length === 0 ? (
-        <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, color: "#64748b", background: "#fff" }}>
+        <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 12, padding: 12, color: "#63594d", background: "#fff6e8" }}>
           No ledger entries for this range.
         </div>
       ) : (
         <>
-          <div className="lease-ledger-entries-table" style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 12 }}>
+          <div className="lease-ledger-entries-table" style={{ overflowX: "auto", border: "1px solid rgba(91,70,48,0.16)", borderRadius: 12, background: "#fffaf1" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
               <thead>
-                <tr style={{ background: "#f8fafc" }}>
+                <tr style={{ background: "#f4eadc" }}>
                   {["Date", "Type", "Category", "Amount", "Method/Ref", "Notes", "Balance"].map((h) => (
-                    <th key={h} style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #e2e8f0" }}>{h}</th>
+                    <th key={h} style={{ textAlign: "left", padding: 10, borderBottom: "1px solid rgba(91,70,48,0.16)" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {entries.map((entry) => (
                   <tr key={entry.id}>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{entry.effectiveDate}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9", textTransform: "capitalize" }}>{entry.entryType}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9", textTransform: "capitalize" }}>{entry.category}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9", color: entry.entryType === "payment" ? "#047857" : "#0f172a" }}>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{entry.effectiveDate}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)", textTransform: "capitalize" }}>{entry.entryType}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)", textTransform: "capitalize" }}>{entry.category}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)", color: entry.entryType === "payment" ? "#047857" : "#211c17" }}>
                       {formatSignedCurrencyCents(entry.amountCents, entry.entryType)}
                     </td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>
                       {[entry.method, entry.reference].filter(Boolean).join(" · ") || "—"}
                     </td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{entry.notes || "—"}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatCurrencyCents(entry.balanceCents)}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{entry.notes || "—"}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatCurrencyCents(entry.balanceCents)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1312,9 +1312,10 @@ export default function LeaseLedgerPage() {
                 display: "flex",
                 gap: 12,
                 flexWrap: "wrap",
-                border: "1px solid #e2e8f0",
+                border: "1px solid rgba(91,70,48,0.16)",
                 borderRadius: 10,
                 padding: 10,
+                background: "#fff6e8",
               }}
             >
               <strong style={{ minWidth: 90 }}>{month}</strong>

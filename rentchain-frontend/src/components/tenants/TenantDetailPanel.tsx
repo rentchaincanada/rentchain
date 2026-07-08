@@ -50,6 +50,16 @@ const riskBorderMap: Record<string, string> = {
 
 const RECENT_LEASE_LEDGER_ENTRY_LIMIT = 10;
 const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const tenantProfileTheme = {
+  card: "#fffaf1",
+  cardStrong: "#fff6e8",
+  border: "rgba(91, 70, 48, 0.16)",
+  borderStrong: "rgba(91, 70, 48, 0.3)",
+  pine: "#245842",
+  pineSoft: "rgba(36, 88, 66, 0.12)",
+  charcoal: "#211c17",
+  muted: "#63594d",
+};
 
 function formatDateLabel(value?: string | number | null) {
   if (!value) return "--";
@@ -534,10 +544,10 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
                     onClick={() => setRecordOpen(true)}
                     style={{
                       borderRadius: radius.pill,
-                      border: `1px solid ${colors.border}`,
+                      border: `1px solid ${tenantProfileTheme.pine}`,
                       padding: "6px 10px",
-                      background: colors.accent,
-                      color: "white",
+                      background: tenantProfileTheme.pine,
+                      color: "#fffaf1",
                       fontSize: 12,
                       display: "flex",
                       alignItems: "center",
@@ -676,7 +686,49 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
           />
         }
       >
-        <MoveInReadinessPanel readiness={moveInReadiness} saving={readinessSaving} onUpdate={handleReadinessUpdate} />
+        <details
+          style={{
+            borderRadius: radius.xl,
+            border: `1px solid ${tenantProfileTheme.border}`,
+            background: tenantProfileTheme.card,
+            boxShadow: shadows.sm,
+            overflow: "hidden",
+          }}
+        >
+          <summary
+            style={{
+              alignItems: "center",
+              cursor: "pointer",
+              display: "flex",
+              gap: spacing.md,
+              justifyContent: "space-between",
+              padding: spacing.md,
+            }}
+          >
+            <span style={{ display: "grid", gap: 4 }}>
+              <span style={{ color: tenantProfileTheme.charcoal, fontWeight: 850 }}>Move-in readiness</span>
+              <span style={{ color: tenantProfileTheme.muted, fontSize: 13 }}>
+                Open when you need the detailed lease, deposit, inspection, insurance, and key-release checklist.
+              </span>
+            </span>
+            <span
+              style={{
+                border: `1px solid ${tenantProfileTheme.borderStrong}`,
+                borderRadius: radius.pill,
+                color: tenantProfileTheme.pine,
+                flex: "0 0 auto",
+                fontSize: 12,
+                fontWeight: 800,
+                padding: "5px 9px",
+              }}
+            >
+              Details
+            </span>
+          </summary>
+          <div style={{ borderTop: `1px solid ${tenantProfileTheme.border}`, padding: spacing.md }}>
+            <MoveInReadinessPanel readiness={moveInReadiness} saving={readinessSaving} onUpdate={handleReadinessUpdate} />
+          </div>
+        </details>
       </FeatureGate>
 
       {latestLeaseNoticeSummary ? (
@@ -798,8 +850,9 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
         style={{
           padding: spacing.md,
           borderRadius: radius.md,
-          border: `1px solid ${colors.border}`,
-          background: colors.panel,
+          border: `1px solid ${tenantProfileTheme.border}`,
+          background: tenantProfileTheme.cardStrong,
+          boxShadow: shadows.sm,
           fontSize: "0.85rem",
         }}
       >
@@ -831,8 +884,9 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
         style={{
           padding: spacing.md,
           borderRadius: radius.md,
-          backgroundColor: colors.panel,
-          border: `1px solid ${colors.border}`,
+          backgroundColor: tenantProfileTheme.cardStrong,
+          border: `1px solid ${tenantProfileTheme.border}`,
+          boxShadow: shadows.sm,
           fontSize: "0.85rem",
         }}
       >
@@ -873,7 +927,8 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
                 padding: "6px 10px",
                 borderRadius: radius.md,
                 border: `1px solid ${colors.border}`,
-                background: colors.panel,
+                background: tenantProfileTheme.card,
+                color: tenantProfileTheme.charcoal,
                 cursor: "pointer",
                 fontWeight: 700,
                 fontSize: "0.8rem",
@@ -898,10 +953,10 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
                   <div
                     key={entry.id}
                     style={{
-                      border: "1px solid rgba(148,163,184,0.35)",
+                      border: `1px solid ${tenantProfileTheme.border}`,
                       borderRadius: 10,
                       padding: 12,
-                      background: "rgba(255,255,255,0.8)",
+                      background: tenantProfileTheme.card,
                       display: "grid",
                       gap: 4,
                     }}

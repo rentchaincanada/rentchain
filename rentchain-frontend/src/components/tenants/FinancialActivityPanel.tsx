@@ -91,8 +91,9 @@ export const FinancialActivityPanel: React.FC<FinancialActivityPanelProps> = ({
       style={{
         padding: spacing.md,
         borderRadius: radius.md,
-        border: `1px solid ${colors.border}`,
-        background: colors.panel,
+        border: "1px solid rgba(91,70,48,0.16)",
+        background: "#fff6e8",
+        boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
         display: "grid",
         gap: spacing.md,
       }}
@@ -126,10 +127,10 @@ export const FinancialActivityPanel: React.FC<FinancialActivityPanelProps> = ({
                       <div
                         key={row.id}
                         style={{
-                          border: "1px solid rgba(148,163,184,0.35)",
+                          border: "1px solid rgba(91,70,48,0.16)",
                           borderRadius: 10,
                           padding: 12,
-                          background: "rgba(255,255,255,0.8)",
+                          background: "#fffaf1",
                           display: "grid",
                           gap: 6,
                         }}
@@ -144,8 +145,8 @@ export const FinancialActivityPanel: React.FC<FinancialActivityPanelProps> = ({
                                   alignItems: "center",
                                   padding: "2px 8px",
                                   borderRadius: radius.pill,
-                                  border: `1px solid ${colors.border}`,
-                                  background: colors.card,
+                                  border: "1px solid rgba(91,70,48,0.16)",
+                                  background: "#fff6e8",
                                   color: text.primary,
                                   fontSize: "0.72rem",
                                   fontWeight: 700,

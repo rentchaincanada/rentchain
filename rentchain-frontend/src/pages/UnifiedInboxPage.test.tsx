@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import UnifiedInboxPage from "./UnifiedInboxPage";
 import type { UnifiedInboxRecord } from "../api/unifiedInboxApi";
@@ -257,16 +257,19 @@ describe("UnifiedInboxPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Pipe leak reported/i }));
     const pipeButton = screen.getByRole("button", { name: /Pipe leak reported/i });
     expect(pipeButton).toHaveAttribute("aria-expanded", "true");
+    expect(pipeButton).toHaveStyle({ background: "#fff6e8" });
     await waitFor(() => expect(pipeButton).toHaveTextContent("Read"));
+    expect(within(pipeButton).getByText("Read")).toHaveStyle({ background: "rgba(36, 88, 66, 0.12)", color: "#245842" });
     expect(screen.getByRole("tab", { name: /Unread 1/i })).toBeInTheDocument();
     expect(pipeButton.nextElementSibling).toHaveTextContent("Pipe leak reported");
     expect(pipeButton.nextElementSibling).toHaveTextContent("Status");
     expect(screen.getByTestId("unified-inbox-detail-panel")).toHaveStyle({
-      background: "#f8fafc",
+      background: "#fbf6ed",
       boxShadow: "none",
     });
     expect(screen.getByText("Open the maintenance workspace to review available maintenance requests.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open maintenance workspace/i })).toHaveAttribute("href", "/maintenance");
+    expect(screen.getByRole("link", { name: /Open maintenance workspace/i })).toHaveStyle({ background: "#211c17" });
 
     fireEvent.click(screen.getByRole("tab", { name: /Unread 1/i }));
     fireEvent.click(screen.getByRole("button", { name: /Outstanding rent balance/i }));

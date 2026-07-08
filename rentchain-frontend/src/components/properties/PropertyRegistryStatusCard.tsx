@@ -694,15 +694,24 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
   );
 
   return (
-    <Card style={{ display: "grid", gap: 10, padding: 14 }}>
+    <Card
+      style={{
+        display: "grid",
+        gap: 10,
+        padding: 14,
+        border: "1px solid rgba(91,70,48,0.16)",
+        background: "#fff6e8",
+        boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
+      }}
+    >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.6 }}>
+          <div style={{ fontSize: 12, color: "#63594d", textTransform: "uppercase", letterSpacing: 0.6 }}>
             Compliance / Registry
           </div>
-          <div style={{ fontSize: 15, fontWeight: 800 }}>Registry readiness</div>
+          <div style={{ color: "#211c17", fontSize: 15, fontWeight: 800 }}>Registry readiness</div>
           {!loading && data?.readiness ? (
-            <div style={{ color: "#64748b", fontSize: 12 }}>
+            <div style={{ color: "#63594d", fontSize: 12 }}>
               {data.readiness.schemaLabel}
               {data.readiness.readinessStatus !== "verified" ? ` · ${data.readiness.completionPercent}% complete` : ""}
             </div>
@@ -718,7 +727,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
         </div>
       </div>
 
-      {loading ? <div style={{ color: "#475569" }}>Checking registry and readiness…</div> : null}
+      {loading ? <div style={{ color: "#63594d" }}>Checking registry and readiness…</div> : null}
       {!loading && error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
 
       {!loading && data?.readiness ? (
@@ -760,7 +769,8 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
               width: "min(920px, 100%)",
               maxHeight: "88vh",
               overflow: "auto",
-              background: "#fff",
+              background: "#fffaf1",
+              border: "1px solid rgba(91,70,48,0.18)",
               borderRadius: 18,
               padding: 18,
               display: "grid",
@@ -890,12 +900,12 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                 gap: 12,
                 padding: "14px 16px",
                 borderRadius: 14,
-                border: "1px solid rgba(15,23,42,0.08)",
-                background: "#fff",
+                border: "1px solid rgba(91,70,48,0.16)",
+                background: "#fffaf1",
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-                <div style={{ fontWeight: 700, color: "#0f172a" }}>Filing timeline</div>
+                <div style={{ fontWeight: 700, color: "#211c17" }}>Filing timeline</div>
                 {filingStatusLabel(workflowStatus) ? (
                   <Pill tone={filingStatusTone(workflowStatus)}>{filingStatusLabel(workflowStatus)}</Pill>
                 ) : null}
@@ -917,16 +927,16 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                         height: 16,
                         borderRadius: 999,
                         marginTop: 4,
-                        background: step.active ? "#2563eb" : step.complete ? "#22c55e" : "#e2e8f0",
-                        boxShadow: step.active ? "0 0 0 4px rgba(37,99,235,0.14)" : "none",
+                        background: step.active ? "#245842" : step.complete ? "#22c55e" : "#d7c8b6",
+                        boxShadow: step.active ? "0 0 0 4px rgba(36,88,66,0.14)" : "none",
                       }}
                     />
                     <div style={{ display: "grid", gap: 4 }}>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                        <div style={{ fontWeight: step.active ? 800 : 700, color: "#0f172a" }}>{step.label}</div>
+                        <div style={{ fontWeight: step.active ? 800 : 700, color: "#211c17" }}>{step.label}</div>
                         {step.active ? <Pill tone="accent">Current</Pill> : null}
                       </div>
-                      <div style={{ color: "#64748b", fontSize: 13 }}>
+                      <div style={{ color: "#63594d", fontSize: 13 }}>
                         {step.timestamp !== null ? `${formatDateTime(step.timestamp)}${step.actor ? ` • ${step.actor}` : ""}` : "Not reached yet"}
                       </div>
                     </div>
@@ -1423,7 +1433,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                         href={filing.request.checklist.portalUrl}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: "#2563eb", fontWeight: 700, textDecoration: "none" }}
+                        style={{ color: "#245842", fontWeight: 700, textDecoration: "none" }}
                       >
                         Open Halifax filing portal
                       </a>

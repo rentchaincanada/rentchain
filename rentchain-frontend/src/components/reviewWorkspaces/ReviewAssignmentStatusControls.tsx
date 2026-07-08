@@ -184,9 +184,9 @@ export function ReviewAssignmentStatusControls({
     <section
       aria-label={`Manual review lifecycle controls for ${title}`}
       style={{
-        border: "1px solid #dbe3ef",
+        border: "1px solid rgba(91,70,48,0.16)",
         borderRadius: 8,
-        background: "#f8fafc",
+        background: "#fffaf1",
         padding: 10,
         display: "grid",
         gap: 8,
@@ -194,8 +194,8 @@ export function ReviewAssignmentStatusControls({
       }}
     >
       <div style={{ display: "grid", gap: 3 }}>
-        <strong style={{ color: "#0f172a", fontSize: 13 }}>Manual review controls</strong>
-        <span style={{ color: "#475569", fontSize: 12, lineHeight: 1.45 }}>
+        <strong style={{ color: "#211c17", fontSize: 13 }}>Manual review controls</strong>
+        <span style={{ color: "#63594d", fontSize: 12, lineHeight: 1.45 }}>
           Assignment and status selections are manual review metadata only. They do not route work automatically, change source
           records, or alter financial status.
         </span>
@@ -211,8 +211,8 @@ export function ReviewAssignmentStatusControls({
             onChange={(event) => updateStatus(event.target.value as ReviewLifecycleStatus)}
             style={{
               ...selectStyle,
-              borderColor: pendingChanges && pendingStatus !== null ? "#f59e0b" : "#cbd5e1",
-              backgroundColor: pendingChanges && pendingStatus !== null ? "#fffbeb" : "#fff",
+              borderColor: pendingChanges && pendingStatus !== null ? "#f59e0b" : "rgba(91,70,48,0.24)",
+              backgroundColor: pendingChanges && pendingStatus !== null ? "#fffbeb" : "#fffaf1",
             }}
           >
             {REVIEW_STATUS_OPTIONS.map((option) => (
@@ -221,7 +221,7 @@ export function ReviewAssignmentStatusControls({
               </option>
             ))}
           </select>
-          <span id={`${itemId}-status-help`} style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
+          <span id={`${itemId}-status-help`} style={{ fontSize: 12, color: "#63594d", lineHeight: 1.4 }}>
             {pendingChanges && pendingStatus !== null ? "Change pending confirmation" : selectedStatusDescription(status)}
           </span>
         </label>
@@ -235,8 +235,8 @@ export function ReviewAssignmentStatusControls({
             onChange={(event) => updateAssignment(event.target.value as ReviewAssignmentTarget)}
             style={{
               ...selectStyle,
-              borderColor: pendingChanges && pendingAssignment !== null ? "#f59e0b" : "#cbd5e1",
-              backgroundColor: pendingChanges && pendingAssignment !== null ? "#fffbeb" : "#fff",
+              borderColor: pendingChanges && pendingAssignment !== null ? "#f59e0b" : "rgba(91,70,48,0.24)",
+              backgroundColor: pendingChanges && pendingAssignment !== null ? "#fffbeb" : "#fffaf1",
             }}
           >
             {REVIEW_ASSIGNMENT_OPTIONS.map((option) => (
@@ -245,12 +245,12 @@ export function ReviewAssignmentStatusControls({
               </option>
             ))}
           </select>
-          <span id={`${itemId}-assignment-help`} style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
+          <span id={`${itemId}-assignment-help`} style={{ fontSize: 12, color: "#63594d", lineHeight: 1.4 }}>
             {pendingChanges && pendingAssignment !== null ? "Change pending confirmation" : selectedAssignmentReason(assignment)}
           </span>
         </label>
       </div>
-      <div id={`${itemId}-manual-review-summary`} style={{ display: "grid", gap: 3, color: "#334155", fontSize: 13, lineHeight: 1.4 }}>
+      <div id={`${itemId}-manual-review-summary`} style={{ display: "grid", gap: 3, color: "#3f382f", fontSize: 13, lineHeight: 1.4 }}>
         <span>Manual status: {reviewStatusLabel(pendingStatus ?? status)}</span>
         <span>Manual assignment: {reviewAssignmentLabel(pendingAssignment ?? assignment)}</span>
         <span>Assignment reason: {selectedAssignmentReason(pendingAssignment ?? assignment)}</span>
@@ -291,8 +291,8 @@ export function ReviewAssignmentStatusControls({
               onClick={confirmChanges}
               disabled={saving}
               style={{
-                backgroundColor: saving ? "#94a3b8" : "#059669",
-                color: "#fff",
+                backgroundColor: saving ? "#7a6b5a" : "#245842",
+                color: "#fffaf1",
                 border: "none",
                 borderRadius: 6,
                 padding: "10px 16px",
@@ -310,8 +310,8 @@ export function ReviewAssignmentStatusControls({
               onClick={cancelChanges}
               disabled={saving}
               style={{
-                backgroundColor: "#6b7280",
-                color: "#fff",
+                backgroundColor: "#3f382f",
+                color: "#fffaf1",
                 border: "none",
                 borderRadius: 6,
                 padding: "10px 16px",
@@ -326,7 +326,7 @@ export function ReviewAssignmentStatusControls({
               Cancel
             </button>
           </div>
-          <div style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.4 }}>
+          <div style={{ fontSize: 12, color: "#63594d", lineHeight: 1.4 }}>
             <span id={`${itemId}-confirm-help`} style={{ display: "block" }}>
               Confirm: Apply the assignment changes and record in audit trail.
             </span>
@@ -343,17 +343,17 @@ export function ReviewAssignmentStatusControls({
 const controlLabelStyle: React.CSSProperties = {
   display: "grid",
   gap: 5,
-  color: "#334155",
+  color: "#3f382f",
   fontSize: 12,
   fontWeight: 900,
 };
 
 const selectStyle: React.CSSProperties = {
-  border: "1px solid #cbd5e1",
+  border: "1px solid rgba(91,70,48,0.24)",
   borderRadius: 8,
   padding: "12px 14px",
-  color: "#0f172a",
-  background: "#fff",
+  color: "#211c17",
+  background: "#fffaf1",
   minWidth: 0,
   width: "100%",
   minHeight: 44,

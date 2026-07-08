@@ -966,15 +966,15 @@ function savedViewFilters(view: SavedOperationalView): Partial<CommandCenterFilt
 function severityTone(severity: CommandCenterSeverity) {
   if (severity === "critical") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
   if (severity === "warning") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
-  return { color: "#075985", background: "#e0f2fe", border: "#bae6fd" };
+  return { color: "#245842", background: "rgba(36,88,66,0.1)", border: "rgba(36,88,66,0.22)" };
 }
 
 function chipStyle(selected: boolean, tone: "dark" | "blue" = "blue"): React.CSSProperties {
   const activeDark = tone === "dark";
   return {
-    border: selected ? `1px solid ${activeDark ? "#0f172a" : "#1d4ed8"}` : "1px solid #cbd5e1",
-    background: selected ? (activeDark ? "#0f172a" : "#dbeafe") : "#fff",
-    color: selected ? (activeDark ? "#fff" : "#1d4ed8") : "#334155",
+    border: selected ? `1px solid ${activeDark ? "#211c17" : "#245842"}` : "1px solid rgba(91,70,48,0.22)",
+    background: selected ? (activeDark ? "#211c17" : "rgba(36,88,66,0.12)") : "#fffaf1",
+    color: selected ? (activeDark ? "#fffaf1" : "#245842") : "#3f382f",
     borderRadius: 999,
     padding: "8px 12px",
     fontSize: 13,
@@ -988,15 +988,40 @@ function chipStyle(selected: boolean, tone: "dark" | "blue" = "blue"): React.CSS
 }
 
 const sectionTitleStyle: React.CSSProperties = {
-  color: "#0f172a",
+  color: "#211c17",
   fontSize: 15,
   fontWeight: 900,
 };
 
 const helperTextStyle: React.CSSProperties = {
-  color: "#64748b",
+  color: "#63594d",
   fontSize: 13,
   lineHeight: 1.45,
+};
+
+const operationsCardSurface: React.CSSProperties = {
+  border: "1px solid rgba(91,70,48,0.16)",
+  background: "linear-gradient(180deg, #fff6e8 0%, #fffaf1 100%)",
+  boxShadow: "0 10px 24px rgba(59,44,28,0.08)",
+};
+
+const operationsSectionSurface: React.CSSProperties = {
+  border: "1px solid rgba(91,70,48,0.14)",
+  background: "linear-gradient(180deg, #fffaf1 0%, #fff6e8 100%)",
+  boxShadow: "0 10px 24px rgba(59,44,28,0.07)",
+};
+
+const operationsInputStyle: React.CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  border: "1px solid rgba(91,70,48,0.24)",
+  borderRadius: 10,
+  padding: "10px 12px",
+  fontSize: 14,
+  color: "#211c17",
+  background: "#fffaf1",
+  boxSizing: "border-box",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.65)",
 };
 
 function Badge({ children, severity }: { children: React.ReactNode; severity: CommandCenterSeverity }) {
@@ -1141,8 +1166,24 @@ export default function OperationalCommandCenterPage() {
 
   return (
     <MacShell title="Operational command center" showTopNav={false}>
-      <div style={{ display: "grid", gap: 18, width: "100%", maxWidth: 1280, margin: "0 auto", minWidth: 0 }}>
-        <Section>
+      <div
+        style={{
+          display: "grid",
+          gap: 18,
+          width: "100%",
+          maxWidth: 1280,
+          margin: "0 auto",
+          minWidth: 0,
+          padding: 18,
+          borderRadius: 20,
+          border: "1px solid rgba(91,70,48,0.14)",
+          background:
+            "radial-gradient(circle at top left, rgba(184,130,62,0.1) 0, rgba(247,241,231,0) 34%), linear-gradient(180deg, #fffaf1 0%, #f7f1e7 100%)",
+          boxShadow: "0 16px 36px rgba(59,44,28,0.1)",
+          boxSizing: "border-box",
+        }}
+      >
+        <Section style={operationsSectionSurface}>
           <div
             style={{
               display: "grid",
@@ -1153,8 +1194,8 @@ export default function OperationalCommandCenterPage() {
             }}
           >
             <div style={{ display: "grid", gap: 6, maxWidth: 920 }}>
-              <h1 style={{ margin: 0, fontSize: "1.55rem", color: "#0f172a" }}>Operational command center</h1>
-              <div style={{ color: "#475569", lineHeight: 1.55 }}>
+              <h1 style={{ margin: 0, fontSize: "1.55rem", color: "#211c17" }}>Operational command center</h1>
+              <div style={{ color: "#63594d", lineHeight: 1.55 }}>
                 Centralized operational visibility across leases, payments, occupancy, screening, documents, and review workflows.
                 This page prioritizes source workflow issues only; it does not execute actions, enforce legal timelines, or modify records.
               </div>
@@ -1166,15 +1207,14 @@ export default function OperationalCommandCenterPage() {
                 display: "grid",
                 gap: 10,
                 minWidth: 0,
-                border: "1px solid #bfdbfe",
-                background: "#eff6ff",
+                ...operationsCardSurface,
               }}
             >
-              <div style={{ display: "flex", gap: 8, alignItems: "center", color: "#1d4ed8", fontWeight: 900 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", color: "#245842", fontWeight: 900 }}>
                 <Inbox size={18} />
                 <span>Operational inbox bridge</span>
               </div>
-              <div style={{ color: "#334155", lineHeight: 1.45, fontSize: 13 }}>
+              <div style={{ color: "#3f382f", lineHeight: 1.45, fontSize: 13 }}>
                 Review messages and source-linked actions tied to applications, leases, maintenance, payments, or work orders
                 when that context is available.
               </div>
@@ -1187,15 +1227,15 @@ export default function OperationalCommandCenterPage() {
                     justifyContent: "center",
                     borderRadius: 999,
                     padding: "9px 12px",
-                    background: "#2563eb",
-                    color: "#fff",
+                    background: "#211c17",
+                    color: "#fffaf1",
                     fontWeight: 900,
                     textDecoration: "none",
                   }}
                 >
                   Open operational inbox
                 </Link>
-                <Link to="/decision-inbox" style={{ color: "#2563eb", fontWeight: 900 }}>
+                <Link to="/decision-inbox" style={{ color: "#245842", fontWeight: 900 }}>
                   Open decision inbox
                 </Link>
               </div>
@@ -1206,6 +1246,7 @@ export default function OperationalCommandCenterPage() {
         <Section
           data-testid="operations-summary-strip"
           style={{
+            ...operationsSectionSurface,
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 136px), 1fr))",
             gap: 8,
@@ -1222,14 +1263,17 @@ export default function OperationalCommandCenterPage() {
             ["Open decisions", decisionData?.summary?.open ?? 0],
             ["Delinquent", dashboardData?.kpis?.delinquentCount ?? 0],
           ].map(([name, value]) => (
-            <Card key={String(name)} style={{ borderRadius: 8, padding: 12, boxSizing: "border-box", minWidth: 0, minHeight: 86 }}>
-              <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900 }}>{name}</div>
-              <strong style={{ color: "#0f172a", fontSize: 24 }}>{value}</strong>
+            <Card
+              key={String(name)}
+              style={{ ...operationsCardSurface, borderRadius: 12, padding: 12, boxSizing: "border-box", minWidth: 0, minHeight: 86 }}
+            >
+              <div style={{ color: "#63594d", fontSize: 12, fontWeight: 900 }}>{name}</div>
+              <strong style={{ color: "#211c17", fontSize: 24 }}>{value}</strong>
             </Card>
           ))}
         </Section>
 
-        <Section style={{ display: "grid", gap: 12, minWidth: 0 }}>
+        <Section style={{ ...operationsSectionSurface, display: "grid", gap: 12, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             <div>
               <div style={sectionTitleStyle}>Coordination lanes</div>
@@ -1256,7 +1300,7 @@ export default function OperationalCommandCenterPage() {
                   <Card
                     key={category}
                     style={{
-                      borderRadius: 8,
+                      borderRadius: 12,
                       padding: 14,
                       display: "grid",
                       alignContent: "start",
@@ -1266,11 +1310,12 @@ export default function OperationalCommandCenterPage() {
                       minWidth: 0,
                       boxSizing: "border-box",
                       overflowWrap: "anywhere",
+                      ...operationsCardSurface,
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <Icon size={18} />
-                      <strong style={{ color: "#0f172a" }}>{config.label}</strong>
+                      <strong style={{ color: "#211c17" }}>{config.label}</strong>
                     </div>
                     <LockedFeature
                       featureKey="operations_signals"
@@ -1294,7 +1339,7 @@ export default function OperationalCommandCenterPage() {
                 >
                   <Card
                     style={{
-                      borderRadius: 8,
+                      borderRadius: 12,
                       padding: 14,
                       display: "grid",
                       alignContent: "start",
@@ -1304,14 +1349,15 @@ export default function OperationalCommandCenterPage() {
                       minWidth: 0,
                       boxSizing: "border-box",
                       overflowWrap: "anywhere",
+                      ...operationsCardSurface,
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <Icon size={18} />
-                      <strong style={{ color: "#0f172a" }}>{config.label}</strong>
+                      <strong style={{ color: "#211c17" }}>{config.label}</strong>
                     </div>
-                    <div style={{ color: "#64748b", fontSize: 13, lineHeight: 1.45 }}>{config.description}</div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12, color: "#475569" }}>
+                    <div style={{ color: "#63594d", fontSize: 13, lineHeight: 1.45 }}>{config.description}</div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12, color: "#3f382f" }}>
                       <span>{total} total</span>
                       <span>{critical} critical</span>
                       <span>{warning} warning</span>
@@ -1324,7 +1370,7 @@ export default function OperationalCommandCenterPage() {
           </div>
         </Section>
 
-        <Section style={{ display: "grid", gap: 14, minWidth: 0 }}>
+        <Section style={{ ...operationsSectionSurface, display: "grid", gap: 14, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <Building2 size={18} />
             <strong style={sectionTitleStyle}>Priority routing queue</strong>
@@ -1336,35 +1382,24 @@ export default function OperationalCommandCenterPage() {
               display: "grid",
               gap: 14,
               padding: 14,
-              borderRadius: 10,
-              border: "1px solid #dbe3ef",
-              background: "#f8fafc",
+              borderRadius: 14,
+              ...operationsCardSurface,
               minWidth: 0,
               boxSizing: "border-box",
             }}
           >
-            <label style={{ display: "grid", gap: 5, color: "#334155", fontSize: 13, fontWeight: 800 }}>
+            <label style={{ display: "grid", gap: 5, color: "#3f382f", fontSize: 13, fontWeight: 800 }}>
               Search operational items
               <input
                 aria-label="Search operational items"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search by tenant, property, unit, workflow, category, or status"
-                style={{
-                  width: "100%",
-                  minWidth: 0,
-                  border: "1px solid #cbd5e1",
-                  borderRadius: 8,
-                  padding: "10px 12px",
-                  fontSize: 14,
-                  color: "#0f172a",
-                  background: "#fff",
-                  boxSizing: "border-box",
-                }}
+                style={operationsInputStyle}
               />
             </label>
             <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ color: "#334155", fontSize: 13, fontWeight: 900 }}>Saved operational views</div>
+              <div style={{ color: "#3f382f", fontSize: 13, fontWeight: 900 }}>Saved operational views</div>
               <div
                 style={{
                   display: "grid",
@@ -1393,7 +1428,7 @@ export default function OperationalCommandCenterPage() {
               </div>
             </div>
             <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ color: "#334155", fontSize: 13, fontWeight: 900 }}>Priority filters</div>
+              <div style={{ color: "#3f382f", fontSize: 13, fontWeight: 900 }}>Priority filters</div>
               <div
                 style={{
                   display: "grid",
@@ -1463,7 +1498,7 @@ export default function OperationalCommandCenterPage() {
                   onChange: (value: string) => setTimingRisk(value as TimingRiskFilter),
                 },
               ].map((control) => (
-                <label key={control.label} style={{ display: "grid", gap: 5, color: "#334155", fontSize: 13, fontWeight: 800 }}>
+                <label key={control.label} style={{ display: "grid", gap: 5, color: "#3f382f", fontSize: 13, fontWeight: 800 }}>
                   {control.label}
                   <select
                     aria-label={control.label}
@@ -1472,17 +1507,7 @@ export default function OperationalCommandCenterPage() {
                       setActiveSavedView("all_operational");
                       control.onChange(event.target.value);
                     }}
-                    style={{
-                      width: "100%",
-                      minWidth: 0,
-                      border: "1px solid #cbd5e1",
-                      borderRadius: 8,
-                      padding: "9px 10px",
-                      fontSize: 14,
-                      color: "#0f172a",
-                      background: "#fff",
-                      boxSizing: "border-box",
-                    }}
+                    style={operationsInputStyle}
                   >
                     {control.options.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -1499,9 +1524,9 @@ export default function OperationalCommandCenterPage() {
                 type="button"
                 onClick={clearFilters}
                 style={{
-                  border: "1px solid #cbd5e1",
-                  background: "#fff",
-                  color: "#334155",
+                  border: "1px solid rgba(91,70,48,0.24)",
+                  background: "#fffaf1",
+                  color: "#3f382f",
                   borderRadius: 8,
                   padding: "7px 10px",
                   fontSize: 13,
@@ -1514,22 +1539,26 @@ export default function OperationalCommandCenterPage() {
               </button>
             </div>
           </Card>
-          {entitlements.loading || loading ? <Card style={{ color: "#64748b", display: "grid", gap: 6 }}>Loading operational signals...</Card> : null}
+          {entitlements.loading || loading ? (
+            <Card style={{ ...operationsCardSurface, color: "#63594d", display: "grid", gap: 6 }}>
+              Loading operational signals...
+            </Card>
+          ) : null}
           {!loading && error ? (
-            <Card style={{ color: "#b91c1c", display: "grid", gap: 6 }}>
+            <Card style={{ ...operationsCardSurface, color: "#b91c1c", display: "grid", gap: 6 }}>
               <strong>Operational command center could not load.</strong>
               <span>{error}</span>
             </Card>
           ) : null}
           {!loading && !error && signals.length === 0 ? (
-            <Card style={{ color: "#64748b", display: "grid", gap: 6 }}>
-              <strong style={{ color: "#0f172a" }}>No high-signal operational issues are currently visible.</strong>
+            <Card style={{ ...operationsCardSurface, color: "#63594d", display: "grid", gap: 6 }}>
+              <strong style={{ color: "#211c17" }}>No high-signal operational issues are currently visible.</strong>
               <span>When a source workflow needs review, it will appear here with its source route and next action.</span>
             </Card>
           ) : null}
           {!loading && !error && signals.length > 0 && visibleSignals.length === 0 ? (
-            <Card style={{ color: "#64748b", boxSizing: "border-box", display: "grid", gap: 6 }}>
-              <strong style={{ color: "#0f172a" }}>No operational items match this triage view.</strong>
+            <Card style={{ ...operationsCardSurface, color: "#63594d", boxSizing: "border-box", display: "grid", gap: 6 }}>
+              <strong style={{ color: "#211c17" }}>No operational items match this triage view.</strong>
               <span>Current filters: {activeFilterCopy}.</span>
               <span>Adjust the view or reset filters to return to the full operational queue.</span>
             </Card>
@@ -1550,9 +1579,9 @@ export default function OperationalCommandCenterPage() {
                     <div style={{ display: "grid", gap: 3 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <Badge severity={group.tone}>{group.label}</Badge>
-                        <strong style={{ color: "#0f172a" }}>{group.signals.length} item{group.signals.length === 1 ? "" : "s"}</strong>
+                        <strong style={{ color: "#211c17" }}>{group.signals.length} item{group.signals.length === 1 ? "" : "s"}</strong>
                       </div>
-                      <span style={{ color: "#64748b", fontSize: 13 }}>{group.description}</span>
+                      <span style={{ color: "#63594d", fontSize: 13 }}>{group.description}</span>
                     </div>
                   </div>
                   {group.signals.length ? (
@@ -1561,14 +1590,15 @@ export default function OperationalCommandCenterPage() {
                         <Card
                           key={signal.id}
                           style={{
-                            borderRadius: 8,
+                            borderRadius: 12,
                             padding: 14,
                             display: "grid",
                             gap: 10,
                             minWidth: 0,
                             boxSizing: "border-box",
                             overflowWrap: "anywhere",
-                            border: signal.severity === "critical" ? "1px solid #fecaca" : "1px solid rgba(15, 23, 42, 0.08)",
+                            ...operationsCardSurface,
+                            border: signal.severity === "critical" ? "1px solid #fecaca" : operationsCardSurface.border,
                           }}
                         >
                           <div
@@ -1582,15 +1612,15 @@ export default function OperationalCommandCenterPage() {
                           >
                             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                               <Badge severity={signal.severity}>{signal.severity}</Badge>
-                              <span style={{ color: "#64748b", fontSize: 13, fontWeight: 800 }}>
+                              <span style={{ color: "#63594d", fontSize: 13, fontWeight: 800 }}>
                                 {CATEGORY_CONFIG[signal.category].label}
                               </span>
-                              <span style={{ color: "#64748b", fontSize: 13 }}>{signal.source}</span>
+                              <span style={{ color: "#63594d", fontSize: 13 }}>{signal.source}</span>
                             </div>
                             <Link
                               to={signal.destination}
                               style={{
-                                color: "#2563eb",
+                                color: "#245842",
                                 fontWeight: 900,
                                 whiteSpace: "nowrap",
                                 alignSelf: "start",
@@ -1600,10 +1630,10 @@ export default function OperationalCommandCenterPage() {
                             </Link>
                           </div>
                           <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
-                            <strong style={{ color: "#0f172a", fontSize: 16 }}>{signal.title}</strong>
-                            <span style={{ color: "#64748b", fontSize: 13 }}>Context: {signal.contextLabel}</span>
-                            <span style={{ color: "#475569", lineHeight: 1.5 }}>Why: {signal.description}</span>
-                            <span style={{ color: "#0f172a", fontSize: 13, fontWeight: 900 }}>
+                            <strong style={{ color: "#211c17", fontSize: 16 }}>{signal.title}</strong>
+                            <span style={{ color: "#63594d", fontSize: 13 }}>Context: {signal.contextLabel}</span>
+                            <span style={{ color: "#3f382f", lineHeight: 1.5 }}>Why: {signal.description}</span>
+                            <span style={{ color: "#211c17", fontSize: 13, fontWeight: 900 }}>
                               Next action: {signal.nextActionLabel}
                             </span>
                           </div>
@@ -1612,7 +1642,7 @@ export default function OperationalCommandCenterPage() {
                               display: "grid",
                               gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
                               gap: 8,
-                              color: "#475569",
+                              color: "#3f382f",
                               fontSize: 12,
                               fontWeight: 800,
                               minWidth: 0,
@@ -1638,7 +1668,7 @@ export default function OperationalCommandCenterPage() {
                       ))}
                     </div>
                   ) : (
-                    <Card style={{ color: "#64748b", borderRadius: 8, boxSizing: "border-box" }}>
+                    <Card style={{ ...operationsCardSurface, color: "#63594d", borderRadius: 8, boxSizing: "border-box" }}>
                       No {group.label.toLowerCase()} items currently visible.
                     </Card>
                   )}
