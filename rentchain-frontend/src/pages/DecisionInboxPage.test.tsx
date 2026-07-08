@@ -413,6 +413,12 @@ describe("DecisionInboxPage", () => {
     expect(document.querySelector(".rc-decision-inbox-context-links")).toBeInTheDocument();
     expect(document.querySelector(".rc-decision-inbox-filters")).toBeInTheDocument();
     expect(document.querySelector(".rc-decision-inbox-list")).toBeInTheDocument();
+    expect(document.querySelector(".rc-decision-inbox-hero")).toBeInTheDocument();
+    expect(document.querySelector(".rc-decision-inbox-summary")).toBeInTheDocument();
+    expect(document.querySelector(".rc-decision-inbox-summary-card")).toBeInTheDocument();
+    expect(document.querySelector(".rc-decision-inbox-agent-actions")).toBeInTheDocument();
+    expect(document.querySelector(".rc-decision-inbox-review-panel")).toBeInTheDocument();
+    expect(document.querySelector(".rc-decision-inbox-link")).toBeInTheDocument();
   });
 
   it("updates visible decisions through deterministic filters", async () => {

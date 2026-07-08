@@ -24,6 +24,26 @@ import "./DecisionInboxPage.css";
 
 type FilterValue<T extends string> = T | "all";
 
+const decisionInboxTheme = {
+  paper: "#f7f1e7",
+  panel: "rgba(255, 252, 246, 0.96)",
+  card: "#fffaf1",
+  cardStrong: "#fff6e8",
+  border: "rgba(91, 70, 48, 0.18)",
+  borderStrong: "rgba(91, 70, 48, 0.28)",
+  charcoal: "#211c17",
+  muted: "#63594d",
+  subtle: "#7a6b5c",
+  pine: "#245842",
+  pineSoft: "rgba(36, 88, 66, 0.12)",
+  sage: "#58735f",
+  sageSoft: "rgba(88, 115, 95, 0.14)",
+  amber: "#8a5a16",
+  amberSoft: "#fff3d6",
+  clay: "#9d3f32",
+  claySoft: "#fde7df",
+} as const;
+
 const severityOptions: Array<FilterValue<DecisionInboxSeverity>> = [
   "all",
   "critical",
@@ -90,41 +110,41 @@ function label(value: string) {
 function severityTone(severity: DecisionInboxSeverity) {
   if (severity === "critical") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
   if (severity === "high") return { color: "#9f1239", background: "#ffe4e6", border: "#fecdd3" };
-  if (severity === "medium") return { color: "#9a3412", background: "#ffedd5", border: "#fed7aa" };
-  if (severity === "low") return { color: "#075985", background: "#e0f2fe", border: "#bae6fd" };
-  if (severity === "info") return { color: "#334155", background: "#f1f5f9", border: "#cbd5e1" };
-  return { color: "#475569", background: "#f8fafc", border: "#e2e8f0" };
+  if (severity === "medium") return { color: decisionInboxTheme.amber, background: decisionInboxTheme.amberSoft, border: "#e9c77a" };
+  if (severity === "low") return { color: decisionInboxTheme.pine, background: decisionInboxTheme.pineSoft, border: "rgba(36, 88, 66, 0.28)" };
+  if (severity === "info") return { color: decisionInboxTheme.muted, background: decisionInboxTheme.cardStrong, border: decisionInboxTheme.borderStrong };
+  return { color: decisionInboxTheme.muted, background: decisionInboxTheme.cardStrong, border: decisionInboxTheme.border };
 }
 
 function statusTone(status: DecisionInboxStatus) {
   if (status === "blocked") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
   if (status === "open") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
-  if (status === "pending") return { color: "#1d4ed8", background: "#dbeafe", border: "#bfdbfe" };
+  if (status === "pending") return { color: decisionInboxTheme.pine, background: decisionInboxTheme.sageSoft, border: "rgba(88, 115, 95, 0.3)" };
   if (status === "resolved") return { color: "#166534", background: "#dcfce7", border: "#bbf7d0" };
-  if (status === "dismissed") return { color: "#475569", background: "#f1f5f9", border: "#cbd5e1" };
-  return { color: "#475569", background: "#f8fafc", border: "#e2e8f0" };
+  if (status === "dismissed") return { color: decisionInboxTheme.muted, background: decisionInboxTheme.cardStrong, border: decisionInboxTheme.borderStrong };
+  return { color: decisionInboxTheme.muted, background: decisionInboxTheme.cardStrong, border: decisionInboxTheme.border };
 }
 
 function workflowStateTone(state: DecisionWorkflowState) {
   if (state === "escalated") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
   if (state === "waiting_context") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
-  if (state === "under_review") return { color: "#1d4ed8", background: "#dbeafe", border: "#bfdbfe" };
+  if (state === "under_review") return { color: decisionInboxTheme.pine, background: decisionInboxTheme.sageSoft, border: "rgba(88, 115, 95, 0.3)" };
   if (state === "resolved") return { color: "#166534", background: "#dcfce7", border: "#bbf7d0" };
-  if (state === "archived") return { color: "#475569", background: "#f1f5f9", border: "#cbd5e1" };
-  return { color: "#334155", background: "#f8fafc", border: "#e2e8f0" };
+  if (state === "archived") return { color: decisionInboxTheme.muted, background: decisionInboxTheme.cardStrong, border: decisionInboxTheme.borderStrong };
+  return { color: decisionInboxTheme.muted, background: decisionInboxTheme.cardStrong, border: decisionInboxTheme.border };
 }
 
 function escalationTone(level: DecisionWorkflowEscalationLevel) {
   if (level === "critical") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
   if (level === "urgent") return { color: "#9f1239", background: "#ffe4e6", border: "#fecdd3" };
   if (level === "attention") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
-  return { color: "#475569", background: "#f8fafc", border: "#e2e8f0" };
+  return { color: decisionInboxTheme.muted, background: decisionInboxTheme.cardStrong, border: decisionInboxTheme.border };
 }
 
 function automationStatusTone(status: AutomatedWorkflowStatus) {
   if (status === "blocked") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
   if (status === "pending") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
-  if (status === "derived") return { color: "#1d4ed8", background: "#dbeafe", border: "#bfdbfe" };
+  if (status === "derived") return { color: decisionInboxTheme.pine, background: decisionInboxTheme.sageSoft, border: "rgba(88, 115, 95, 0.3)" };
   return { color: "#166534", background: "#dcfce7", border: "#bbf7d0" };
 }
 
@@ -243,34 +263,36 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
         <Badge tone={escalationTone(item.workflow.escalationLevel)}>
           {item.workflow.escalationLevel === "none" ? "No escalation" : label(item.workflow.escalationLevel)}
         </Badge>
-        <span style={{ color: "#475569", fontSize: 13, fontWeight: 700 }}>{label(item.type)}</span>
-        <span style={{ color: "#475569", fontSize: 13, fontWeight: 700 }}>{label(item.workflow.queue)}</span>
-        <span style={{ color: "#64748b", fontSize: 13 }}>Source: {label(item.source)}</span>
+        <span style={{ color: decisionInboxTheme.muted, fontSize: 13, fontWeight: 700 }}>{label(item.type)}</span>
+        <span style={{ color: decisionInboxTheme.muted, fontSize: 13, fontWeight: 700 }}>{label(item.workflow.queue)}</span>
+        <span style={{ color: decisionInboxTheme.subtle, fontSize: 13 }}>Source: {label(item.source)}</span>
       </div>
       <div style={{ display: "grid", gap: 5 }}>
-        <div style={{ color: "#0f172a", fontSize: 17, fontWeight: 800 }}>{item.title}</div>
-        <div style={{ color: "#475569", lineHeight: 1.55 }}>{item.description}</div>
+        <div style={{ color: decisionInboxTheme.charcoal, fontSize: 17, fontWeight: 800 }}>{item.title}</div>
+        <div style={{ color: decisionInboxTheme.muted, lineHeight: 1.55 }}>{item.description}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <span style={{ color: "#64748b", fontSize: 13 }}>
+        <span style={{ color: decisionInboxTheme.subtle, fontSize: 13 }}>
           Related: {safeRelatedLabel(item)}
         </span>
         {item.destination ? (
-          <Link to={item.destination} style={{ color: "#2563eb", fontWeight: 800 }}>
+          <Link className="rc-decision-inbox-link" to={item.destination} style={{ color: decisionInboxTheme.pine, fontWeight: 800 }}>
             {contextLinkLabel(item.destination)}
           </Link>
         ) : (
-          <span style={{ color: "#64748b", fontSize: 13 }}>No context link available</span>
+          <span style={{ color: decisionInboxTheme.subtle, fontSize: 13 }}>No context link available</span>
         )}
         <Link
+          className="rc-decision-inbox-link"
           to={evidencePackPath({ scope: reviewScope, scopeId: item.id })}
-          style={{ color: "#2563eb", fontWeight: 800 }}
+          style={{ color: decisionInboxTheme.pine, fontWeight: 800 }}
         >
           Preview evidence
         </Link>
         <Link
+          className="rc-decision-inbox-link"
           to={reviewTimelinePath({ scope: reviewScope, scopeId: item.id })}
-          style={{ color: "#2563eb", fontWeight: 800 }}
+          style={{ color: decisionInboxTheme.pine, fontWeight: 800 }}
         >
           View timeline
         </Link>
@@ -302,16 +324,16 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
                   border: "1px solid #fed7aa",
                   borderRadius: 8,
                   padding: 10,
-                  background: "#fff",
+                  background: decisionInboxTheme.card,
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                  <strong style={{ color: "#0f172a" }}>{action.label}</strong>
+                  <strong style={{ color: decisionInboxTheme.charcoal }}>{action.label}</strong>
                   <span style={{ color: action.status === "available" ? "#166534" : "#92400e", fontSize: 12, fontWeight: 900 }}>
                     {label(action.status)}
                   </span>
                 </div>
-                <div style={{ color: "#475569", fontSize: 13 }}>{action.description}</div>
+                <div style={{ color: decisionInboxTheme.muted, fontSize: 13 }}>{action.description}</div>
                 {action.actionKey === "prepare_notice" ? (
                   <div style={{ color: "#7c2d12", fontSize: 12 }}>
                     Draft only. Review local legal requirements before use.
@@ -321,7 +343,7 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
                   <div style={{ color: "#92400e", fontSize: 12 }}>{action.blockedReason}</div>
                 ) : null}
                 {action.status === "available" && action.destination ? (
-                  <Link to={action.destination} style={{ color: "#2563eb", fontWeight: 800, fontSize: 13 }}>
+                  <Link className="rc-decision-inbox-link" to={action.destination} style={{ color: decisionInboxTheme.pine, fontWeight: 800, fontSize: 13 }}>
                     {contextLinkLabel(action.destination)}
                   </Link>
                 ) : null}
@@ -333,8 +355,8 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
       {automatedWorkflow ? (
         <div
           style={{
-            border: "1px solid #bfdbfe",
-            background: "#eff6ff",
+            border: `1px solid ${decisionInboxTheme.borderStrong}`,
+            background: decisionInboxTheme.sageSoft,
             borderRadius: 8,
             padding: 12,
             display: "grid",
@@ -343,31 +365,31 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
         >
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
             <div style={{ display: "grid", gap: 4 }}>
-              <strong style={{ color: "#1e3a8a" }}>Deterministic workflow orchestration only.</strong>
-              <span style={{ color: "#1e40af", fontSize: 13 }}>
+              <strong style={{ color: decisionInboxTheme.pine }}>Deterministic workflow orchestration only.</strong>
+              <span style={{ color: decisionInboxTheme.pine, fontSize: 13 }}>
                 No tenant communication, payment action, or legal enforcement is automated. Manual review remains required.
               </span>
             </div>
             <Badge tone={automationStatusTone(automatedWorkflow.status)}>{label(automatedWorkflow.status)}</Badge>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
-            <div style={{ color: "#334155", fontSize: 13 }}>
+            <div style={{ color: decisionInboxTheme.muted, fontSize: 13 }}>
               <strong>Workflow type:</strong> {label(automatedWorkflow.workflowType)}
             </div>
-            <div style={{ color: "#334155", fontSize: 13 }}>
+            <div style={{ color: decisionInboxTheme.muted, fontSize: 13 }}>
               <strong>Transition:</strong> {label(automatedWorkflow.transition.fromState)} to {label(automatedWorkflow.transition.toState)}
             </div>
-            <div style={{ color: "#334155", fontSize: 13 }}>
+            <div style={{ color: decisionInboxTheme.muted, fontSize: 13 }}>
               <strong>Policy guarded:</strong> {automatedWorkflow.policyGuarded ? "Yes" : "No"}
             </div>
-            <div style={{ color: "#334155", fontSize: 13 }}>
+            <div style={{ color: decisionInboxTheme.muted, fontSize: 13 }}>
               <strong>External execution:</strong> {automatedWorkflow.externalExecutionEnabled ? "Enabled" : "Disabled"}
             </div>
           </div>
           <div style={{ display: "grid", gap: 5 }}>
-            <strong style={{ color: "#1e3a8a", fontSize: 13 }}>Review automation reasoning</strong>
+            <strong style={{ color: decisionInboxTheme.pine, fontSize: 13 }}>Review automation reasoning</strong>
             {automatedWorkflow.reasons.slice(0, 3).map((reason) => (
-              <span key={reason} style={{ color: "#334155", fontSize: 13 }}>
+              <span key={reason} style={{ color: decisionInboxTheme.muted, fontSize: 13 }}>
                 {safeAutomationReason(reason, item)}
               </span>
             ))}
@@ -379,12 +401,16 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
           </div>
         </div>
       ) : null}
-      <AgentActionPanel actions={item.agentActions} />
-      <OperatorReviewSessionPanel
-        scope={reviewScope}
-        scopeId={item.id}
-        linkedEvidence={evidence}
-      />
+      <div className="rc-decision-inbox-agent-actions">
+        <AgentActionPanel actions={item.agentActions} />
+      </div>
+      <div className="rc-decision-inbox-review-panel">
+        <OperatorReviewSessionPanel
+          scope={reviewScope}
+          scopeId={item.id}
+          linkedEvidence={evidence}
+        />
+      </div>
     </Card>
   );
 }
@@ -401,17 +427,17 @@ function FilterSelect<T extends string>({
   onChange: (value: FilterValue<T>) => void;
 }) {
   return (
-    <label style={{ display: "grid", gap: 5, color: "#334155", fontSize: 13, fontWeight: 800 }}>
+    <label style={{ display: "grid", gap: 5, color: decisionInboxTheme.muted, fontSize: 13, fontWeight: 800 }}>
       {labelText}
       <select
         value={value}
         onChange={(event) => onChange(event.target.value as FilterValue<T>)}
         style={{
-          border: "1px solid #cbd5e1",
+          border: `1px solid ${decisionInboxTheme.borderStrong}`,
           borderRadius: 8,
           padding: "8px 10px",
-          color: "#0f172a",
-          background: "#fff",
+          color: decisionInboxTheme.charcoal,
+          background: decisionInboxTheme.card,
           minWidth: 150,
         }}
       >
@@ -468,26 +494,26 @@ export default function DecisionInboxPage() {
   return (
     <MacShell title="Decision inbox" showTopNav={false}>
       <div className="rc-decision-inbox-page" style={{ display: "grid", gap: 16 }}>
-        <Section>
+        <Section className="rc-decision-inbox-hero">
           <div
             className="rc-decision-inbox-header"
             style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}
           >
             <div className="rc-decision-inbox-heading" style={{ display: "grid", gap: 6 }}>
               <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Decision inbox</h1>
-              <div style={{ color: "#475569", maxWidth: 900 }}>
+              <div style={{ color: decisionInboxTheme.muted, maxWidth: 900 }}>
                 A read-only view of detected decisions across analytics and lease ledger surfaces. Review context here without
                 triggering workflow actions.
               </div>
             </div>
             <div className="rc-decision-inbox-context-links">
-              <Link to="/institution-exports" style={{ color: "#2563eb", fontWeight: 800 }}>
+              <Link className="rc-decision-inbox-link" to="/institution-exports" style={{ color: decisionInboxTheme.pine, fontWeight: 800 }}>
                 Institution export preview
               </Link>
-              <Link to="/agent-supervision" style={{ color: "#2563eb", fontWeight: 800 }}>
+              <Link className="rc-decision-inbox-link" to="/agent-supervision" style={{ color: decisionInboxTheme.pine, fontWeight: 800 }}>
                 Agent supervision
               </Link>
-              <Link to="/identity-layer" style={{ color: "#2563eb", fontWeight: 800 }}>
+              <Link className="rc-decision-inbox-link" to="/identity-layer" style={{ color: decisionInboxTheme.pine, fontWeight: 800 }}>
                 Identity layer
               </Link>
             </div>
@@ -495,7 +521,7 @@ export default function DecisionInboxPage() {
         </Section>
 
         {data ? (
-          <Section style={{ display: "grid", gap: 10 }}>
+          <Section className="rc-decision-inbox-summary" style={{ display: "grid", gap: 10 }}>
             <div style={{ fontWeight: 800 }}>Summary</div>
             <div
               className="rc-decision-inbox-summary-grid"
@@ -520,9 +546,9 @@ export default function DecisionInboxPage() {
                 ["Blocked suggestions", data.agentActionSummary.blocked],
                 ["Suggestion review required", data.agentActionSummary.reviewRequired],
               ].map(([name, value]) => (
-                <Card key={String(name)} style={{ borderRadius: 8, padding: 12 }}>
-                  <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{name}</div>
-                  <strong style={{ color: "#0f172a", fontSize: 22 }}>{value}</strong>
+                <Card key={String(name)} className="rc-decision-inbox-summary-card" style={{ borderRadius: 8, padding: 12 }}>
+                  <div style={{ color: decisionInboxTheme.subtle, fontSize: 12, fontWeight: 800 }}>{name}</div>
+                  <strong style={{ color: decisionInboxTheme.charcoal, fontSize: 22 }}>{value}</strong>
                 </Card>
               ))}
             </div>
@@ -548,10 +574,10 @@ export default function DecisionInboxPage() {
           />
         </Section>
 
-        {loading ? <Card>Loading decision inbox…</Card> : null}
-        {!loading && error ? <Card style={{ color: "#b91c1c" }}>We couldn't load the decision inbox right now.</Card> : null}
+        {loading ? <Card className="rc-decision-inbox-state-card">Loading decision inbox…</Card> : null}
+        {!loading && error ? <Card className="rc-decision-inbox-state-card" style={{ color: "#b91c1c" }}>We couldn't load the decision inbox right now.</Card> : null}
         {!loading && !error && data?.items.length === 0 ? (
-          <Card style={{ color: "#64748b" }}>No decisions match the current filters.</Card>
+          <Card className="rc-decision-inbox-state-card" style={{ color: decisionInboxTheme.subtle }}>No decisions match the current filters.</Card>
         ) : null}
         {!loading && !error && data?.items.length ? (
           <div className="rc-decision-inbox-list" style={{ display: "grid", gap: 12 }}>
