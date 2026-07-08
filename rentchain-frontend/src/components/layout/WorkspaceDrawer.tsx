@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
 import { getVisibleNavItems } from "./navConfig";
@@ -109,7 +110,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
     </>
   );
 
-  return (
+  const overlay = (
     <div
       style={{
         position: "fixed",
@@ -117,7 +118,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
         left: 0,
         right: 0,
         bottom: isMobile ? mobileBottomNavOffset : 0,
-        zIndex: isMobile ? 3000 : 3000,
+        zIndex: "var(--rc-landlord-z-drawer, 4020)",
         display: "flex",
         justifyContent: isMobile ? "center" : "flex-end",
         alignItems: isMobile ? "flex-end" : "flex-start",
@@ -126,6 +127,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
         overscrollBehavior: "none",
         touchAction: isMobile ? "auto" : "none",
         pointerEvents: "auto",
+        isolation: "isolate",
       }}
     >
       <div
@@ -137,6 +139,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
           touchAction: isMobile ? "auto" : "none",
           overscrollBehavior: "none",
           pointerEvents: "auto",
+          zIndex: 0,
         }}
       />
       <div
@@ -159,7 +162,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
           boxShadow: shadows.lg,
           display: "flex",
           flexDirection: "column",
-          zIndex: isMobile ? 3001 : 3001,
+          zIndex: 1,
           overflow: "hidden",
           overscrollBehaviorY: "contain",
           contain: "layout paint",
@@ -325,4 +328,6 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
       </div>
     </div>
   );
+
+  return createPortal(overlay, document.body);
 };

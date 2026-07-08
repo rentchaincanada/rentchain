@@ -90,7 +90,7 @@ describe("WorkspaceDrawer", () => {
       bottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
       alignItems: "flex-end",
       justifyContent: "center",
-      zIndex: "3000",
+      zIndex: "var(--rc-landlord-z-drawer, 4020)",
     });
     expect(dialog).toHaveStyle({
       width: "min(420px, calc(100% - 24px))",
@@ -98,7 +98,7 @@ describe("WorkspaceDrawer", () => {
       height: "auto",
       maxHeight:
         "min(calc(100dvh - calc(12px + env(safe-area-inset-bottom, 0px)) - 16px), 620px)",
-      zIndex: "3001",
+      zIndex: "1",
     });
     expect(within(dialog).getByRole("button", { name: "Dashboard" }).parentElement).toHaveStyle({
       gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
