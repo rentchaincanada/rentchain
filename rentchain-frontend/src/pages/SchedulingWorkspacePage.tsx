@@ -11,7 +11,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { Button, Card, Input } from "../components/ui/Ui";
-import { colors, radius, spacing, text } from "../styles/tokens";
+import { radius, spacing, text } from "../styles/tokens";
 
 type CalendarView = "month" | "week";
 
@@ -155,7 +155,7 @@ function WorkspaceList({
   actionLabel: string;
 }) {
   return (
-    <Card style={{ display: "grid", gap: spacing.md }}>
+    <Card className="scheduling-card" style={{ display: "grid", gap: spacing.md }}>
       <SectionHeader icon={icon} title={title} actionTo={actionTo} actionLabel={actionLabel} />
       <div className="scheduling-item-list">
         {items.map((item) => (
@@ -233,11 +233,52 @@ export default function SchedulingWorkspacePage() {
     <div className="scheduling-workspace">
       <style>{`
         .scheduling-workspace {
+          --schedule-card: #fffaf1;
+          --schedule-panel: #fff6e8;
+          --schedule-muted-panel: #f7efe2;
+          --schedule-border: rgba(91, 70, 48, 0.16);
+          --schedule-border-strong: rgba(91, 70, 48, 0.28);
+          --schedule-text: #211c17;
+          --schedule-muted: #63594d;
+          --schedule-pine: #245842;
+          --schedule-pine-soft: rgba(36, 88, 66, 0.12);
+          --schedule-shadow: 0 10px 24px rgba(59, 44, 28, 0.1);
           display: grid;
           gap: ${spacing.lg};
-          color: ${text.primary};
+          color: var(--schedule-text);
           max-width: 1320px;
           margin: 0 auto;
+        }
+        .scheduling-card {
+          background: var(--schedule-card) !important;
+          border-color: var(--schedule-border) !important;
+          box-shadow: var(--schedule-shadow) !important;
+        }
+        .scheduling-workspace input {
+          background: var(--schedule-card) !important;
+          border-color: var(--schedule-border) !important;
+          color: var(--schedule-text) !important;
+        }
+        .scheduling-workspace input:focus {
+          border-color: rgba(36, 88, 66, 0.42) !important;
+          box-shadow: 0 0 0 3px rgba(36, 88, 66, 0.18) !important;
+        }
+        .scheduling-workspace button:not(.scheduling-day) {
+          border: 1px solid var(--schedule-border) !important;
+          background: var(--schedule-card) !important;
+          color: var(--schedule-text) !important;
+          box-shadow: none !important;
+        }
+        .scheduling-workspace button:not(.scheduling-day):hover,
+        .scheduling-link-button:hover,
+        .scheduling-item-row:hover {
+          border-color: var(--schedule-border-strong) !important;
+          background: var(--schedule-panel) !important;
+        }
+        .scheduling-workspace button.scheduling-primary-action {
+          border-color: rgba(36, 88, 66, 0.42) !important;
+          background: var(--schedule-pine) !important;
+          color: #fffaf1 !important;
         }
         .scheduling-hero {
           display: flex;
@@ -253,7 +294,7 @@ export default function SchedulingWorkspacePage() {
         }
         .scheduling-hero p {
           margin: 6px 0 0;
-          color: ${text.muted};
+          color: var(--schedule-muted);
           line-height: 1.5;
         }
         .scheduling-layout {
@@ -284,24 +325,24 @@ export default function SchedulingWorkspacePage() {
         .scheduling-view-toggle {
           display: inline-flex;
           padding: 3px;
-          border: 1px solid ${colors.border};
+          border: 1px solid var(--schedule-border);
           border-radius: ${radius.pill};
-          background: #f8fafc;
+          background: var(--schedule-muted-panel);
         }
         .scheduling-view-toggle button,
         .scheduling-month-controls button {
           border: 0;
           border-radius: ${radius.pill};
           background: transparent;
-          color: ${text.secondary};
+          color: var(--schedule-muted);
           font-weight: 800;
           padding: 8px 11px;
           cursor: pointer;
         }
         .scheduling-view-toggle button.is-active {
-          background: ${colors.card};
-          color: ${colors.accent};
-          box-shadow: 0 1px 2px rgba(15,23,42,0.12);
+          background: var(--schedule-card) !important;
+          color: var(--schedule-pine) !important;
+          box-shadow: 0 1px 2px rgba(59,44,28,0.12) !important;
         }
         .scheduling-calendar-grid {
           display: grid;
@@ -309,17 +350,17 @@ export default function SchedulingWorkspacePage() {
           gap: 7px;
         }
         .scheduling-weekday {
-          color: ${text.subtle};
+          color: var(--schedule-muted);
           font-size: 0.78rem;
           font-weight: 800;
           text-align: center;
         }
         .scheduling-day {
           min-height: 70px;
-          border: 1px solid ${colors.border};
+          border: 1px solid var(--schedule-border);
           border-radius: ${radius.md};
-          background: #fff;
-          color: ${text.primary};
+          background: var(--schedule-card);
+          color: var(--schedule-text);
           cursor: pointer;
           display: grid;
           align-content: space-between;
@@ -327,12 +368,13 @@ export default function SchedulingWorkspacePage() {
           text-align: left;
         }
         .scheduling-day.is-muted {
-          color: ${text.subtle};
-          background: #f8fafc;
+          color: var(--schedule-muted);
+          background: var(--schedule-muted-panel);
         }
         .scheduling-day.is-selected {
-          border-color: ${colors.accent};
-          box-shadow: 0 0 0 3px rgba(37,99,235,0.16);
+          border-color: rgba(36, 88, 66, 0.42);
+          background: var(--schedule-pine-soft);
+          box-shadow: 0 0 0 3px rgba(36,88,66,0.16);
         }
         .scheduling-day strong {
           font-size: 0.9rem;
@@ -341,8 +383,8 @@ export default function SchedulingWorkspacePage() {
           justify-self: start;
           font-size: 0.72rem;
           font-weight: 800;
-          color: #166534;
-          background: rgba(34,197,94,0.12);
+          color: var(--schedule-pine);
+          background: var(--schedule-pine-soft);
           border-radius: ${radius.pill};
           padding: 3px 6px;
         }
@@ -361,12 +403,12 @@ export default function SchedulingWorkspacePage() {
           justify-content: center;
           min-height: 36px;
           padding: 8px 12px;
-          border: 1px solid ${colors.border};
+          border: 1px solid var(--schedule-border);
           border-radius: ${radius.pill};
-          color: ${text.primary};
+          color: var(--schedule-text);
           text-decoration: none;
           font-weight: 800;
-          background: #fff;
+          background: var(--schedule-card);
           white-space: nowrap;
         }
         .scheduling-item-list {
@@ -379,11 +421,11 @@ export default function SchedulingWorkspacePage() {
           justify-content: space-between;
           gap: ${spacing.sm};
           padding: 12px;
-          border: 1px solid ${colors.border};
+          border: 1px solid var(--schedule-border);
           border-radius: ${radius.md};
           text-decoration: none;
-          color: ${text.primary};
-          background: #f8fafc;
+          color: var(--schedule-text);
+          background: var(--schedule-muted-panel);
         }
         .scheduling-item-row span {
           display: grid;
@@ -391,13 +433,13 @@ export default function SchedulingWorkspacePage() {
           min-width: 0;
         }
         .scheduling-item-row small {
-          color: ${text.muted};
+          color: var(--schedule-muted);
           line-height: 1.35;
         }
         .scheduling-item-row em {
           font-style: normal;
           font-weight: 800;
-          color: ${colors.accent};
+          color: var(--schedule-pine);
           white-space: nowrap;
         }
         .scheduling-note-actions,
@@ -414,9 +456,9 @@ export default function SchedulingWorkspacePage() {
         }
         .scheduling-note-row {
           align-items: center;
-          border: 1px solid ${colors.border};
+          border: 1px solid var(--schedule-border);
           border-radius: ${radius.md};
-          background: #f8fafc;
+          background: var(--schedule-muted-panel);
           padding: ${spacing.sm};
         }
         .scheduling-note-row input {
@@ -424,7 +466,7 @@ export default function SchedulingWorkspacePage() {
           min-width: 0;
         }
         .scheduling-local-note {
-          color: ${text.subtle};
+          color: var(--schedule-muted);
           font-size: 0.82rem;
           line-height: 1.4;
         }
@@ -436,11 +478,11 @@ export default function SchedulingWorkspacePage() {
           gap: ${spacing.sm};
         }
         .scheduling-review-list li {
-          border: 1px solid ${colors.border};
+          border: 1px solid var(--schedule-border);
           border-radius: ${radius.md};
           padding: 11px 12px;
-          background: #f8fafc;
-          color: ${text.secondary};
+          background: var(--schedule-muted-panel);
+          color: var(--schedule-muted);
           line-height: 1.45;
         }
         @media (max-width: 980px) {
@@ -482,7 +524,7 @@ export default function SchedulingWorkspacePage() {
         }
       `}</style>
 
-      <Card elevated className="scheduling-hero">
+      <Card elevated className="scheduling-hero scheduling-card">
         <div>
           <h1>Scheduling</h1>
           <p>Calendar view for viewings, maintenance, work orders, screening, and notes.</p>
@@ -494,7 +536,7 @@ export default function SchedulingWorkspacePage() {
 
       <div className="scheduling-layout">
         <div className="scheduling-left">
-          <Card style={{ display: "grid", gap: spacing.md }}>
+          <Card className="scheduling-card" style={{ display: "grid", gap: spacing.md }}>
             <div className="scheduling-toolbar">
               <div className="scheduling-month-title">
                 <CalendarDays size={18} strokeWidth={2.2} aria-hidden="true" />
@@ -560,7 +602,7 @@ export default function SchedulingWorkspacePage() {
             </div>
           </Card>
 
-          <Card style={{ display: "grid", gap: spacing.md }}>
+          <Card className="scheduling-card" style={{ display: "grid", gap: spacing.md }}>
             <SectionHeader icon={FileText} title="Notes" />
             <div style={{ display: "grid", gap: spacing.sm }}>
               <strong>{formatDay(selectedDate)}</strong>
@@ -594,7 +636,7 @@ export default function SchedulingWorkspacePage() {
                 placeholder="Add another note for this day"
               />
               <div className="scheduling-note-actions">
-                <Button type="button" onClick={addNote} aria-label="Add note">
+                <Button type="button" className="scheduling-primary-action" onClick={addNote} aria-label="Add note">
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                     <Plus size={16} aria-hidden="true" />
                     Add note
@@ -638,7 +680,7 @@ export default function SchedulingWorkspacePage() {
             actionLabel="Open Screening"
           />
 
-          <Card style={{ display: "grid", gap: spacing.md }}>
+          <Card className="scheduling-card" style={{ display: "grid", gap: spacing.md }}>
             <SectionHeader icon={ListChecks} title="Screening Shortcuts" />
             <div className="scheduling-shortcuts">
               <Link to="/screening" className="scheduling-link-button">
@@ -650,7 +692,7 @@ export default function SchedulingWorkspacePage() {
             </div>
           </Card>
 
-          <Card style={{ display: "grid", gap: spacing.md }}>
+          <Card className="scheduling-card" style={{ display: "grid", gap: spacing.md }}>
             <SectionHeader icon={ListChecks} title="Scheduling Review" />
             <ul className="scheduling-review-list" aria-label="Read-only scheduling recommendations">
               {reviewItems.map((item) => (

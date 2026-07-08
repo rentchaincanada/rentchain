@@ -19,7 +19,7 @@ import {
   type DelegatedAccessRole,
   type DelegatedAccessWorkspaceScope,
 } from "../api/delegatedAccessApi";
-import { colors, radius, spacing, text } from "../styles/tokens";
+import { radius, spacing, text } from "../styles/tokens";
 
 const roleLabels: Record<DelegatedAccessRole, string> = {
   property_manager: "Property Manager",
@@ -59,6 +59,19 @@ const permissions = Object.keys(permissionLabels) as DelegatedAccessPermissionAc
 
 const defaultWorkspaces: DelegatedAccessWorkspaceScope[] = ["dashboard", "operations"];
 const defaultPermissions: DelegatedAccessPermissionAction[] = ["view"];
+const delegatedWarm = {
+  card: "#fffaf1",
+  panel: "#fff6e8",
+  mutedPanel: "#f7efe2",
+  border: "rgba(91, 70, 48, 0.16)",
+  borderStrong: "rgba(91, 70, 48, 0.28)",
+  text: "#211c17",
+  muted: "#63594d",
+  pine: "#245842",
+  pineSoft: "rgba(36, 88, 66, 0.12)",
+  amber: "#8a5a17",
+  amberSoft: "rgba(180, 83, 9, 0.14)",
+};
 type AccessStatusFilter = "all" | "pending" | "active" | "cancelled" | "expired" | "revoked";
 type AccessRow =
   | { kind: "invitation"; status: DelegatedAccessInvitation["status"]; invitation: DelegatedAccessInvitation }
@@ -98,6 +111,28 @@ function propertyScopeLabel(mode: DelegatedAccessPropertyScopeMode, selectedSumm
 
 function statusTone(status: string): "accent" | "muted" {
   return status === "active" || status === "pending" ? "accent" : "muted";
+}
+
+function delegatedStatusStyle(status: string): React.CSSProperties {
+  if (status === "active") {
+    return {
+      background: delegatedWarm.pineSoft,
+      color: delegatedWarm.pine,
+      borderColor: "rgba(36, 88, 66, 0.28)",
+    };
+  }
+  if (status === "pending") {
+    return {
+      background: delegatedWarm.amberSoft,
+      color: delegatedWarm.amber,
+      borderColor: "rgba(180, 83, 9, 0.28)",
+    };
+  }
+  return {
+    background: delegatedWarm.mutedPanel,
+    color: delegatedWarm.muted,
+    borderColor: delegatedWarm.border,
+  };
 }
 
 function statusLabel(status: string) {
@@ -149,8 +184,9 @@ function ToggleChip({
         gap: 8,
         padding: "8px 10px",
         borderRadius: radius.pill,
-        border: `1px solid ${checked ? colors.accent : colors.border}`,
-        background: checked ? colors.accentSoft : colors.card,
+        border: `1px solid ${checked ? "rgba(36, 88, 66, 0.34)" : delegatedWarm.border}`,
+        background: checked ? delegatedWarm.pineSoft : delegatedWarm.card,
+        color: delegatedWarm.text,
         fontSize: 13,
         fontWeight: 700,
         cursor: "pointer",
@@ -169,10 +205,70 @@ function ToggleChip({
 
 function StatusCard({ label, value }: { label: string; value: number }) {
   return (
-    <Card style={{ padding: spacing.md, display: "grid", gap: 4 }}>
-      <div style={{ color: text.muted, fontSize: 12, fontWeight: 800, textTransform: "uppercase" }}>{label}</div>
+    <Card className="delegated-surface" style={{ padding: spacing.md, display: "grid", gap: 4 }}>
+      <div style={{ color: delegatedWarm.muted, fontSize: 12, fontWeight: 800, textTransform: "uppercase" }}>{label}</div>
       <div style={{ fontSize: 26, fontWeight: 900 }}>{value}</div>
     </Card>
+  );
+}
+
+function DelegatedAccessTheme() {
+  return (
+    <style>
+      {`
+        .delegated-access-page {
+          --delegated-card: ${delegatedWarm.card};
+          --delegated-panel: ${delegatedWarm.panel};
+          --delegated-muted-panel: ${delegatedWarm.mutedPanel};
+          --delegated-border: ${delegatedWarm.border};
+          --delegated-border-strong: ${delegatedWarm.borderStrong};
+          --delegated-text: ${delegatedWarm.text};
+          --delegated-muted: ${delegatedWarm.muted};
+          --delegated-pine: ${delegatedWarm.pine};
+          --delegated-pine-soft: ${delegatedWarm.pineSoft};
+        }
+        .delegated-access-page .delegated-surface {
+          background: var(--delegated-card) !important;
+          border-color: var(--delegated-border) !important;
+          box-shadow: 0 10px 24px rgba(59, 44, 28, 0.1) !important;
+        }
+        .delegated-access-page .delegated-panel {
+          background: var(--delegated-muted-panel) !important;
+          border-color: var(--delegated-border) !important;
+        }
+        .delegated-access-page input,
+        .delegated-access-page select {
+          background: var(--delegated-card) !important;
+          border-color: var(--delegated-border) !important;
+          color: var(--delegated-text) !important;
+        }
+        .delegated-access-page input:focus,
+        .delegated-access-page select:focus {
+          border-color: rgba(36, 88, 66, 0.42) !important;
+          box-shadow: 0 0 0 3px rgba(36, 88, 66, 0.18) !important;
+        }
+        .delegated-access-page button {
+          border: 1px solid var(--delegated-border) !important;
+          background: var(--delegated-card) !important;
+          color: var(--delegated-text) !important;
+          box-shadow: none !important;
+        }
+        .delegated-access-page button:hover:not(:disabled) {
+          border-color: var(--delegated-border-strong) !important;
+          background: var(--delegated-panel) !important;
+        }
+        .delegated-access-page button.delegated-primary,
+        .delegated-access-page button[aria-selected="true"] {
+          border-color: rgba(36, 88, 66, 0.42) !important;
+          background: var(--delegated-pine) !important;
+          color: #fffaf1 !important;
+        }
+        .delegated-access-page button.delegated-primary:hover:not(:disabled),
+        .delegated-access-page button[aria-selected="true"]:hover:not(:disabled) {
+          background: #1f4b39 !important;
+        }
+      `}
+    </style>
   );
 }
 
@@ -377,9 +473,9 @@ export default function DelegatedAccessPage() {
         display: "grid",
         gap: spacing.xs,
         padding: spacing.md,
-        border: `1px solid ${colors.border}`,
+        border: `1px solid ${delegatedWarm.border}`,
         borderRadius: radius.md,
-        background: colors.card,
+        background: delegatedWarm.card,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
@@ -389,7 +485,9 @@ export default function DelegatedAccessPage() {
             {roleLabels[invitation.role]} · {propertyScopeLabel(invitation.propertyScope.mode)}
           </div>
         </div>
-        <Pill tone={statusTone(invitation.status)}>{statusLabel(invitation.status)}</Pill>
+        <Pill tone={statusTone(invitation.status)} style={delegatedStatusStyle(invitation.status)}>
+          {statusLabel(invitation.status)}
+        </Pill>
       </div>
       <div style={{ color: text.secondary, fontSize: 13 }}>
         Workspaces: {labelList(invitation.workspaceScopes, workspaceLabels)} · Permissions:{" "}
@@ -428,9 +526,9 @@ export default function DelegatedAccessPage() {
         display: "grid",
         gap: spacing.sm,
         padding: spacing.md,
-        border: `1px solid ${colors.border}`,
+        border: `1px solid ${delegatedWarm.border}`,
         borderRadius: radius.md,
-        background: grant.status === "revoked" ? "#f8fafc" : colors.card,
+        background: grant.status === "revoked" ? delegatedWarm.mutedPanel : delegatedWarm.card,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
@@ -440,7 +538,9 @@ export default function DelegatedAccessPage() {
             {roleLabels[grant.role]} · {propertyScopeLabel(grant.permissionScope.propertyScope.mode)}
           </div>
         </div>
-        <Pill tone={statusTone(grant.status)}>{statusLabel(grant.status)}</Pill>
+        <Pill tone={statusTone(grant.status)} style={delegatedStatusStyle(grant.status)}>
+          {statusLabel(grant.status)}
+        </Pill>
       </div>
       <div style={{ color: text.secondary, fontSize: 13 }}>
         Workspaces: {labelList(grant.permissionScope.workspaceScopes, workspaceLabels)} · Permissions:{" "}
@@ -471,15 +571,16 @@ export default function DelegatedAccessPage() {
           </div>
           {confirmingRevokeGrant?.grantId === grant.grantId ? (
             <div
+              className="delegated-panel"
               role="alertdialog"
               aria-label={`Confirm revoke access for ${grant.delegateEmail || "delegate"}`}
               style={{
                 display: "grid",
                 gap: spacing.xs,
                 padding: spacing.sm,
-                border: `1px solid ${colors.border}`,
+                border: `1px solid ${delegatedWarm.border}`,
                 borderRadius: radius.md,
-                background: "#fff7ed",
+                background: delegatedWarm.panel,
               }}
             >
               <div style={{ fontWeight: 900 }}>
@@ -539,8 +640,10 @@ export default function DelegatedAccessPage() {
           display: "grid",
           gap: spacing.md,
         }}
+        className="delegated-access-page"
       >
-        <Card elevated>
+        <DelegatedAccessTheme />
+        <Card elevated className="delegated-surface">
           <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Delegate Management</h1>
           <p style={{ margin: "8px 0 0", color: text.muted }}>
             Delegate management is available only to landlord owners.
@@ -559,8 +662,10 @@ export default function DelegatedAccessPage() {
         display: "grid",
         gap: spacing.md,
       }}
+      className="delegated-access-page"
     >
-      <Card elevated style={{ display: "grid", gap: spacing.md }}>
+      <DelegatedAccessTheme />
+      <Card elevated className="delegated-surface" style={{ display: "grid", gap: spacing.md }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
           <div style={{ display: "grid", gap: 6 }}>
             <h1 style={{ margin: 0, fontSize: "1.55rem", fontWeight: 900 }}>Delegate Management</h1>
@@ -568,7 +673,7 @@ export default function DelegatedAccessPage() {
               Never share your login. Invite delegates to their own account.
             </p>
           </div>
-          <Button type="button" onClick={() => setInviteOpen((open) => !open)}>
+          <Button type="button" className="delegated-primary" onClick={() => setInviteOpen((open) => !open)}>
             {inviteOpen ? "Hide Invite" : "Invite Delegate"}
           </Button>
         </div>
@@ -595,7 +700,7 @@ export default function DelegatedAccessPage() {
       </div>
 
       {inviteOpen ? (
-        <Card style={{ display: "grid", gap: spacing.md }}>
+        <Card className="delegated-surface" style={{ display: "grid", gap: spacing.md }}>
           <div style={{ display: "flex", alignItems: "center", gap: spacing.sm }}>
             <UserPlus size={20} />
             <div>
@@ -624,9 +729,9 @@ export default function DelegatedAccessPage() {
                   onChange={(event) => setInviteRole(event.target.value as DelegatedAccessRole)}
                   style={{
                     minHeight: 42,
-                    border: `1px solid ${colors.border}`,
+                    border: `1px solid ${delegatedWarm.border}`,
                     borderRadius: radius.md,
-                    background: colors.card,
+                    background: delegatedWarm.card,
                     padding: "10px 12px",
                     color: text.primary,
                   }}
@@ -644,9 +749,9 @@ export default function DelegatedAccessPage() {
                   aria-label="Property scope"
                   style={{
                     minHeight: 42,
-                    border: `1px solid ${colors.border}`,
+                    border: `1px solid ${delegatedWarm.border}`,
                     borderRadius: radius.md,
-                    background: "#f8fafc",
+                    background: delegatedWarm.mutedPanel,
                     padding: "10px 12px",
                     color: text.primary,
                     display: "flex",
@@ -697,7 +802,7 @@ export default function DelegatedAccessPage() {
             </div>
 
             <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" className="delegated-primary" disabled={submitting}>
                 {submitting ? "Creating..." : "Create Invitation"}
               </Button>
               <Button
@@ -715,7 +820,7 @@ export default function DelegatedAccessPage() {
         </Card>
       ) : null}
 
-      <Card style={{ display: "grid", gap: spacing.md }}>
+      <Card className="delegated-surface" style={{ display: "grid", gap: spacing.md }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
           <div>
             <h2 style={{ margin: 0, fontSize: "1.1rem" }}>Access Overview</h2>
@@ -754,7 +859,7 @@ export default function DelegatedAccessPage() {
             body={emptyState.body}
             action={
               statusFilter === "all" || statusFilter === "pending" ? (
-                <Button type="button" onClick={() => setInviteOpen(true)}>Invite Delegate</Button>
+                <Button type="button" className="delegated-primary" onClick={() => setInviteOpen(true)}>Invite Delegate</Button>
               ) : undefined
             }
           />
@@ -781,7 +886,7 @@ export default function DelegatedAccessPage() {
         ) : null}
       </Card>
 
-      <Card style={{ display: "grid", gap: spacing.sm }}>
+      <Card className="delegated-surface" style={{ display: "grid", gap: spacing.sm }}>
         <h2 style={{ margin: 0, fontSize: "1.1rem" }}>Delegates Summary</h2>
         {delegates.length === 0 ? (
           <div style={{ color: text.muted }}>Delegate summaries will appear after invitations are accepted.</div>
@@ -799,7 +904,8 @@ export default function DelegatedAccessPage() {
                   gap: spacing.sm,
                   padding: spacing.sm,
                   borderRadius: radius.md,
-                  border: `1px solid ${colors.border}`,
+                  border: `1px solid ${delegatedWarm.border}`,
+                  background: delegatedWarm.mutedPanel,
                 }}
               >
                 <div style={{ flex: "1 1 220px", minWidth: 0 }}>

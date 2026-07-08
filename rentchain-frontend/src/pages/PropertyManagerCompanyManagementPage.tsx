@@ -28,7 +28,7 @@ import {
 import { Button, Card, EmptyState, InlineError, Input, Pill, SkeletonBlock } from "../components/ui/Ui";
 import { useToast } from "../components/ui/ToastProvider";
 import { useAuth } from "../context/useAuth";
-import { colors, radius, shadows, spacing, text } from "../styles/tokens";
+import { radius, shadows, spacing, text } from "../styles/tokens";
 
 const ASSIGNMENT_ROLES: PropertyManagerCompanyStaffAssignmentRole[] = [
   "regional_manager",
@@ -78,6 +78,19 @@ const RELATIONSHIP_WORKSPACES: PropertyManagerCompanyWorkspaceScope[] = [
 ];
 
 const DEFAULT_RELATIONSHIP_WORKSPACES: PropertyManagerCompanyWorkspaceScope[] = ["dashboard", "operations"];
+const pmcWarm = {
+  card: "#fffaf1",
+  panel: "#fff6e8",
+  mutedPanel: "#f7efe2",
+  border: "rgba(91, 70, 48, 0.16)",
+  borderStrong: "rgba(91, 70, 48, 0.28)",
+  text: "#211c17",
+  muted: "#63594d",
+  pine: "#245842",
+  pineSoft: "rgba(36, 88, 66, 0.12)",
+  amber: "#8a5a17",
+  amberSoft: "rgba(180, 83, 9, 0.14)",
+};
 
 type SurfaceMode = "landlord" | "company";
 
@@ -110,6 +123,28 @@ function actionPastTense(action: string) {
 
 function statusTone(value: string): "accent" | "muted" {
   return value === "active" || value === "pending" ? "accent" : "muted";
+}
+
+function pmcStatusStyle(value: string): React.CSSProperties {
+  if (value === "active") {
+    return {
+      background: pmcWarm.pineSoft,
+      color: pmcWarm.pine,
+      borderColor: "rgba(36, 88, 66, 0.28)",
+    };
+  }
+  if (value === "pending") {
+    return {
+      background: pmcWarm.amberSoft,
+      color: pmcWarm.amber,
+      borderColor: "rgba(180, 83, 9, 0.28)",
+    };
+  }
+  return {
+    background: pmcWarm.mutedPanel,
+    color: pmcWarm.muted,
+    borderColor: pmcWarm.border,
+  };
 }
 
 function formatDate(value?: string | null) {
@@ -181,8 +216,8 @@ function ToggleChip({
         gap: 8,
         padding: "8px 10px",
         borderRadius: radius.pill,
-        border: `1px solid ${checked ? colors.accent : colors.border}`,
-        background: checked ? colors.accentSoft : colors.card,
+        border: `1px solid ${checked ? "rgba(36, 88, 66, 0.34)" : pmcWarm.border}`,
+        background: checked ? pmcWarm.pineSoft : pmcWarm.card,
         color: disabled ? text.muted : text.primary,
         fontSize: 13,
         fontWeight: 700,
@@ -285,7 +320,7 @@ function RelationshipCard({
 }) {
   const title = companyMode ? relationship.landlordWorkspaceLabel : relationship.propertyManagerCompanyLabel;
   return (
-    <Card data-testid="pmc-relationship-card" style={{ display: "grid", gap: spacing.md }}>
+    <Card data-testid="pmc-relationship-card" className="pmc-surface" style={{ display: "grid", gap: spacing.md }}>
       <div className="pmc-card-header">
         <div style={{ minWidth: 0 }}>
           <div className="pmc-card-title">{title}</div>
@@ -293,7 +328,9 @@ function RelationshipCard({
             {relationshipScopeLabel(relationship)}
           </div>
         </div>
-        <Pill tone={statusTone(relationship.status)}>{statusLabel(relationship.status)}</Pill>
+        <Pill tone={statusTone(relationship.status)} style={pmcStatusStyle(relationship.status)}>
+          {statusLabel(relationship.status)}
+        </Pill>
       </div>
 
       <div className="pmc-meta-grid">
@@ -352,7 +389,7 @@ function RelationshipCard({
             <EmptyState
               title="No staff assigned"
               body="This relationship has no visible staff assignments yet."
-              style={{ background: colors.card }}
+              style={{ background: pmcWarm.card }}
             />
           )}
         </div>
@@ -382,7 +419,9 @@ function AssignmentRow({
         </div>
       </div>
       <div className="pmc-row-actions">
-        <Pill tone={statusTone(assignment.status)}>{statusLabel(assignment.status)}</Pill>
+        <Pill tone={statusTone(assignment.status)} style={pmcStatusStyle(assignment.status)}>
+          {statusLabel(assignment.status)}
+        </Pill>
         {onSuspend && assignment.status === "active" ? (
           <Button type="button" variant="secondary" onClick={onSuspend}>
             Suspend
@@ -693,11 +732,48 @@ export default function PropertyManagerCompanyManagementPage() {
       <style>
         {`
           .pmc-page {
+            --pmc-card: ${pmcWarm.card};
+            --pmc-panel: ${pmcWarm.panel};
+            --pmc-muted-panel: ${pmcWarm.mutedPanel};
+            --pmc-border: ${pmcWarm.border};
+            --pmc-border-strong: ${pmcWarm.borderStrong};
+            --pmc-text: ${pmcWarm.text};
+            --pmc-muted: ${pmcWarm.muted};
+            --pmc-pine: ${pmcWarm.pine};
+            --pmc-pine-soft: ${pmcWarm.pineSoft};
             max-width: 1320px;
             margin: 0 auto;
             padding: 0;
             display: grid;
             gap: ${spacing.md};
+            color: var(--pmc-text);
+          }
+          .pmc-surface {
+            background: var(--pmc-card) !important;
+            border-color: var(--pmc-border) !important;
+            box-shadow: 0 10px 24px rgba(59, 44, 28, 0.1) !important;
+          }
+          .pmc-page button {
+            border: 1px solid var(--pmc-border) !important;
+            background: var(--pmc-card) !important;
+            color: var(--pmc-text) !important;
+            box-shadow: none !important;
+          }
+          .pmc-page button:hover:not(:disabled) {
+            border-color: var(--pmc-border-strong) !important;
+            background: var(--pmc-panel) !important;
+          }
+          .pmc-page button.pmc-primary-action,
+          .pmc-page button[aria-selected="true"] {
+            border-color: rgba(36, 88, 66, 0.42) !important;
+            background: var(--pmc-pine) !important;
+            color: #fffaf1 !important;
+          }
+          .pmc-page input,
+          .pmc-page select {
+            background: var(--pmc-card) !important;
+            border-color: var(--pmc-border) !important;
+            color: var(--pmc-text) !important;
           }
           .pmc-header {
             display: flex;
@@ -742,10 +818,10 @@ export default function PropertyManagerCompanyManagementPage() {
           .pmc-summary-stat {
             display: grid;
             gap: 4px;
-            border: 1px solid ${colors.border};
+            border: 1px solid var(--pmc-border);
             border-radius: ${radius.md};
             padding: ${spacing.sm};
-            background: ${colors.panel};
+            background: var(--pmc-muted-panel);
             min-width: 0;
           }
           .pmc-meta-grid span {
@@ -759,9 +835,9 @@ export default function PropertyManagerCompanyManagementPage() {
           .pmc-note {
             padding: ${spacing.sm};
             border-radius: ${radius.md};
-            border: 1px solid ${colors.border};
-            background: ${colors.accentSoft};
-            color: ${text.secondary};
+            border: 1px solid var(--pmc-border);
+            background: var(--pmc-pine-soft);
+            color: var(--pmc-muted);
             font-size: 13px;
             line-height: 1.45;
           }
@@ -769,20 +845,20 @@ export default function PropertyManagerCompanyManagementPage() {
           .pmc-selected-company {
             display: grid;
             gap: ${spacing.sm};
-            border: 1px solid ${colors.border};
+            border: 1px solid var(--pmc-border);
             border-radius: ${radius.md};
             padding: ${spacing.sm};
-            background: ${colors.panel};
+            background: var(--pmc-muted-panel);
           }
           .pmc-selected-company {
-            border-color: ${colors.accent};
-            background: ${colors.accentSoft};
+            border-color: rgba(36, 88, 66, 0.34);
+            background: var(--pmc-pine-soft);
           }
           .pmc-result-button {
             width: 100%;
             text-align: left;
-            border: 1px solid ${colors.border};
-            background: ${colors.card};
+            border: 1px solid var(--pmc-border);
+            background: var(--pmc-card);
             border-radius: ${radius.md};
             padding: ${spacing.sm};
             cursor: pointer;
@@ -790,17 +866,17 @@ export default function PropertyManagerCompanyManagementPage() {
             overflow-wrap: anywhere;
           }
           .pmc-result-button[aria-pressed="true"] {
-            border-color: ${colors.accent};
-            background: ${colors.accentSoft};
+            border-color: rgba(36, 88, 66, 0.34);
+            background: var(--pmc-pine-soft);
           }
           .pmc-select {
             width: 100%;
             min-height: 42px;
-            border: 1px solid ${colors.border};
+            border: 1px solid var(--pmc-border);
             border-radius: ${radius.md};
             padding: 10px 12px;
-            background: ${colors.card};
-            color: ${text.primary};
+            background: var(--pmc-card);
+            color: var(--pmc-text);
           }
           .pmc-section-title {
             display: flex;
@@ -850,7 +926,7 @@ export default function PropertyManagerCompanyManagementPage() {
         `}
       </style>
 
-      <Card elevated>
+      <Card elevated className="pmc-surface">
         <div className="pmc-header">
           <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
             <h1 style={{ margin: 0, fontSize: "1.55rem", fontWeight: 900 }}>PM Company Management</h1>
@@ -862,6 +938,7 @@ export default function PropertyManagerCompanyManagementPage() {
             {canUseLandlordSurface ? (
               <Button
                 type="button"
+                className={mode === "landlord" ? "pmc-primary-action" : undefined}
                 variant={mode === "landlord" ? "primary" : "secondary"}
                 role="tab"
                 aria-selected={mode === "landlord"}
@@ -872,6 +949,7 @@ export default function PropertyManagerCompanyManagementPage() {
             ) : null}
             <Button
               type="button"
+              className={mode === "company" ? "pmc-primary-action" : undefined}
               variant={mode === "company" ? "primary" : "secondary"}
               role="tab"
               aria-selected={mode === "company"}
@@ -894,7 +972,7 @@ export default function PropertyManagerCompanyManagementPage() {
       {!loading && mode === "landlord" ? (
         canUseLandlordSurface ? (
           <div className="pmc-grid">
-            <Card style={{ display: "grid", gap: spacing.md }}>
+            <Card className="pmc-surface" style={{ display: "grid", gap: spacing.md }}>
               <h2 className="pmc-section-title">
                 <Building2 size={18} /> Create pending relationship
               </h2>
@@ -958,7 +1036,7 @@ export default function PropertyManagerCompanyManagementPage() {
                           <EmptyState
                             title="No PM companies found"
                             body="Try another company name or verify the company has been created and activated."
-                            style={{ background: colors.card }}
+                            style={{ background: pmcWarm.card }}
                           />
                         )}
                       </div>
@@ -989,14 +1067,19 @@ export default function PropertyManagerCompanyManagementPage() {
                     ))}
                   </div>
                 </div>
-                <Button type="button" disabled={busy || !selectedLookup || !relationshipWorkspaces.length} onClick={createRelationship}>
+                <Button
+                  type="button"
+                  className="pmc-primary-action"
+                  disabled={busy || !selectedLookup || !relationshipWorkspaces.length}
+                  onClick={createRelationship}
+                >
                   Create pending relationship
                 </Button>
               </div>
             </Card>
 
             <div style={{ display: "grid", gap: spacing.md }}>
-              <Card style={{ display: "grid", gap: spacing.sm }}>
+              <Card className="pmc-surface" style={{ display: "grid", gap: spacing.sm }}>
                 <h2 className="pmc-section-title">
                   <Users size={18} /> Landlord relationships
                 </h2>
@@ -1035,7 +1118,7 @@ export default function PropertyManagerCompanyManagementPage() {
       {!loading && mode === "company" ? (
         hasCompanySurface ? (
           <div className="pmc-grid">
-            <Card style={{ display: "grid", gap: spacing.md }}>
+            <Card className="pmc-surface" style={{ display: "grid", gap: spacing.md }}>
               <h2 className="pmc-section-title">
                 <CheckCircle2 size={18} /> Company admin controls
               </h2>
@@ -1127,6 +1210,7 @@ export default function PropertyManagerCompanyManagementPage() {
                 </div>
                 <Button
                   type="button"
+                  className="pmc-primary-action"
                   disabled={
                     busy ||
                     !selectedCompanyId ||
@@ -1145,7 +1229,7 @@ export default function PropertyManagerCompanyManagementPage() {
             </Card>
 
             <div style={{ display: "grid", gap: spacing.md }}>
-              <Card style={{ display: "grid", gap: spacing.sm }}>
+              <Card className="pmc-surface" style={{ display: "grid", gap: spacing.sm }}>
                 <h2 className="pmc-section-title">Company relationships</h2>
                 {companyRelationships.length ? (
                   companyRelationships.map((relationship) => (
@@ -1164,7 +1248,7 @@ export default function PropertyManagerCompanyManagementPage() {
                 )}
               </Card>
 
-              <Card style={{ display: "grid", gap: spacing.sm }}>
+              <Card className="pmc-surface" style={{ display: "grid", gap: spacing.sm }}>
                 <h2 className="pmc-section-title">Staff assignments</h2>
                 {companyAssignments.length ? (
                   companyAssignments.map((assignment) => (

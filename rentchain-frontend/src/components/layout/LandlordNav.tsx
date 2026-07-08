@@ -290,85 +290,88 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
         </button>
       </div>
 
-      <div
-        className={[
-          "rc-landlord-backdrop",
-          showMobileBottomNav ? "rc-landlord-backdrop--nav-safe" : "",
-          drawerOpen ? "is-open" : "",
-        ].filter(Boolean).join(" ")}
-        onClick={closeDrawer}
-        aria-hidden={!drawerOpen}
-      />
+      {drawerOpen ? (
+        <>
+          <div
+            className={[
+              "rc-landlord-backdrop",
+              showMobileBottomNav ? "rc-landlord-backdrop--nav-safe" : "",
+              "is-open",
+            ].filter(Boolean).join(" ")}
+            onClick={closeDrawer}
+            aria-hidden="true"
+          />
 
-      <aside
-        id="rc-landlord-drawer"
-        className={[
-          "rc-landlord-drawer",
-          showMobileBottomNav ? "rc-landlord-drawer--nav-safe" : "",
-          drawerOpen ? "is-open" : "",
-        ].filter(Boolean).join(" ")}
-        role="dialog"
-        aria-modal={drawerOpen ? "true" : undefined}
-        aria-label="Navigation menu"
-        aria-hidden={!drawerOpen}
-      >
-        <div className="rc-landlord-drawer-header">
-          <span>Workspace</span>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              closeDrawer();
-            }}
-            aria-label="Close menu"
+          <aside
+            id="rc-landlord-drawer"
+            className={[
+              "rc-landlord-drawer",
+              showMobileBottomNav ? "rc-landlord-drawer--nav-safe" : "",
+              "is-open",
+            ].filter(Boolean).join(" ")}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation menu"
           >
-            Close
-          </button>
-        </div>
-        <div className="rc-landlord-drawer-scroll">
-          {navLoading ? (
-            <div className="rc-landlord-drawer-links">
-              <button type="button" disabled className="active">
-                Loading menu...
+            <div className="rc-landlord-drawer-header">
+              <span>Workspace</span>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  closeDrawer();
+                }}
+                aria-label="Close menu"
+              >
+                Close
               </button>
             </div>
-          ) : (
-            <div className="rc-landlord-drawer-links">
-              {orderedPrimaryDrawerItems.map(({ id, to, label }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => handleDrawerNavigation(to)}
-                  className={loc.pathname.startsWith(to) ? "active" : ""}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="rc-landlord-drawer-scroll">
+              {navLoading ? (
+                <div className="rc-landlord-drawer-links">
+                  <button type="button" disabled className="active">
+                    Loading menu...
+                  </button>
+                </div>
+              ) : (
+                <div className="rc-landlord-drawer-links">
+                  {orderedPrimaryDrawerItems.map(({ id, to, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => handleDrawerNavigation(to)}
+                      className={loc.pathname.startsWith(to) ? "active" : ""}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="rc-landlord-drawer-divider" />
+              <button type="button" className="rc-landlord-drawer-signout" onClick={logout}>
+                Sign out
+              </button>
+              {adminDrawerItems.length ? (
+                <div className="rc-landlord-drawer-divider" />
+              ) : null}
+              {adminDrawerItems.length ? (
+                <div className="rc-landlord-drawer-links">
+                  {adminDrawerItems.map(({ id, to, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => handleDrawerNavigation(to)}
+                      className={loc.pathname.startsWith(to) ? "active" : ""}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
-          )}
-          <div className="rc-landlord-drawer-divider" />
-          <button type="button" className="rc-landlord-drawer-signout" onClick={logout}>
-            Sign out
-          </button>
-          {adminDrawerItems.length ? (
-            <div className="rc-landlord-drawer-divider" />
-          ) : null}
-          {adminDrawerItems.length ? (
-            <div className="rc-landlord-drawer-links">
-              {adminDrawerItems.map(({ id, to, label }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => handleDrawerNavigation(to)}
-                  className={loc.pathname.startsWith(to) ? "active" : ""}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </aside>
+          </aside>
+        </>
+      ) : null}
 
       <UpgradeNudgeHost />
       <div className={contentClassName}>{children}</div>

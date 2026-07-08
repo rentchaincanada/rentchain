@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
 import { getVisibleNavItems } from "./navConfig";
@@ -11,8 +12,9 @@ type WorkspaceDrawerProps = {
   userEmail?: string | null;
   userRole?: string | null;
   onSignOut?: () => void;
-  reserveBottomNavSpace?: boolean;
 };
+
+export const WORKSPACE_DRAWER_MOBILE_QUERY = "(max-width: 820px)";
 
 export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
   open,
@@ -20,12 +22,11 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
   userEmail,
   userRole,
   onSignOut,
-  reserveBottomNavSpace = false,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { features, loading: capsLoading } = useCapabilities();
-  const isMobile = useIsMobile("(max-width: 1024px)");
+  const isMobile = useIsMobile(WORKSPACE_DRAWER_MOBILE_QUERY);
   const navLoading = !userRole || capsLoading;
   const visibleItems = navLoading ? [] : getVisibleNavItems(userRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
@@ -81,11 +82,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
     navigate(path);
     onClose();
   };
-  const mobileBottomNavOffset =
-    reserveBottomNavSpace
-      ? "var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px)))"
-      : "calc(12px + env(safe-area-inset-bottom, 0px))";
-
+  const mobileBottomNavOffset = "var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px)))";
   const footerContent = (
     <>
       {onSignOut ? (
@@ -109,7 +106,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
     </>
   );
 
-  return (
+  const overlay = (
     <div
       style={{
         position: "fixed",
@@ -117,7 +114,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
         left: 0,
         right: 0,
         bottom: isMobile ? mobileBottomNavOffset : 0,
-        zIndex: isMobile ? 3000 : 3000,
+        zIndex: "var(--rc-landlord-z-drawer, 4020)",
         display: "flex",
         justifyContent: isMobile ? "center" : "flex-end",
         alignItems: isMobile ? "flex-end" : "flex-start",
@@ -126,6 +123,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
         overscrollBehavior: "none",
         touchAction: isMobile ? "auto" : "none",
         pointerEvents: "auto",
+        isolation: "isolate",
       }}
     >
       <div
@@ -137,6 +135,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
           touchAction: isMobile ? "auto" : "none",
           overscrollBehavior: "none",
           pointerEvents: "auto",
+          zIndex: 0,
         }}
       />
       <div
@@ -159,13 +158,13 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
           boxShadow: shadows.lg,
           display: "flex",
           flexDirection: "column",
-          zIndex: isMobile ? 3001 : 3001,
+          zIndex: 1,
           overflow: "hidden",
           overscrollBehaviorY: "contain",
           contain: "layout paint",
           isolation: "isolate",
           WebkitOverflowScrolling: "touch",
-          paddingTop: isMobile ? 0 : "env(safe-area-inset-top)",
+          paddingTop: isMobile ? "env(safe-area-inset-top, 0px)" : "env(safe-area-inset-top)",
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
           pointerEvents: "auto",
         }}
@@ -325,4 +324,6 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
       </div>
     </div>
   );
+
+  return createPortal(overlay, document.body);
 };

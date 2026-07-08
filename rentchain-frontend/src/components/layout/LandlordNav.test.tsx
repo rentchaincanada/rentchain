@@ -85,7 +85,7 @@ describe("LandlordNav mobile drawer", () => {
     });
   });
 
-  it("opens a bottom-nav drawer with expected workspace options", async () => {
+  it("opens a modal workspace drawer with expected workspace options", async () => {
     renderLandlordNav();
 
     fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
@@ -201,13 +201,15 @@ describe("LandlordNav mobile drawer", () => {
     expect(screen.getByText("Verified Screenings", { selector: ".rc-landlord-mobile-role" })).toBeInTheDocument();
   });
 
-  it("keeps the mobile tab bar and close control available while the drawer is open", () => {
+  it("opens the workspace sheet above the mobile tab bar", () => {
     renderLandlordNav();
 
     fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
 
     expect(screen.getByRole("navigation", { name: "Bottom navigation" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open workspace pages" })).toHaveClass("active");
+    expect(document.querySelector(".rc-landlord-backdrop")).toHaveClass("is-open");
+    expect(document.querySelector(".rc-landlord-backdrop")).toHaveClass("rc-landlord-backdrop--nav-safe");
     expect(
       within(screen.getByRole("dialog", { name: "Navigation menu" })).getByRole("button", {
         name: "Close menu",
@@ -225,19 +227,38 @@ describe("LandlordNav mobile drawer", () => {
     fireEvent.click(moreButton);
 
     await waitFor(() => {
-      expect(document.querySelector("#rc-landlord-drawer")).not.toHaveClass("is-open");
+      expect(document.querySelector("#rc-landlord-drawer")).not.toBeInTheDocument();
     });
     expect(moreButton).not.toHaveClass("active");
   });
 
-  it("uses a safe-area drawer offset so the sheet and backdrop stop above the mobile nav", () => {
+  it("uses nav-safe bottom offsets so the sheet opens above the mobile nav", () => {
     renderLandlordNav();
+
+    expect(document.querySelector(".rc-landlord-drawer")).not.toBeInTheDocument();
+    expect(document.querySelector(".rc-landlord-backdrop")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
 
     const drawer = document.querySelector(".rc-landlord-drawer");
     const backdrop = document.querySelector(".rc-landlord-backdrop");
 
     expect(drawer).toHaveClass("rc-landlord-drawer--nav-safe");
     expect(backdrop).toHaveClass("rc-landlord-backdrop--nav-safe");
+  });
+
+  it("keeps the mobile bottom nav usable while the workspace sheet is open", async () => {
+    renderLandlordNav();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
+
+    const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
+    fireEvent.click(within(tabbar).getByRole("button", { name: "Properties" }));
+
+    await waitFor(() => {
+      expect(document.querySelector("#rc-landlord-drawer")).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/properties");
   });
 
   it("closes the drawer on option select and route change", async () => {
@@ -247,7 +268,7 @@ describe("LandlordNav mobile drawer", () => {
     fireEvent.click(within(screen.getByRole("dialog", { name: "Navigation menu" })).getByRole("button", { name: "Payments" }));
 
     await waitFor(() => {
-      expect(document.querySelector("#rc-landlord-drawer")).not.toHaveClass("is-open");
+      expect(document.querySelector("#rc-landlord-drawer")).not.toBeInTheDocument();
     });
     expect(screen.getByTestId("current-path")).toHaveTextContent("/payments");
   });
@@ -372,11 +393,11 @@ describe("LandlordNav mobile drawer", () => {
     fireEvent.keyDown(document, { key: "Escape" });
 
     await waitFor(() => {
-      expect(document.querySelector("#rc-landlord-drawer")).not.toHaveClass("is-open");
+      expect(document.querySelector("#rc-landlord-drawer")).not.toBeInTheDocument();
     });
   });
 
-  it("closes immediately from the drawer close button and leaves the tab bar available", async () => {
+  it("closes immediately from the drawer close button and restores the tab bar", async () => {
     renderLandlordNav();
 
     fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
@@ -387,7 +408,7 @@ describe("LandlordNav mobile drawer", () => {
     );
 
     await waitFor(() => {
-      expect(document.querySelector("#rc-landlord-drawer")).not.toHaveClass("is-open");
+      expect(document.querySelector("#rc-landlord-drawer")).not.toBeInTheDocument();
     });
     expect(screen.getByRole("navigation", { name: "Bottom navigation" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open workspace pages" })).not.toHaveClass("active");
