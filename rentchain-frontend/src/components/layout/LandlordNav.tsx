@@ -293,14 +293,22 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       {drawerOpen ? (
         <>
           <div
-            className="rc-landlord-backdrop is-open"
+            className={[
+              "rc-landlord-backdrop",
+              showMobileBottomNav ? "rc-landlord-backdrop--nav-safe" : "",
+              "is-open",
+            ].filter(Boolean).join(" ")}
             onClick={closeDrawer}
             aria-hidden="true"
           />
 
           <aside
             id="rc-landlord-drawer"
-            className="rc-landlord-drawer is-open"
+            className={[
+              "rc-landlord-drawer",
+              showMobileBottomNav ? "rc-landlord-drawer--nav-safe" : "",
+              "is-open",
+            ].filter(Boolean).join(" ")}
             role="dialog"
             aria-modal="true"
             aria-label="Navigation menu"

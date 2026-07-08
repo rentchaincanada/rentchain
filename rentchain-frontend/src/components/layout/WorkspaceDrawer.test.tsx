@@ -78,7 +78,7 @@ describe("WorkspaceDrawer", () => {
     expect(screen.getByRole("button", { name: "Governed review workspaces" })).toBeInTheDocument();
   });
 
-  it("uses a full-height modal panel on mobile instead of reserving bottom navigation space", () => {
+  it("uses a bottom-nav-aware sheet on mobile", () => {
     render(
       <MemoryRouter initialEntries={["/dashboard"]}>
         <WorkspaceDrawer open onClose={vi.fn()} userRole="landlord" userEmail="owner@example.com" />
@@ -87,16 +87,17 @@ describe("WorkspaceDrawer", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Workspace navigation" });
     expect(dialog.parentElement).toHaveStyle({
-      bottom: "0",
-      alignItems: "center",
+      bottom: "var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px)))",
+      alignItems: "flex-end",
       justifyContent: "center",
       zIndex: "var(--rc-landlord-z-drawer, 4020)",
     });
     expect(dialog).toHaveStyle({
-      width: "calc(100% - 24px)",
-      maxWidth: "560px",
-      height: "calc(100dvh - 24px)",
-      maxHeight: "calc(100dvh - 24px)",
+      width: "min(420px, calc(100% - 24px))",
+      maxWidth: "min(560px, calc(100% - 24px))",
+      height: "auto",
+      maxHeight:
+        "min(calc(100dvh - var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px))) - 16px), 620px)",
       zIndex: "1",
     });
     expect(within(dialog).getByRole("button", { name: "Dashboard" }).parentElement).toHaveStyle({

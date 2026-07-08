@@ -620,6 +620,18 @@
     transform: none;
   }
 
+  .rc-landlord-backdrop--nav-safe {
+    bottom: var(--rc-mobile-drawer-bottom-offset);
+  }
+
+  .rc-landlord-drawer--nav-safe {
+    top: auto;
+    bottom: var(--rc-mobile-drawer-bottom-offset);
+    max-height: min(calc(100vh - var(--rc-mobile-drawer-bottom-offset) - 16px), 560px);
+    max-height: min(calc(100dvh - var(--rc-mobile-drawer-bottom-offset) - 16px), 560px);
+    box-shadow: 0 -18px 40px rgba(59, 44, 28, 0.18);
+  }
+
   .rc-landlord-drawer-header {
     padding-bottom: 10px;
   }

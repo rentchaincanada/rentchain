@@ -82,6 +82,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
     navigate(path);
     onClose();
   };
+  const mobileBottomNavOffset = "var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px)))";
   const footerContent = (
     <>
       {onSignOut ? (
@@ -112,15 +113,15 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
         top: 0,
         left: 0,
         right: 0,
-        bottom: 0,
+        bottom: isMobile ? mobileBottomNavOffset : 0,
         zIndex: "var(--rc-landlord-z-drawer, 4020)",
         display: "flex",
         justifyContent: isMobile ? "center" : "flex-end",
-        alignItems: isMobile ? "center" : "flex-start",
+        alignItems: isMobile ? "flex-end" : "flex-start",
         maxWidth: "100%",
         overflow: "hidden",
         overscrollBehavior: "none",
-        touchAction: "none",
+        touchAction: isMobile ? "auto" : "none",
         pointerEvents: "auto",
         isolation: "isolate",
       }}
@@ -131,7 +132,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
           position: "absolute",
           inset: 0,
           background: "rgba(0,0,0,0.35)",
-          touchAction: "none",
+          touchAction: isMobile ? "auto" : "none",
           overscrollBehavior: "none",
           pointerEvents: "auto",
           zIndex: 0,
@@ -143,11 +144,11 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
         aria-label="Workspace navigation"
         style={{
           position: "relative",
-          width: isMobile ? "calc(100% - 24px)" : 320,
-          maxWidth: isMobile ? 560 : "90vw",
-          height: isMobile ? "calc(100dvh - 24px)" : "100dvh",
-          maxHeight: isMobile ? "calc(100dvh - 24px)" : "100dvh",
-          margin: isMobile ? "12px" : 0,
+          width: isMobile ? "min(420px, calc(100% - 24px))" : 320,
+          maxWidth: isMobile ? "min(560px, calc(100% - 24px))" : "90vw",
+          height: isMobile ? "auto" : "100dvh",
+          maxHeight: isMobile ? `min(calc(100dvh - ${mobileBottomNavOffset} - 16px), 620px)` : "100dvh",
+          margin: isMobile ? "0 auto 8px" : 0,
           minHeight: 0,
           minWidth: 0,
           background: colors.card,
