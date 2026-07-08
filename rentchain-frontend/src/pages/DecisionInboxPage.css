@@ -4,10 +4,28 @@
 }
 
 .rc-decision-inbox-page {
+  --rc-decision-paper: #f7f1e7;
+  --rc-decision-panel: rgba(255, 252, 246, 0.96);
+  --rc-decision-card: #fffaf1;
+  --rc-decision-card-strong: #fff6e8;
+  --rc-decision-border: rgba(91, 70, 48, 0.18);
+  --rc-decision-border-strong: rgba(91, 70, 48, 0.28);
+  --rc-decision-text: #211c17;
+  --rc-decision-muted: #63594d;
+  --rc-decision-subtle: #7a6b5c;
+  --rc-decision-pine: #245842;
+  --rc-decision-pine-soft: rgba(36, 88, 66, 0.12);
+  --rc-decision-shadow: 0 12px 28px rgba(59, 44, 28, 0.11);
   width: 100%;
   max-width: 100%;
   min-width: 0;
   overflow-x: hidden;
+  border-radius: 18px;
+  padding: 4px;
+  color: var(--rc-decision-text);
+  background:
+    radial-gradient(circle at top left, rgba(184, 130, 62, 0.12) 0, rgba(247, 241, 231, 0) 34%),
+    linear-gradient(180deg, rgba(255, 252, 246, 0.72), rgba(247, 241, 231, 0));
 }
 
 .rc-decision-inbox-heading,
@@ -26,6 +44,9 @@
 
 .rc-decision-inbox-card {
   overflow-x: hidden;
+  background: var(--rc-decision-card) !important;
+  border: 1px solid var(--rc-decision-border) !important;
+  box-shadow: var(--rc-decision-shadow) !important;
 }
 
 .rc-decision-inbox-card a,
@@ -41,9 +62,95 @@
   gap: 12px;
 }
 
+.rc-decision-inbox-page > div,
+.rc-decision-inbox-hero,
+.rc-decision-inbox-summary,
+.rc-decision-inbox-filters,
+.rc-decision-inbox-state-card {
+  background: var(--rc-decision-panel) !important;
+  border: 1px solid var(--rc-decision-border) !important;
+  box-shadow: var(--rc-decision-shadow) !important;
+}
+
+.rc-decision-inbox-hero h1 {
+  color: var(--rc-decision-text);
+}
+
+.rc-decision-inbox-link,
+.rc-decision-inbox-page a {
+  color: var(--rc-decision-pine) !important;
+  text-decoration-color: rgba(36, 88, 66, 0.32);
+  text-underline-offset: 3px;
+}
+
+.rc-decision-inbox-link:hover,
+.rc-decision-inbox-page a:hover {
+  color: #173b2b !important;
+  text-decoration-thickness: 2px;
+}
+
+.rc-decision-inbox-link:focus-visible,
+.rc-decision-inbox-page a:focus-visible,
+.rc-decision-inbox-filters select:focus-visible {
+  outline: 3px solid rgba(36, 88, 66, 0.28);
+  outline-offset: 2px;
+}
+
+.rc-decision-inbox-summary-card {
+  background: linear-gradient(180deg, var(--rc-decision-card-strong), var(--rc-decision-card)) !important;
+  border: 1px solid var(--rc-decision-border) !important;
+  box-shadow: 0 8px 18px rgba(59, 44, 28, 0.08) !important;
+}
+
 .rc-decision-inbox-filters > label {
   flex: 1 1 150px;
   min-width: 0;
+}
+
+.rc-decision-inbox-filters select {
+  background: var(--rc-decision-card) !important;
+  border-color: var(--rc-decision-border-strong) !important;
+  color: var(--rc-decision-text) !important;
+  box-shadow: 0 4px 10px rgba(59, 44, 28, 0.06);
+}
+
+.rc-decision-inbox-agent-actions > div,
+.rc-decision-inbox-review-panel > div {
+  background: var(--rc-decision-card-strong) !important;
+  border-color: var(--rc-decision-border-strong) !important;
+  box-shadow: 0 8px 18px rgba(59, 44, 28, 0.08) !important;
+}
+
+.rc-decision-inbox-agent-actions > div > div,
+.rc-decision-inbox-review-panel > div > div {
+  border-color: var(--rc-decision-border) !important;
+}
+
+.rc-decision-inbox-agent-actions strong,
+.rc-decision-inbox-review-panel strong {
+  color: var(--rc-decision-pine) !important;
+}
+
+.rc-decision-inbox-agent-actions span,
+.rc-decision-inbox-agent-actions div,
+.rc-decision-inbox-review-panel span,
+.rc-decision-inbox-review-panel div,
+.rc-decision-inbox-review-panel label {
+  color: var(--rc-decision-muted) !important;
+}
+
+.rc-decision-inbox-review-panel input,
+.rc-decision-inbox-review-panel select,
+.rc-decision-inbox-review-panel textarea {
+  background: var(--rc-decision-card) !important;
+  border-color: var(--rc-decision-border-strong) !important;
+  color: var(--rc-decision-text) !important;
+}
+
+.rc-decision-inbox-review-panel button {
+  border-color: var(--rc-decision-border-strong) !important;
+  background: var(--rc-decision-pine-soft) !important;
+  color: var(--rc-decision-pine) !important;
 }
 
 @media (max-width: 820px) {
@@ -72,7 +179,8 @@
     justify-content: center;
     padding: 9px 10px;
     border-radius: 10px;
-    background: rgba(37, 99, 235, 0.08);
+    background: var(--rc-decision-pine-soft);
+    border: 1px solid rgba(36, 88, 66, 0.22);
     text-align: center;
   }
 
