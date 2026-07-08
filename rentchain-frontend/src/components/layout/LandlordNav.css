@@ -9,6 +9,10 @@
     var(--rc-landlord-desktop-topnav-height) + var(--rc-landlord-workspace-bar-height) + env(safe-area-inset-top, 0px)
   );
   --rc-landlord-sticky-shell-gap: 20px;
+  --rc-landlord-z-content: 0;
+  --rc-landlord-z-nav: 4000;
+  --rc-landlord-z-backdrop: 4010;
+  --rc-landlord-z-drawer: 4020;
 }
 
 .rc-landlord-shell {
@@ -81,7 +85,7 @@
   top: 0;
   right: 0;
   left: 0;
-  z-index: 3000;
+  z-index: var(--rc-landlord-z-nav);
   box-sizing: border-box;
   isolation: isolate;
   background: var(--rc-landlord-panel);
@@ -218,13 +222,19 @@
 
 .rc-landlord-content {
   position: relative;
-  z-index: 0;
+  z-index: var(--rc-landlord-z-content);
+  isolation: isolate;
   padding: 0 0 24px;
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   overflow-x: hidden;
+}
+
+.rc-landlord-content > * {
+  position: relative;
+  z-index: 0;
 }
 
 .rc-landlord-content--sticky-offset {
@@ -288,7 +298,7 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
-  z-index: 3060;
+  z-index: var(--rc-landlord-z-backdrop);
 }
 
 .rc-landlord-backdrop.is-open {
@@ -309,7 +319,7 @@
   box-shadow: -12px 0 28px rgba(59, 44, 28, 0.16);
   transform: translateX(100%);
   transition: transform 0.2s ease;
-  z-index: 3070;
+  z-index: var(--rc-landlord-z-drawer);
   display: flex;
   flex-direction: column;
   padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
@@ -397,7 +407,7 @@
   box-shadow: 0 -10px 28px rgba(59, 44, 28, 0.12);
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
   grid-template-columns: repeat(6, 1fr);
-  z-index: 3000;
+  z-index: var(--rc-landlord-z-nav);
   box-sizing: border-box;
   max-width: 100%;
   overflow-x: hidden;
@@ -466,7 +476,7 @@
   .rc-landlord-mobile-topbar {
     position: sticky;
     top: 0;
-    z-index: 3000;
+    z-index: var(--rc-landlord-z-nav);
     display: flex;
     align-items: center;
     gap: 10px;
@@ -575,18 +585,18 @@
   .rc-landlord-mobile-tabbar {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    z-index: 3000;
+    z-index: var(--rc-landlord-z-nav);
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
   }
 
   .rc-landlord-backdrop {
-    z-index: 60;
+    z-index: var(--rc-landlord-z-backdrop);
   }
 
   .rc-landlord-drawer {
-    z-index: 70;
+    z-index: var(--rc-landlord-z-drawer);
     top: auto;
     left: max(12px, env(safe-area-inset-left, 0px));
     right: max(12px, env(safe-area-inset-right, 0px));
