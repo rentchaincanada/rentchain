@@ -308,11 +308,12 @@
 
 .rc-landlord-drawer {
   position: fixed;
-  top: 12px;
-  bottom: 12px;
+  top: 0;
+  bottom: 0;
   right: 0;
   height: auto;
-  max-height: calc(100vh - 24px);
+  max-height: 100vh;
+  max-height: 100dvh;
   width: min(320px, 88vw);
   background: var(--rc-landlord-panel);
   border: 1px solid var(--rc-landlord-border);
@@ -322,7 +323,10 @@
   z-index: var(--rc-landlord-z-drawer);
   display: flex;
   flex-direction: column;
-  padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  padding:
+    calc(18px + env(safe-area-inset-top, 0px))
+    16px
+    calc(18px + env(safe-area-inset-bottom, 0px));
   gap: 16px;
   overflow: hidden;
   pointer-events: none;
@@ -597,31 +601,23 @@
 
   .rc-landlord-drawer {
     z-index: var(--rc-landlord-z-drawer);
-    top: auto;
-    left: max(12px, env(safe-area-inset-left, 0px));
-    right: max(12px, env(safe-area-inset-right, 0px));
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    top: max(10px, env(safe-area-inset-top, 0px));
+    left: max(10px, env(safe-area-inset-left, 0px));
+    right: max(10px, env(safe-area-inset-right, 0px));
+    bottom: max(10px, env(safe-area-inset-bottom, 0px));
     width: auto;
-    max-height: min(calc(100vh - 32px - env(safe-area-inset-bottom, 0px)), 560px);
-    max-height: min(calc(100dvh - 32px - env(safe-area-inset-bottom, 0px)), 560px);
+    max-height: none;
     border-radius: 20px;
-    box-shadow: 0 -18px 40px rgba(59, 44, 28, 0.18);
-    transform: translateY(calc(100% + 24px));
-    padding: 16px 14px;
+    box-shadow: 0 18px 48px rgba(33, 28, 23, 0.24);
+    transform: translateY(0);
+    padding:
+      calc(16px + env(safe-area-inset-top, 0px))
+      14px
+      calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   .rc-landlord-drawer.is-open {
-    transform: translateY(0);
-  }
-
-  .rc-landlord-backdrop--nav-safe {
-    bottom: var(--rc-mobile-drawer-bottom-offset);
-  }
-
-  .rc-landlord-drawer--nav-safe {
-    bottom: var(--rc-mobile-drawer-bottom-offset);
-    max-height: min(calc(100vh - var(--rc-mobile-drawer-bottom-offset) - 16px), 560px);
-    max-height: min(calc(100dvh - var(--rc-mobile-drawer-bottom-offset) - 16px), 560px);
+    transform: none;
   }
 
   .rc-landlord-drawer-header {

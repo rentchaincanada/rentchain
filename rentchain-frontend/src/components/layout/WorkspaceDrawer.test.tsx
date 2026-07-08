@@ -78,7 +78,7 @@ describe("WorkspaceDrawer", () => {
     expect(screen.getByRole("button", { name: "Governed review workspaces" })).toBeInTheDocument();
   });
 
-  it("does not reserve bottom navigation space by default", () => {
+  it("uses a full-height modal panel on mobile instead of reserving bottom navigation space", () => {
     render(
       <MemoryRouter initialEntries={["/dashboard"]}>
         <WorkspaceDrawer open onClose={vi.fn()} userRole="landlord" userEmail="owner@example.com" />
@@ -87,17 +87,16 @@ describe("WorkspaceDrawer", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Workspace navigation" });
     expect(dialog.parentElement).toHaveStyle({
-      bottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
-      alignItems: "flex-end",
+      bottom: "0",
+      alignItems: "center",
       justifyContent: "center",
       zIndex: "var(--rc-landlord-z-drawer, 4020)",
     });
     expect(dialog).toHaveStyle({
-      width: "min(420px, calc(100% - 24px))",
-      maxWidth: "min(560px, calc(100% - 24px))",
-      height: "auto",
-      maxHeight:
-        "min(calc(100dvh - calc(12px + env(safe-area-inset-bottom, 0px)) - 16px), 620px)",
+      width: "calc(100% - 24px)",
+      maxWidth: "560px",
+      height: "calc(100dvh - 24px)",
+      maxHeight: "calc(100dvh - 24px)",
       zIndex: "1",
     });
     expect(within(dialog).getByRole("button", { name: "Dashboard" }).parentElement).toHaveStyle({
@@ -140,29 +139,6 @@ describe("WorkspaceDrawer", () => {
     });
     expect(within(dialog).getByRole("button", { name: "Dashboard" }).parentElement).toHaveStyle({
       gridTemplateColumns: "1fr",
-    });
-  });
-
-  it("can reserve bottom navigation space when explicitly requested", () => {
-    render(
-      <MemoryRouter initialEntries={["/dashboard"]}>
-        <WorkspaceDrawer
-          open
-          onClose={vi.fn()}
-          userRole="landlord"
-          userEmail="owner@example.com"
-          reserveBottomNavSpace
-        />
-      </MemoryRouter>
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "Workspace navigation" });
-    expect(dialog.parentElement).toHaveStyle({
-      bottom: "var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px)))",
-    });
-    expect(dialog).toHaveStyle({
-      maxHeight:
-        "min(calc(100dvh - var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px))) - 16px), 620px)",
     });
   });
 
