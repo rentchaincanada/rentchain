@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { WorkspaceDrawer } from "./WorkspaceDrawer";
+import { WORKSPACE_DRAWER_MOBILE_QUERY, WorkspaceDrawer } from "./WorkspaceDrawer";
 
 const mocks = vi.hoisted(() => ({
   useCapabilities: vi.fn(),
@@ -102,6 +102,44 @@ describe("WorkspaceDrawer", () => {
     });
     expect(within(dialog).getByRole("button", { name: "Dashboard" }).parentElement).toHaveStyle({
       gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    });
+  });
+
+  it("uses the same mobile breakpoint as the landlord shell", () => {
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <WorkspaceDrawer open onClose={vi.fn()} userRole="landlord" userEmail="owner@example.com" />
+      </MemoryRouter>
+    );
+
+    expect(mocks.useIsMobile).toHaveBeenCalledWith(WORKSPACE_DRAWER_MOBILE_QUERY);
+    expect(WORKSPACE_DRAWER_MOBILE_QUERY).toBe("(max-width: 820px)");
+  });
+
+  it("uses a side drawer at reduced desktop widths instead of the bottom sheet", () => {
+    mocks.useIsMobile.mockReturnValue(false);
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <WorkspaceDrawer open onClose={vi.fn()} userRole="landlord" userEmail="owner@example.com" />
+      </MemoryRouter>
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Workspace navigation" });
+    expect(dialog.parentElement).toHaveStyle({
+      bottom: "0",
+      alignItems: "flex-start",
+      justifyContent: "flex-end",
+    });
+    expect(dialog).toHaveStyle({
+      width: "320px",
+      height: "100dvh",
+      maxHeight: "100dvh",
+      margin: "0",
+      borderRadius: "0",
+    });
+    expect(within(dialog).getByRole("button", { name: "Dashboard" }).parentElement).toHaveStyle({
+      gridTemplateColumns: "1fr",
     });
   });
 

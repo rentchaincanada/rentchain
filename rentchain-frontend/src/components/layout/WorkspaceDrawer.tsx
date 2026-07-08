@@ -15,6 +15,8 @@ type WorkspaceDrawerProps = {
   reserveBottomNavSpace?: boolean;
 };
 
+export const WORKSPACE_DRAWER_MOBILE_QUERY = "(max-width: 820px)";
+
 export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
   open,
   onClose,
@@ -26,7 +28,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
   const navigate = useNavigate();
   const location = useLocation();
   const { features, loading: capsLoading } = useCapabilities();
-  const isMobile = useIsMobile("(max-width: 1024px)");
+  const isMobile = useIsMobile(WORKSPACE_DRAWER_MOBILE_QUERY);
   const navLoading = !userRole || capsLoading;
   const visibleItems = navLoading ? [] : getVisibleNavItems(userRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
