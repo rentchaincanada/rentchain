@@ -1,16 +1,58 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { colors, layout, radius, shadows, spacing, text, typography } from "../../styles/tokens";
+import {
+  colors as baseColors,
+  layout,
+  radius,
+  shadows as baseShadows,
+  spacing,
+  text as baseText,
+  typography,
+} from "../../styles/tokens";
 import { useAuth } from "../../context/useAuth";
 import { useLanguage } from "../../context/LanguageContext";
 import { RentChainLogo } from "../../components/brand/RentChainLogo";
 import { marketingCopy } from "../../content/marketingCopy";
 
+type MarketingLayoutTone = "default" | "warmNeutral";
+
 interface MarketingLayoutProps {
   children: React.ReactNode;
+  tone?: MarketingLayoutTone;
 }
 
-export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) => {
+const warmMarketingColors = {
+  ...baseColors,
+  bg: "#f4efe6",
+  bgAmbient:
+    "radial-gradient(circle at 12% 10%, rgba(215, 173, 107, 0.18), transparent 30%), linear-gradient(135deg, #f4efe6 0%, #efe6d7 48%, #f8f3ea 100%)",
+  panel: "#fffaf1",
+  card: "#fffaf1",
+  bgElevated: "#fff7ea",
+  border: "rgba(105, 82, 49, 0.2)",
+  borderStrong: "rgba(105, 82, 49, 0.34)",
+  accent: "#171411",
+  accentSoft: "rgba(36, 88, 66, 0.14)",
+  navy: "#245842",
+  navySoft: "rgba(36, 88, 66, 0.14)",
+};
+
+const warmMarketingText = {
+  ...baseText,
+  primary: "#171411",
+  secondary: "#2c2924",
+  muted: "#5f5a51",
+  subtle: "#756f64",
+};
+
+const warmMarketingShadows = {
+  ...baseShadows,
+  sm: "0 8px 18px rgba(69, 55, 33, 0.09)",
+  md: "0 22px 52px rgba(69, 55, 33, 0.14)",
+  focus: "0 0 0 3px rgba(105, 82, 49, 0.22)",
+};
+
+export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children, tone = "default" }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -21,6 +63,9 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
   const { locale, setLocale, t } = useLanguage();
   const copy = marketingCopy[locale];
   const isAuthed = Boolean(user?.id);
+  const colors = tone === "warmNeutral" ? warmMarketingColors : baseColors;
+  const text = tone === "warmNeutral" ? warmMarketingText : baseText;
+  const shadows = tone === "warmNeutral" ? warmMarketingShadows : baseShadows;
 
   const localeButtonStyle = (active: boolean) => ({
     border: "none",

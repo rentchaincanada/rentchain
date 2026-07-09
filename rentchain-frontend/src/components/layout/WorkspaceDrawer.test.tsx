@@ -105,6 +105,24 @@ describe("WorkspaceDrawer", () => {
     });
   });
 
+  it("uses warm neutral active drawer states instead of blue selection styling", () => {
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <WorkspaceDrawer open onClose={vi.fn()} userRole="landlord" userEmail="owner@example.com" />
+      </MemoryRouter>
+    );
+
+    const dashboard = within(screen.getByRole("dialog")).getByRole("button", { name: "Dashboard" });
+
+    expect(dashboard).toHaveStyle({
+      background: "rgba(36, 88, 66, 0.13)",
+      color: "#245842",
+    });
+    expect(dashboard).not.toHaveStyle({
+      background: "rgba(37,99,235,0.08)",
+    });
+  });
+
   it("uses the same mobile breakpoint as the landlord shell", () => {
     render(
       <MemoryRouter initialEntries={["/dashboard"]}>
