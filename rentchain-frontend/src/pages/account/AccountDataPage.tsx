@@ -4,6 +4,7 @@ import { Button, Card, Section } from "../../components/ui/Ui";
 import { colors, spacing, text } from "../../styles/tokens";
 import { useAuth } from "../../context/useAuth";
 import { normalizeTimelinePlan } from "../../features/automation/timeline/timelineEntitlements";
+import "./accountBillingTheme.css";
 
 const AccountDataPage: React.FC = () => {
   const navigate = useNavigate();
@@ -43,15 +44,15 @@ const AccountDataPage: React.FC = () => {
   };
 
   return (
-    <Section style={{ maxWidth: 860, margin: "0 auto", display: "grid", gap: spacing.md }}>
-      <Card elevated style={{ display: "grid", gap: 8 }}>
+    <Section className="rc-account-billing-surface rc-account-data-page" style={{ maxWidth: 860, margin: "0 auto", display: "grid", gap: spacing.md }}>
+      <Card elevated className="rc-account-billing-card rc-account-billing-card--strong" style={{ display: "grid", gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800 }}>Data Management</h1>
         <p style={{ margin: 0, color: text.muted }}>
           Export account-level data and review retention policy information.
         </p>
       </Card>
 
-      <Card style={{ display: "grid", gap: spacing.md, border: `1px solid ${colors.border}` }}>
+      <Card className="rc-account-billing-card" style={{ display: "grid", gap: spacing.md, border: `1px solid ${colors.border}` }}>
         <div style={{ display: "grid", gap: 8 }}>
           <div style={{ fontWeight: 700 }}>Export options</div>
           <div style={{ color: text.muted, fontSize: 14 }}>
@@ -82,10 +83,10 @@ const AccountDataPage: React.FC = () => {
         </div>
 
         <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-          <Button type="button" variant="secondary" onClick={() => navigate("/account")}>
+          <Button className="rc-account-secondary-action" type="button" variant="secondary" onClick={() => navigate("/account")}>
             Back to My Account
           </Button>
-          <Button type="button" variant="secondary" onClick={() => navigate("/billing#receipts")}>
+          <Button className="rc-account-secondary-action" type="button" variant="secondary" onClick={() => navigate("/billing#receipts")}>
             View receipts
           </Button>
         </div>

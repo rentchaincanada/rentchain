@@ -95,6 +95,7 @@ describe("BillingPage", () => {
     );
 
     expect(screen.getAllByText("Loading...").length).toBeGreaterThan(0);
+    expect(document.querySelector(".rc-billing-page")).toHaveClass("rc-account-billing-surface");
     expect(screen.getByTestId("billing-plans-panel")).toHaveTextContent("none");
     expect(screen.getAllByRole("button", { name: "Continue to Starter checkout" })).toHaveLength(2);
     expect(
@@ -121,6 +122,7 @@ describe("BillingPage", () => {
     await waitFor(() =>
       expect(screen.getByText(/Pricing selection saved: Pro on the Yearly plan/i)).toBeInTheDocument()
     );
+    expect(document.querySelector(".rc-billing-page")).toHaveClass("rc-account-billing-surface");
     expect(screen.getByText(/Billing, plans, and upgrade review/i)).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -183,6 +185,7 @@ describe("BillingPage", () => {
     );
 
     await waitFor(() => expect(screen.getByText("Pro")).toBeInTheDocument());
+    expect(document.querySelector(".rc-billing-page")).toHaveClass("rc-account-billing-surface");
     expect(screen.getByTestId("billing-plans-panel")).toHaveTextContent("pro");
     expect(screen.getAllByRole("button", { name: "Manage subscription" })).toHaveLength(2);
     expect(

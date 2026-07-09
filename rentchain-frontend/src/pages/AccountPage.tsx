@@ -6,6 +6,7 @@ import { useAuth } from "../context/useAuth";
 import { useBillingStatus, billingTierLabel } from "@/hooks/useBillingStatus";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { useAccountSummary } from "./account/useAccountSummary";
+import "./account/accountBillingTheme.css";
 
 type HubCardProps = {
   title: string;
@@ -15,7 +16,7 @@ type HubCardProps = {
 
 function HubCard({ title, description, children }: HubCardProps) {
   return (
-    <Card style={{ display: "grid", gap: spacing.sm, border: `1px solid ${colors.border}` }}>
+    <Card className="rc-account-billing-card" style={{ display: "grid", gap: spacing.sm, border: `1px solid ${colors.border}` }}>
       <div style={{ fontWeight: 800, fontSize: "1rem" }}>{title}</div>
       <div style={{ color: text.muted, fontSize: "0.9rem" }}>{description}</div>
       <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>{children}</div>
@@ -36,8 +37,8 @@ const AccountPage: React.FC = () => {
     typeof amountCents === "number" ? `${(amountCents / 100).toFixed(2)} CAD` : "Unavailable";
 
   return (
-    <Section style={{ maxWidth: 1080, margin: "0 auto", display: "grid", gap: spacing.md }}>
-      <Card elevated>
+    <Section className="rc-account-billing-surface rc-account-page" style={{ maxWidth: 1080, margin: "0 auto", display: "grid", gap: spacing.md }}>
+      <Card elevated className="rc-account-billing-card rc-account-billing-card--strong">
         <div style={{ display: "grid", gap: 6 }}>
           <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>My Account</h1>
           <p style={{ margin: 0, color: text.muted }}>
@@ -49,7 +50,7 @@ const AccountPage: React.FC = () => {
         </div>
       </Card>
 
-      <Card style={{ display: "grid", gap: spacing.sm, border: `1px solid ${colors.border}` }}>
+      <Card className="rc-account-billing-card" style={{ display: "grid", gap: spacing.sm, border: `1px solid ${colors.border}` }}>
         <div style={{ fontWeight: 800, fontSize: "1rem" }}>Account Summary</div>
         {summaryLoading ? (
           <div style={{ display: "grid", gap: 6, color: text.muted, fontSize: 13 }}>
@@ -95,7 +96,7 @@ const AccountPage: React.FC = () => {
         {summaryError ? (
           <div style={{ display: "flex", alignItems: "center", gap: spacing.sm, color: text.muted, fontSize: 13 }}>
             <span>{summaryError}</span>
-            <Button type="button" variant="secondary" onClick={() => navigate("/billing")}>
+            <Button className="rc-account-secondary-action" type="button" variant="secondary" onClick={() => navigate("/billing")}>
               Go to Billing
             </Button>
           </div>
@@ -110,13 +111,13 @@ const AccountPage: React.FC = () => {
         }}
       >
         <HubCard title="Personal" description="Profile and notification preferences.">
-          <Button type="button" variant="secondary" onClick={() => navigate("/account/profile")}>
+          <Button className="rc-account-secondary-action" type="button" variant="secondary" onClick={() => navigate("/account/profile")}>
             Profile
           </Button>
         </HubCard>
 
         <HubCard title="Security" description="Additional sign-in security controls will appear here when they are ready for landlord use.">
-          <Button type="button" variant="secondary" disabled>
+          <Button className="rc-account-secondary-action" type="button" variant="secondary" disabled>
             Security controls coming soon
           </Button>
         </HubCard>
@@ -137,11 +138,12 @@ const AccountPage: React.FC = () => {
           <Button type="button" onClick={() => navigate("/billing")}>
             Billing
           </Button>
-          <Button type="button" variant="secondary" onClick={() => navigate("/site/pricing")}>
+          <Button className="rc-account-secondary-action" type="button" variant="secondary" onClick={() => navigate("/site/pricing")}>
             Pricing & plans
           </Button>
           <Button
             type="button"
+            className="rc-account-secondary-action"
             variant="secondary"
             onClick={() => {
               void openUpgradeFlow({ navigate, fallbackPath: "/pricing" });
@@ -158,16 +160,16 @@ const AccountPage: React.FC = () => {
         </HubCard>
 
         <HubCard title="Data management" description="Export your data and manage retention (coming soon).">
-          <Button type="button" variant="secondary" onClick={() => navigate("/account/data")}>
+          <Button className="rc-account-secondary-action" type="button" variant="secondary" onClick={() => navigate("/account/data")}>
             Manage data
           </Button>
         </HubCard>
 
         <HubCard title="Legal" description="Privacy, Terms, and compliance documents.">
-          <Button type="button" variant="secondary" onClick={() => navigate("/privacy")}>
+          <Button className="rc-account-secondary-action" type="button" variant="secondary" onClick={() => navigate("/privacy")}>
             Privacy
           </Button>
-          <Button type="button" variant="secondary" onClick={() => navigate("/terms")}>
+          <Button className="rc-account-secondary-action" type="button" variant="secondary" onClick={() => navigate("/terms")}>
             Terms
           </Button>
         </HubCard>

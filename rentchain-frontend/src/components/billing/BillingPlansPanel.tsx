@@ -1,6 +1,6 @@
 import React from "react";
 import { Button } from "../ui/Ui";
-import { colors, radius, text } from "../../styles/tokens";
+import { radius, text } from "../../styles/tokens";
 import { PlanIntervalToggle } from "./PlanIntervalToggle";
 import { getVisiblePlans, type PlanKey } from "@/billing/planVisibility";
 import { normalizePlan } from "@/lib/plan";
@@ -10,6 +10,7 @@ import {
   TIER_MATRIX_AREAS,
   type PricingPlanKey,
 } from "@/constants/pricingPlans";
+import "@/pages/account/accountBillingTheme.css";
 
 type Props = {
   pricing: any | null;
@@ -99,7 +100,7 @@ export function BillingPlansPanel({
   };
 
   return (
-    <div style={{ display: "grid", gap: 10 }}>
+    <div className="rc-billing-plans-panel" style={{ display: "grid", gap: 10 }}>
       <PlanIntervalToggle value={interval} onChange={onIntervalChange} />
 
       {visiblePlans.map((planId) => {
@@ -114,26 +115,30 @@ export function BillingPlansPanel({
         return (
           <div
             key={planId}
+            className="rc-billing-plan-card"
+            data-highlight={highlight ? "true" : "false"}
+            data-selected={selected ? "true" : "false"}
+            data-recommended={recommended ? "true" : "false"}
             style={{
               borderRadius: radius.lg,
               border: highlight
-                ? "1px solid rgba(59,130,246,0.45)"
+                ? "1px solid rgba(36,88,66,0.34)"
                 : selected
-                  ? "1px solid rgba(37,99,235,0.45)"
+                  ? "1px solid rgba(36,88,66,0.34)"
                   : recommended
-                    ? "1px solid rgba(14,116,144,0.42)"
-                  : "1px solid rgba(148,163,184,0.25)",
+                    ? "1px solid rgba(36,88,66,0.32)"
+                  : "1px solid rgba(91,70,48,0.18)",
               background: highlight
-                ? "rgba(59,130,246,0.08)"
+                ? "rgba(36,88,66,0.1)"
                 : selected
-                  ? "rgba(37,99,235,0.08)"
+                  ? "rgba(36,88,66,0.1)"
                   : recommended
-                    ? "rgba(14,116,144,0.08)"
-                  : "rgba(148,163,184,0.06)",
+                    ? "rgba(36,88,66,0.08)"
+                  : "rgba(91,70,48,0.06)",
               padding: 12,
               display: "grid",
               gap: 12,
-              boxShadow: recommended ? "0 14px 28px rgba(14,116,144,0.10)" : "none",
+              boxShadow: recommended ? "0 14px 28px rgba(36,88,66,0.1)" : "none",
             }}
           >
             <div
@@ -154,11 +159,11 @@ export function BillingPlansPanel({
                 </div>
               </div>
               {highlight ? (
-                <span style={{ fontSize: 12, fontWeight: 700, color: colors.accent }}>Current</span>
+                <span className="rc-account-status-pill" style={{ fontSize: 12, fontWeight: 700, color: "#245842", padding: "4px 10px" }}>Current</span>
               ) : selected ? (
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#1d4ed8" }}>Selected from pricing</span>
+                <span className="rc-account-status-pill" style={{ fontSize: 12, fontWeight: 700, color: "#245842", padding: "4px 10px" }}>Selected from pricing</span>
               ) : recommended ? (
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#0f766e" }}>Recommended next step</span>
+                <span className="rc-account-status-pill" style={{ fontSize: 12, fontWeight: 700, color: "#245842", padding: "4px 10px" }}>Recommended next step</span>
               ) : null}
             </div>
 
@@ -189,11 +194,12 @@ export function BillingPlansPanel({
               {topAreas.map((area) => (
                 <div
                   key={`${planId}-${area.key}`}
+                  className="rc-billing-plan-capability"
                   style={{
-                    border: "1px solid rgba(148,163,184,0.2)",
+                    border: "1px solid rgba(91,70,48,0.18)",
                     borderRadius: 12,
                     padding: "8px 10px",
-                    background: "rgba(255,255,255,0.5)",
+                    background: "rgba(255,250,241,0.72)",
                   }}
                 >
                   <div style={{ fontSize: 12, fontWeight: 700, color: text.secondary }}>{area.label}</div>
@@ -206,6 +212,7 @@ export function BillingPlansPanel({
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Button
+                className={highlight ? "rc-account-secondary-action" : undefined}
                 type="button"
                 variant={highlight ? "secondary" : "primary"}
                 onClick={() => {

@@ -1,0 +1,156 @@
+.rc-account-billing-surface,
+.rc-auth-pricing-page {
+  --rc-account-paper: #f7f1e7;
+  --rc-account-card: #fffaf1;
+  --rc-account-card-strong: #fff6e8;
+  --rc-account-border: rgba(91, 70, 48, 0.18);
+  --rc-account-border-strong: rgba(91, 70, 48, 0.3);
+  --rc-account-text: #211c17;
+  --rc-account-muted: #63594d;
+  --rc-account-subtle: #7a6b5c;
+  --rc-account-pine: #245842;
+  --rc-account-pine-soft: rgba(36, 88, 66, 0.12);
+  --rc-account-amber-soft: rgba(184, 130, 62, 0.16);
+  --rc-account-danger: #a33a2f;
+  --rc-account-shadow: 0 16px 36px rgba(59, 44, 28, 0.12);
+  --rc-account-shadow-soft: 0 8px 18px rgba(59, 44, 28, 0.08);
+  background:
+    radial-gradient(circle at top left, rgba(184, 130, 62, 0.14) 0, rgba(247, 241, 231, 0) 34%),
+    linear-gradient(180deg, var(--rc-account-card) 0%, var(--rc-account-paper) 100%) !important;
+  border-color: var(--rc-account-border) !important;
+  color: var(--rc-account-text) !important;
+  box-shadow: var(--rc-account-shadow) !important;
+}
+
+.rc-account-billing-surface *,
+.rc-auth-pricing-page * {
+  letter-spacing: 0;
+}
+
+.rc-account-billing-surface h1,
+.rc-account-billing-surface h2,
+.rc-account-billing-surface h3,
+.rc-auth-pricing-page h1,
+.rc-auth-pricing-page h2,
+.rc-auth-pricing-page h3 {
+  color: var(--rc-account-text) !important;
+}
+
+.rc-account-billing-surface a,
+.rc-auth-pricing-page a {
+  color: var(--rc-account-pine) !important;
+}
+
+.rc-account-billing-card,
+.rc-account-billing-surface .rc-account-billing-card,
+.rc-auth-pricing-card,
+.rc-auth-pricing-page .rc-auth-pricing-card,
+.rc-billing-plan-card {
+  background: var(--rc-account-card) !important;
+  border: 1px solid var(--rc-account-border) !important;
+  box-shadow: var(--rc-account-shadow-soft) !important;
+  color: var(--rc-account-text) !important;
+}
+
+.rc-account-billing-card--strong,
+.rc-auth-pricing-card--strong,
+.rc-billing-plan-card[data-highlight="true"],
+.rc-billing-plan-card[data-selected="true"],
+.rc-billing-plan-card[data-recommended="true"] {
+  background: var(--rc-account-card-strong) !important;
+  border-color: var(--rc-account-border-strong) !important;
+}
+
+.rc-account-billing-panel,
+.rc-auth-pricing-panel,
+.rc-billing-plan-capability,
+.rc-billing-current-plan-panel,
+.rc-billing-recommended-panel {
+  background: var(--rc-account-card-strong) !important;
+  border: 1px solid var(--rc-account-border) !important;
+  box-shadow: var(--rc-account-shadow-soft) !important;
+  color: var(--rc-account-text) !important;
+}
+
+.rc-account-billing-surface input,
+.rc-account-billing-surface select,
+.rc-account-billing-surface textarea {
+  background: var(--rc-account-card-strong) !important;
+  border-color: var(--rc-account-border-strong) !important;
+  color: var(--rc-account-text) !important;
+}
+
+.rc-account-billing-surface input:focus-visible,
+.rc-account-billing-surface button:focus-visible,
+.rc-auth-pricing-page button:focus-visible,
+.rc-auth-pricing-page a:focus-visible {
+  outline: 3px solid rgba(184, 130, 62, 0.36) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 4px rgba(36, 88, 66, 0.14) !important;
+}
+
+.rc-account-billing-surface button,
+.rc-auth-pricing-page button,
+.rc-billing-plan-card button {
+  background: var(--rc-account-pine) !important;
+  border: 1px solid rgba(36, 88, 66, 0.34) !important;
+  color: #fff !important;
+  box-shadow: var(--rc-account-shadow-soft) !important;
+}
+
+.rc-account-billing-surface button:not(:disabled):hover,
+.rc-auth-pricing-page button:not(:disabled):hover,
+.rc-billing-plan-card button:not(:disabled):hover {
+  background: #1f4f3b !important;
+  border-color: #1f4f3b !important;
+}
+
+.rc-account-billing-surface .rc-account-secondary-action,
+.rc-auth-pricing-page .rc-account-secondary-action,
+.rc-account-billing-surface .rc-pricing-interval-button[data-active="false"],
+.rc-auth-pricing-page .rc-pricing-interval-button[data-active="false"] {
+  background: var(--rc-account-card) !important;
+  color: var(--rc-account-pine) !important;
+  border: 1px solid var(--rc-account-border-strong) !important;
+}
+
+.rc-account-billing-surface button:disabled,
+.rc-auth-pricing-page button:disabled,
+.rc-billing-plan-card button:disabled {
+  background: var(--rc-account-card-strong) !important;
+  color: var(--rc-account-muted) !important;
+  border-color: var(--rc-account-border) !important;
+  box-shadow: none !important;
+}
+
+.rc-account-status-pill,
+.rc-billing-plan-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(36, 88, 66, 0.28) !important;
+  background: var(--rc-account-pine-soft) !important;
+  color: var(--rc-account-pine) !important;
+  box-shadow: none !important;
+}
+
+.rc-account-danger-panel {
+  background: rgba(163, 58, 47, 0.08) !important;
+  border-color: rgba(163, 58, 47, 0.3) !important;
+  color: var(--rc-account-danger) !important;
+}
+
+.rc-account-billing-table {
+  background: var(--rc-account-card) !important;
+}
+
+.rc-account-billing-table th,
+.rc-account-billing-table td {
+  border-color: var(--rc-account-border) !important;
+}
+
+.rc-account-billing-table th {
+  color: var(--rc-account-subtle) !important;
+  background: rgba(250, 243, 232, 0.72) !important;
+}

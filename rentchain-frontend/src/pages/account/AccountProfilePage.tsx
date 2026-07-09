@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button, Card, Section } from "../../components/ui/Ui";
 import { colors, spacing, text } from "../../styles/tokens";
 import { useAuth } from "../../context/useAuth";
+import "./accountBillingTheme.css";
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
@@ -29,15 +30,15 @@ const AccountProfilePage: React.FC = () => {
   const { user } = useAuth();
 
   return (
-    <Section style={{ maxWidth: 860, margin: "0 auto", display: "grid", gap: spacing.md }}>
-      <Card elevated style={{ display: "grid", gap: 8 }}>
+    <Section className="rc-account-billing-surface rc-account-profile-page" style={{ maxWidth: 860, margin: "0 auto", display: "grid", gap: spacing.md }}>
+      <Card elevated className="rc-account-billing-card rc-account-billing-card--strong" style={{ display: "grid", gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800 }}>Profile</h1>
         <p style={{ margin: 0, color: text.muted }}>
           Account identity and contact details for your workspace.
         </p>
       </Card>
 
-      <Card style={{ display: "grid", gap: spacing.md, border: `1px solid ${colors.border}` }}>
+      <Card className="rc-account-billing-card" style={{ display: "grid", gap: spacing.md, border: `1px solid ${colors.border}` }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: spacing.md }}>
           <ReadOnlyField label="Email" value={String(user?.email || "Not available")} />
           <ReadOnlyField label="User ID" value={String(user?.id || "Not available")} />
@@ -57,10 +58,10 @@ const AccountProfilePage: React.FC = () => {
           Profile editing will be enabled in a future release.
         </div>
         <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-          <Button type="button" variant="secondary" onClick={() => navigate("/account")}>
+          <Button className="rc-account-secondary-action" type="button" variant="secondary" onClick={() => navigate("/account")}>
             Back to My Account
           </Button>
-          <Button type="button" variant="secondary" disabled>
+          <Button className="rc-account-secondary-action" type="button" variant="secondary" disabled>
             Security controls coming soon
           </Button>
         </div>
