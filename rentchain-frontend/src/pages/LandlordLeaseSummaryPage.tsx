@@ -7,6 +7,15 @@ import { triggerDocumentDownload } from "@/lib/documentRendering";
 import { downloadLeaseSummaryPdf } from "@/utils/leaseSummaryPdf";
 import { printSummaryDocument } from "@/utils/printSummary";
 
+const leaseSummaryTheme = {
+  card: "#fffaf1",
+  borderStrong: "rgba(91, 70, 48, 0.3)",
+  charcoal: "#211c17",
+  muted: "#63594d",
+  pine: "#245842",
+  pineSoft: "rgba(36, 88, 66, 0.12)",
+} as const;
+
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
   return fallback;
@@ -134,8 +143,8 @@ export default function LandlordLeaseSummaryPage() {
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div style={{ display: "grid", gap: 6 }}>
-        <div style={{ fontSize: 24, fontWeight: 800 }}>Lease summary</div>
-        <div style={{ color: "#475569", fontSize: 14 }}>
+        <div style={{ fontSize: 24, fontWeight: 800, color: leaseSummaryTheme.charcoal }}>Lease summary</div>
+        <div style={{ color: leaseSummaryTheme.muted, fontSize: 14 }}>
           Review the current landlord-visible lease details when a separate lease document is not attached.
         </div>
       </div>
@@ -143,7 +152,7 @@ export default function LandlordLeaseSummaryPage() {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <Link
           to={ledgerPath}
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+          style={leaseSummaryActionStyle}
         >
           Open payment ledger
         </Link>
@@ -151,7 +160,7 @@ export default function LandlordLeaseSummaryPage() {
             type="button"
             onClick={() => void handlePrintOrSavePdf()}
           disabled={!lease}
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+          style={leaseSummaryActionStyle}
         >
           Print / Save PDF
         </button>
@@ -159,19 +168,19 @@ export default function LandlordLeaseSummaryPage() {
           type="button"
           onClick={() => void handleDownloadEvidencePackage()}
           disabled={!lease}
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+          style={leaseSummaryActionStyle}
         >
           Download evidence package
         </button>
         <Link
           to="/leases"
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+          style={leaseSummaryActionStyle}
         >
           Back to leases
         </Link>
         <Link
           to="/operations"
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+          style={leaseSummaryActionStyle}
         >
           Open operations
         </Link>
@@ -185,17 +194,18 @@ export default function LandlordLeaseSummaryPage() {
           role="status"
           aria-live="polite"
           style={{
-            border: "1px solid #bfdbfe",
+            border: `1px solid ${leaseSummaryTheme.borderStrong}`,
             borderRadius: 10,
-            background: "#eff6ff",
-            color: "#1e3a8a",
+            background: leaseSummaryTheme.pineSoft,
+            color: leaseSummaryTheme.pine,
             padding: "10px 12px",
             display: "grid",
             gap: 3,
+            boxShadow: "0 8px 18px rgba(59, 44, 28, 0.07)",
           }}
         >
           <div style={{ fontWeight: 800 }}>{workflowFocus.title}</div>
-          <div style={{ fontSize: 13, color: "#334155" }}>{workflowFocus.description}</div>
+          <div style={{ fontSize: 13, color: leaseSummaryTheme.muted }}>{workflowFocus.description}</div>
         </div>
       ) : null}
 
@@ -210,3 +220,13 @@ export default function LandlordLeaseSummaryPage() {
     </div>
   );
 }
+
+const leaseSummaryActionStyle: React.CSSProperties = {
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: `1px solid ${leaseSummaryTheme.borderStrong}`,
+  background: leaseSummaryTheme.card,
+  color: leaseSummaryTheme.pine,
+  textDecoration: "none",
+  fontWeight: 700,
+};

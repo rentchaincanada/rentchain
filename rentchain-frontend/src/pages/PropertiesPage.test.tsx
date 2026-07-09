@@ -226,6 +226,41 @@ describe("PropertiesPage", () => {
     expect(screen.getAllByRole("button", { name: "Upgrade to Starter" }).length).toBeGreaterThan(0);
   });
 
+  it("renders action request filters with route-local warm active states", async () => {
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Free tier property workflow")).toBeInTheDocument();
+
+    const filterButtons = Array.from(document.querySelectorAll(".rc-action-request-filter-button"));
+    expect(filterButtons).toHaveLength(4);
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("data-active", "true");
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "All" })).toHaveStyle({
+      background: "#245842",
+      color: "#fff",
+    });
+    expect(screen.getByRole("button", { name: "New" })).toHaveAttribute("data-active", "false");
+    expect(screen.getByRole("button", { name: "New" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "New" })).toHaveStyle({
+      background: "#fffaf1",
+      color: "#211c17",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Resolved" }));
+
+    expect(screen.getByRole("button", { name: "Resolved" })).toHaveAttribute("data-active", "true");
+    expect(screen.getByRole("button", { name: "Resolved" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Resolved" })).toHaveStyle({
+      background: "#245842",
+      color: "#fff",
+    });
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("data-active", "false");
+  });
+
   it("shows a print action when a property is selected", async () => {
     render(
       <MemoryRouter>

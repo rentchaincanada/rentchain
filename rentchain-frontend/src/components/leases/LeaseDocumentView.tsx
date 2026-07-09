@@ -2,6 +2,18 @@ import React from "react";
 import type { LandlordActiveLease } from "@/api/leasesApi";
 import { composeLeaseSummaryLegalDocument } from "@/lib/legalDocumentComposition";
 
+const leaseDocumentTheme = {
+  card: "#fffaf1",
+  cardStrong: "#fff6e8",
+  border: "rgba(91, 70, 48, 0.18)",
+  borderStrong: "rgba(91, 70, 48, 0.3)",
+  charcoal: "#211c17",
+  muted: "#63594d",
+  subtle: "#7a6b5c",
+  pine: "#245842",
+  pineSoft: "rgba(36, 88, 66, 0.12)",
+} as const;
+
 function formatCurrency(value: number | null | undefined) {
   const amount = typeof value === "number" ? value : 0;
   return amount.toLocaleString(undefined, { style: "currency", currency: "CAD" });
@@ -51,14 +63,14 @@ function Section({
         display: "grid",
         gap: 10,
         padding: highlighted ? "18px 14px 14px" : "18px 0 0",
-        borderTop: highlighted ? "2px solid #2563eb" : "1px solid #e2e8f0",
-        borderRadius: highlighted ? 8 : 0,
-        background: highlighted ? "#eff6ff" : "transparent",
+        borderTop: highlighted ? `2px solid ${leaseDocumentTheme.pine}` : `1px solid ${leaseDocumentTheme.border}`,
+        borderRadius: highlighted ? 12 : 0,
+        background: highlighted ? leaseDocumentTheme.pineSoft : "transparent",
         scrollMarginTop: 96,
         transition: "background-color 160ms ease, border-color 160ms ease",
       }}
     >
-      <h2 id={titleId} style={{ margin: 0, fontSize: 16, letterSpacing: 0, color: "#0f172a" }}>{title}</h2>
+      <h2 id={titleId} style={{ margin: 0, fontSize: 16, letterSpacing: 0, color: leaseDocumentTheme.charcoal }}>{title}</h2>
       <div style={{ display: "grid", gap: 8 }}>{children}</div>
     </section>
   );
@@ -67,10 +79,10 @@ function Section({
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div style={{ display: "grid", gap: 3 }}>
-      <dt aria-label={label} style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0 }}>
+      <dt aria-label={label} style={{ fontSize: 12, fontWeight: 700, color: leaseDocumentTheme.subtle, textTransform: "uppercase", letterSpacing: 0 }}>
         {label}
       </dt>
-      <dd style={{ margin: 0, color: "#0f172a" }}>{value}</dd>
+      <dd style={{ margin: 0, color: leaseDocumentTheme.charcoal }}>{value}</dd>
     </div>
   );
 }
@@ -103,21 +115,21 @@ export function LeaseDocumentView({
         maxWidth: 860,
         margin: "0 auto",
         padding: "clamp(18px, 5vw, 32px) clamp(14px, 5vw, 52px)",
-        border: "1px solid #dbe4ee",
-        borderRadius: 6,
-        background: "#fff",
-        boxShadow: "0 14px 32px rgba(15,23,42,0.08)",
+        border: `1px solid ${leaseDocumentTheme.border}`,
+        borderRadius: 18,
+        background: `linear-gradient(180deg, ${leaseDocumentTheme.cardStrong} 0%, ${leaseDocumentTheme.card} 100%)`,
+        boxShadow: "0 14px 32px rgba(59, 44, 28, 0.12)",
         display: "grid",
         gap: 22,
         overflowWrap: "anywhere",
       }}
     >
       <header style={{ display: "grid", gap: 8, textAlign: "center" }}>
-        <div style={{ fontSize: 12, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: leaseDocumentTheme.subtle, textTransform: "uppercase", letterSpacing: 0 }}>
           {documentDefinition.eyebrow}
         </div>
-        <h1 id={titleId} style={{ margin: 0, fontSize: 26, letterSpacing: 0, color: "#0f172a" }}>{documentDefinition.title}</h1>
-        <div id={descriptionId} style={{ color: "#475569" }}>
+        <h1 id={titleId} style={{ margin: 0, fontSize: 26, letterSpacing: 0, color: leaseDocumentTheme.charcoal }}>{documentDefinition.title}</h1>
+        <div id={descriptionId} style={{ color: leaseDocumentTheme.muted }}>
           {documentDefinition.description}
         </div>
       </header>
@@ -137,7 +149,7 @@ export function LeaseDocumentView({
               ))}
             </dl>
           ) : null}
-          {section.note ? <div style={{ color: "#475569", lineHeight: 1.6 }}>{section.note}</div> : null}
+          {section.note ? <div style={{ color: leaseDocumentTheme.muted, lineHeight: 1.6 }}>{section.note}</div> : null}
         </Section>
       ))}
     </article>
