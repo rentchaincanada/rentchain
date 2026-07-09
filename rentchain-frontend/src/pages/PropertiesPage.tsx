@@ -56,6 +56,27 @@ const landlordWorkspaceTheme = {
   warmPanel: "#fbf6ed",
 };
 
+function actionRequestFilterButtonStyle(active: boolean): React.CSSProperties {
+  return {
+    appearance: "none",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 30,
+    padding: "4px 10px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 700,
+    lineHeight: 1,
+    cursor: "pointer",
+    background: active ? landlordWorkspaceTheme.pine : landlordWorkspaceTheme.card,
+    color: active ? "#fff" : landlordWorkspaceTheme.charcoal,
+    border: `1px solid ${active ? landlordWorkspaceTheme.pine : landlordWorkspaceTheme.borderStrong}`,
+    boxShadow: active ? "0 6px 16px rgba(36, 88, 66, 0.18)" : "none",
+    transition: "background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease",
+  };
+}
+
 function isPersistedUnitIdValue(value: any) {
   const id = String(value || "").trim();
   return Boolean(id) && !/^placeholder-/i.test(id);
@@ -1293,6 +1314,7 @@ const PropertiesPage: React.FC = () => {
                     className="rc-action-request-filter-button"
                     aria-pressed={actionFilter === status}
                     data-active={actionFilter === status ? "true" : "false"}
+                    style={actionRequestFilterButtonStyle(actionFilter === status)}
                     onClick={() =>
                       setActionFilter(
                         status as ActionRequestStatus | "all"
