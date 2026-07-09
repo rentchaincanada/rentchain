@@ -74,5 +74,7 @@ describe("AccountPage", () => {
     expect(screen.getByRole("button", { name: "Manage delegates" })).toBeInTheDocument();
     expect(screen.getByText("PM Company Management")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Manage PM companies" })).toBeInTheDocument();
+    expect(document.querySelector(".rc-account-page")).toHaveClass("rc-account-billing-surface");
+    expect(screen.getByRole("button", { name: "Profile" })).toHaveClass("rc-account-secondary-action");
   });
 });

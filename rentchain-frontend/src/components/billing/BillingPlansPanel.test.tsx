@@ -35,6 +35,8 @@ describe("BillingPlansPanel", () => {
 
     expect(screen.getByText("Current")).toBeInTheDocument();
     expect(screen.getByText("Selected from pricing")).toBeInTheDocument();
+    expect(document.querySelector('.rc-billing-plan-card[data-selected="true"]')).toBeInTheDocument();
+    expect(document.querySelector('.rc-billing-plan-card[data-highlight="true"]')).toBeInTheDocument();
     expect(screen.getAllByText("Operations and reporting").length).toBeGreaterThan(0);
     expect(
       screen.getByText(
@@ -67,6 +69,7 @@ describe("BillingPlansPanel", () => {
     );
 
     expect(screen.getByText("Recommended next step")).toBeInTheDocument();
+    expect(document.querySelector('.rc-billing-plan-card[data-recommended="true"]')).toBeInTheDocument();
     expect(screen.getAllByText("Operations and reporting").length).toBeGreaterThan(0);
     expect(
       screen.getByText(

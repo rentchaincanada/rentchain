@@ -18,6 +18,7 @@ import { track } from "@/lib/analytics";
 import { billingTierLabel, useBillingStatus } from "@/hooks/useBillingStatus";
 import { refreshEntitlements } from "@/lib/entitlements";
 import { CANONICAL_TIER_MATRIX, TIER_POSITIONING_COPY } from "@/constants/pricingPlans";
+import "./account/accountBillingTheme.css";
 
 const formatAmount = (amountCents: number, currency: string) => {
   const amount = (amountCents || 0) / 100;
@@ -289,6 +290,7 @@ const BillingPage: React.FC = () => {
 
   return (
     <Section
+      className="rc-account-billing-surface rc-billing-page"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -297,7 +299,7 @@ const BillingPage: React.FC = () => {
         margin: "0 auto",
       }}
     >
-      <Card elevated>
+      <Card elevated className="rc-account-billing-card rc-account-billing-card--strong">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: spacing.sm }}>
           <div>
             <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>Billing, plans, and upgrade review</h1>
@@ -326,7 +328,7 @@ const BillingPage: React.FC = () => {
             </div>
           </div>
           <div className="rc-wrap-row">
-            <Button type="button" variant="secondary" onClick={load} disabled={loading}>
+            <Button className="rc-account-secondary-action" type="button" variant="secondary" onClick={load} disabled={loading}>
               Refresh
             </Button>
             {isPaidPlan ? (
@@ -351,15 +353,15 @@ const BillingPage: React.FC = () => {
         </div>
       </Card>
 
-      <Card id="plan">
+      <Card id="plan" className="rc-account-billing-card">
         <div style={{ display: "grid", gap: spacing.md }}>
           <div style={{ display: "grid", gap: spacing.sm, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
             <div
               style={{
-                border: "1px solid rgba(148,163,184,0.25)",
+                border: "1px solid rgba(91,70,48,0.18)",
                 borderRadius: 16,
                 padding: 16,
-                background: "rgba(148,163,184,0.06)",
+                background: "#fff6e8",
                 display: "grid",
                 gap: spacing.xs,
               }}
@@ -401,15 +403,15 @@ const BillingPage: React.FC = () => {
             {recommendedUpgradeTier ? (
               <div
                 style={{
-                  border: "1px solid rgba(14,116,144,0.28)",
+                  border: "1px solid rgba(36,88,66,0.28)",
                   borderRadius: 16,
                   padding: 16,
-                  background: "rgba(14,116,144,0.08)",
+                  background: "rgba(36,88,66,0.1)",
                   display: "grid",
                   gap: spacing.xs,
                 }}
               >
-                <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 800 }}>
+                <div style={{ color: "#245842", fontSize: 12, fontWeight: 800 }}>
                   {requestedUpgradePlan ? "Selected from pricing" : "Recommended next plan"}
                 </div>
                 <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>
@@ -449,7 +451,7 @@ const BillingPage: React.FC = () => {
 
           <div className="rc-wrap-row" style={{ marginTop: spacing.xs }}>
             {isPaidPlan ? (
-              <Button type="button" variant="secondary" onClick={handlePortal} disabled={portalLoading}>
+              <Button className="rc-account-secondary-action" type="button" variant="secondary" onClick={handlePortal} disabled={portalLoading}>
                 {portalLoading ? "Opening..." : "Manage subscription"}
               </Button>
             ) : (
@@ -470,7 +472,7 @@ const BillingPage: React.FC = () => {
         </div>
       </Card>
 
-      <Card id="receipts">
+      <Card id="receipts" className="rc-account-billing-card">
         <div style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 12 }}>Plans</div>
         <BillingPlansPanel
           pricing={pricing}
@@ -493,7 +495,7 @@ const BillingPage: React.FC = () => {
         />
       </Card>
 
-      <Card>
+      <Card className="rc-account-billing-card">
         {loading ? (
           <div style={{ color: text.muted }}>Loading...</div>
         ) : error ? (
@@ -504,7 +506,7 @@ const BillingPage: React.FC = () => {
           </div>
         ) : (
           <div style={{ width: "100%", overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <table className="rc-account-billing-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ textAlign: "left", borderBottom: `1px solid ${colors.border}` }}>
                   <th style={{ padding: "8px" }}>Date</th>
@@ -534,7 +536,7 @@ const BillingPage: React.FC = () => {
                     </td>
                     <td style={{ padding: "8px" }}>
                       {record.receiptUrl ? (
-                        <a href={record.receiptUrl} target="_blank" rel="noopener noreferrer" style={{ color: colors.accent }}>
+                        <a href={record.receiptUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#245842" }}>
                           View
                         </a>
                       ) : (
@@ -549,16 +551,16 @@ const BillingPage: React.FC = () => {
         )}
       </Card>
 
-      <Card>
+      <Card className="rc-account-billing-card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: spacing.sm }}>
           <div style={{ color: text.secondary }}>
             Need a receipt or have billing questions? Email{" "}
-            <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: colors.accent }}>
+            <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: "#245842" }}>
               {SUPPORT_EMAIL}
             </a>
             .
           </div>
-          <Button variant="secondary" onClick={load} disabled={loading} className="rc-full-width-mobile">
+          <Button variant="secondary" onClick={load} disabled={loading} className="rc-full-width-mobile rc-account-secondary-action">
             Reload
           </Button>
         </div>

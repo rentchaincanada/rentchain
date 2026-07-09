@@ -88,6 +88,8 @@ describe("PricingPage analytics", () => {
         /You do not need to pick a paid plan before you understand the workflow\. Use pricing to see what opens next after the basics are already working for you\./i
       )
     ).toBeInTheDocument();
+    expect(document.querySelector(".rc-auth-pricing-page")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Monthly" })).toHaveClass("rc-pricing-interval-button");
 
     fireEvent.click(screen.getByRole("button", { name: "Annual" }));
 

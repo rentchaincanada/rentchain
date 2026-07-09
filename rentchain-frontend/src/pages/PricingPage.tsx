@@ -17,6 +17,7 @@ import {
 } from "../constants/pricingPlans";
 import { track } from "@/lib/analytics";
 import { normalizePlan } from "@/lib/plan";
+import "./account/accountBillingTheme.css";
 
 type PlanKey = PricingPlanKey;
 
@@ -74,9 +75,9 @@ const PLAN_CALLOUT_COPY: Partial<
 
 function pricingCardShadow(plan: PlanKey, hovered: boolean) {
   if (plan === "pro") {
-    return hovered ? "0 22px 42px rgba(37,99,235,0.16)" : "0 16px 34px rgba(37,99,235,0.12)";
+    return hovered ? "0 22px 42px rgba(59,44,28,0.16)" : "0 16px 34px rgba(59,44,28,0.12)";
   }
-  return hovered ? "0 16px 32px rgba(15,23,42,0.10)" : "0 10px 24px rgba(15,23,42,0.06)";
+  return hovered ? "0 16px 32px rgba(59,44,28,0.12)" : "0 10px 24px rgba(59,44,28,0.08)";
 }
 
 function buildBillingUpgradePath(target: Exclude<PlanKey, "free">, interval: PricingInterval) {
@@ -239,6 +240,7 @@ const PricingPage: React.FC = () => {
   return (
     <MacShell title="RentChain · Pricing" showTopNav={false}>
       <Section
+        className="rc-auth-pricing-page"
         style={{
           maxWidth: 1360,
           margin: "0 auto",
@@ -251,7 +253,7 @@ const PricingPage: React.FC = () => {
           boxSizing: "border-box",
         }}
       >
-        <Card elevated>
+        <Card elevated className="rc-auth-pricing-card rc-auth-pricing-card--strong">
           <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>Pricing</h1>
           <p style={{ marginTop: spacing.sm, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
             Start simple on Free, move into day-to-day rental operations on Starter, get stronger control on Pro, and step up to deeper portfolio oversight on Elite.
@@ -272,11 +274,12 @@ const PricingPage: React.FC = () => {
 
         <div
           style={{
-            background: "#f3f7ff",
+            background: "#f7f1e7",
             borderRadius: isMobile ? 20 : 24,
             padding: isMobile ? 12 : 20,
             boxSizing: "border-box",
           }}
+          className="rc-auth-pricing-panel"
         >
           <div
             style={{
@@ -287,10 +290,12 @@ const PricingPage: React.FC = () => {
               alignItems: "stretch",
             }}
           >
-          <Card style={{ gridColumn: "1 / -1" }}>
+          <Card className="rc-auth-pricing-card" style={{ gridColumn: "1 / -1" }}>
             <div style={{ display: "inline-flex", gap: 8, border: "1px solid rgba(15,23,42,0.12)", borderRadius: 999, padding: 4 }}>
               <Button
                 type="button"
+                className="rc-pricing-interval-button"
+                data-active={interval === "monthly" ? "true" : "false"}
                 variant={interval === "monthly" ? "primary" : "ghost"}
                 onClick={() => setInterval("monthly")}
                 style={{ padding: "6px 12px" }}
@@ -299,6 +304,8 @@ const PricingPage: React.FC = () => {
               </Button>
               <Button
                 type="button"
+                className="rc-pricing-interval-button"
+                data-active={interval === "yearly" ? "true" : "false"}
                 variant={interval === "yearly" ? "primary" : "ghost"}
                 onClick={() => setInterval("yearly")}
                 style={{ padding: "6px 12px" }}
@@ -310,6 +317,7 @@ const PricingPage: React.FC = () => {
           {PLAN_ORDER.map((plan) => (
             <Card
               key={plan}
+              className={`rc-auth-pricing-card${plan === "pro" ? " rc-auth-pricing-card--strong" : ""}`}
               elevated={plan === "pro"}
               style={{
                 display: "flex",
@@ -325,11 +333,11 @@ const PricingPage: React.FC = () => {
                 overflow: "visible",
                 transform: hoveredPlan === plan ? "translateY(-3px)" : "translateY(0)",
                 border:
-                  plan === "pro" ? "1px solid rgba(37,99,235,0.28)" : "1px solid rgba(15,23,42,0.08)",
+                  plan === "pro" ? "1px solid rgba(36,88,66,0.28)" : "1px solid rgba(91,70,48,0.18)",
                 background:
                   plan === "pro"
-                    ? "linear-gradient(180deg, rgba(37,99,235,0.06) 0%, #ffffff 28%)"
-                    : "#ffffff",
+                    ? "linear-gradient(180deg, rgba(36,88,66,0.1) 0%, #fffaf1 30%)"
+                    : "#fffaf1",
                 boxShadow: pricingCardShadow(plan, hoveredPlan === plan),
                 justifySelf: "stretch",
                 ...(plan === "pro"
@@ -350,25 +358,26 @@ const PricingPage: React.FC = () => {
                 </div>
                 {plan !== "free" ? (
                   <span
+                    className="rc-billing-plan-badge"
                     style={{
                       border:
                         plan === "pro" || plan === "elite"
-                          ? "1px solid rgba(37,99,235,0.4)"
-                          : "1px solid rgba(15,23,42,0.18)",
+                          ? "1px solid rgba(36,88,66,0.28)"
+                          : "1px solid rgba(91,70,48,0.18)",
                       borderRadius: 999,
                       padding: "4px 12px",
                       fontSize: 11,
                       fontWeight: 700,
-                      color: plan === "pro" || plan === "elite" ? "#1d4ed8" : text.primary,
+                      color: plan === "pro" || plan === "elite" ? "#245842" : text.primary,
                       background:
                         plan === "pro" || plan === "elite"
-                          ? "linear-gradient(180deg, rgba(37,99,235,0.14), rgba(37,99,235,0.08))"
-                          : "rgba(15,23,42,0.06)",
+                          ? "linear-gradient(180deg, rgba(36,88,66,0.14), rgba(36,88,66,0.08))"
+                          : "rgba(91,70,48,0.08)",
                       maxWidth: "100%",
                       overflowWrap: "anywhere",
                       letterSpacing: 0.2,
                       boxShadow:
-                        plan === "pro" || plan === "elite" ? "0 8px 20px rgba(37,99,235,0.12)" : "none",
+                        plan === "pro" || plan === "elite" ? "0 8px 20px rgba(36,88,66,0.12)" : "none",
                     }}
                   >
                     {TIER_POSITIONING_COPY[plan].badge}
@@ -407,8 +416,8 @@ const PricingPage: React.FC = () => {
                     lineHeight: 1.65,
                     padding: "10px 12px",
                     borderRadius: 12,
-                    background: "rgba(15,23,42,0.03)",
-                    border: "1px solid rgba(15,23,42,0.06)",
+                    background: "rgba(91,70,48,0.06)",
+                    border: "1px solid rgba(91,70,48,0.12)",
                     minWidth: 0,
                     flex: "0 0 auto",
                     ...wrappingTextStyle,
@@ -420,9 +429,9 @@ const PricingPage: React.FC = () => {
               {plan === "pro" || plan === "elite" ? (
                 <div
                   style={{
-                    border: "1px solid rgba(37,99,235,0.28)",
+                    border: "1px solid rgba(36,88,66,0.28)",
                     borderRadius: 12,
-                    background: "rgba(37,99,235,0.06)",
+                    background: "rgba(36,88,66,0.08)",
                     padding: "12px 14px",
                     display: "grid",
                     gap: 8,
@@ -463,7 +472,7 @@ const PricingPage: React.FC = () => {
               {plan !== "free" ? (
                 <div
                   style={{
-                    border: "1px solid rgba(15,23,42,0.12)",
+                    border: "1px solid rgba(91,70,48,0.18)",
                     borderRadius: 12,
                     padding: "12px 14px",
                     display: "grid",
@@ -481,7 +490,7 @@ const PricingPage: React.FC = () => {
               ) : null}
               <div style={{ marginTop: isMobile ? spacing.sm : "auto", paddingTop: 8, width: "100%" }}>
                 {plan === "free" ? (
-                  <Button type="button" variant="secondary" onClick={() => navigate("/dashboard")} style={{ width: "100%" }}>
+                  <Button className="rc-account-secondary-action" type="button" variant="secondary" onClick={() => navigate("/dashboard")} style={{ width: "100%" }}>
                     Start your rental workflow
                   </Button>
                 ) : (
@@ -500,9 +509,9 @@ const PricingPage: React.FC = () => {
           </div>
         </div>
 
-        <Card>
+        <Card className="rc-auth-pricing-card">
           <h2 style={{ marginTop: 0 }}>FAQ</h2>
-          <details open style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 12, padding: "12px 14px" }}>
+          <details open className="rc-auth-pricing-card" style={{ border: "1px solid rgba(91,70,48,0.18)", borderRadius: 12, padding: "12px 14px" }}>
             <summary style={{ cursor: "pointer", fontWeight: 700 }}>
               Do I need a subscription to screen tenants?
             </summary>
