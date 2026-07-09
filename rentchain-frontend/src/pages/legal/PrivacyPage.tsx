@@ -8,7 +8,7 @@ const PrivacyPage: React.FC = () => {
   }, []);
 
   return (
-    <MarketingLayout>
+    <MarketingLayout tone="warmNeutral">
       <div style={{ display: "flex", flexDirection: "column", gap: spacing.md, maxWidth: 760 }}>
         <div>
           <h1 style={{ margin: 0 }}>Privacy Policy</h1>

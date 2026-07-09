@@ -76,10 +76,18 @@ describe("AdminVerifiedScreeningsPage landlord mode", () => {
     expect(mocks.listVerifiedScreenings).toHaveBeenCalledWith("landlord");
     expect(screen.getByPlaceholderText("Search applicant or email")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Phil Jones/i }));
+    const queueItem = screen.getByRole("button", { name: /Phil Jones/i });
+    expect(queueItem).toHaveStyle({
+      background: "#fffaf1",
+    });
+
+    fireEvent.click(queueItem);
 
     await waitFor(() => {
       expect(screen.getByText("Result summary")).toBeInTheDocument();
+    });
+    expect(queueItem).toHaveStyle({
+      background: "rgba(36, 88, 66, 0.13)",
     });
     expect(screen.getByText("Screening review completed.")).toBeInTheDocument();
     expect(screen.getByText("Approve")).toBeInTheDocument();
@@ -100,6 +108,22 @@ describe("AdminVerifiedScreeningsPage landlord mode", () => {
     expect(screen.queryByText(/Unit ID/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/unit_raw_123/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Internal-only note/i)).not.toBeInTheDocument();
+  });
+
+  it("uses warm neutral landlord buttons and cards for empty states", async () => {
+    mocks.listVerifiedScreenings.mockResolvedValueOnce([]);
+
+    render(
+      <MemoryRouter>
+        <AdminVerifiedScreeningsPage audience="landlord" shell="none" />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("No verified screenings yet.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run a screening" })).toHaveStyle({
+      background: "#171411",
+      color: "#fffaf1",
+    });
   });
 
   it("reloads through the admin endpoint when the route audience changes", async () => {

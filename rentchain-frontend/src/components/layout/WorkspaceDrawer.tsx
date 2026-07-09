@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
-import { colors, radius, spacing, text, shadows } from "../../styles/tokens";
+import { radius, spacing } from "../../styles/tokens";
 import { getVisibleNavItems } from "./navConfig";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -15,6 +15,20 @@ type WorkspaceDrawerProps = {
 };
 
 export const WORKSPACE_DRAWER_MOBILE_QUERY = "(max-width: 820px)";
+
+const workspaceDrawerTheme = {
+  card: "#fffaf1",
+  panel: "#fff8ed",
+  border: "rgba(91, 70, 48, 0.18)",
+  borderStrong: "rgba(91, 70, 48, 0.3)",
+  activeBorder: "rgba(36, 88, 66, 0.38)",
+  activeBg: "rgba(36, 88, 66, 0.13)",
+  activeText: "#245842",
+  text: "#211c17",
+  muted: "#63594d",
+  scrim: "rgba(33, 28, 23, 0.42)",
+  shadow: "0 22px 52px rgba(59, 44, 28, 0.18)",
+};
 
 export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
   open,
@@ -83,6 +97,18 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
     onClose();
   };
   const mobileBottomNavOffset = "var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px)))";
+  const drawerNavButtonStyle = (active: boolean): React.CSSProperties => ({
+    textAlign: isMobile ? "center" : "left",
+    padding: isMobile ? "10px 8px" : "10px 12px",
+    minHeight: isMobile ? 48 : undefined,
+    borderRadius: radius.md,
+    border: `1px solid ${active ? workspaceDrawerTheme.activeBorder : workspaceDrawerTheme.border}`,
+    background: active ? workspaceDrawerTheme.activeBg : workspaceDrawerTheme.card,
+    color: active ? workspaceDrawerTheme.activeText : workspaceDrawerTheme.text,
+    fontWeight: active ? 750 : 650,
+    cursor: "pointer",
+    boxShadow: active ? "inset 0 -2px 0 rgba(36, 88, 66, 0.22)" : "none",
+  });
   const footerContent = (
     <>
       {onSignOut ? (
@@ -91,8 +117,9 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
           onClick={onSignOut}
           style={{
             borderRadius: radius.md,
-            border: `1px solid ${colors.border}`,
-            background: colors.panel,
+            border: `1px solid ${workspaceDrawerTheme.border}`,
+            background: workspaceDrawerTheme.panel,
+            color: workspaceDrawerTheme.text,
             padding: "8px 12px",
             cursor: "pointer",
             fontWeight: 700,
@@ -102,7 +129,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
           Sign out
         </button>
       ) : null}
-      {userEmail ? <div style={{ fontSize: 12, color: text.muted }}>{userEmail}</div> : null}
+      {userEmail ? <div style={{ fontSize: 12, color: workspaceDrawerTheme.muted }}>{userEmail}</div> : null}
     </>
   );
 
@@ -131,7 +158,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
         style={{
           position: "absolute",
           inset: 0,
-          background: "rgba(0,0,0,0.35)",
+          background: workspaceDrawerTheme.scrim,
           touchAction: isMobile ? "auto" : "none",
           overscrollBehavior: "none",
           pointerEvents: "auto",
@@ -151,11 +178,11 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
           margin: isMobile ? "0 auto 8px" : 0,
           minHeight: 0,
           minWidth: 0,
-          background: colors.card,
-          border: isMobile ? `1px solid ${colors.border}` : undefined,
-          borderLeft: isMobile ? undefined : `1px solid ${colors.border}`,
+          background: workspaceDrawerTheme.card,
+          border: isMobile ? `1px solid ${workspaceDrawerTheme.border}` : undefined,
+          borderLeft: isMobile ? undefined : `1px solid ${workspaceDrawerTheme.border}`,
           borderRadius: isMobile ? 20 : 0,
-          boxShadow: shadows.lg,
+          boxShadow: workspaceDrawerTheme.shadow,
           display: "flex",
           flexDirection: "column",
           zIndex: 1,
@@ -177,19 +204,20 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
             position: "sticky",
             top: 0,
             flex: "0 0 auto",
-            background: colors.card,
+            background: workspaceDrawerTheme.card,
             padding: `${spacing.lg} ${spacing.lg} ${spacing.sm}`,
             zIndex: 1,
-            borderBottom: `1px solid ${colors.border}`,
+            borderBottom: `1px solid ${workspaceDrawerTheme.border}`,
           }}
         >
-          <div style={{ fontSize: "1.1rem", fontWeight: 800, color: text.primary }}>Workspace</div>
+          <div style={{ fontSize: "1.1rem", fontWeight: 800, color: workspaceDrawerTheme.text }}>Workspace</div>
           <button
             type="button"
             onClick={onClose}
             style={{
-              border: `1px solid ${colors.border}`,
-              background: colors.panel,
+              border: `1px solid ${workspaceDrawerTheme.border}`,
+              background: workspaceDrawerTheme.panel,
+              color: workspaceDrawerTheme.text,
               borderRadius: radius.pill,
               padding: "6px 10px",
               cursor: "pointer",
@@ -212,7 +240,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
             maxHeight: "100%",
           }}
         >
-          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", color: text.muted, marginBottom: spacing.sm }}>Pages</div>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", color: workspaceDrawerTheme.muted, marginBottom: spacing.sm }}>Pages</div>
           <div
             style={{
               display: "grid",
@@ -226,9 +254,9 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
                   textAlign: "left",
                   padding: "10px 12px",
                   borderRadius: radius.md,
-                  border: `1px solid ${colors.border}`,
-                  background: colors.card,
-                  color: text.muted,
+                  border: `1px solid ${workspaceDrawerTheme.border}`,
+                  background: workspaceDrawerTheme.card,
+                  color: workspaceDrawerTheme.muted,
                   fontWeight: 600,
                 }}
               >
@@ -242,17 +270,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
                   key={link.to}
                   type="button"
                   onClick={() => handleNav(link.to)}
-                  style={{
-                    textAlign: isMobile ? "center" : "left",
-                    padding: isMobile ? "10px 8px" : "10px 12px",
-                    minHeight: isMobile ? 48 : undefined,
-                    borderRadius: radius.md,
-                    border: `1px solid ${active ? colors.accent : colors.border}`,
-                    background: active ? "rgba(37,99,235,0.08)" : colors.card,
-                    color: text.primary,
-                    fontWeight: active ? 700 : 600,
-                    cursor: "pointer",
-                  }}
+                  style={drawerNavButtonStyle(active)}
                 >
                   {link.label}
                 </button>
@@ -262,7 +280,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
               <div
                 style={{
                   height: 1,
-                  background: colors.border,
+                  background: workspaceDrawerTheme.border,
                   margin: `${spacing.xs} 0`,
                   gridColumn: isMobile ? "1 / -1" : undefined,
                 }}
@@ -275,17 +293,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
                   key={link.to}
                   type="button"
                   onClick={() => handleNav(link.to)}
-                  style={{
-                    textAlign: isMobile ? "center" : "left",
-                    padding: isMobile ? "10px 8px" : "10px 12px",
-                    minHeight: isMobile ? 48 : undefined,
-                    borderRadius: radius.md,
-                    border: `1px solid ${active ? colors.accent : colors.border}`,
-                    background: active ? "rgba(37,99,235,0.08)" : colors.card,
-                    color: text.primary,
-                    fontWeight: active ? 700 : 600,
-                    cursor: "pointer",
-                  }}
+                  style={drawerNavButtonStyle(active)}
                 >
                   {link.label}
                 </button>
@@ -296,7 +304,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
             <div
               style={{
                 marginTop: spacing.md,
-                borderTop: `1px solid ${colors.border}`,
+                borderTop: `1px solid ${workspaceDrawerTheme.border}`,
                 paddingTop: spacing.sm,
                 display: "grid",
                 gap: 8,
@@ -311,8 +319,8 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
           <div
             style={{
               flex: "0 0 auto",
-              background: colors.card,
-              borderTop: `1px solid ${colors.border}`,
+              background: workspaceDrawerTheme.card,
+              borderTop: `1px solid ${workspaceDrawerTheme.border}`,
               padding: `${spacing.sm} ${spacing.lg} calc(${spacing.sm} + env(safe-area-inset-bottom))`,
               display: "grid",
               gap: 8,
