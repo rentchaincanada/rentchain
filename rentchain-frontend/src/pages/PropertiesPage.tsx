@@ -1287,29 +1287,22 @@ const PropertiesPage: React.FC = () => {
               <div style={{ fontWeight: 600 }}>Action Requests</div>
               <div className="rc-action-requests-filters" style={{ display: "flex", gap: 8 }}>
                 {["all", "new", "acknowledged", "resolved"].map((status) => (
-                  <Button
+                  <button
+                    type="button"
                     key={status}
                     className="rc-action-request-filter-button"
+                    aria-pressed={actionFilter === status}
                     data-active={actionFilter === status ? "true" : "false"}
-                    variant="ghost"
                     onClick={() =>
                       setActionFilter(
                         status as ActionRequestStatus | "all"
                       )
                     }
-                    style={{
-                      padding: "4px 10px",
-                      fontSize: 12,
-                      background: actionFilter === status ? landlordWorkspaceTheme.pine : landlordWorkspaceTheme.card,
-                      color: actionFilter === status ? "#fff" : landlordWorkspaceTheme.charcoal,
-                      border: `1px solid ${actionFilter === status ? landlordWorkspaceTheme.pine : landlordWorkspaceTheme.borderStrong}`,
-                      boxShadow: actionFilter === status ? "0 6px 16px rgba(36, 88, 66, 0.18)" : "none",
-                    }}
                   >
                     {status === "all"
                       ? "All"
                       : status.charAt(0).toUpperCase() + status.slice(1)}
-                  </Button>
+                  </button>
                 ))}
               </div>
             </div>

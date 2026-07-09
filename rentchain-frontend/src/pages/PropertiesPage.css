@@ -115,6 +115,31 @@
   color: #211c17 !important;
 }
 
+.rc-properties-page .rc-action-request-filter-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.rc-properties-page .rc-action-request-filter-button:focus-visible {
+  outline: 3px solid rgba(184, 130, 62, 0.35);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(36, 88, 66, 0.14) !important;
+}
+
 .rc-properties-page .rc-properties-action-button,
 .rc-properties-page button,
 .rc-properties-page a[role="button"] {

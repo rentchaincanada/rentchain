@@ -121,6 +121,10 @@ describe("LandlordLeaseSummaryPage", () => {
 
     expect(await screen.findByText("Lease summary")).toBeInTheDocument();
     expect(screen.getAllByTestId("lease-document-view").length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("lease-document-view")[0]).toHaveStyle({
+      background: "linear-gradient(180deg, #fff6e8 0%, #fffaf1 100%)",
+      borderRadius: "18px",
+    });
     expect(screen.getAllByRole("article", { name: "Residential Lease Pack" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("term", { name: "Property" }).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Residential Lease Pack").length).toBeGreaterThan(0);
@@ -158,6 +162,9 @@ describe("LandlordLeaseSummaryPage", () => {
     );
 
     expect(await screen.findByText("Lease summary")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.getElementById("lease-section-rent-payment")).toBeTruthy();
+    });
     const target = document.getElementById("lease-section-rent-payment");
 
     expect(screen.getByRole("status")).toHaveTextContent("Rent and Payment workflow focus");
@@ -169,7 +176,8 @@ describe("LandlordLeaseSummaryPage", () => {
       expect(focus).toHaveBeenCalledWith({ preventScroll: true });
       expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
     });
-    expect(target).toHaveStyle({ background: "#eff6ff" });
+    expect(target).toHaveStyle({ background: "rgba(36, 88, 66, 0.12)" });
+    expect(target).toHaveStyle({ borderTop: "2px solid #245842" });
   });
 
   it("renders a non-empty printable lease summary source for browser print preview", async () => {

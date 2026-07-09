@@ -238,11 +238,14 @@ describe("PropertiesPage", () => {
     const filterButtons = Array.from(document.querySelectorAll(".rc-action-request-filter-button"));
     expect(filterButtons).toHaveLength(4);
     expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("data-active", "true");
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "New" })).toHaveAttribute("data-active", "false");
+    expect(screen.getByRole("button", { name: "New" })).toHaveAttribute("aria-pressed", "false");
 
     fireEvent.click(screen.getByRole("button", { name: "Resolved" }));
 
     expect(screen.getByRole("button", { name: "Resolved" })).toHaveAttribute("data-active", "true");
+    expect(screen.getByRole("button", { name: "Resolved" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("data-active", "false");
   });
 
