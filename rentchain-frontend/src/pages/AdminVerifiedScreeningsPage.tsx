@@ -30,6 +30,54 @@ type AdminVerifiedScreeningsPageProps = {
   shell?: VerifiedScreeningsShell;
 };
 
+const landlordVerifiedTheme = {
+  page: "#f7f1e7",
+  card: "#fffaf1",
+  panel: "#fff8ed",
+  border: "rgba(91, 70, 48, 0.18)",
+  borderStrong: "rgba(91, 70, 48, 0.3)",
+  activeBg: "rgba(36, 88, 66, 0.13)",
+  activeBorder: "rgba(36, 88, 66, 0.38)",
+  primary: "#171411",
+  primaryText: "#fffaf1",
+  pine: "#245842",
+  text: "#211c17",
+  muted: "#63594d",
+  shadow: "0 18px 42px rgba(59, 44, 28, 0.12)",
+};
+
+const landlordVerifiedCardStyle: React.CSSProperties = {
+  background: landlordVerifiedTheme.card,
+  border: `1px solid ${landlordVerifiedTheme.border}`,
+  boxShadow: landlordVerifiedTheme.shadow,
+  color: landlordVerifiedTheme.text,
+};
+
+const landlordVerifiedButtonStyle: React.CSSProperties = {
+  background: landlordVerifiedTheme.primary,
+  color: landlordVerifiedTheme.primaryText,
+  boxShadow: "0 14px 26px rgba(23, 20, 17, 0.16)",
+};
+
+const landlordVerifiedSecondaryButtonStyle: React.CSSProperties = {
+  background: "rgba(234, 223, 205, 0.72)",
+  color: landlordVerifiedTheme.text,
+  border: `1px solid ${landlordVerifiedTheme.border}`,
+  boxShadow: "none",
+};
+
+const landlordVerifiedPillStyle: React.CSSProperties = {
+  background: landlordVerifiedTheme.activeBg,
+  borderColor: landlordVerifiedTheme.activeBorder,
+  color: landlordVerifiedTheme.pine,
+};
+
+const landlordVerifiedInputStyle: React.CSSProperties = {
+  background: "#fffdf8",
+  border: `1px solid ${landlordVerifiedTheme.border}`,
+  color: landlordVerifiedTheme.text,
+};
+
 function formatVerifiedScreeningStatus(value?: string | null) {
   const normalized = String(value || "").trim().toUpperCase();
   const labels: Record<string, string> = {
@@ -93,8 +141,8 @@ function ScreeningSummaryDetail({ item }: { item: VerifiedScreeningQueueItem }) 
           </div>
         </div>
         <div className="rc-wrap-row">
-          <Pill>{verifiedScreeningPackageDisplay(item)}</Pill>
-          <Pill>{verifiedScreeningStatusDisplay(item)}</Pill>
+          <Pill style={landlordVerifiedPillStyle}>{verifiedScreeningPackageDisplay(item)}</Pill>
+          <Pill style={landlordVerifiedPillStyle}>{verifiedScreeningStatusDisplay(item)}</Pill>
         </div>
       </div>
 
@@ -155,6 +203,7 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
   const isAdminAudience = audience === "admin";
   const adminAccessDenied = isAdminAudience && !isAdmin;
   const pageTitle = isAdminAudience ? "Admin · Verified Screenings" : "Verified Screenings";
+  const landlordMode = !isAdminAudience;
 
   const load = useCallback(async () => {
     if (adminAccessDenied) {
@@ -242,7 +291,20 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
     shell === "mac" ? (
       <MacShell title={pageTitle}>{children}</MacShell>
     ) : (
-      <div style={{ display: "grid", gap: spacing.lg }}>{children}</div>
+      <div
+        style={{
+          display: "grid",
+          gap: spacing.lg,
+          ...(landlordMode
+            ? {
+                background: landlordVerifiedTheme.page,
+                color: landlordVerifiedTheme.text,
+              }
+            : {}),
+        }}
+      >
+        {children}
+      </div>
     );
 
   const handleSave = async () => {
@@ -297,21 +359,46 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
               ? "You do not have access to this queue."
               : "Unable to load verified screenings.";
     return renderShell(
-        <Section>
-          <Card elevated style={{ display: "grid", gap: 12 }}>
+        <Section
+          style={
+            landlordMode
+              ? {
+                  background: "transparent",
+                  border: "none",
+                  boxShadow: "none",
+                  padding: 0,
+                }
+              : undefined
+          }
+        >
+          <Card elevated style={{ display: "grid", gap: 12, ...(landlordMode ? landlordVerifiedCardStyle : {}) }}>
             <h1 style={{ margin: 0, fontSize: "1.2rem" }}>{heading}</h1>
-            {viewMessage ? <div style={{ color: text.muted }}>{viewMessage}</div> : null}
+            {viewMessage ? <div style={{ color: landlordMode ? landlordVerifiedTheme.muted : text.muted }}>{viewMessage}</div> : null}
             <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-              <Button type="button" onClick={() => navigate("/applications")}>
+              <Button
+                type="button"
+                onClick={() => navigate("/applications")}
+                style={landlordMode ? landlordVerifiedButtonStyle : undefined}
+              >
                 Run a screening
               </Button>
               {viewState === "upgrade_required" ? (
-                <Button type="button" variant="secondary" onClick={() => navigate("/billing")}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => navigate("/billing")}
+                  style={landlordMode ? landlordVerifiedSecondaryButtonStyle : undefined}
+                >
                   Upgrade plan
                 </Button>
               ) : null}
               {viewState === "error" ? (
-                <Button type="button" variant="secondary" onClick={load}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={load}
+                  style={landlordMode ? landlordVerifiedSecondaryButtonStyle : undefined}
+                >
                   Retry
                 </Button>
               ) : null}
@@ -322,17 +409,36 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
   }
 
   return renderShell(
-      <Section style={{ display: "grid", gap: spacing.md }}>
+      <Section
+        style={{
+          display: "grid",
+          gap: spacing.md,
+          ...(landlordMode
+            ? {
+                background: "transparent",
+                border: "none",
+                boxShadow: "none",
+                padding: 0,
+              }
+            : {}),
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.sm }}>
           <h1 style={{ margin: 0, fontSize: "1.3rem" }}>Verified Screening Queue</h1>
           <div style={{ display: "flex", gap: spacing.sm }}>
-            <Button type="button" variant="secondary" onClick={load} disabled={loading}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={load}
+              disabled={loading}
+              style={landlordMode ? landlordVerifiedSecondaryButtonStyle : undefined}
+            >
               Refresh
             </Button>
           </div>
         </div>
 
-        <Card elevated>
+        <Card elevated style={landlordMode ? landlordVerifiedCardStyle : undefined}>
           <ResponsiveMasterDetail
             title={undefined}
             searchSlot={
@@ -340,16 +446,16 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={isAdminAudience ? "Search applicant or application ID" : "Search applicant or email"}
-                style={{ width: "100%" }}
+                style={{ width: "100%", ...(landlordMode ? landlordVerifiedInputStyle : {}) }}
               />
             }
             masterTitle="Queue"
             master={
               <div style={{ display: "grid", gap: 8 }}>
                 {loading ? (
-                  <div style={{ color: text.muted }}>Loading queue...</div>
+                  <div style={{ color: landlordMode ? landlordVerifiedTheme.muted : text.muted }}>Loading queue...</div>
                 ) : filtered.length === 0 ? (
-                  <div style={{ color: text.muted }}>No verified screenings.</div>
+                  <div style={{ color: landlordMode ? landlordVerifiedTheme.muted : text.muted }}>No verified screenings.</div>
                 ) : (
                   filtered.map((item, index) => {
                     const itemKey = verifiedScreeningListKey(item, index);
@@ -360,22 +466,45 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
                       onClick={() => setSelectedId(itemKey)}
                       style={{
                         textAlign: "left",
-                        border: `1px solid ${itemKey === selectedId ? colors.accent : colors.border}`,
-                        background: itemKey === selectedId ? "rgba(37,99,235,0.08)" : colors.card,
+                        border: `1px solid ${
+                          landlordMode
+                            ? itemKey === selectedId
+                              ? landlordVerifiedTheme.activeBorder
+                              : landlordVerifiedTheme.border
+                            : itemKey === selectedId
+                              ? colors.accent
+                              : colors.border
+                        }`,
+                        background: landlordMode
+                          ? itemKey === selectedId
+                            ? landlordVerifiedTheme.activeBg
+                            : landlordVerifiedTheme.card
+                          : itemKey === selectedId
+                            ? "rgba(37,99,235,0.08)"
+                            : colors.card,
                         borderRadius: radius.md,
                         padding: "10px 12px",
                         cursor: "pointer",
                         display: "grid",
                         gap: 4,
+                        boxShadow: landlordMode && itemKey === selectedId ? "inset 0 -2px 0 rgba(36, 88, 66, 0.22)" : "none",
                       }}
                     >
-                      <div style={{ fontWeight: 700, color: text.primary }}>{item.applicant?.name || "Applicant"}</div>
-                      <div style={{ color: text.muted, fontSize: 12 }}>{item.applicant?.email || "No email"}</div>
-                      <div className="rc-wrap-row">
-                        <Pill>{isAdminAudience ? item.status : verifiedScreeningStatusDisplay(item)}</Pill>
-                        <Pill>{isAdminAudience ? item.serviceLevel : verifiedScreeningPackageDisplay(item)}</Pill>
+                      <div style={{ fontWeight: 700, color: landlordMode ? landlordVerifiedTheme.text : text.primary }}>
+                        {item.applicant?.name || "Applicant"}
                       </div>
-                      <div style={{ fontSize: 12, color: text.muted }}>
+                      <div style={{ color: landlordMode ? landlordVerifiedTheme.muted : text.muted, fontSize: 12 }}>
+                        {item.applicant?.email || "No email"}
+                      </div>
+                      <div className="rc-wrap-row">
+                        <Pill style={landlordMode ? landlordVerifiedPillStyle : undefined}>
+                          {isAdminAudience ? item.status : verifiedScreeningStatusDisplay(item)}
+                        </Pill>
+                        <Pill style={landlordMode ? landlordVerifiedPillStyle : undefined}>
+                          {isAdminAudience ? item.serviceLevel : verifiedScreeningPackageDisplay(item)}
+                        </Pill>
+                      </div>
+                      <div style={{ fontSize: 12, color: landlordMode ? landlordVerifiedTheme.muted : text.muted }}>
                         ${(item.totalAmountCents / 100).toFixed(2)} {item.currency}
                       </div>
                     </button>
@@ -404,7 +533,7 @@ const AdminVerifiedScreeningsPage: React.FC<AdminVerifiedScreeningsPageProps> = 
             selectedLabel={(isAdminAudience ? detail?.applicant?.name : selectedSummary?.applicant?.name) || "Screening"}
             onClearSelection={() => setSelectedId(null)}
             detail={
-              <Card>
+              <Card style={landlordMode ? landlordVerifiedCardStyle : undefined}>
                 {isAdminAudience && !detail ? (
                   <div style={{ color: text.muted }}>Select a queue item.</div>
                 ) : !isAdminAudience && !selectedSummary ? (

@@ -19,6 +19,19 @@ type WidgetProps = {
   audience?: Audience;
   defaultOpen?: boolean;
   compact?: boolean;
+  tone?: "default" | "warmNeutral";
+};
+
+const warmWidgetTheme = {
+  card: "#fffaf1",
+  panel: "#fff8ed",
+  border: "rgba(105, 82, 49, 0.2)",
+  text: "#171411",
+  muted: "#5f5a51",
+  primary: "#171411",
+  primaryText: "#fffaf1",
+  secondary: "rgba(234, 223, 205, 0.72)",
+  accentSoft: "rgba(36, 88, 66, 0.14)",
 };
 
 const promptSuggestions = [
@@ -42,6 +55,7 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
   audience = "general",
   defaultOpen = false,
   compact = false,
+  tone = "default",
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [query, setQuery] = useState("");
@@ -105,6 +119,14 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
         padding: compact ? "6px 10px" : "8px 12px",
         fontSize: compact ? "0.8rem" : "0.85rem",
         borderRadius: radius.pill,
+        ...(tone === "warmNeutral"
+          ? {
+              background: warmWidgetTheme.secondary,
+              border: `1px solid ${warmWidgetTheme.border}`,
+              color: warmWidgetTheme.text,
+              boxShadow: "none",
+            }
+          : {}),
       }}
       onClick={() => handleSend(label, "prompt")}
       aria-label={`Search: ${label}`}
@@ -117,7 +139,9 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
     <Card
       style={{
         padding: compact ? spacing.md : spacing.lg,
-        background: colors.panel,
+        background: tone === "warmNeutral" ? warmWidgetTheme.card : colors.panel,
+        border: tone === "warmNeutral" ? `1px solid ${warmWidgetTheme.border}` : undefined,
+        color: tone === "warmNeutral" ? warmWidgetTheme.text : undefined,
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md }}>
@@ -136,6 +160,14 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
           style={{
             padding: compact ? "6px 10px" : "8px 12px",
             fontSize: compact ? "0.8rem" : "0.85rem",
+            ...(tone === "warmNeutral"
+              ? {
+                  background: warmWidgetTheme.secondary,
+                  border: `1px solid ${warmWidgetTheme.border}`,
+                  color: warmWidgetTheme.text,
+                  boxShadow: "none",
+                }
+              : {}),
           }}
           onClick={() => setIsOpen((prev) => !prev)}
           aria-label={isOpen ? "Collapse Ask RentChain widget" : "Expand Ask RentChain widget"}
@@ -152,9 +184,9 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
             role="log"
             aria-live="polite"
             style={{
-              background: colors.card,
+              background: tone === "warmNeutral" ? warmWidgetTheme.panel : colors.card,
               borderRadius: radius.md,
-              border: `1px solid ${colors.border}`,
+              border: `1px solid ${tone === "warmNeutral" ? warmWidgetTheme.border : colors.border}`,
               padding: spacing.md,
               display: "flex",
               flexDirection: "column",
@@ -165,7 +197,7 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
             }}
           >
             {messages.length === 0 && (
-              <div style={{ color: text.muted }}>
+              <div style={{ color: tone === "warmNeutral" ? warmWidgetTheme.muted : text.muted }}>
                 Ask a question and I will suggest the closest Help Center matches.
               </div>
             )}
@@ -181,29 +213,39 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
                     maxWidth: "88%",
                     padding: spacing.sm,
                     borderRadius: radius.md,
-                    background: isUser ? colors.accentSoft : colors.panel,
-                    border: `1px solid ${colors.border}`,
-                    color: text.primary,
+                    background:
+                      tone === "warmNeutral"
+                        ? isUser
+                          ? warmWidgetTheme.accentSoft
+                          : warmWidgetTheme.card
+                        : isUser
+                          ? colors.accentSoft
+                          : colors.panel,
+                    border: `1px solid ${tone === "warmNeutral" ? warmWidgetTheme.border : colors.border}`,
+                    color: tone === "warmNeutral" ? warmWidgetTheme.text : text.primary,
                   }}
                 >
                   <div style={{ fontWeight: 600, marginBottom: spacing.xxs }}>
                     {isUser ? "You" : "RentChain"}
                   </div>
-                  <div style={{ color: text.secondary }}>{message.text}</div>
+                  <div style={{ color: tone === "warmNeutral" ? warmWidgetTheme.text : text.secondary }}>{message.text}</div>
                   {!isUser && message.results && message.results.length > 0 && (
                     <div style={{ marginTop: spacing.sm, display: "grid", gap: spacing.sm }}>
                       {message.results.map((result) => (
                         <div
                           key={result.id}
                           style={{
-                            border: `1px solid ${colors.border}`,
+                            border: `1px solid ${tone === "warmNeutral" ? warmWidgetTheme.border : colors.border}`,
                             borderRadius: radius.sm,
                             padding: spacing.sm,
-                            background: "#ffffff",
+                            background: tone === "warmNeutral" ? warmWidgetTheme.panel : "#ffffff",
                           }}
                         >
                           <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                            <Link to={result.url} style={{ color: colors.accent, fontWeight: 600 }}>
+                            <Link
+                              to={result.url}
+                              style={{ color: tone === "warmNeutral" ? warmWidgetTheme.primary : colors.accent, fontWeight: 600 }}
+                            >
                               {result.title}
                             </Link>
                             {result.audience && (
@@ -212,18 +254,37 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
                               </Pill>
                             )}
                           </div>
-                          <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: "0.9rem" }}>
+                          <div
+                            style={{
+                              marginTop: spacing.xs,
+                              color: tone === "warmNeutral" ? warmWidgetTheme.muted : text.muted,
+                              fontSize: "0.9rem",
+                            }}
+                          >
                             {snippetFor(result, scopedQuery(message.text))}
                           </div>
                         </div>
                       ))}
                       <div style={{ display: "flex", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" }}>
-                        <span style={{ color: text.muted, fontSize: "0.85rem" }}>Was this helpful?</span>
+                        <span style={{ color: tone === "warmNeutral" ? warmWidgetTheme.muted : text.muted, fontSize: "0.85rem" }}>
+                          Was this helpful?
+                        </span>
                         <Button
                           variant="ghost"
                           disabled={feedbackLocked}
                           aria-label="Helpful response"
-                          style={{ padding: "6px 10px", opacity: feedbackLocked ? 0.6 : 1 }}
+                          style={{
+                            padding: "6px 10px",
+                            opacity: feedbackLocked ? 0.6 : 1,
+                            ...(tone === "warmNeutral"
+                              ? {
+                                  background: warmWidgetTheme.secondary,
+                                  border: `1px solid ${warmWidgetTheme.border}`,
+                                  color: warmWidgetTheme.text,
+                                  boxShadow: "none",
+                                }
+                              : {}),
+                          }}
                           onClick={() => {
                             if (feedbackLocked) {
                               return;
@@ -238,7 +299,18 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
                           variant="ghost"
                           disabled={feedbackLocked}
                           aria-label="Not helpful response"
-                          style={{ padding: "6px 10px", opacity: feedbackLocked ? 0.6 : 1 }}
+                          style={{
+                            padding: "6px 10px",
+                            opacity: feedbackLocked ? 0.6 : 1,
+                            ...(tone === "warmNeutral"
+                              ? {
+                                  background: warmWidgetTheme.secondary,
+                                  border: `1px solid ${warmWidgetTheme.border}`,
+                                  color: warmWidgetTheme.text,
+                                  boxShadow: "none",
+                                }
+                              : {}),
+                          }}
                           onClick={() => {
                             if (feedbackLocked) {
                               return;
@@ -275,7 +347,16 @@ export const AskRentChainWidget: React.FC<WidgetProps> = ({
             <Button
               onClick={() => handleSend(query, "button")}
               aria-label="Send search query"
-              style={{ padding: compact ? "8px 12px" : "10px 16px" }}
+              style={{
+                padding: compact ? "8px 12px" : "10px 16px",
+                ...(tone === "warmNeutral"
+                  ? {
+                      background: warmWidgetTheme.primary,
+                      color: warmWidgetTheme.primaryText,
+                      boxShadow: "0 14px 26px rgba(23, 20, 17, 0.16)",
+                    }
+                  : {}),
+              }}
             >
               Send
             </Button>
