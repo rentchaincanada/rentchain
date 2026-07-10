@@ -1524,7 +1524,7 @@ export default function OperationalCommandCenterPage() {
           display: "grid",
           gap: 18,
           width: "100%",
-          maxWidth: 1280,
+          maxWidth: 1360,
           margin: "0 auto",
           minWidth: 0,
           padding: 18,
@@ -1686,12 +1686,26 @@ export default function OperationalCommandCenterPage() {
                   alignContent: "start",
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "start" }}>
-                  <div style={{ display: "grid", gap: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start", minWidth: 0 }}>
+                  <div style={{ display: "grid", gap: 4, flex: "1 1 auto", minWidth: 0 }}>
                     <strong style={{ color: "#211c17" }}>{lane.label}</strong>
                     <span style={{ color: "#63594d", fontSize: 13, lineHeight: 1.45 }}>{lane.helper}</span>
                   </div>
-                  <strong style={{ color: "#211c17", fontSize: 24, lineHeight: 1 }}>{lane.signals.length}</strong>
+                  <strong
+                    data-testid={`operations-waiting-lane-count-${lane.key}`}
+                    style={{
+                      color: "#211c17",
+                      fontSize: 24,
+                      lineHeight: 1,
+                      whiteSpace: "nowrap",
+                      flex: "0 0 auto",
+                      minWidth: "max-content",
+                      fontVariantNumeric: "tabular-nums",
+                      textAlign: "right",
+                    }}
+                  >
+                    {lane.signals.length}
+                  </strong>
                 </div>
                 <SignalMiniList signals={lane.signals} empty={lane.empty} />
               </Card>

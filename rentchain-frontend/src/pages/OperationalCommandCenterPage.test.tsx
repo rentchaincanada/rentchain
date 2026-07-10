@@ -660,6 +660,11 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getByText("Waiting on tenant")).toBeInTheDocument();
     expect(screen.getByText("Waiting on landlord")).toBeInTheDocument();
     expect(screen.getByText("Waiting on contractor")).toBeInTheDocument();
+    expect(screen.getByTestId("operations-waiting-lane-count-tenant")).toHaveStyle({
+      whiteSpace: "nowrap",
+      flex: "0 0 auto",
+      minWidth: "max-content",
+    });
     expect(screen.getByTestId("operations-work-buckets")).toBeInTheDocument();
     expect(screen.getByText("Main work buckets")).toBeInTheDocument();
     expect(screen.getByText("Maintenance and repairs")).toBeInTheDocument();
