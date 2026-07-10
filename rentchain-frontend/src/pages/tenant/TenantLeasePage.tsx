@@ -49,13 +49,18 @@ function canUseLegacyDocumentFallback(value: string) {
   return Boolean(next) && !isGoogleStorageSignedUrl(next) && !isAppDomainLeasePdfFallback(next);
 }
 
-function tenantDocumentOpenErrorMessage(err: any, documentKind: "lease" | "schedule-a") {
+function isMissingTenantDocumentRefreshError(err: any) {
   const code = String(err?.payload?.error || err?.message || "").trim();
-  const isMissingDocument =
+  return (
     err?.status === 404 ||
     code === "lease_document_not_found" ||
-    code === "schedule_a_document_not_found";
-  if (isMissingDocument) {
+    code === "schedule_a_document_not_found"
+  );
+}
+
+function tenantDocumentOpenErrorMessage(err: any, documentKind: "lease" | "schedule-a") {
+  const code = String(err?.payload?.error || err?.message || "").trim();
+  if (isMissingTenantDocumentRefreshError(err)) {
     return documentKind === "schedule-a"
       ? "Schedule A is not available in this tenant workspace yet."
       : "Signed document is not available in this tenant workspace yet. If signing was completed, the tenant-safe copy may still be preparing.";
@@ -163,10 +168,13 @@ export default function TenantLeasePage() {
       if (!nextUrl) throw new Error("Lease document is not available.");
       window.open(nextUrl, "_blank", "noreferrer");
     } catch (err: any) {
+      const canUseProjectedFallback =
+        Boolean(fallbackUrl) &&
+        (documentKind === "schedule-a" || !isScheduleADocumentUrl(fallbackUrl)) &&
+        (canUseLegacyDocumentFallback(fallbackUrl) || isMissingTenantDocumentRefreshError(err));
       if (
         !primaryRefreshReturnedScheduleA &&
-        canUseLegacyDocumentFallback(fallbackUrl) &&
-        (documentKind === "schedule-a" || !isScheduleADocumentUrl(fallbackUrl))
+        canUseProjectedFallback
       ) {
         window.open(fallbackUrl, "_blank", "noreferrer");
         return;

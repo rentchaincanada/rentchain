@@ -2423,11 +2423,13 @@ describe("tenant workspace frontend shell", () => {
     expect(await screen.findByText("refresh failed")).toBeInTheDocument();
   });
 
-  it("handles tenant signed document 404 responses as an unavailable state", async () => {
+  it("uses the projected signed document fallback when tenant refresh returns 404", async () => {
     const missingDocumentError = Object.assign(new Error("lease_document_not_found"), {
       status: 404,
       payload: { ok: false, error: "lease_document_not_found" },
     });
+    const fallbackUrl =
+      "https://storage.googleapis.com/lease-documents/leases/landlord-1/lease-missing-document-url/signed.pdf?X-Goog-Expires=1";
     tenantPortalApi.refreshTenantLeaseDocumentUrl.mockRejectedValueOnce(missingDocumentError);
     tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
       leaseId: "lease-missing-document-url",
@@ -2435,12 +2437,10 @@ describe("tenant workspace frontend shell", () => {
       endDate: "2027-02-28",
       monthlyRent: 1800,
       status: "active",
-      documentUrl:
-        "https://storage.googleapis.com/lease-documents/leases/landlord-1/lease-missing-document-url/signed.pdf?X-Goog-Expires=1",
+      documentUrl: fallbackUrl,
       leaseDocumentContext: {
         leaseId: "lease-missing-document-url",
-        documentUrl:
-          "https://storage.googleapis.com/lease-documents/leases/landlord-1/lease-missing-document-url/signed.pdf?X-Goog-Expires=1",
+        documentUrl: fallbackUrl,
         displayLabel: "Signed lease document",
         documentStatus: "signed",
         source: "lease.documentUrl",
@@ -2477,15 +2477,17 @@ describe("tenant workspace frontend shell", () => {
       </MemoryRouter>
     );
 
+    expect(await screen.findByText(/^Signed document available$/i)).toBeInTheDocument();
+    const newTabLink = screen.getByRole("link", { name: "Open signed document in a new tab" });
+    expect(newTabLink).toHaveAttribute("href", fallbackUrl);
+    expect(newTabLink).toHaveAttribute("target", "_blank");
+    expect(newTabLink).toHaveAttribute("rel", "noopener noreferrer");
+
     vi.mocked(window.open).mockClear();
     fireEvent.click(await screen.findByRole("button", { name: /View signed document/i }));
     await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith());
-    expect(window.open).not.toHaveBeenCalled();
-    expect(
-      await screen.findByText(
-        "Signed document is not available in this tenant workspace yet. If signing was completed, the tenant-safe copy may still be preparing."
-      )
-    ).toBeInTheDocument();
+    expect(window.open).toHaveBeenCalledWith(fallbackUrl, "_blank", "noreferrer");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("lease_document_not_found");
     expect(document.body).not.toHaveTextContent("X-Goog-Expires");
   });
@@ -2541,6 +2543,8 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getAllByText(/no tenant-safe signed lease document link is available yet/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/^Signature workflow not started$/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /View signed document/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open signed document in a new tab" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("does not open Schedule A when the tenant primary lease refresh path returns it", async () => {
