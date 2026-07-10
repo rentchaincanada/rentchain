@@ -2335,14 +2335,16 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/\$1,800/i)).toBeInTheDocument();
     expect(screen.getByText(/^Lease signing complete$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Signed lease document$/i)).toBeInTheDocument();
-    expect(screen.getByText(/Document status: Signed/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Signed lease document workspace/i })).toBeInTheDocument();
+    expect(screen.getByText(/^Signed document available$/i)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("https://example.com/lease.pdf");
     expect(screen.getByText(/^Lease fully executed$/i)).toBeInTheDocument();
     expect(screen.getByText(/Rent terms ready for future setup/i)).toBeInTheDocument();
     expect(screen.getByText(/Payment processed by Stripe\. RentChain does not store card or bank payment details\./i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Pay rent/i })).toBeInTheDocument();
     expect(screen.getByText(/^Drawn signature$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Taylor Tenant$/i)).toBeInTheDocument();
-    const openLeaseButton = screen.getByRole("button", { name: /View lease/i });
+    const openLeaseButton = screen.getByRole("button", { name: /View signed document/i });
     expect(openLeaseButton).toBeInTheDocument();
     fireEvent.click(openLeaseButton);
     await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalled());
@@ -2411,7 +2413,7 @@ describe("tenant workspace frontend shell", () => {
     );
 
     vi.mocked(window.open).mockClear();
-    expect(screen.queryByRole("button", { name: /Open lease document/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /View signed document/i })).not.toBeInTheDocument();
     expect(await screen.findByText(/Schedule A \/ attachment/i)).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: /Open Schedule A/i }));
     await waitFor(() =>
@@ -2419,6 +2421,75 @@ describe("tenant workspace frontend shell", () => {
     );
     expect(window.open).not.toHaveBeenCalled();
     expect(await screen.findByText("refresh failed")).toBeInTheDocument();
+  });
+
+  it("uses the projected signed document fallback when tenant refresh returns 404", async () => {
+    const missingDocumentError = Object.assign(new Error("lease_document_not_found"), {
+      status: 404,
+      payload: { ok: false, error: "lease_document_not_found" },
+    });
+    const fallbackUrl =
+      "https://storage.googleapis.com/lease-documents/leases/landlord-1/lease-missing-document-url/signed.pdf?X-Goog-Expires=1";
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockRejectedValueOnce(missingDocumentError);
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-missing-document-url",
+      startDate: "2026-03-01",
+      endDate: "2027-02-28",
+      monthlyRent: 1800,
+      status: "active",
+      documentUrl: fallbackUrl,
+      leaseDocumentContext: {
+        leaseId: "lease-missing-document-url",
+        documentUrl: fallbackUrl,
+        displayLabel: "Signed lease document",
+        documentStatus: "signed",
+        source: "lease.documentUrl",
+        confidence: "high",
+        warnings: [],
+      },
+      signatureStatus: "signed",
+      signatureReadinessLabel: "Lease signing complete",
+      signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
+      providerSigningStatus: "signed",
+      tenantSignature: {
+        signedAt: "2026-03-02T12:00:00.000Z",
+        signatureMethod: "typed",
+        signatureDisplayName: "Taylor Tenant",
+      },
+      leasePdfStatus: "available",
+      leasePdfLabel: "Lease document available",
+      leasePdfDescription: "A tenant-safe lease document is available in this workspace.",
+      leaseExecution: {
+        executionStatus: "fully_executed",
+        executionLabel: "Lease fully executed",
+        executionDescription: "The lease is fully executed.",
+        requiredNextAction: "none",
+        tenantSignatureStatus: "completed",
+        landlordSignatureStatus: "completed",
+        pdfStatus: "generated",
+        completedAt: "2026-03-02T12:00:00.000Z",
+      },
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <TenantLeasePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/^Signed document available$/i)).toBeInTheDocument();
+    const newTabLink = screen.getByRole("link", { name: "Open signed document in a new tab" });
+    expect(newTabLink).toHaveAttribute("href", fallbackUrl);
+    expect(newTabLink).toHaveAttribute("target", "_blank");
+    expect(newTabLink).toHaveAttribute("rel", "noopener noreferrer");
+
+    vi.mocked(window.open).mockClear();
+    fireEvent.click(await screen.findByRole("button", { name: /View signed document/i }));
+    await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith());
+    expect(window.open).toHaveBeenCalledWith(fallbackUrl, "_blank", "noreferrer");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("lease_document_not_found");
+    expect(document.body).not.toHaveTextContent("X-Goog-Expires");
   });
 
   it("shows provider-signed leases without documents as signed-copy pending instead of not started", async () => {
@@ -2471,7 +2542,9 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/^Signing complete; signed copy pending$/i)).toBeInTheDocument();
     expect(screen.getAllByText(/no tenant-safe signed lease document link is available yet/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/^Signature workflow not started$/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /View lease/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /View signed document/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open signed document in a new tab" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("does not open Schedule A when the tenant primary lease refresh path returns it", async () => {
@@ -2528,7 +2601,7 @@ describe("tenant workspace frontend shell", () => {
     );
 
     vi.mocked(window.open).mockClear();
-    fireEvent.click(await screen.findByRole("button", { name: /View lease/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /View signed document/i }));
     await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith());
     expect(window.open).not.toHaveBeenCalled();
   });

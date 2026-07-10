@@ -6,6 +6,7 @@ import {
   refreshTenantLeaseDocumentUrl,
   signTenantLease,
 } from "../../api/tenantPortal";
+import { SignedDocumentWorkspace } from "../../components/leases/SignedDocumentWorkspace";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -48,6 +49,30 @@ function canUseLegacyDocumentFallback(value: string) {
   return Boolean(next) && !isGoogleStorageSignedUrl(next) && !isAppDomainLeasePdfFallback(next);
 }
 
+function isMissingTenantDocumentRefreshError(err: any) {
+  const code = String(err?.payload?.error || err?.message || "").trim();
+  return (
+    err?.status === 404 ||
+    code === "lease_document_not_found" ||
+    code === "schedule_a_document_not_found"
+  );
+}
+
+function tenantDocumentOpenErrorMessage(err: any, documentKind: "lease" | "schedule-a") {
+  const code = String(err?.payload?.error || err?.message || "").trim();
+  if (isMissingTenantDocumentRefreshError(err)) {
+    return documentKind === "schedule-a"
+      ? "Schedule A is not available in this tenant workspace yet."
+      : "Signed document is not available in this tenant workspace yet. If signing was completed, the tenant-safe copy may still be preparing.";
+  }
+  return (
+    code ||
+    (documentKind === "schedule-a"
+      ? "Schedule A link expired and needs regeneration."
+      : "Lease document link expired and needs regeneration.")
+  );
+}
+
 function isScheduleADocumentUrl(value: unknown) {
   const normalized = String(value || "").trim().toLowerCase();
   return Boolean(normalized) && (normalized.includes("schedule-a") || normalized.includes("schedule_a"));
@@ -63,6 +88,7 @@ export default function TenantLeasePage() {
   const [paying, setPaying] = React.useState(false);
   const [openingDocument, setOpeningDocument] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [documentOpenError, setDocumentOpenError] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -128,7 +154,7 @@ export default function TenantLeasePage() {
     const fallbackUrl = String(context?.documentUrl || (documentKind === "lease" ? data?.documentUrl : "") || "").trim();
     let primaryRefreshReturnedScheduleA = false;
     setOpeningDocument(true);
-    setError(null);
+    setDocumentOpenError(null);
     try {
       const refreshed =
         documentKind === "schedule-a"
@@ -142,15 +168,18 @@ export default function TenantLeasePage() {
       if (!nextUrl) throw new Error("Lease document is not available.");
       window.open(nextUrl, "_blank", "noreferrer");
     } catch (err: any) {
+      const canUseProjectedFallback =
+        Boolean(fallbackUrl) &&
+        (documentKind === "schedule-a" || !isScheduleADocumentUrl(fallbackUrl)) &&
+        (canUseLegacyDocumentFallback(fallbackUrl) || isMissingTenantDocumentRefreshError(err));
       if (
         !primaryRefreshReturnedScheduleA &&
-        canUseLegacyDocumentFallback(fallbackUrl) &&
-        (documentKind === "schedule-a" || !isScheduleADocumentUrl(fallbackUrl))
+        canUseProjectedFallback
       ) {
         window.open(fallbackUrl, "_blank", "noreferrer");
         return;
       }
-      setError(err?.payload?.error || err?.message || (documentKind === "schedule-a" ? "Schedule A link expired and needs regeneration." : "Lease document link expired and needs regeneration."));
+      setDocumentOpenError(tenantDocumentOpenErrorMessage(err, documentKind));
     } finally {
       setOpeningDocument(false);
     }
@@ -177,6 +206,7 @@ export default function TenantLeasePage() {
   const execution = data?.leaseExecution || null;
   const providerSigningStatus = String(data?.providerSigningStatus || "not_started");
   const providerSigningComplete = providerSigningStatus === "signed";
+  const signedDocumentComplete = providerSigningComplete || data?.signatureStatus === "signed";
   const providerSigningAvailable = data?.providerSigningAvailable === true || providerSigningStatus === "pending_signature";
   const leaseDocumentContext = data?.leaseDocumentContext || null;
   const scheduleADocumentContext = data?.scheduleADocumentContext || null;
@@ -399,33 +429,34 @@ export default function TenantLeasePage() {
             </TenantInfoCard>
           ) : null}
 
-          <TenantInfoCard heading="Lease Document" accent="#0f766e">
-            {leaseDocumentLabel ? (
-              <div style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontWeight: 800 }}>{leaseDocumentLabel}</div>
-                {data.leasePdfDescription ? (
-                  <div style={{ color: "var(--text-muted, #64748b)" }}>{data.leasePdfDescription}</div>
-                ) : null}
-                {leaseDocumentContext?.documentStatus ? (
-                  <div style={{ color: "var(--text-muted, #64748b)" }}>
-                    Document status: {prettyStatus(leaseDocumentContext.documentStatus)}
-                  </div>
-                ) : null}
-                {leaseDocumentWarnings.length > 0 ? (
-                  <div style={{ color: "var(--text-muted, #64748b)" }}>{leaseDocumentWarnings[0]}</div>
-                ) : null}
-              </div>
-            ) : null}
-            {leaseDocumentUrl ? (
-              <button type="button" onClick={() => void handleOpenLeaseDocument()} disabled={openingDocument}>
-                {openingDocument ? "Opening..." : "View lease"}
-              </button>
-            ) : (
-              <div style={{ color: "var(--text-muted, #64748b)" }}>
-                No approved lease document link is available in this workspace yet.
-              </div>
-            )}
-          </TenantInfoCard>
+          <SignedDocumentWorkspace
+            audience="tenant"
+            title="Signed lease document workspace"
+            statusLabel={
+              leaseDocumentUrl
+                ? signedDocumentComplete
+                  ? "Signed document available"
+                  : "Lease document available"
+                : signedCopyPending
+                ? "Signed copy pending"
+                : "Document unavailable"
+            }
+            documentLabel={leaseDocumentLabel || "Signed lease document"}
+            documentUrl={leaseDocumentUrl}
+            signedAt={data.providerSignedAt || data.tenantSignature?.signedAt || null}
+            completedAt={execution?.completedAt || null}
+            evidenceLabel={signedDocumentComplete && leaseDocumentUrl ? "Lease record ready" : "Tenant-safe document access pending"}
+            warnings={leaseDocumentWarnings}
+            opening={openingDocument}
+            openError={documentOpenError}
+            onOpenDocument={leaseDocumentUrl ? () => void handleOpenLeaseDocument() : undefined}
+            providerMetadataVisible={false}
+            unavailableMessage={
+              signedCopyPending
+                ? "Signing is complete, but no tenant-safe signed lease document link is available yet."
+                : "No approved lease document link is available in this workspace yet."
+            }
+          />
 
           {scheduleAUrl ? (
             <TenantInfoCard heading="Schedule A / attachment" accent="#0891b2">

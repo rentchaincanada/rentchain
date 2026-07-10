@@ -1,8 +1,9 @@
 import React from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { downloadAuthenticatedExport } from "@/api/exportDownload";
-import { getLeaseById, type LandlordActiveLease } from "@/api/leasesApi";
+import { downloadSignedLease, getLeaseById, type LandlordActiveLease } from "@/api/leasesApi";
 import { LeaseDocumentView } from "@/components/leases/LeaseDocumentView";
+import { SignedDocumentWorkspace } from "@/components/leases/SignedDocumentWorkspace";
 import { triggerDocumentDownload } from "@/lib/documentRendering";
 import { downloadLeaseSummaryPdf } from "@/utils/leaseSummaryPdf";
 import { printSummaryDocument } from "@/utils/printSummary";
@@ -62,12 +63,61 @@ function workflowFocusForSection(sectionId: string | null) {
   return null;
 }
 
+function isSignedLeaseSummaryRecord(lease: LandlordActiveLease) {
+  const signingStatus = String((lease as any).currentSigningStatus || (lease as any).signingStatus || "").trim().toLowerCase();
+  const executionStatus = String(lease.leaseExecution?.executionStatus || "").trim().toLowerCase();
+  return signingStatus === "signed" || executionStatus === "fully_executed" || lease.signatureStatus === "signed";
+}
+
+function signedDocumentStatusLabel(lease: LandlordActiveLease) {
+  if (isSignedLeaseSummaryRecord(lease) && lease.documentUrl) return "Signed document available";
+  if (isSignedLeaseSummaryRecord(lease)) return "Signed document pending";
+  if (lease.documentUrl) return "Lease document available";
+  return "Document unavailable";
+}
+
+function signedDocumentSourceLabel(lease: LandlordActiveLease) {
+  const source = String((lease as any).signedDocumentSource || (lease as any).documentSource || "").trim();
+  if (!source) return lease.documentUrl ? "Secure signed document source" : null;
+  return source
+    .replace(/[./-]+/g, " ")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function isGoogleStorageSignedUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.hostname === "storage.googleapis.com" || url.hostname === "storage.cloud.google.com" || url.hostname.endsWith(".storage.googleapis.com");
+  } catch {
+    return false;
+  }
+}
+
+function isAppDomainLeasePdfFallback(value: string) {
+  if (!value) return false;
+  try {
+    const url = new URL(value, window.location.origin);
+    return url.origin === window.location.origin && /^\/leases\/.+\.pdf$/i.test(url.pathname);
+  } catch {
+    return /^\/leases\/.+\.pdf(?:$|\?)/i.test(value);
+  }
+}
+
+function canUseLegacyDocumentFallback(value: string) {
+  const next = String(value || "").trim();
+  return Boolean(next) && !isGoogleStorageSignedUrl(next) && !isAppDomainLeasePdfFallback(next);
+}
+
 export default function LandlordLeaseSummaryPage() {
   const { leaseId = "" } = useParams();
   const location = useLocation();
   const [lease, setLease] = React.useState<LandlordActiveLease | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [openingSignedDocument, setOpeningSignedDocument] = React.useState(false);
+  const [signedDocumentError, setSignedDocumentError] = React.useState<string | null>(null);
+  const [signedDocumentUrl, setSignedDocumentUrl] = React.useState<string | null>(null);
   const activeSectionId = sectionTargetFromLocation(location);
   const workflowFocus = workflowFocusForSection(activeSectionId);
 
@@ -87,10 +137,12 @@ export default function LandlordLeaseSummaryPage() {
         const response = await getLeaseById(leaseId);
         if (!active) return;
         setLease(response.lease || null);
+        setSignedDocumentUrl(String(response.lease?.documentUrl || "").trim() || null);
       } catch (err: unknown) {
         if (!active) return;
         setError(errorMessage(err, "Failed to load lease summary."));
         setLease(null);
+        setSignedDocumentUrl(null);
       } finally {
         if (active) setLoading(false);
       }
@@ -140,6 +192,28 @@ export default function LandlordLeaseSummaryPage() {
     }
   }
 
+  async function handleOpenSignedDocument() {
+    if (!lease) return;
+    setOpeningSignedDocument(true);
+    setSignedDocumentError(null);
+    try {
+      const signedDocument = await downloadSignedLease(lease.id);
+      const nextUrl = String(signedDocument?.documentUrl || "").trim();
+      if (!nextUrl) throw new Error("Signed document is not available yet.");
+      setSignedDocumentUrl(nextUrl);
+      window.open(nextUrl, "_blank", "noopener,noreferrer");
+    } catch (err: unknown) {
+      const fallbackUrl = String(signedDocumentUrl || lease.documentUrl || "").trim();
+      if (canUseLegacyDocumentFallback(fallbackUrl)) {
+        window.open(fallbackUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+      setSignedDocumentError(errorMessage(err, "Signed document is not available yet."));
+    } finally {
+      setOpeningSignedDocument(false);
+    }
+  }
+
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div style={{ display: "grid", gap: 6 }}>
@@ -156,9 +230,12 @@ export default function LandlordLeaseSummaryPage() {
         >
           Open payment ledger
         </Link>
-          <button
-            type="button"
-            onClick={() => void handlePrintOrSavePdf()}
+        <a href="#signed-document" style={leaseSummaryActionStyle}>
+          Signed document workspace
+        </a>
+        <button
+          type="button"
+          onClick={() => void handlePrintOrSavePdf()}
           disabled={!lease}
           style={leaseSummaryActionStyle}
         >
@@ -211,6 +288,25 @@ export default function LandlordLeaseSummaryPage() {
 
       {lease ? (
         <>
+          <SignedDocumentWorkspace
+            audience="landlord"
+            statusLabel={signedDocumentStatusLabel(lease)}
+            documentLabel={isSignedLeaseSummaryRecord(lease) ? "Signed lease document" : lease.leasePdfLabel || "Lease document"}
+            documentUrl={signedDocumentUrl || lease.documentUrl || null}
+            sourceLabel={signedDocumentSourceLabel(lease)}
+            signedAt={(lease as any).providerSignedAt || lease.leaseExecution?.completedAt || lease.tenantSignature?.signedAt || null}
+            completedAt={lease.leaseExecution?.completedAt || null}
+            evidenceLabel={isSignedLeaseSummaryRecord(lease) ? "Included in lease evidence package" : "Evidence package pending signed document"}
+            warnings={[]}
+            opening={openingSignedDocument}
+            openError={signedDocumentError}
+            onOpenDocument={() => void handleOpenSignedDocument()}
+            unavailableMessage={
+              isSignedLeaseSummaryRecord(lease)
+                ? "Signing appears complete, but no signed document URL is available in this workspace yet."
+                : "A signed document will appear here after the lease signing workflow is complete."
+            }
+          />
           <LeaseDocumentView lease={lease} activeSectionId={activeSectionId} />
           <div className="print-only print-only-summary" aria-hidden="true">
             <LeaseDocumentView lease={lease} anchorIds={false} />

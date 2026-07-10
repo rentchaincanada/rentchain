@@ -6,6 +6,7 @@ import { buildLeaseSummaryPdfSource } from "@/utils/leaseSummaryPdf";
 
 const mocks = vi.hoisted(() => ({
   getLeaseById: vi.fn(),
+  downloadSignedLease: vi.fn(),
   printSummaryDocument: vi.fn(),
   downloadAuthenticatedExport: vi.fn(),
 }));
@@ -14,6 +15,7 @@ const originalWindowPrintDescriptor = Object.getOwnPropertyDescriptor(window, "p
 
 vi.mock("@/api/leasesApi", () => ({
   getLeaseById: mocks.getLeaseById,
+  downloadSignedLease: mocks.downloadSignedLease,
 }));
 
 vi.mock("@/api/exportDownload", () => ({
@@ -27,6 +29,12 @@ vi.mock("@/utils/printSummary", () => ({
 describe("LandlordLeaseSummaryPage", () => {
   beforeEach(() => {
     mocks.getLeaseById.mockReset();
+    mocks.downloadSignedLease.mockReset();
+    mocks.downloadSignedLease.mockResolvedValue({
+      documentUrl: "https://example.com/signed-lease.pdf",
+      signingStatus: "signed",
+      signedAt: "2026-01-02T00:00:00.000Z",
+    });
     mocks.printSummaryDocument.mockReset();
     mocks.printSummaryDocument.mockResolvedValue(undefined);
     mocks.downloadAuthenticatedExport.mockReset();
@@ -143,10 +151,70 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(screen.getAllByText("Tony Wenpeng").length).toBeGreaterThan(0);
     expect(screen.queryByText(/gs:\/\//i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open payment ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(screen.getByRole("link", { name: "Signed document workspace" })).toHaveAttribute("href", "#signed-document");
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download evidence package" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to leases" })).toHaveAttribute("href", "/leases");
     expect(screen.getByRole("link", { name: "Open operations" })).toHaveAttribute("href", "/operations");
+    expect(screen.getByRole("heading", { name: "Signed Document Workspace" })).toBeInTheDocument();
+    expect(screen.getAllByText("Document unavailable").length).toBeGreaterThan(0);
+  });
+
+  it("renders a signed document workspace without exposing raw URLs and opens a refreshed signed document", async () => {
+    mocks.getLeaseById.mockResolvedValue({
+      lease: {
+        id: "lease-signed",
+        propertyId: "prop-1",
+        propertyName: "Coburg Rd",
+        unitNumber: "3",
+        monthlyRent: 2100,
+        startDate: "2026-01-01",
+        endDate: "2026-12-31",
+        status: "active",
+        tenantName: "Tony Wenpeng",
+        tenantEmail: "tony@example.com",
+        documentUrl: "https://storage.googleapis.com/rentchain-documents-prod/signed.pdf?X-Goog-Signature=hidden",
+        signingStatus: "signed",
+        leaseExecution: {
+          executionStatus: "fully_executed",
+          executionLabel: "Lease fully executed",
+          executionDescription: "The signing workflow is complete.",
+          requiredNextAction: "none",
+          tenantSignatureStatus: "completed",
+          landlordSignatureStatus: "completed",
+          pdfStatus: "generated",
+          completedAt: "2026-01-02T00:00:00.000Z",
+        },
+      },
+    });
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-signed/summary"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/summary" element={<LandlordLeaseSummaryPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: "Signed Document Workspace" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Signed document workspace" })).toHaveAttribute("href", "#signed-document");
+    expect(screen.getByText("Signed document available")).toBeInTheDocument();
+    expect(screen.getByText("Included in lease evidence package")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("X-Goog-Signature");
+
+    const fallbackLink = screen.getByRole("link", { name: "Open signed document in a new tab" });
+    expect(fallbackLink).toHaveAttribute(
+      "href",
+      "https://storage.googleapis.com/rentchain-documents-prod/signed.pdf?X-Goog-Signature=hidden"
+    );
+    expect(fallbackLink).toHaveAttribute("target", "_blank");
+    expect(fallbackLink).toHaveAttribute("rel", "noopener noreferrer");
+
+    fireEvent.click(screen.getByRole("button", { name: "View signed document" }));
+
+    await waitFor(() => expect(mocks.downloadSignedLease).toHaveBeenCalledWith("lease-signed"));
+    expect(open).toHaveBeenCalledWith("https://example.com/signed-lease.pdf", "_blank", "noopener,noreferrer");
   });
 
   it("scrolls to and highlights requested lease summary workflow sections after data loads", async () => {
