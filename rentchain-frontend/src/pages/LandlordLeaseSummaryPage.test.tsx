@@ -151,6 +151,7 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(screen.getAllByText("Tony Wenpeng").length).toBeGreaterThan(0);
     expect(screen.queryByText(/gs:\/\//i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open payment ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(screen.getByRole("link", { name: "Signed document workspace" })).toHaveAttribute("href", "#signed-document");
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download evidence package" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to leases" })).toHaveAttribute("href", "/leases");
@@ -197,6 +198,7 @@ describe("LandlordLeaseSummaryPage", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Signed Document Workspace" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Signed document workspace" })).toHaveAttribute("href", "#signed-document");
     expect(screen.getByText("Signed document available")).toBeInTheDocument();
     expect(screen.getByText("Included in lease evidence package")).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("X-Goog-Signature");

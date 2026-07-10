@@ -230,9 +230,12 @@ export default function LandlordLeaseSummaryPage() {
         >
           Open payment ledger
         </Link>
-          <button
-            type="button"
-            onClick={() => void handlePrintOrSavePdf()}
+        <a href="#signed-document" style={leaseSummaryActionStyle}>
+          Signed document workspace
+        </a>
+        <button
+          type="button"
+          onClick={() => void handlePrintOrSavePdf()}
           disabled={!lease}
           style={leaseSummaryActionStyle}
         >
