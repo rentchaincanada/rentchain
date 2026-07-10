@@ -2,6 +2,11 @@ import React from "react";
 import { Link, useParams } from "react-router-dom";
 import { getLeaseById, type JurisdictionPolicyGuidance, type LandlordActiveLease } from "@/api/leasesApi";
 import {
+  fetchExpiringLeaseRenewals,
+  type LandlordLeaseRenewalLease,
+} from "@/api/landlordLeaseRenewalApi";
+import { LeaseRenewalOperatorInputsCard } from "@/components/leases/LeaseRenewalOperatorInputsCard";
+import {
   RENEWAL_PIPELINE_BUCKETS,
   deriveRenewalPipelineItems,
   type RenewalPipelineItem,
@@ -231,16 +236,89 @@ function renewalSourceContextItem(lease: LandlordActiveLease): RenewalPipelineIt
   return deriveRenewalPipelineItems([lease])[0] || null;
 }
 
-function RenewalSourceContext({ lease }: { lease: LandlordActiveLease }) {
+function renewalProjectionFallbackFromLease(lease: LandlordActiveLease): LandlordLeaseRenewalLease {
+  const projectedLease = lease as LandlordActiveLease & Partial<LandlordLeaseRenewalLease>;
+  return {
+    id: lease.id,
+    tenantId: lease.tenantId || lease.primaryTenantId || "",
+    propertyId: lease.propertyId || null,
+    propertyAddress: lease.propertyAddress || null,
+    unitId: lease.unitId || null,
+    status: lease.status,
+    leaseType: projectedLease.leaseType || "fixed_term",
+    province: lease.jurisdictionProvince || projectedLease.province || "UNKNOWN",
+    leaseStartDate: lease.startDate || null,
+    leaseEndDate: lease.endDate || null,
+    currentRent: typeof lease.monthlyRent === "number" ? lease.monthlyRent : null,
+    currency: projectedLease.currency || "CAD",
+    nextNoticeDueAt: projectedLease.nextNoticeDueAt || null,
+    latestNoticeId: projectedLease.latestNoticeId || null,
+    tenantName: lease.tenantName || null,
+    unitLabel: lease.unitLabel || (lease.unitNumber ? `Unit ${lease.unitNumber}` : null),
+    propertyLabel: lease.propertyLabel || lease.propertyName || null,
+    renewalRentChangeMode: projectedLease.renewalRentChangeMode || null,
+    renewalOfferedRent: typeof projectedLease.renewalOfferedRent === "number" ? projectedLease.renewalOfferedRent : null,
+    renewalDecisionDeadlineAt: projectedLease.renewalDecisionDeadlineAt || null,
+    renewalNewTermType: projectedLease.renewalNewTermType || null,
+    renewalNewLeaseStartDate: projectedLease.renewalNewLeaseStartDate || null,
+    renewalNewLeaseEndDate: projectedLease.renewalNewLeaseEndDate || null,
+    renewalUpdatedAt: projectedLease.renewalUpdatedAt || null,
+    updatedAt: lease.updatedAt,
+    leaseLifecycleSummary: lease.leaseLifecycleSummary,
+  };
+}
+
+function RenewalOperatorInputsWorkspace({ lease }: { lease: LandlordActiveLease }) {
   const propertyId = String(lease.propertyId || "").trim();
+  const [renewalLease, setRenewalLease] = React.useState<LandlordLeaseRenewalLease | null>(null);
+  const [loadingRenewalInputs, setLoadingRenewalInputs] = React.useState(false);
+  const [renewalInputsError, setRenewalInputsError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!propertyId) {
+      setRenewalLease(null);
+      setLoadingRenewalInputs(false);
+      setRenewalInputsError(null);
+      return;
+    }
+
+    let active = true;
+    (async () => {
+      try {
+        setLoadingRenewalInputs(true);
+        setRenewalInputsError(null);
+        const response = await fetchExpiringLeaseRenewals({ propertyId });
+        if (!active) return;
+        const renewalItems = response.items?.length ? response.items : response.data || [];
+        const projectedLease = renewalItems.find((item) => item.id === lease.id);
+        setRenewalLease(projectedLease || renewalProjectionFallbackFromLease(lease));
+      } catch (err: unknown) {
+        if (!active) return;
+        setRenewalLease(null);
+        setRenewalInputsError(errorMessage(err, "Failed to load renewal operator inputs."));
+      } finally {
+        if (active) setLoadingRenewalInputs(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [lease, propertyId]);
+
   if (!propertyId) {
     return (
-      <div style={sourceContextStyle} aria-label="Renewal source context">
-        <div style={sourceContextTitleStyle}>Renewal source context</div>
-        <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
-          Portfolio renewal context is not available because this lease is not linked to a property.
+      <>
+        <div style={sourceContextStyle} aria-label="Renewal source context">
+          <div style={sourceContextTitleStyle}>Renewal source context</div>
+          <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
+            Portfolio renewal context is not available because this lease is not linked to a property.
+          </div>
         </div>
-      </div>
+        <div style={{ color: "#b91c1c", lineHeight: 1.55 }}>
+          Renewal operator inputs cannot be loaded until this lease is linked to a property.
+        </div>
+      </>
     );
   }
 
@@ -255,42 +333,53 @@ function RenewalSourceContext({ lease }: { lease: LandlordActiveLease }) {
     "Review renewal planning and source context before preparing next steps. Check jurisdiction requirements before acting.";
 
   return (
-    <div style={sourceContextStyle} aria-label="Renewal source context">
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
-        <div style={{ display: "grid", gap: 4 }}>
-          <div style={sourceContextTitleStyle}>Renewal source context</div>
-          <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
-            Portfolio renewal context for this lease, scoped to the property source view.
+    <>
+      <div style={sourceContextStyle} aria-label="Renewal source context">
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={sourceContextTitleStyle}>Renewal source context</div>
+            <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
+              Portfolio renewal context for this lease, scoped to the property source view.
+            </div>
           </div>
+          <Link to={sourcePath} style={{ ...buttonLinkStyle, width: "fit-content" }}>
+            Open portfolio renewal view
+          </Link>
         </div>
-        <Link to={sourcePath} style={{ ...buttonLinkStyle, width: "fit-content" }}>
-          Open portfolio renewal view
-        </Link>
+        <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, margin: 0 }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <dt style={termStyle}>Property</dt>
+            <dd style={sourceValueStyle}>{lease.propertyName || lease.propertyLabel || lease.propertyAddress || "Property"}</dd>
+          </div>
+          <div style={{ display: "grid", gap: 4 }}>
+            <dt style={termStyle}>Lease</dt>
+            <dd style={sourceValueStyle}>{renewalSourceLeaseLabel(lease)}</dd>
+          </div>
+          <div style={{ display: "grid", gap: 4 }}>
+            <dt style={termStyle}>Lease end</dt>
+            <dd style={sourceValueStyle}>{formatDate(lease.endDate)}</dd>
+          </div>
+          <div style={{ display: "grid", gap: 4 }}>
+            <dt style={termStyle}>Review timing</dt>
+            <dd style={sourceValueStyle}>{timing}</dd>
+          </div>
+          <div style={{ display: "grid", gap: 4 }}>
+            <dt style={termStyle}>Renewal status</dt>
+            <dd style={sourceValueStyle}>{status}</dd>
+          </div>
+        </dl>
+        <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>{explanation}</div>
       </div>
-      <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, margin: 0 }}>
-        <div style={{ display: "grid", gap: 4 }}>
-          <dt style={termStyle}>Property</dt>
-          <dd style={sourceValueStyle}>{lease.propertyName || lease.propertyLabel || lease.propertyAddress || "Property"}</dd>
-        </div>
-        <div style={{ display: "grid", gap: 4 }}>
-          <dt style={termStyle}>Lease</dt>
-          <dd style={sourceValueStyle}>{renewalSourceLeaseLabel(lease)}</dd>
-        </div>
-        <div style={{ display: "grid", gap: 4 }}>
-          <dt style={termStyle}>Lease end</dt>
-          <dd style={sourceValueStyle}>{formatDate(lease.endDate)}</dd>
-        </div>
-        <div style={{ display: "grid", gap: 4 }}>
-          <dt style={termStyle}>Review timing</dt>
-          <dd style={sourceValueStyle}>{timing}</dd>
-        </div>
-        <div style={{ display: "grid", gap: 4 }}>
-          <dt style={termStyle}>Renewal status</dt>
-          <dd style={sourceValueStyle}>{status}</dd>
-        </div>
-      </dl>
-      <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>{explanation}</div>
-    </div>
+
+      {loadingRenewalInputs ? <div>Loading renewal operator inputs…</div> : null}
+      {!loadingRenewalInputs && renewalInputsError ? <div style={{ color: "#b91c1c" }}>{renewalInputsError}</div> : null}
+      {!loadingRenewalInputs && !renewalInputsError && renewalLease ? (
+        <LeaseRenewalOperatorInputsCard
+          lease={renewalLease}
+          onSaved={(updatedLease) => setRenewalLease(updatedLease)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -394,10 +483,10 @@ export default function LandlordLeaseWorkflowPage() {
             <section style={panelStyle} aria-label="Renewal operator inputs">
               <h2 style={sectionHeadingStyle}>Renewal operator inputs</h2>
               <div style={{ color: workflowTheme.muted, lineHeight: 1.6 }}>
-                Use the portfolio renewal workbench to review unit-specific renewal inputs such as proposed rent,
-                term dates, response deadline, and renewal recommendation before preparing tenant-facing notices.
+                Review and save unit-specific renewal inputs such as proposed rent, term dates, and response deadline
+                before preparing tenant-facing notices.
               </div>
-              <RenewalSourceContext lease={lease} />
+              <RenewalOperatorInputsWorkspace lease={lease} />
             </section>
           ) : null}
 
