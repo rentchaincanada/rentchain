@@ -649,6 +649,26 @@ describe("OperationalCommandCenterPage", () => {
       expect(mocks.fetchProperties).toHaveBeenCalledWith({ status: "active" });
     });
 
+    expect(screen.getByTestId("operations-daily-summary")).toBeInTheDocument();
+    expect(screen.getByText("Today's operational summary")).toBeInTheDocument();
+    expect(screen.getByText("Urgent / overdue work")).toBeInTheDocument();
+    expect(screen.getByText("Urgent / blocked")).toBeInTheDocument();
+    expect(screen.getByText("Needs landlord review")).toBeInTheDocument();
+    expect(screen.getByText("Evidence/source attached")).toBeInTheDocument();
+    expect(screen.getByTestId("operations-waiting-lanes")).toBeInTheDocument();
+    expect(screen.getByText("Waiting lanes")).toBeInTheDocument();
+    expect(screen.getByText("Waiting on tenant")).toBeInTheDocument();
+    expect(screen.getByText("Waiting on landlord")).toBeInTheDocument();
+    expect(screen.getByText("Waiting on contractor")).toBeInTheDocument();
+    expect(screen.getByTestId("operations-work-buckets")).toBeInTheDocument();
+    expect(screen.getByText("Main work buckets")).toBeInTheDocument();
+    expect(screen.getByText("Maintenance and repairs")).toBeInTheDocument();
+    expect(screen.getByText("Lease actions")).toBeInTheDocument();
+    expect(screen.getByText("Notices and compliance")).toBeInTheDocument();
+    expect(screen.getByText("Payments and arrears")).toBeInTheDocument();
+    expect(screen.getByText("Tenant/application requests")).toBeInTheDocument();
+    expect(screen.getByText("Contractor follow-ups")).toBeInTheDocument();
+    expect(screen.getByText("Evidence-ready items")).toBeInTheDocument();
     expect(screen.getAllByText("Payments / obligations").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Lease lifecycle").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Documents / workspace").length).toBeGreaterThan(0);
@@ -659,8 +679,8 @@ describe("OperationalCommandCenterPage", () => {
       display: "grid",
       gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
     });
-    expect(screen.getByText("Priority routing queue")).toBeInTheDocument();
-    expect(screen.getByText(/Highest priority first by urgency, severity, and source workflow/i)).toBeInTheDocument();
+    expect(screen.getByText("Advanced triage queue")).toBeInTheDocument();
+    expect(screen.getByText(/Search, saved views, manual review controls, and detailed priority lists/i)).toBeInTheDocument();
     expect(screen.getAllByText("Critical").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Needs review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Upcoming").length).toBeGreaterThan(0);
@@ -674,7 +694,6 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getAllByText("Assignment: Operations owned").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Escalation: Critical").length).toBeGreaterThan(0);
     expect(screen.getByText("Next action: Open payment ledger")).toBeInTheDocument();
-    expect(screen.getAllByText("Review workspace readiness").length).toBeGreaterThan(0);
     expect(screen.getByTestId("operational-review-queue")).toBeInTheDocument();
     expect(screen.getByText("Operational review queue")).toBeInTheDocument();
     expect(screen.getByText(/does not create workspaces, route work automatically, or change source records/i)).toBeInTheDocument();
@@ -682,7 +701,6 @@ describe("OperationalCommandCenterPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Details and manual controls for Review missing payment/i }));
     expect(screen.getAllByText("Related resource context").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(1);
-    expect(screen.getAllByText(/does not create a workspace, route work automatically, or change source records/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Payment Ledger Review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Delinquency or payment evidence review").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /create review workspace/i })).not.toBeInTheDocument();
@@ -856,7 +874,7 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getAllByText("Review status: Blocked").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Assignment: Property manager").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Manual status: In review").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Manual assignment: Finance reviewer").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Assigned reviewer: Finance reviewer").length).toBeGreaterThan(0);
   });
 
   it("persists manual review status and assigned reviewer changes from Operations controls", async () => {
