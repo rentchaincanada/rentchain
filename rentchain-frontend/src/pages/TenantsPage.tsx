@@ -209,20 +209,21 @@ function buildTenantLeaseLink(
   tenant?: TenantApiModel | null,
   currentLease?: TenantLeaseSummary | null
 ) {
+  const currentLeaseId = getTenantCurrentLeaseId(tenant, currentLease);
   const signedDocumentUrl = String(currentLease?.signedDocumentUrl || "").trim();
+  if (currentLeaseId) {
+    return {
+      href: `/leases/${encodeURIComponent(currentLeaseId)}/summary#signed-document`,
+      external: false,
+    };
+  }
   if (signedDocumentUrl) {
     return {
       href: signedDocumentUrl,
       external: true,
     };
   }
-  const currentLeaseId = getTenantCurrentLeaseId(tenant, currentLease);
-  return currentLeaseId
-    ? {
-        href: `/leases/${encodeURIComponent(currentLeaseId)}/summary`,
-        external: false,
-      }
-    : null;
+  return null;
 }
 
 function TenantLeaseLink({

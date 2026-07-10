@@ -277,7 +277,7 @@ describe("TenantsPage", () => {
     expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
     const leaseLinks = screen.getAllByRole("link", { name: "Main Street · Unit 4 · Lease" });
     expect(leaseLinks.length).toBeGreaterThan(0);
-    expect(leaseLinks[0]).toHaveAttribute("href", "/leases/lease-1/summary");
+    expect(leaseLinks[0]).toHaveAttribute("href", "/leases/lease-1/summary#signed-document");
     expect(screen.queryByText("lease-1")).not.toBeInTheDocument();
     expect(screen.getByText("Payment ledger")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open payment ledger" })).toBeEnabled();
@@ -333,12 +333,12 @@ describe("TenantsPage", () => {
     expect(await screen.findByText("Tenant actions")).toBeInTheDocument();
     const leaseLinks = screen.getAllByRole("link", { name: "Main Street · Unit 4 · Lease" });
     expect(leaseLinks.length).toBeGreaterThan(0);
-    expect(leaseLinks[0]).toHaveAttribute("href", "/leases/lease-active-1/summary");
+    expect(leaseLinks[0]).toHaveAttribute("href", "/leases/lease-active-1/summary#signed-document");
     expect(screen.queryByText("lease-active-1")).not.toBeInTheDocument();
     expect(screen.queryByText("No current lease linked")).not.toBeInTheDocument();
   });
 
-  it("prefers the signed lease document URL for tenant profile lease links when available", async () => {
+  it("keeps signed lease document links inside the lease summary workspace when a lease id is available", async () => {
     mocks.useCapabilitiesMock.mockReturnValue({
       features: { tenant_invites: true },
     });
@@ -389,11 +389,8 @@ describe("TenantsPage", () => {
     expect(await screen.findByText("Tenant actions")).toBeInTheDocument();
     const leaseLinks = screen.getAllByRole("link", { name: "Main Street · Unit 4 · Lease" });
     expect(leaseLinks.length).toBeGreaterThan(0);
-    expect(leaseLinks[0]).toHaveAttribute(
-      "href",
-      "https://storage.googleapis.com/rentchain-documents-prod/lease-signing/1?X-Goog-Signature=safe"
-    );
-    expect(leaseLinks[0]).toHaveAttribute("target", "_blank");
+    expect(leaseLinks[0]).toHaveAttribute("href", "/leases/lease-signed-1/summary#signed-document");
+    expect(leaseLinks[0]).not.toHaveAttribute("target", "_blank");
   });
 
   it("uses the current lease as the active unit link when tenancy registration is stale", async () => {
