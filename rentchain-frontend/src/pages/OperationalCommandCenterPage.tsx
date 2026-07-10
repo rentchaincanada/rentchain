@@ -1,6 +1,19 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Building2, ClipboardList, FileText, Home, Inbox, ReceiptText, ShieldCheck } from "lucide-react";
+import {
+  AlertTriangle,
+  Building2,
+  ClipboardList,
+  FileCheck2,
+  FileText,
+  Hammer,
+  Home,
+  Inbox,
+  ReceiptText,
+  ShieldCheck,
+  UserRoundCheck,
+  Wrench,
+} from "lucide-react";
 import { fetchDashboardSummary, type DashboardSummaryData } from "@/api/dashboard";
 import {
   fetchDecisionInbox,
@@ -27,7 +40,7 @@ import {
   type ReviewAssignmentTarget,
   type ReviewLifecycleStatus,
 } from "@/components/reviewWorkspaces/ReviewAssignmentStatusControls";
-import { ReviewWorkspacePanel, type ReviewWorkspaceUiModel } from "@/components/reviewWorkspaces/ReviewWorkspacePanel";
+import { type ReviewWorkspaceUiModel } from "@/components/reviewWorkspaces/ReviewWorkspacePanel";
 import { Card, Section } from "@/components/ui/Ui";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { isUpgradeRequiredError } from "@/lib/gatedFeatureErrors";
@@ -57,6 +70,17 @@ type ReviewStatusFilter = "all" | "open" | "review_needed" | "informational";
 type AssignmentFilter = "all" | "assigned" | "unassigned";
 type EscalationFilter = "all" | "escalated" | "not_escalated";
 type TimingRiskFilter = "all" | "delinquent" | "upcoming" | "high_risk";
+type WaitingLaneKey = "tenant" | "landlord" | "contractor";
+type WorkBucketKey =
+  | "maintenance"
+  | "lease_actions"
+  | "notices"
+  | "payments"
+  | "tenant_requests"
+  | "contractor_followups"
+  | "evidence_ready";
+
+type SummaryActionKey = "urgent" | "landlord_review" | "upcoming" | "evidence";
 
 type CommandCenterFilterOptions = {
   search?: string;
@@ -230,6 +254,139 @@ const TIMING_RISK_OPTIONS: Array<{ value: TimingRiskFilter; label: string }> = [
   { value: "delinquent", label: "Delinquent" },
   { value: "upcoming", label: "Upcoming / deadline" },
   { value: "high_risk", label: "High risk" },
+];
+
+const WAITING_LANE_CONFIG: Array<{
+  key: WaitingLaneKey;
+  label: string;
+  helper: string;
+  empty: string;
+}> = [
+  {
+    key: "tenant",
+    label: "Waiting on tenant",
+    helper: "Tenant, applicant, signature, screening, and response-dependent work.",
+    empty: "No tenant-waiting items visible.",
+  },
+  {
+    key: "landlord",
+    label: "Waiting on landlord",
+    helper: "Manual review, assignment, approval, payment, lease, and document decisions.",
+    empty: "No landlord-owned waiting items visible.",
+  },
+  {
+    key: "contractor",
+    label: "Waiting on contractor",
+    helper: "Maintenance, repair, work order, and contractor follow-up signals when present.",
+    empty: "No contractor-waiting items visible.",
+  },
+];
+
+const WORK_BUCKET_CONFIG: Array<{
+  key: WorkBucketKey;
+  label: string;
+  helper: string;
+  destination: string;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+}> = [
+  {
+    key: "maintenance",
+    label: "Maintenance and repairs",
+    helper: "Maintenance, repair, property condition, and work-order source signals.",
+    destination: "/properties",
+    icon: Wrench,
+  },
+  {
+    key: "lease_actions",
+    label: "Lease actions",
+    helper: "Execution, renewal, document, signature, and lease lifecycle work.",
+    destination: "/leases",
+    icon: ClipboardList,
+  },
+  {
+    key: "notices",
+    label: "Notices and compliance",
+    helper: "Jurisdiction, notice, policy, and compliance review signals.",
+    destination: "/leases",
+    icon: FileCheck2,
+  },
+  {
+    key: "payments",
+    label: "Payments and arrears",
+    helper: "Delinquency, payment readiness, ledger, and obligation review work.",
+    destination: "/payments",
+    icon: ReceiptText,
+  },
+  {
+    key: "tenant_requests",
+    label: "Tenant/application requests",
+    helper: "Screening, application, applicant, tenant, and inbox-driven requests.",
+    destination: "/tenants",
+    icon: UserRoundCheck,
+  },
+  {
+    key: "contractor_followups",
+    label: "Contractor follow-ups",
+    helper: "Contractor and work-order follow-up work when source signals exist.",
+    destination: "/properties",
+    icon: Hammer,
+  },
+  {
+    key: "evidence_ready",
+    label: "Evidence-ready items",
+    helper: "Items with scoped source workflow evidence or manual review handoff context.",
+    destination: "/decision-inbox",
+    icon: ShieldCheck,
+  },
+];
+
+const REVIEW_QUEUE_PREVIEW_LIMIT = 6;
+
+const SUMMARY_ACTION_CONFIG: Array<{
+  key: SummaryActionKey;
+  label: string;
+  issue: string;
+  nextAction: string;
+  actionLabel: string;
+  href: string;
+  severity: CommandCenterSeverity;
+}> = [
+  {
+    key: "urgent",
+    label: "Urgent / blocked",
+    issue: "Blocked, critical, delinquent, or escalated source work.",
+    nextAction: "Start with the highest-risk operational items.",
+    actionLabel: "Review urgent work",
+    href: "#operations-urgent-work",
+    severity: "critical",
+  },
+  {
+    key: "landlord_review",
+    label: "Needs landlord review",
+    issue: "Manual decisions, assignments, approvals, and review-needed items.",
+    nextAction: "Review landlord-owned items before source workflows move forward.",
+    actionLabel: "Review landlord-owned items",
+    href: "#operations-review-queue",
+    severity: "warning",
+  },
+  {
+    key: "upcoming",
+    label: "Upcoming",
+    issue: "Forward-looking lease, renewal, occupancy, or dated workflow timing.",
+    nextAction: "Check deadlines that need scheduling, notice, or renewal follow-up.",
+    actionLabel: "Review upcoming deadlines",
+    href: "#operations-upcoming-work",
+    severity: "info",
+  },
+  {
+    key: "evidence",
+    label: "Evidence/source attached",
+    issue: "Items with source routing and manual review handoff context.",
+    nextAction: "Open source-backed items that are ready for review context.",
+    actionLabel: "Open evidence-ready items",
+    href: "#operations-evidence-ready",
+    severity: "info",
+  },
 ];
 
 function label(value: string) {
@@ -880,6 +1037,95 @@ function summarizeByPriority(signals: CommandCenterSignal[]) {
   }));
 }
 
+function signalOperationalText(signal: CommandCenterSignal) {
+  return [
+    signal.title,
+    signal.description,
+    signal.contextLabel,
+    signal.source,
+    signal.workflowStatus,
+    signal.reviewStatus,
+    signal.nextActionLabel,
+    signal.assignmentLabel,
+    signal.escalationLabel,
+    CATEGORY_CONFIG[signal.category].label,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function signalMatches(signal: CommandCenterSignal, pattern: RegExp) {
+  return pattern.test(signalOperationalText(signal));
+}
+
+function isBlockedOrUrgent(signal: CommandCenterSignal) {
+  return (
+    signal.priorityGroup === "critical" ||
+    signal.severity === "critical" ||
+    signal.escalationState === "escalated" ||
+    /blocked|critical|urgent|delinquent|arrear/i.test(`${signal.workflowStatus} ${signal.reviewStatus} ${signal.source}`)
+  );
+}
+
+function isReviewReady(signal: CommandCenterSignal) {
+  return (
+    signal.priorityGroup === "needs_review" ||
+    /review|open|blocked|awaiting|manual/i.test(`${signal.reviewStatus} ${signal.workflowStatus} ${signal.source}`)
+  );
+}
+
+function waitingLaneSignals(signals: CommandCenterSignal[], lane: WaitingLaneKey) {
+  if (lane === "tenant") {
+    return signals.filter((signal) =>
+      signalMatches(signal, /\b(tenant|applicant|application|screening|signature|awaiting tenant|tenant response)\b/i)
+    );
+  }
+  if (lane === "contractor") {
+    return signals.filter((signal) => signalMatches(signal, /\b(contractor|maintenance|repair|work order|work-order)\b/i));
+  }
+  return signals.filter((signal) => {
+    const tenant = signalMatches(signal, /\b(tenant response|applicant|application|screening)\b/i);
+    const contractor = signalMatches(signal, /\b(contractor|maintenance|repair|work order|work-order)\b/i);
+    return !tenant && !contractor && isReviewReady(signal);
+  });
+}
+
+function workBucketSignals(signals: CommandCenterSignal[], bucket: WorkBucketKey) {
+  if (bucket === "maintenance") {
+    return signals.filter((signal) => signalMatches(signal, /\b(maintenance|repair|work order|work-order|condition|vacant)\b/i));
+  }
+  if (bucket === "lease_actions") {
+    return signals.filter(
+      (signal) =>
+        signal.category === "lease_lifecycle" ||
+        signal.category === "documents" ||
+        signalMatches(signal, /\b(lease|renewal|signature|document|execution)\b/i)
+    );
+  }
+  if (bucket === "notices") {
+    return signals.filter((signal) => signalMatches(signal, /\b(notice|compliance|jurisdiction|policy|legal|renewal)\b/i));
+  }
+  if (bucket === "payments") {
+    return signals.filter((signal) => signal.category === "payments" || signalMatches(signal, /\b(payment|rent|arrear|delinquen|ledger|obligation)\b/i));
+  }
+  if (bucket === "tenant_requests") {
+    return signals.filter(
+      (signal) =>
+        signal.category === "screening" ||
+        signalMatches(signal, /\b(tenant|applicant|application|screening|inbox|message|request)\b/i)
+    );
+  }
+  if (bucket === "contractor_followups") {
+    return signals.filter((signal) => signalMatches(signal, /\b(contractor|work order|work-order|repair vendor|maintenance vendor)\b/i));
+  }
+  return signals.filter((signal) => Boolean(signal.manualReviewScope && signal.manualReviewScopeId));
+}
+
+function limitedSignals(signals: CommandCenterSignal[], limit = 3) {
+  return prioritizeOperationalItems(signals).slice(0, limit);
+}
+
 function normalizeSearchText(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -1024,6 +1270,21 @@ const operationsInputStyle: React.CSSProperties = {
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.65)",
 };
 
+const compactActionLinkStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 8,
+  padding: "8px 10px",
+  background: "#fffaf1",
+  border: "1px solid rgba(91,70,48,0.2)",
+  color: "#245842",
+  fontSize: 13,
+  fontWeight: 900,
+  textDecoration: "none",
+  minHeight: 36,
+};
+
 function Badge({ children, severity }: { children: React.ReactNode; severity: CommandCenterSeverity }) {
   const tone = severityTone(severity);
   return (
@@ -1041,6 +1302,141 @@ function Badge({ children, severity }: { children: React.ReactNode; severity: Co
     >
       {label(String(children))}
     </span>
+  );
+}
+
+function SummaryActionCard({
+  config,
+  value,
+}: {
+  config: (typeof SUMMARY_ACTION_CONFIG)[number];
+  value: number;
+}) {
+  const tone = severityTone(value > 0 ? config.severity : "info");
+  return (
+    <a
+      href={config.href}
+      aria-label={`${config.actionLabel}: ${value} ${config.label.toLowerCase()} item${value === 1 ? "" : "s"}`}
+      style={{
+        color: "inherit",
+        textDecoration: "none",
+        display: "flex",
+        minWidth: 0,
+      }}
+    >
+      <Card
+        data-testid={`operations-summary-action-${config.key}`}
+        style={{
+          ...operationsCardSurface,
+          border: `1px solid ${tone.border}`,
+          borderRadius: 12,
+          padding: 14,
+          boxSizing: "border-box",
+          minWidth: 0,
+          minHeight: 150,
+          display: "grid",
+          gap: 8,
+          alignContent: "start",
+          width: "100%",
+        }}
+      >
+        <div style={{ color: "#63594d", fontSize: 12, fontWeight: 900 }}>{config.label}</div>
+        <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 12, minWidth: 0 }}>
+          <strong style={{ color: "#211c17", fontSize: 32, lineHeight: 1, whiteSpace: "nowrap" }}>{value}</strong>
+          <span style={{ color: "#245842", fontSize: 13, fontWeight: 900, textAlign: "right", lineHeight: 1.3 }}>
+            {config.actionLabel}
+          </span>
+        </div>
+        <span style={{ color: "#3f382f", fontSize: 13, lineHeight: 1.45 }}>{config.issue}</span>
+        <span style={{ color: "#211c17", fontSize: 13, lineHeight: 1.45, fontWeight: 900 }}>Next: {config.nextAction}</span>
+      </Card>
+    </a>
+  );
+}
+
+function SignalMiniList({ signals, empty }: { signals: CommandCenterSignal[]; empty: string }) {
+  const items = limitedSignals(signals, 3);
+  if (!items.length) {
+    return <span style={{ color: "#63594d", fontSize: 13 }}>{empty}</span>;
+  }
+  return (
+    <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
+      {items.map((signal) => (
+        <div
+          key={signal.id}
+          style={{
+            display: "grid",
+            gap: 4,
+            minWidth: 0,
+            padding: "8px 0",
+            borderTop: "1px solid rgba(91,70,48,0.12)",
+          }}
+        >
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <Badge severity={signal.severity}>{signal.severity}</Badge>
+            <strong style={{ color: "#211c17", fontSize: 14, overflowWrap: "anywhere" }}>{signal.title}</strong>
+          </div>
+          <span style={{ color: "#63594d", fontSize: 12, lineHeight: 1.4 }}>{signal.contextLabel}</span>
+          <span style={{ color: "#3f382f", fontSize: 12, fontWeight: 800 }}>Next: {signal.nextActionLabel}</span>
+          <Link to={scopedSourceDestinationForSignal(signal)} style={{ color: "#245842", fontSize: 13, fontWeight: 900 }}>
+            Open source workflow
+          </Link>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WorkBucketCard({
+  config,
+  signals,
+}: {
+  config: (typeof WORK_BUCKET_CONFIG)[number];
+  signals: CommandCenterSignal[];
+}) {
+  const Icon = config.icon;
+  const critical = signals.filter(isBlockedOrUrgent).length;
+  const preview = limitedSignals(signals, 2);
+  return (
+    <Card
+      data-testid={`operations-work-bucket-${config.key}`}
+      style={{
+        ...operationsCardSurface,
+        borderRadius: 12,
+        padding: 14,
+        display: "grid",
+        gap: 10,
+        minWidth: 0,
+        alignContent: "start",
+        boxSizing: "border-box",
+      }}
+    >
+      <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
+        <Icon size={18} />
+        <strong style={{ color: "#211c17", overflowWrap: "anywhere" }}>{config.label}</strong>
+      </div>
+      <span style={{ color: "#63594d", fontSize: 13, lineHeight: 1.45 }}>{config.helper}</span>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: "#3f382f", fontSize: 12, fontWeight: 900 }}>
+        <span>{signals.length} item{signals.length === 1 ? "" : "s"}</span>
+        <span>{critical} urgent</span>
+      </div>
+      {preview.length ? (
+        <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+          {preview.map((signal) => (
+            <div key={signal.id} style={{ display: "grid", gap: 3, minWidth: 0 }}>
+              <strong style={{ color: "#211c17", fontSize: 13, overflowWrap: "anywhere" }}>{signal.title}</strong>
+              <span style={{ color: "#63594d", fontSize: 12, lineHeight: 1.35 }}>{signal.contextLabel}</span>
+              <span style={{ color: "#3f382f", fontSize: 12, lineHeight: 1.35 }}>Status: {signal.reviewStatus}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <span style={{ color: "#63594d", fontSize: 13 }}>No visible source items in this bucket.</span>
+      )}
+      <Link to={config.destination} style={compactActionLinkStyle}>
+        Open workspace
+      </Link>
+    </Card>
   );
 }
 
@@ -1066,6 +1462,8 @@ export default function OperationalCommandCenterPage() {
   const [assignment, setAssignment] = React.useState<AssignmentFilter>("all");
   const [escalation, setEscalation] = React.useState<EscalationFilter>("all");
   const [timingRisk, setTimingRisk] = React.useState<TimingRiskFilter>("all");
+  const [showFullReviewQueue, setShowFullReviewQueue] = React.useState(false);
+  const [showPriorityDetails, setShowPriorityDetails] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -1125,10 +1523,41 @@ export default function OperationalCommandCenterPage() {
     [activeFilter, assignment, escalation, reviewStatus, search, signals, timingRisk, workflowType]
   );
   const reviewQueueItems = React.useMemo(() => deriveOperationalReviewQueueItems(visibleSignals), [visibleSignals]);
+  const displayedReviewQueueItems = React.useMemo(
+    () => (showFullReviewQueue ? reviewQueueItems : reviewQueueItems.slice(0, REVIEW_QUEUE_PREVIEW_LIMIT)),
+    [reviewQueueItems, showFullReviewQueue]
+  );
   const categorySummary = React.useMemo(() => summarizeByCategory(visibleSignals), [visibleSignals]);
   const prioritySummary = React.useMemo(() => summarizeByPriority(visibleSignals), [visibleSignals]);
-  const criticalCount = signals.filter((signal) => signal.severity === "critical").length;
-  const warningCount = signals.filter((signal) => signal.severity === "warning").length;
+  const urgentSignals = React.useMemo(() => visibleSignals.filter(isBlockedOrUrgent), [visibleSignals]);
+  const landlordReviewSignals = React.useMemo(() => visibleSignals.filter(isReviewReady), [visibleSignals]);
+  const upcomingSignals = React.useMemo(() => visibleSignals.filter((signal) => signal.priorityGroup === "upcoming"), [visibleSignals]);
+  const evidenceReadySignals = React.useMemo(
+    () => visibleSignals.filter((signal) => Boolean(signal.manualReviewScope && signal.manualReviewScopeId)),
+    [visibleSignals]
+  );
+  const waitingLanes = React.useMemo(
+    () =>
+      WAITING_LANE_CONFIG.map((lane) => ({
+        ...lane,
+        signals: waitingLaneSignals(visibleSignals, lane.key),
+      })),
+    [visibleSignals]
+  );
+  const workBuckets = React.useMemo(
+    () =>
+      WORK_BUCKET_CONFIG.map((bucket) => ({
+        ...bucket,
+        signals: workBucketSignals(visibleSignals, bucket.key),
+      })),
+    [visibleSignals]
+  );
+  const summaryActionCounts: Record<SummaryActionKey, number> = {
+    urgent: urgentSignals.length,
+    landlord_review: landlordReviewSignals.length,
+    upcoming: upcomingSignals.length,
+    evidence: evidenceReadySignals.length,
+  };
   const activeFilterCopy = filterCopy({ search, filter: activeFilter, workflowType, reviewStatus, assignment, escalation, timingRisk });
 
   function applySavedView(view: SavedOperationalView) {
@@ -1171,7 +1600,7 @@ export default function OperationalCommandCenterPage() {
           display: "grid",
           gap: 18,
           width: "100%",
-          maxWidth: 1280,
+          maxWidth: 1360,
           margin: "0 auto",
           minWidth: 0,
           padding: 18,
@@ -1244,42 +1673,178 @@ export default function OperationalCommandCenterPage() {
         </Section>
 
         <Section
-          data-testid="operations-summary-strip"
-          style={{
-            ...operationsSectionSurface,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 136px), 1fr))",
-            gap: 8,
-            minWidth: 0,
-            boxSizing: "border-box",
-          }}
+          data-testid="operations-daily-summary"
+          style={{ ...operationsSectionSurface, display: "grid", gap: 14, minWidth: 0 }}
         >
-          {[
-            ["Signals", signals.length],
-            ["Critical", criticalCount],
-            ["Warnings", warningCount],
-            ["Needs review", signals.filter((signal) => signal.priorityGroup === "needs_review").length],
-            ["Upcoming", signals.filter((signal) => signal.priorityGroup === "upcoming").length],
-            ["Open decisions", decisionData?.summary?.open ?? 0],
-            ["Delinquent", dashboardData?.kpis?.delinquentCount ?? 0],
-          ].map(([name, value]) => (
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
+            <div style={{ display: "grid", gap: 4 }}>
+              <div style={sectionTitleStyle}>Today's operational summary</div>
+              <div style={helperTextStyle}>Daily work is grouped by urgency, review ownership, upcoming timing, and evidence/source readiness.</div>
+            </div>
+            <div style={{ ...helperTextStyle, fontWeight: 900 }}>{visibleSignals.length} visible source signal{visibleSignals.length === 1 ? "" : "s"}</div>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
+              gap: 10,
+              minWidth: 0,
+            }}
+          >
+            {SUMMARY_ACTION_CONFIG.map((config) => (
+              <SummaryActionCard key={config.key} config={config} value={summaryActionCounts[config.key]} />
+            ))}
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+              gap: 12,
+              minWidth: 0,
+            }}
+          >
             <Card
-              key={String(name)}
-              style={{ ...operationsCardSurface, borderRadius: 12, padding: 12, boxSizing: "border-box", minWidth: 0, minHeight: 86 }}
+              id="operations-urgent-work"
+              style={{
+                ...operationsCardSurface,
+                borderRadius: 12,
+                padding: 14,
+                display: "grid",
+                gap: 10,
+                minWidth: 0,
+              }}
             >
-              <div style={{ color: "#63594d", fontSize: 12, fontWeight: 900 }}>{name}</div>
-              <strong style={{ color: "#211c17", fontSize: 24 }}>{value}</strong>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <AlertTriangle size={18} />
+                <strong style={sectionTitleStyle}>Urgent / overdue work</strong>
+                <span style={helperTextStyle}>Top items only.</span>
+              </div>
+              <SignalMiniList signals={urgentSignals} empty="No urgent or blocked operational items are visible." />
             </Card>
-          ))}
+            <Card
+              id="operations-upcoming-work"
+              style={{
+                ...operationsCardSurface,
+                borderRadius: 12,
+                padding: 14,
+                display: "grid",
+                gap: 10,
+                minWidth: 0,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <ClipboardList size={18} />
+                <strong style={sectionTitleStyle}>Upcoming deadlines</strong>
+                <span style={helperTextStyle}>Top dated work only.</span>
+              </div>
+              <SignalMiniList signals={upcomingSignals} empty="No upcoming deadline items are visible." />
+            </Card>
+            <Card
+              id="operations-evidence-ready"
+              style={{
+                ...operationsCardSurface,
+                borderRadius: 12,
+                padding: 14,
+                display: "grid",
+                gap: 10,
+                minWidth: 0,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <ShieldCheck size={18} />
+                <strong style={sectionTitleStyle}>Evidence-ready items</strong>
+                <span style={helperTextStyle}>Top source-backed items only.</span>
+              </div>
+              <SignalMiniList signals={evidenceReadySignals} empty="No evidence-ready items are visible." />
+            </Card>
+          </div>
+        </Section>
+
+        <Section
+          data-testid="operations-waiting-lanes"
+          style={{ ...operationsSectionSurface, display: "grid", gap: 14, minWidth: 0 }}
+        >
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={sectionTitleStyle}>Waiting lanes</div>
+            <div style={helperTextStyle}>These lanes use existing source signal text and review metadata only; they do not create new workflow state.</div>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+              gap: 12,
+              minWidth: 0,
+            }}
+          >
+            {waitingLanes.map((lane) => (
+              <Card
+                key={lane.key}
+                style={{
+                  ...operationsCardSurface,
+                  borderRadius: 12,
+                  padding: 14,
+                  display: "grid",
+                  gap: 10,
+                  minWidth: 0,
+                  alignContent: "start",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start", minWidth: 0 }}>
+                  <div style={{ display: "grid", gap: 4, flex: "1 1 auto", minWidth: 0 }}>
+                    <strong style={{ color: "#211c17" }}>{lane.label}</strong>
+                    <span style={{ color: "#63594d", fontSize: 13, lineHeight: 1.45 }}>{lane.helper}</span>
+                  </div>
+                  <strong
+                    data-testid={`operations-waiting-lane-count-${lane.key}`}
+                    style={{
+                      color: "#211c17",
+                      fontSize: 24,
+                      lineHeight: 1,
+                      whiteSpace: "nowrap",
+                      flex: "0 0 auto",
+                      minWidth: "max-content",
+                      fontVariantNumeric: "tabular-nums",
+                      textAlign: "right",
+                    }}
+                  >
+                    {lane.signals.length}
+                  </strong>
+                </div>
+                <SignalMiniList signals={lane.signals} empty={lane.empty} />
+              </Card>
+            ))}
+          </div>
+        </Section>
+
+        <Section
+          data-testid="operations-work-buckets"
+          style={{ ...operationsSectionSurface, display: "grid", gap: 14, minWidth: 0 }}
+        >
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={sectionTitleStyle}>Main work buckets</div>
+            <div style={helperTextStyle}>Buckets keep source-workspace links visible without merging dashboard, inbox, lease, or property workflows into this page.</div>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
+              gap: 12,
+              minWidth: 0,
+            }}
+          >
+            {workBuckets.map((bucket) => (
+              <WorkBucketCard key={bucket.key} config={bucket} signals={bucket.signals} />
+            ))}
+          </div>
         </Section>
 
         <Section style={{ ...operationsSectionSurface, display: "grid", gap: 12, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             <div>
-              <div style={sectionTitleStyle}>Coordination lanes</div>
-              <div style={helperTextStyle}>Each lane links back to the source workflow for manual review.</div>
+              <div style={sectionTitleStyle}>Source workspaces</div>
+              <div style={helperTextStyle}>Use these shortcuts when the daily board points back to a source workflow.</div>
             </div>
-            <div style={{ ...helperTextStyle, fontWeight: 800 }}>Read-only coordination layer</div>
+            <div style={{ ...helperTextStyle, fontWeight: 800 }}>Read-only source routing</div>
           </div>
           <div
             data-testid="operations-coordination-lanes"
@@ -1373,8 +1938,10 @@ export default function OperationalCommandCenterPage() {
         <Section style={{ ...operationsSectionSurface, display: "grid", gap: 14, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <Building2 size={18} />
-            <strong style={sectionTitleStyle}>Priority routing queue</strong>
-            <span style={helperTextStyle}>Highest priority first by urgency, severity, and source workflow.</span>
+            <strong style={sectionTitleStyle}>Advanced triage queue</strong>
+            <span style={helperTextStyle}>
+              Search, saved views, and compact manual review controls. Open decisions: {decisionData?.summary?.open ?? 0}. Delinquent: {dashboardData?.kpis?.delinquentCount ?? 0}.
+            </span>
           </div>
           <Card
             data-testid="operations-filter-panel"
@@ -1564,117 +2131,185 @@ export default function OperationalCommandCenterPage() {
             </Card>
           ) : null}
           {!loading && !error && visibleSignals.length ? (
-            <OperationalReviewQueue
-              items={reviewQueueItems}
-              onManualReviewChange={(item, next) =>
-                persistManualReviewChange(item.manualReviewScope as OperatorReviewScope, item.manualReviewScopeId, next)
-              }
-            />
+            <div id="operations-review-queue" style={{ display: "grid", gap: 10, minWidth: 0 }}>
+              <Card
+                style={{
+                  ...operationsCardSurface,
+                  borderRadius: 10,
+                  padding: 12,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  minWidth: 0,
+                }}
+              >
+                <span style={{ ...helperTextStyle, fontWeight: 900 }}>
+                  Showing {displayedReviewQueueItems.length} of {reviewQueueItems.length} reviewable item{reviewQueueItems.length === 1 ? "" : "s"}.
+                </span>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  {reviewQueueItems.length > REVIEW_QUEUE_PREVIEW_LIMIT ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowFullReviewQueue((current) => !current)}
+                      style={{
+                        border: "1px solid rgba(91,70,48,0.24)",
+                        background: showFullReviewQueue ? "#fffaf1" : "#211c17",
+                        color: showFullReviewQueue ? "#3f382f" : "#fffaf1",
+                        borderRadius: 8,
+                        padding: "8px 10px",
+                        fontSize: 13,
+                        fontWeight: 900,
+                        cursor: "pointer",
+                        minHeight: 36,
+                      }}
+                    >
+                      {showFullReviewQueue ? "Show compact preview" : "View all in review queue"}
+                    </button>
+                  ) : null}
+                  <Link to="/decision-inbox" style={compactActionLinkStyle}>
+                    Open decision inbox
+                  </Link>
+                </div>
+              </Card>
+              <OperationalReviewQueue
+                items={displayedReviewQueueItems}
+                onManualReviewChange={(item, next) =>
+                  persistManualReviewChange(item.manualReviewScope as OperatorReviewScope, item.manualReviewScopeId, next)
+                }
+              />
+            </div>
           ) : null}
           {!loading && !error && visibleSignals.length ? (
-            <div style={{ display: "grid", gap: 16 }}>
-              {prioritySummary.map((group) => (
-                <div key={group.group} style={{ display: "grid", gap: 10, minWidth: 0 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
-                    <div style={{ display: "grid", gap: 3 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <Badge severity={group.tone}>{group.label}</Badge>
-                        <strong style={{ color: "#211c17" }}>{group.signals.length} item{group.signals.length === 1 ? "" : "s"}</strong>
+            <Card
+              style={{
+                ...operationsCardSurface,
+                borderRadius: 10,
+                padding: 12,
+                display: "grid",
+                gap: 10,
+                minWidth: 0,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ ...helperTextStyle, fontWeight: 900 }}>
+                  Detailed priority lists are collapsed by default to keep this page focused on daily action.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowPriorityDetails((current) => !current)}
+                  style={{
+                    border: "1px solid rgba(91,70,48,0.24)",
+                    background: showPriorityDetails ? "#fffaf1" : "#211c17",
+                    color: showPriorityDetails ? "#3f382f" : "#fffaf1",
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                    fontSize: 13,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                    minHeight: 36,
+                  }}
+                >
+                  {showPriorityDetails ? "Hide detailed priority lists" : "Show detailed priority lists"}
+                </button>
+              </div>
+              {showPriorityDetails ? (
+                <div style={{ display: "grid", gap: 16 }}>
+                  {prioritySummary.map((group) => (
+                    <div key={group.group} style={{ display: "grid", gap: 10, minWidth: 0 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
+                        <div style={{ display: "grid", gap: 3 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <Badge severity={group.tone}>{group.label}</Badge>
+                            <strong style={{ color: "#211c17" }}>{group.signals.length} item{group.signals.length === 1 ? "" : "s"}</strong>
+                          </div>
+                          <span style={{ color: "#63594d", fontSize: 13 }}>{group.description}</span>
+                        </div>
                       </div>
-                      <span style={{ color: "#63594d", fontSize: 13 }}>{group.description}</span>
-                    </div>
-                  </div>
-                  {group.signals.length ? (
-                    <div style={{ display: "grid", gap: 10 }}>
-                      {group.signals.map((signal) => (
-                        <Card
-                          key={signal.id}
-                          style={{
-                            borderRadius: 12,
-                            padding: 14,
-                            display: "grid",
-                            gap: 10,
-                            minWidth: 0,
-                            boxSizing: "border-box",
-                            overflowWrap: "anywhere",
-                            ...operationsCardSurface,
-                            border: signal.severity === "critical" ? "1px solid #fecaca" : operationsCardSurface.border,
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
-                              gap: 10,
-                              alignItems: "start",
-                              minWidth: 0,
-                            }}
-                          >
-                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                              <Badge severity={signal.severity}>{signal.severity}</Badge>
-                              <span style={{ color: "#63594d", fontSize: 13, fontWeight: 800 }}>
-                                {CATEGORY_CONFIG[signal.category].label}
-                              </span>
-                              <span style={{ color: "#63594d", fontSize: 13 }}>{signal.source}</span>
-                            </div>
-                            <Link
-                              to={signal.destination}
+                      {group.signals.length ? (
+                        <div style={{ display: "grid", gap: 10 }}>
+                          {group.signals.map((signal) => (
+                            <Card
+                              key={signal.id}
                               style={{
-                                color: "#245842",
-                                fontWeight: 900,
-                                whiteSpace: "nowrap",
-                                alignSelf: "start",
+                                borderRadius: 12,
+                                padding: 14,
+                                display: "grid",
+                                gap: 10,
+                                minWidth: 0,
+                                boxSizing: "border-box",
+                                overflowWrap: "anywhere",
+                                ...operationsCardSurface,
+                                border: signal.severity === "critical" ? "1px solid #fecaca" : operationsCardSurface.border,
                               }}
                             >
-                              Open source workflow
-                            </Link>
-                          </div>
-                          <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
-                            <strong style={{ color: "#211c17", fontSize: 16 }}>{signal.title}</strong>
-                            <span style={{ color: "#63594d", fontSize: 13 }}>Context: {signal.contextLabel}</span>
-                            <span style={{ color: "#3f382f", lineHeight: 1.5 }}>Why: {signal.description}</span>
-                            <span style={{ color: "#211c17", fontSize: 13, fontWeight: 900 }}>
-                              Next action: {signal.nextActionLabel}
-                            </span>
-                          </div>
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
-                              gap: 8,
-                              color: "#3f382f",
-                              fontSize: 12,
-                              fontWeight: 800,
-                              minWidth: 0,
-                            }}
-                          >
-                            <span>Workflow status: {signal.workflowStatus}</span>
-                            <span>Review status: {signal.reviewStatus}</span>
-                            {signal.financialStatus ? <span>Financial status: {signal.financialStatus}</span> : null}
-                            <span>Assignment: {signal.assignmentLabel || "Unassigned"}</span>
-                            <span>Escalation: {signal.escalationLabel || "Not escalated"}</span>
-                          </div>
-                          <ReviewWorkspacePanel
-                            workspace={reviewWorkspacePreviewForSignal(signal)}
-                            onManualReviewChange={(workspace, next) =>
-                              persistManualReviewChange(
-                                workspace.manualReviewScope as OperatorReviewScope,
-                                workspace.manualReviewScopeId,
-                                next
-                              )
-                            }
-                          />
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
+                                  gap: 10,
+                                  alignItems: "start",
+                                  minWidth: 0,
+                                }}
+                              >
+                                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                                  <Badge severity={signal.severity}>{signal.severity}</Badge>
+                                  <span style={{ color: "#63594d", fontSize: 13, fontWeight: 800 }}>
+                                    {CATEGORY_CONFIG[signal.category].label}
+                                  </span>
+                                  <span style={{ color: "#63594d", fontSize: 13 }}>{signal.source}</span>
+                                </div>
+                                <Link
+                                  to={scopedSourceDestinationForSignal(signal)}
+                                  style={{
+                                    color: "#245842",
+                                    fontWeight: 900,
+                                    whiteSpace: "nowrap",
+                                    alignSelf: "start",
+                                  }}
+                                >
+                                  Open source workflow
+                                </Link>
+                              </div>
+                              <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
+                                <strong style={{ color: "#211c17", fontSize: 16 }}>{signal.title}</strong>
+                                <span style={{ color: "#63594d", fontSize: 13 }}>Context: {signal.contextLabel}</span>
+                                <span style={{ color: "#3f382f", lineHeight: 1.5 }}>Why: {signal.description}</span>
+                                <span style={{ color: "#211c17", fontSize: 13, fontWeight: 900 }}>
+                                  Next action: {signal.nextActionLabel}
+                                </span>
+                              </div>
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
+                                  gap: 8,
+                                  color: "#3f382f",
+                                  fontSize: 12,
+                                  fontWeight: 800,
+                                  minWidth: 0,
+                                }}
+                              >
+                                <span>Workflow status: {signal.workflowStatus}</span>
+                                <span>Review status: {signal.reviewStatus}</span>
+                                {signal.financialStatus ? <span>Financial status: {signal.financialStatus}</span> : null}
+                                <span>Assignment: {signal.assignmentLabel || "Unassigned"}</span>
+                                <span>Escalation: {signal.escalationLabel || "Not escalated"}</span>
+                              </div>
+                            </Card>
+                          ))}
+                        </div>
+                      ) : (
+                        <Card style={{ ...operationsCardSurface, color: "#63594d", borderRadius: 8, boxSizing: "border-box" }}>
+                          No {group.label.toLowerCase()} items currently visible.
                         </Card>
-                      ))}
+                      )}
                     </div>
-                  ) : (
-                    <Card style={{ ...operationsCardSurface, color: "#63594d", borderRadius: 8, boxSizing: "border-box" }}>
-                      No {group.label.toLowerCase()} items currently visible.
-                    </Card>
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
+              ) : null}
+            </Card>
           ) : null}
         </Section>
       </div>
