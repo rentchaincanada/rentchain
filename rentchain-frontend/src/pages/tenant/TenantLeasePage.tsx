@@ -49,6 +49,25 @@ function canUseLegacyDocumentFallback(value: string) {
   return Boolean(next) && !isGoogleStorageSignedUrl(next) && !isAppDomainLeasePdfFallback(next);
 }
 
+function tenantDocumentOpenErrorMessage(err: any, documentKind: "lease" | "schedule-a") {
+  const code = String(err?.payload?.error || err?.message || "").trim();
+  const isMissingDocument =
+    err?.status === 404 ||
+    code === "lease_document_not_found" ||
+    code === "schedule_a_document_not_found";
+  if (isMissingDocument) {
+    return documentKind === "schedule-a"
+      ? "Schedule A is not available in this tenant workspace yet."
+      : "Signed document is not available in this tenant workspace yet. If signing was completed, the tenant-safe copy may still be preparing.";
+  }
+  return (
+    code ||
+    (documentKind === "schedule-a"
+      ? "Schedule A link expired and needs regeneration."
+      : "Lease document link expired and needs regeneration.")
+  );
+}
+
 function isScheduleADocumentUrl(value: unknown) {
   const normalized = String(value || "").trim().toLowerCase();
   return Boolean(normalized) && (normalized.includes("schedule-a") || normalized.includes("schedule_a"));
@@ -152,7 +171,7 @@ export default function TenantLeasePage() {
         window.open(fallbackUrl, "_blank", "noreferrer");
         return;
       }
-      setDocumentOpenError(err?.payload?.error || err?.message || (documentKind === "schedule-a" ? "Schedule A link expired and needs regeneration." : "Lease document link expired and needs regeneration."));
+      setDocumentOpenError(tenantDocumentOpenErrorMessage(err, documentKind));
     } finally {
       setOpeningDocument(false);
     }

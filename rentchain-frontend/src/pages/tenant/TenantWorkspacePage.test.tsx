@@ -2423,6 +2423,73 @@ describe("tenant workspace frontend shell", () => {
     expect(await screen.findByText("refresh failed")).toBeInTheDocument();
   });
 
+  it("handles tenant signed document 404 responses as an unavailable state", async () => {
+    const missingDocumentError = Object.assign(new Error("lease_document_not_found"), {
+      status: 404,
+      payload: { ok: false, error: "lease_document_not_found" },
+    });
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockRejectedValueOnce(missingDocumentError);
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-missing-document-url",
+      startDate: "2026-03-01",
+      endDate: "2027-02-28",
+      monthlyRent: 1800,
+      status: "active",
+      documentUrl:
+        "https://storage.googleapis.com/lease-documents/leases/landlord-1/lease-missing-document-url/signed.pdf?X-Goog-Expires=1",
+      leaseDocumentContext: {
+        leaseId: "lease-missing-document-url",
+        documentUrl:
+          "https://storage.googleapis.com/lease-documents/leases/landlord-1/lease-missing-document-url/signed.pdf?X-Goog-Expires=1",
+        displayLabel: "Signed lease document",
+        documentStatus: "signed",
+        source: "lease.documentUrl",
+        confidence: "high",
+        warnings: [],
+      },
+      signatureStatus: "signed",
+      signatureReadinessLabel: "Lease signing complete",
+      signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
+      providerSigningStatus: "signed",
+      tenantSignature: {
+        signedAt: "2026-03-02T12:00:00.000Z",
+        signatureMethod: "typed",
+        signatureDisplayName: "Taylor Tenant",
+      },
+      leasePdfStatus: "available",
+      leasePdfLabel: "Lease document available",
+      leasePdfDescription: "A tenant-safe lease document is available in this workspace.",
+      leaseExecution: {
+        executionStatus: "fully_executed",
+        executionLabel: "Lease fully executed",
+        executionDescription: "The lease is fully executed.",
+        requiredNextAction: "none",
+        tenantSignatureStatus: "completed",
+        landlordSignatureStatus: "completed",
+        pdfStatus: "generated",
+        completedAt: "2026-03-02T12:00:00.000Z",
+      },
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <TenantLeasePage />
+      </MemoryRouter>
+    );
+
+    vi.mocked(window.open).mockClear();
+    fireEvent.click(await screen.findByRole("button", { name: /View signed document/i }));
+    await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith());
+    expect(window.open).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(
+        "Signed document is not available in this tenant workspace yet. If signing was completed, the tenant-safe copy may still be preparing."
+      )
+    ).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("lease_document_not_found");
+    expect(document.body).not.toHaveTextContent("X-Goog-Expires");
+  });
+
   it("shows provider-signed leases without documents as signed-copy pending instead of not started", async () => {
     tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
       leaseId: "lease-provider-signed",
