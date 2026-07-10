@@ -1,6 +1,12 @@
 import React from "react";
 import { Link, useParams } from "react-router-dom";
 import { getLeaseById, type JurisdictionPolicyGuidance, type LandlordActiveLease } from "@/api/leasesApi";
+import {
+  RENEWAL_PIPELINE_BUCKETS,
+  deriveRenewalPipelineItems,
+  type RenewalPipelineItem,
+  type RenewalPipelineTimingBucketKey,
+} from "@/lib/leases/renewalPipeline";
 
 type WorkflowKey = "execution" | "rent-increase" | "notice" | "deposit" | "renewal" | "move-out";
 
@@ -211,6 +217,83 @@ function portfolioRenewalInputsPath(lease: LandlordActiveLease) {
   return `/portfolio-health?${params.toString()}`;
 }
 
+function renewalPipelineBucketLabel(value: RenewalPipelineTimingBucketKey) {
+  return RENEWAL_PIPELINE_BUCKETS.find((bucket) => bucket.key === value)?.label || "Review timing";
+}
+
+function renewalSourceLeaseLabel(lease: LandlordActiveLease) {
+  const unit = lease.unitLabel || lease.unitNumber || "Unit not set";
+  const tenant = lease.tenantName || "Tenant not linked";
+  return `Unit ${unit} · ${tenant}`;
+}
+
+function renewalSourceContextItem(lease: LandlordActiveLease): RenewalPipelineItem | null {
+  return deriveRenewalPipelineItems([lease])[0] || null;
+}
+
+function RenewalSourceContext({ lease }: { lease: LandlordActiveLease }) {
+  const propertyId = String(lease.propertyId || "").trim();
+  if (!propertyId) {
+    return (
+      <div style={sourceContextStyle} aria-label="Renewal source context">
+        <div style={sourceContextTitleStyle}>Renewal source context</div>
+        <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
+          Portfolio renewal context is not available because this lease is not linked to a property.
+        </div>
+      </div>
+    );
+  }
+
+  const contextItem = renewalSourceContextItem(lease);
+  const sourcePath = portfolioRenewalInputsPath(lease);
+  const timing = contextItem
+    ? `${renewalPipelineBucketLabel(contextItem.timingBucket)} · ${contextItem.timingLabel}`
+    : "Review timing unavailable";
+  const status = contextItem?.statusLabel || lifecycleStatusLabel(lease);
+  const explanation =
+    contextItem?.detail ||
+    "Review renewal planning and source context before preparing next steps. Check jurisdiction requirements before acting.";
+
+  return (
+    <div style={sourceContextStyle} aria-label="Renewal source context">
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <div style={sourceContextTitleStyle}>Renewal source context</div>
+          <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
+            Portfolio renewal context for this lease, scoped to the property source view.
+          </div>
+        </div>
+        <Link to={sourcePath} style={{ ...buttonLinkStyle, width: "fit-content" }}>
+          Open portfolio renewal view
+        </Link>
+      </div>
+      <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, margin: 0 }}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Property</dt>
+          <dd style={sourceValueStyle}>{lease.propertyName || lease.propertyLabel || lease.propertyAddress || "Property"}</dd>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Lease</dt>
+          <dd style={sourceValueStyle}>{renewalSourceLeaseLabel(lease)}</dd>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Lease end</dt>
+          <dd style={sourceValueStyle}>{formatDate(lease.endDate)}</dd>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Review timing</dt>
+          <dd style={sourceValueStyle}>{timing}</dd>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Renewal status</dt>
+          <dd style={sourceValueStyle}>{status}</dd>
+        </div>
+      </dl>
+      <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>{explanation}</div>
+    </div>
+  );
+}
+
 function matchingPolicy(lease: LandlordActiveLease, config: WorkflowConfig): JurisdictionPolicyGuidance | null {
   const policies = Array.isArray(lease.jurisdictionPolicies) ? lease.jurisdictionPolicies : [];
   return policies.find((policy) => config.policyKeys.includes(policy.policyKey)) || null;
@@ -314,9 +397,7 @@ export default function LandlordLeaseWorkflowPage() {
                 Use the portfolio renewal workbench to review unit-specific renewal inputs such as proposed rent,
                 term dates, response deadline, and renewal recommendation before preparing tenant-facing notices.
               </div>
-              <Link to={portfolioRenewalInputsPath(lease)} style={{ ...buttonLinkStyle, width: "fit-content" }}>
-                Open renewal inputs
-              </Link>
+              <RenewalSourceContext lease={lease} />
             </section>
           ) : null}
 
@@ -386,6 +467,27 @@ const sectionHeadingStyle: React.CSSProperties = {
   color: workflowTheme.charcoal,
   fontSize: 18,
   letterSpacing: 0,
+};
+
+const sourceContextStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  padding: 12,
+  border: `1px solid ${workflowTheme.border}`,
+  borderRadius: 10,
+  background: workflowTheme.cardStrong,
+};
+
+const sourceContextTitleStyle: React.CSSProperties = {
+  color: workflowTheme.charcoal,
+  fontWeight: 900,
+};
+
+const sourceValueStyle: React.CSSProperties = {
+  margin: 0,
+  color: workflowTheme.charcoal,
+  fontWeight: 700,
+  lineHeight: 1.35,
 };
 
 const termStyle: React.CSSProperties = {

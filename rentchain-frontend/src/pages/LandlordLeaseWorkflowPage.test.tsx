@@ -156,13 +156,64 @@ describe("LandlordLeaseWorkflowPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Renewal Review" })).toBeInTheDocument();
     expect(screen.getByText("Review lease end timing and renewal context before deciding on renewal, continuation, or move-out next steps.")).toBeInTheDocument();
-    expect(screen.getByText("Expiring soon")).toBeInTheDocument();
+    expect(screen.getAllByText("Expiring soon").length).toBeGreaterThan(0);
     expect(screen.getByText("30 days")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Renewal operator inputs" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open renewal inputs" })).toHaveAttribute(
+    const sourceContext = screen.getByLabelText("Renewal source context");
+    expect(sourceContext).toHaveTextContent("Portfolio renewal context for this lease, scoped to the property source view.");
+    expect(sourceContext).toHaveTextContent("Harbour View");
+    expect(sourceContext).toHaveTextContent("Unit 101 · Jane Tenant");
+    expect(sourceContext).toHaveTextContent("December 31, 2026");
+    expect(sourceContext).toHaveTextContent("Next 30 days · 30 days to lease end");
+    expect(sourceContext).toHaveTextContent("Expiring soon");
+    expect(sourceContext).toHaveTextContent(/Review the renewal planning window and check jurisdiction requirements/i);
+    expect(screen.getByRole("link", { name: "Open portfolio renewal view" })).toHaveAttribute(
       "href",
       "/portfolio-health?entry=lease-renewals&propertyId=prop-1"
     );
+    expect(document.body).not.toHaveTextContent("/portfolio-health?entry=lease-renewals&propertyId=prop-1");
+  });
+
+  it("shows a compact unavailable renewal source state when the lease has no property link", async () => {
+    mocks.getLeaseById.mockResolvedValueOnce({
+      lease: {
+        id: "lease-missing-property",
+        propertyId: null,
+        propertyName: null,
+        propertyLabel: null,
+        propertyAddress: null,
+        unitNumber: "202",
+        monthlyRent: 1650,
+        startDate: "2026-01-01",
+        endDate: "2026-10-31",
+        status: "active",
+        tenantName: "No Property Tenant",
+        tenantEmail: "tenant@example.com",
+        leaseExecution: null,
+        paymentReadiness: null,
+        leaseLifecycleSummary: {
+          lifecycleStatus: "expiring_soon",
+          lifecycleLabel: "Expiring soon",
+          lifecycleDescription: "This lease is approaching renewal planning review.",
+          requiredNextAction: "prepare_renewal_notice",
+          renewalOutcome: "not_started",
+          daysUntilExpiry: 45,
+          history: [],
+        },
+        jurisdictionPolicies: [],
+      },
+    });
+
+    renderWorkflow("/leases/lease-missing-property/workflows/renewal");
+
+    expect(await screen.findByRole("heading", { name: "Renewal Review" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Renewal operator inputs" })).toBeInTheDocument();
+    const sourceContext = screen.getByLabelText("Renewal source context");
+    expect(sourceContext).toHaveTextContent(
+      "Portfolio renewal context is not available because this lease is not linked to a property."
+    );
+    expect(screen.queryByRole("link", { name: "Open portfolio renewal view" })).not.toBeInTheDocument();
+    expect(screen.getByText("45 days")).toBeInTheDocument();
   });
 
   it("uses lease end date fallback copy when lifecycle summary is absent", async () => {
@@ -187,7 +238,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     renderWorkflow("/leases/lease-no-summary/workflows/renewal");
 
     expect(await screen.findByRole("heading", { name: "Renewal Review" })).toBeInTheDocument();
-    expect(screen.getByText("December 31, 2099")).toBeInTheDocument();
+    expect(screen.getAllByText("December 31, 2099").length).toBeGreaterThan(0);
     expect(screen.getByText("Lifecycle summary pending")).toBeInTheDocument();
     expect(screen.getByText(/days$/)).toBeInTheDocument();
     expect(screen.queryByText("Not available")).not.toBeInTheDocument();
