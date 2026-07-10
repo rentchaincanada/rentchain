@@ -487,6 +487,13 @@ export default function LandlordLeaseWorkflowPage() {
                 before preparing tenant-facing notices.
               </div>
               <RenewalOperatorInputsWorkspace lease={lease} />
+              <div style={deferredNoticeStyle} aria-label="Tenant notice email workflow">
+                <div style={{ color: workflowTheme.charcoal, fontWeight: 900 }}>Tenant notice/email workflow</div>
+                <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
+                  Tenant-facing renewal notices are not sent from this workflow yet. Review and save operator inputs here first;
+                  notice drafting, email delivery, and evidence tracking should be handled in a dedicated notice workflow.
+                </div>
+              </div>
             </section>
           ) : null}
 
@@ -570,6 +577,15 @@ const sourceContextStyle: React.CSSProperties = {
 const sourceContextTitleStyle: React.CSSProperties = {
   color: workflowTheme.charcoal,
   fontWeight: 900,
+};
+
+const deferredNoticeStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+  padding: 12,
+  border: `1px dashed ${workflowTheme.borderStrong}`,
+  borderRadius: 10,
+  background: "rgba(255, 246, 232, 0.72)",
 };
 
 const sourceValueStyle: React.CSSProperties = {

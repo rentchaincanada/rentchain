@@ -112,6 +112,16 @@ export function canSetProposedRent(rentChangeMode: LeaseRenewalFormState["rentCh
   return rentChangeMode === "increase" || rentChangeMode === "decrease";
 }
 
+export function formatRenewalCurrency(value: number | null | undefined, currency = "CAD") {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return value.toLocaleString(undefined, {
+    style: "currency",
+    currency: currency || "CAD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 export function formatLeaseRenewalLocation(lease: LandlordLeaseRenewalLease) {
   const propertyLabel = lease.propertyAddress || lease.propertyLabel || "Property";
   return lease.unitLabel ? `${propertyLabel} • ${lease.unitLabel}` : propertyLabel;
@@ -188,6 +198,7 @@ export function LeaseRenewalOperatorInputsCard({
   const form = formState || internalForm;
   const proposedRentAllowed = canSetProposedRent(form.rentChangeMode);
   const updatedBadge = formatRenewalUpdatedBadge(localLease);
+  const currentRentLabel = formatRenewalCurrency(localLease.currentRent, localLease.currency);
 
   function updateForm(field: keyof LeaseRenewalFormState, value: string) {
     const next = {
@@ -326,6 +337,16 @@ export function LeaseRenewalOperatorInputsCard({
           </select>
         </label>
 
+        <div style={fieldStyle} aria-label="Current rent">
+          <span>Current rent</span>
+          <div style={readonlyValueStyle}>{currentRentLabel || "Current rent unavailable"}</div>
+          <span style={{ color: "#64748b", fontSize: 12 }}>
+            {currentRentLabel
+              ? "Compare proposed rent against the current lease rent before saving renewal inputs."
+              : "Review lease terms before changing rent."}
+          </span>
+        </div>
+
         <label style={fieldStyle}>
           <span>Proposed rent</span>
           <input
@@ -414,4 +435,11 @@ const cardStyle: React.CSSProperties = {
 const fieldStyle: React.CSSProperties = {
   display: "grid",
   gap: 4,
+};
+
+const readonlyValueStyle: React.CSSProperties = {
+  minHeight: 22,
+  padding: "2px 0",
+  color: "#0f172a",
+  fontWeight: 800,
 };

@@ -261,13 +261,60 @@ describe("LandlordLeaseWorkflowPage", () => {
     );
     expect(await screen.findByLabelText(/Rent change mode/i)).toHaveValue("increase");
     expect(mocks.fetchExpiringLeaseRenewals).toHaveBeenCalledWith({ propertyId: "prop-1" });
+    expect(screen.getByLabelText("Current rent")).toHaveTextContent(/1,850/);
+    expect(screen.getByText("Compare proposed rent against the current lease rent before saving renewal inputs.")).toBeInTheDocument();
     expect(screen.getByLabelText(/Proposed rent/i)).toHaveValue(1975);
     expect(screen.getByLabelText(/New term type/i)).toHaveValue("fixed_term");
     expect(screen.getByLabelText(/New lease start date/i)).toHaveValue("2027-01-01");
     expect(screen.getByLabelText(/New lease end date/i)).toHaveValue("2027-12-31");
     expect(screen.getByLabelText(/Response deadline/i)).toHaveValue("2026-11-15T09:30");
     expect(screen.getByRole("button", { name: "Save renewal inputs" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Tenant notice email workflow")).toHaveTextContent(
+      "Tenant-facing renewal notices are not sent from this workflow yet."
+    );
+    expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("/portfolio-health?entry=lease-renewals&propertyId=prop-1");
+  });
+
+  it("shows current rent unavailable when renewal projection rent is missing", async () => {
+    mocks.fetchExpiringLeaseRenewals.mockResolvedValueOnce({
+      ok: true,
+      items: [
+        {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          propertyAddress: "12 Harbour Road",
+          unitId: "unit-1",
+          status: "active",
+          leaseType: "fixed_term",
+          province: "NS",
+          leaseStartDate: "2026-01-01",
+          leaseEndDate: "2026-12-31",
+          currentRent: null,
+          currency: "CAD",
+          nextNoticeDueAt: null,
+          latestNoticeId: null,
+          tenantName: "Jane Tenant",
+          unitLabel: "Unit 101",
+          propertyLabel: "Harbour View",
+          renewalRentChangeMode: "undecided",
+          renewalOfferedRent: null,
+          renewalDecisionDeadlineAt: null,
+          renewalNewTermType: null,
+          renewalNewLeaseStartDate: null,
+          renewalNewLeaseEndDate: null,
+        },
+      ],
+      data: [],
+    });
+
+    renderWorkflow("/leases/lease-1/workflows/renewal");
+
+    expect(await screen.findByLabelText("Current rent")).toHaveTextContent("Current rent unavailable");
+    expect(screen.getByText("Review lease terms before changing rent.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save renewal inputs" })).toBeInTheDocument();
   });
 
   it("saves renewal operator inputs through the existing lease renewal save behavior", async () => {
