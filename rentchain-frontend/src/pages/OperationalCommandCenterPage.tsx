@@ -80,6 +80,8 @@ type WorkBucketKey =
   | "contractor_followups"
   | "evidence_ready";
 
+type SummaryActionKey = "urgent" | "landlord_review" | "upcoming" | "evidence";
+
 type CommandCenterFilterOptions = {
   search?: string;
   filter?: CommandCenterFilter;
@@ -335,6 +337,55 @@ const WORK_BUCKET_CONFIG: Array<{
     helper: "Items with scoped source workflow evidence or manual review handoff context.",
     destination: "/decision-inbox",
     icon: ShieldCheck,
+  },
+];
+
+const REVIEW_QUEUE_PREVIEW_LIMIT = 6;
+
+const SUMMARY_ACTION_CONFIG: Array<{
+  key: SummaryActionKey;
+  label: string;
+  issue: string;
+  nextAction: string;
+  actionLabel: string;
+  href: string;
+  severity: CommandCenterSeverity;
+}> = [
+  {
+    key: "urgent",
+    label: "Urgent / blocked",
+    issue: "Blocked, critical, delinquent, or escalated source work.",
+    nextAction: "Start with the highest-risk operational items.",
+    actionLabel: "Review urgent work",
+    href: "#operations-urgent-work",
+    severity: "critical",
+  },
+  {
+    key: "landlord_review",
+    label: "Needs landlord review",
+    issue: "Manual decisions, assignments, approvals, and review-needed items.",
+    nextAction: "Review landlord-owned items before source workflows move forward.",
+    actionLabel: "Review landlord-owned items",
+    href: "#operations-review-queue",
+    severity: "warning",
+  },
+  {
+    key: "upcoming",
+    label: "Upcoming",
+    issue: "Forward-looking lease, renewal, occupancy, or dated workflow timing.",
+    nextAction: "Check deadlines that need scheduling, notice, or renewal follow-up.",
+    actionLabel: "Review upcoming deadlines",
+    href: "#operations-upcoming-work",
+    severity: "info",
+  },
+  {
+    key: "evidence",
+    label: "Evidence/source attached",
+    issue: "Items with source routing and manual review handoff context.",
+    nextAction: "Open source-backed items that are ready for review context.",
+    actionLabel: "Open evidence-ready items",
+    href: "#operations-evidence-ready",
+    severity: "info",
   },
 ];
 
@@ -1254,37 +1305,52 @@ function Badge({ children, severity }: { children: React.ReactNode; severity: Co
   );
 }
 
-function DailyMetricCard({
-  label: metricLabel,
+function SummaryActionCard({
+  config,
   value,
-  helper,
-  severity = "info",
 }: {
-  label: string;
+  config: (typeof SUMMARY_ACTION_CONFIG)[number];
   value: number;
-  helper: string;
-  severity?: CommandCenterSeverity;
 }) {
-  const tone = severityTone(severity);
+  const tone = severityTone(value > 0 ? config.severity : "info");
   return (
-    <Card
+    <a
+      href={config.href}
+      aria-label={`${config.actionLabel}: ${value} ${config.label.toLowerCase()} item${value === 1 ? "" : "s"}`}
       style={{
-        ...operationsCardSurface,
-        border: `1px solid ${tone.border}`,
-        borderRadius: 12,
-        padding: 14,
-        boxSizing: "border-box",
+        color: "inherit",
+        textDecoration: "none",
+        display: "flex",
         minWidth: 0,
-        minHeight: 118,
-        display: "grid",
-        gap: 6,
-        alignContent: "start",
       }}
     >
-      <div style={{ color: "#63594d", fontSize: 12, fontWeight: 900 }}>{metricLabel}</div>
-      <strong style={{ color: "#211c17", fontSize: 30, lineHeight: 1 }}>{value}</strong>
-      <span style={{ color: "#3f382f", fontSize: 13, lineHeight: 1.45 }}>{helper}</span>
-    </Card>
+      <Card
+        data-testid={`operations-summary-action-${config.key}`}
+        style={{
+          ...operationsCardSurface,
+          border: `1px solid ${tone.border}`,
+          borderRadius: 12,
+          padding: 14,
+          boxSizing: "border-box",
+          minWidth: 0,
+          minHeight: 150,
+          display: "grid",
+          gap: 8,
+          alignContent: "start",
+          width: "100%",
+        }}
+      >
+        <div style={{ color: "#63594d", fontSize: 12, fontWeight: 900 }}>{config.label}</div>
+        <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 12, minWidth: 0 }}>
+          <strong style={{ color: "#211c17", fontSize: 32, lineHeight: 1, whiteSpace: "nowrap" }}>{value}</strong>
+          <span style={{ color: "#245842", fontSize: 13, fontWeight: 900, textAlign: "right", lineHeight: 1.3 }}>
+            {config.actionLabel}
+          </span>
+        </div>
+        <span style={{ color: "#3f382f", fontSize: 13, lineHeight: 1.45 }}>{config.issue}</span>
+        <span style={{ color: "#211c17", fontSize: 13, lineHeight: 1.45, fontWeight: 900 }}>Next: {config.nextAction}</span>
+      </Card>
+    </a>
   );
 }
 
@@ -1396,6 +1462,8 @@ export default function OperationalCommandCenterPage() {
   const [assignment, setAssignment] = React.useState<AssignmentFilter>("all");
   const [escalation, setEscalation] = React.useState<EscalationFilter>("all");
   const [timingRisk, setTimingRisk] = React.useState<TimingRiskFilter>("all");
+  const [showFullReviewQueue, setShowFullReviewQueue] = React.useState(false);
+  const [showPriorityDetails, setShowPriorityDetails] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -1455,6 +1523,10 @@ export default function OperationalCommandCenterPage() {
     [activeFilter, assignment, escalation, reviewStatus, search, signals, timingRisk, workflowType]
   );
   const reviewQueueItems = React.useMemo(() => deriveOperationalReviewQueueItems(visibleSignals), [visibleSignals]);
+  const displayedReviewQueueItems = React.useMemo(
+    () => (showFullReviewQueue ? reviewQueueItems : reviewQueueItems.slice(0, REVIEW_QUEUE_PREVIEW_LIMIT)),
+    [reviewQueueItems, showFullReviewQueue]
+  );
   const categorySummary = React.useMemo(() => summarizeByCategory(visibleSignals), [visibleSignals]);
   const prioritySummary = React.useMemo(() => summarizeByPriority(visibleSignals), [visibleSignals]);
   const urgentSignals = React.useMemo(() => visibleSignals.filter(isBlockedOrUrgent), [visibleSignals]);
@@ -1480,8 +1552,12 @@ export default function OperationalCommandCenterPage() {
       })),
     [visibleSignals]
   );
-  const criticalCount = signals.filter((signal) => signal.severity === "critical").length;
-  const warningCount = signals.filter((signal) => signal.severity === "warning").length;
+  const summaryActionCounts: Record<SummaryActionKey, number> = {
+    urgent: urgentSignals.length,
+    landlord_review: landlordReviewSignals.length,
+    upcoming: upcomingSignals.length,
+    evidence: evidenceReadySignals.length,
+  };
   const activeFilterCopy = filterCopy({ search, filter: activeFilter, workflowType, reviewStatus, assignment, escalation, timingRisk });
 
   function applySavedView(view: SavedOperationalView) {
@@ -1615,46 +1691,73 @@ export default function OperationalCommandCenterPage() {
               minWidth: 0,
             }}
           >
-            <DailyMetricCard
-              label="Urgent / blocked"
-              value={urgentSignals.length}
-              helper="Critical, blocked, delinquent, or escalated source work."
-              severity={urgentSignals.length ? "critical" : "info"}
-            />
-            <DailyMetricCard
-              label="Needs landlord review"
-              value={landlordReviewSignals.length}
-              helper="Manual decisions, assignments, approvals, and review-needed items."
-              severity={landlordReviewSignals.length ? "warning" : "info"}
-            />
-            <DailyMetricCard
-              label="Upcoming"
-              value={upcomingSignals.length}
-              helper="Forward-looking lease, renewal, occupancy, or dated workflow timing."
-            />
-            <DailyMetricCard
-              label="Evidence/source attached"
-              value={evidenceReadySignals.length}
-              helper="Items with source routing and manual review handoff context."
-            />
+            {SUMMARY_ACTION_CONFIG.map((config) => (
+              <SummaryActionCard key={config.key} config={config} value={summaryActionCounts[config.key]} />
+            ))}
           </div>
-          <Card
+          <div
             style={{
-              ...operationsCardSurface,
-              borderRadius: 12,
-              padding: 14,
               display: "grid",
-              gap: 10,
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+              gap: 12,
               minWidth: 0,
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <AlertTriangle size={18} />
-              <strong style={sectionTitleStyle}>Urgent / overdue work</strong>
-              <span style={helperTextStyle}>Highest-priority items appear here before the full queue.</span>
-            </div>
-            <SignalMiniList signals={urgentSignals} empty="No urgent or blocked operational items are visible." />
-          </Card>
+            <Card
+              id="operations-urgent-work"
+              style={{
+                ...operationsCardSurface,
+                borderRadius: 12,
+                padding: 14,
+                display: "grid",
+                gap: 10,
+                minWidth: 0,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <AlertTriangle size={18} />
+                <strong style={sectionTitleStyle}>Urgent / overdue work</strong>
+                <span style={helperTextStyle}>Top items only.</span>
+              </div>
+              <SignalMiniList signals={urgentSignals} empty="No urgent or blocked operational items are visible." />
+            </Card>
+            <Card
+              id="operations-upcoming-work"
+              style={{
+                ...operationsCardSurface,
+                borderRadius: 12,
+                padding: 14,
+                display: "grid",
+                gap: 10,
+                minWidth: 0,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <ClipboardList size={18} />
+                <strong style={sectionTitleStyle}>Upcoming deadlines</strong>
+                <span style={helperTextStyle}>Top dated work only.</span>
+              </div>
+              <SignalMiniList signals={upcomingSignals} empty="No upcoming deadline items are visible." />
+            </Card>
+            <Card
+              id="operations-evidence-ready"
+              style={{
+                ...operationsCardSurface,
+                borderRadius: 12,
+                padding: 14,
+                display: "grid",
+                gap: 10,
+                minWidth: 0,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <ShieldCheck size={18} />
+                <strong style={sectionTitleStyle}>Evidence-ready items</strong>
+                <span style={helperTextStyle}>Top source-backed items only.</span>
+              </div>
+              <SignalMiniList signals={evidenceReadySignals} empty="No evidence-ready items are visible." />
+            </Card>
+          </div>
         </Section>
 
         <Section
@@ -1733,36 +1836,6 @@ export default function OperationalCommandCenterPage() {
               <WorkBucketCard key={bucket.key} config={bucket} signals={bucket.signals} />
             ))}
           </div>
-        </Section>
-
-        <Section
-          data-testid="operations-summary-strip"
-          style={{
-            ...operationsSectionSurface,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 136px), 1fr))",
-            gap: 8,
-            minWidth: 0,
-            boxSizing: "border-box",
-          }}
-        >
-          {[
-            ["Signals", signals.length],
-            ["Critical", criticalCount],
-            ["Warnings", warningCount],
-            ["Needs review", signals.filter((signal) => signal.priorityGroup === "needs_review").length],
-            ["Upcoming", signals.filter((signal) => signal.priorityGroup === "upcoming").length],
-            ["Open decisions", decisionData?.summary?.open ?? 0],
-            ["Delinquent", dashboardData?.kpis?.delinquentCount ?? 0],
-          ].map(([name, value]) => (
-            <Card
-              key={String(name)}
-              style={{ ...operationsCardSurface, borderRadius: 12, padding: 12, boxSizing: "border-box", minWidth: 0, minHeight: 86 }}
-            >
-              <div style={{ color: "#63594d", fontSize: 12, fontWeight: 900 }}>{name}</div>
-              <strong style={{ color: "#211c17", fontSize: 24 }}>{value}</strong>
-            </Card>
-          ))}
         </Section>
 
         <Section style={{ ...operationsSectionSurface, display: "grid", gap: 12, minWidth: 0 }}>
@@ -1866,7 +1939,9 @@ export default function OperationalCommandCenterPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <Building2 size={18} />
             <strong style={sectionTitleStyle}>Advanced triage queue</strong>
-            <span style={helperTextStyle}>Search, saved views, manual review controls, and detailed priority lists.</span>
+            <span style={helperTextStyle}>
+              Search, saved views, and compact manual review controls. Open decisions: {decisionData?.summary?.open ?? 0}. Delinquent: {dashboardData?.kpis?.delinquentCount ?? 0}.
+            </span>
           </div>
           <Card
             data-testid="operations-filter-panel"
@@ -2056,107 +2131,185 @@ export default function OperationalCommandCenterPage() {
             </Card>
           ) : null}
           {!loading && !error && visibleSignals.length ? (
-            <OperationalReviewQueue
-              items={reviewQueueItems}
-              onManualReviewChange={(item, next) =>
-                persistManualReviewChange(item.manualReviewScope as OperatorReviewScope, item.manualReviewScopeId, next)
-              }
-            />
+            <div id="operations-review-queue" style={{ display: "grid", gap: 10, minWidth: 0 }}>
+              <Card
+                style={{
+                  ...operationsCardSurface,
+                  borderRadius: 10,
+                  padding: 12,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  minWidth: 0,
+                }}
+              >
+                <span style={{ ...helperTextStyle, fontWeight: 900 }}>
+                  Showing {displayedReviewQueueItems.length} of {reviewQueueItems.length} reviewable item{reviewQueueItems.length === 1 ? "" : "s"}.
+                </span>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  {reviewQueueItems.length > REVIEW_QUEUE_PREVIEW_LIMIT ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowFullReviewQueue((current) => !current)}
+                      style={{
+                        border: "1px solid rgba(91,70,48,0.24)",
+                        background: showFullReviewQueue ? "#fffaf1" : "#211c17",
+                        color: showFullReviewQueue ? "#3f382f" : "#fffaf1",
+                        borderRadius: 8,
+                        padding: "8px 10px",
+                        fontSize: 13,
+                        fontWeight: 900,
+                        cursor: "pointer",
+                        minHeight: 36,
+                      }}
+                    >
+                      {showFullReviewQueue ? "Show compact preview" : "View all in review queue"}
+                    </button>
+                  ) : null}
+                  <Link to="/decision-inbox" style={compactActionLinkStyle}>
+                    Open decision inbox
+                  </Link>
+                </div>
+              </Card>
+              <OperationalReviewQueue
+                items={displayedReviewQueueItems}
+                onManualReviewChange={(item, next) =>
+                  persistManualReviewChange(item.manualReviewScope as OperatorReviewScope, item.manualReviewScopeId, next)
+                }
+              />
+            </div>
           ) : null}
           {!loading && !error && visibleSignals.length ? (
-            <div style={{ display: "grid", gap: 16 }}>
-              {prioritySummary.map((group) => (
-                <div key={group.group} style={{ display: "grid", gap: 10, minWidth: 0 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
-                    <div style={{ display: "grid", gap: 3 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <Badge severity={group.tone}>{group.label}</Badge>
-                        <strong style={{ color: "#211c17" }}>{group.signals.length} item{group.signals.length === 1 ? "" : "s"}</strong>
+            <Card
+              style={{
+                ...operationsCardSurface,
+                borderRadius: 10,
+                padding: 12,
+                display: "grid",
+                gap: 10,
+                minWidth: 0,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ ...helperTextStyle, fontWeight: 900 }}>
+                  Detailed priority lists are collapsed by default to keep this page focused on daily action.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowPriorityDetails((current) => !current)}
+                  style={{
+                    border: "1px solid rgba(91,70,48,0.24)",
+                    background: showPriorityDetails ? "#fffaf1" : "#211c17",
+                    color: showPriorityDetails ? "#3f382f" : "#fffaf1",
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                    fontSize: 13,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                    minHeight: 36,
+                  }}
+                >
+                  {showPriorityDetails ? "Hide detailed priority lists" : "Show detailed priority lists"}
+                </button>
+              </div>
+              {showPriorityDetails ? (
+                <div style={{ display: "grid", gap: 16 }}>
+                  {prioritySummary.map((group) => (
+                    <div key={group.group} style={{ display: "grid", gap: 10, minWidth: 0 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
+                        <div style={{ display: "grid", gap: 3 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <Badge severity={group.tone}>{group.label}</Badge>
+                            <strong style={{ color: "#211c17" }}>{group.signals.length} item{group.signals.length === 1 ? "" : "s"}</strong>
+                          </div>
+                          <span style={{ color: "#63594d", fontSize: 13 }}>{group.description}</span>
+                        </div>
                       </div>
-                      <span style={{ color: "#63594d", fontSize: 13 }}>{group.description}</span>
-                    </div>
-                  </div>
-                  {group.signals.length ? (
-                    <div style={{ display: "grid", gap: 10 }}>
-                      {group.signals.map((signal) => (
-                        <Card
-                          key={signal.id}
-                          style={{
-                            borderRadius: 12,
-                            padding: 14,
-                            display: "grid",
-                            gap: 10,
-                            minWidth: 0,
-                            boxSizing: "border-box",
-                            overflowWrap: "anywhere",
-                            ...operationsCardSurface,
-                            border: signal.severity === "critical" ? "1px solid #fecaca" : operationsCardSurface.border,
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
-                              gap: 10,
-                              alignItems: "start",
-                              minWidth: 0,
-                            }}
-                          >
-                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                              <Badge severity={signal.severity}>{signal.severity}</Badge>
-                              <span style={{ color: "#63594d", fontSize: 13, fontWeight: 800 }}>
-                                {CATEGORY_CONFIG[signal.category].label}
-                              </span>
-                              <span style={{ color: "#63594d", fontSize: 13 }}>{signal.source}</span>
-                            </div>
-                            <Link
-                              to={signal.destination}
+                      {group.signals.length ? (
+                        <div style={{ display: "grid", gap: 10 }}>
+                          {group.signals.map((signal) => (
+                            <Card
+                              key={signal.id}
                               style={{
-                                color: "#245842",
-                                fontWeight: 900,
-                                whiteSpace: "nowrap",
-                                alignSelf: "start",
+                                borderRadius: 12,
+                                padding: 14,
+                                display: "grid",
+                                gap: 10,
+                                minWidth: 0,
+                                boxSizing: "border-box",
+                                overflowWrap: "anywhere",
+                                ...operationsCardSurface,
+                                border: signal.severity === "critical" ? "1px solid #fecaca" : operationsCardSurface.border,
                               }}
                             >
-                              Open source workflow
-                            </Link>
-                          </div>
-                          <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
-                            <strong style={{ color: "#211c17", fontSize: 16 }}>{signal.title}</strong>
-                            <span style={{ color: "#63594d", fontSize: 13 }}>Context: {signal.contextLabel}</span>
-                            <span style={{ color: "#3f382f", lineHeight: 1.5 }}>Why: {signal.description}</span>
-                            <span style={{ color: "#211c17", fontSize: 13, fontWeight: 900 }}>
-                              Next action: {signal.nextActionLabel}
-                            </span>
-                          </div>
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
-                              gap: 8,
-                              color: "#3f382f",
-                              fontSize: 12,
-                              fontWeight: 800,
-                              minWidth: 0,
-                            }}
-                          >
-                            <span>Workflow status: {signal.workflowStatus}</span>
-                            <span>Review status: {signal.reviewStatus}</span>
-                            {signal.financialStatus ? <span>Financial status: {signal.financialStatus}</span> : null}
-                            <span>Assignment: {signal.assignmentLabel || "Unassigned"}</span>
-                            <span>Escalation: {signal.escalationLabel || "Not escalated"}</span>
-                          </div>
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
+                                  gap: 10,
+                                  alignItems: "start",
+                                  minWidth: 0,
+                                }}
+                              >
+                                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                                  <Badge severity={signal.severity}>{signal.severity}</Badge>
+                                  <span style={{ color: "#63594d", fontSize: 13, fontWeight: 800 }}>
+                                    {CATEGORY_CONFIG[signal.category].label}
+                                  </span>
+                                  <span style={{ color: "#63594d", fontSize: 13 }}>{signal.source}</span>
+                                </div>
+                                <Link
+                                  to={scopedSourceDestinationForSignal(signal)}
+                                  style={{
+                                    color: "#245842",
+                                    fontWeight: 900,
+                                    whiteSpace: "nowrap",
+                                    alignSelf: "start",
+                                  }}
+                                >
+                                  Open source workflow
+                                </Link>
+                              </div>
+                              <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
+                                <strong style={{ color: "#211c17", fontSize: 16 }}>{signal.title}</strong>
+                                <span style={{ color: "#63594d", fontSize: 13 }}>Context: {signal.contextLabel}</span>
+                                <span style={{ color: "#3f382f", lineHeight: 1.5 }}>Why: {signal.description}</span>
+                                <span style={{ color: "#211c17", fontSize: 13, fontWeight: 900 }}>
+                                  Next action: {signal.nextActionLabel}
+                                </span>
+                              </div>
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
+                                  gap: 8,
+                                  color: "#3f382f",
+                                  fontSize: 12,
+                                  fontWeight: 800,
+                                  minWidth: 0,
+                                }}
+                              >
+                                <span>Workflow status: {signal.workflowStatus}</span>
+                                <span>Review status: {signal.reviewStatus}</span>
+                                {signal.financialStatus ? <span>Financial status: {signal.financialStatus}</span> : null}
+                                <span>Assignment: {signal.assignmentLabel || "Unassigned"}</span>
+                                <span>Escalation: {signal.escalationLabel || "Not escalated"}</span>
+                              </div>
+                            </Card>
+                          ))}
+                        </div>
+                      ) : (
+                        <Card style={{ ...operationsCardSurface, color: "#63594d", borderRadius: 8, boxSizing: "border-box" }}>
+                          No {group.label.toLowerCase()} items currently visible.
                         </Card>
-                      ))}
+                      )}
                     </div>
-                  ) : (
-                    <Card style={{ ...operationsCardSurface, color: "#63594d", borderRadius: 8, boxSizing: "border-box" }}>
-                      No {group.label.toLowerCase()} items currently visible.
-                    </Card>
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
+              ) : null}
+            </Card>
           ) : null}
         </Section>
       </div>

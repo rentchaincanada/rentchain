@@ -640,7 +640,7 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getByText("Operational inbox bridge")).toBeInTheDocument();
     expect(screen.getByText(/Review messages and source-linked actions tied to applications, leases, maintenance, payments, or work orders/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open operational inbox" })).toHaveAttribute("href", "/landlord/unified-inbox");
-    expect(screen.getByRole("link", { name: "Open decision inbox" })).toHaveAttribute("href", "/decision-inbox");
+    expect(screen.getAllByRole("link", { name: "Open decision inbox" })[0]).toHaveAttribute("href", "/decision-inbox");
 
     await waitFor(() => {
       expect(mocks.fetchDecisionInbox).toHaveBeenCalled();
@@ -653,8 +653,12 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getByText("Today's operational summary")).toBeInTheDocument();
     expect(screen.getByText("Urgent / overdue work")).toBeInTheDocument();
     expect(screen.getByText("Urgent / blocked")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Review urgent work:/i })).toHaveAttribute("href", "#operations-urgent-work");
     expect(screen.getByText("Needs landlord review")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Review landlord-owned items:/i })).toHaveAttribute("href", "#operations-review-queue");
     expect(screen.getByText("Evidence/source attached")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open evidence-ready items:/i })).toHaveAttribute("href", "#operations-evidence-ready");
+    expect(screen.getByRole("link", { name: /Review upcoming deadlines:/i })).toHaveAttribute("href", "#operations-upcoming-work");
     expect(screen.getByTestId("operations-waiting-lanes")).toBeInTheDocument();
     expect(screen.getByText("Waiting lanes")).toBeInTheDocument();
     expect(screen.getByText("Waiting on tenant")).toBeInTheDocument();
@@ -673,32 +677,26 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getByText("Payments and arrears")).toBeInTheDocument();
     expect(screen.getByText("Tenant/application requests")).toBeInTheDocument();
     expect(screen.getByText("Contractor follow-ups")).toBeInTheDocument();
-    expect(screen.getByText("Evidence-ready items")).toBeInTheDocument();
+    expect(screen.getAllByText("Evidence-ready items").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Payments / obligations").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Lease lifecycle").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Documents / workspace").length).toBeGreaterThan(0);
-    expect(screen.getByTestId("operations-summary-strip")).toHaveStyle({
-      gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 136px), 1fr))",
-    });
     expect(screen.getByTestId("operations-coordination-lanes")).toHaveStyle({
       display: "grid",
       gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
     });
     expect(screen.getByText("Advanced triage queue")).toBeInTheDocument();
-    expect(screen.getByText(/Search, saved views, manual review controls, and detailed priority lists/i)).toBeInTheDocument();
+    expect(screen.getByText(/Search, saved views, and compact manual review controls/i)).toBeInTheDocument();
+    expect(screen.getByText(/Showing 6 of 9 reviewable items/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View all in review queue" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show detailed priority lists" })).toBeInTheDocument();
     expect(screen.getAllByText("Critical").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Needs review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Upcoming").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Informational").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Context: North Towers · 101 · John Smith").length).toBeGreaterThan(0);
-    expect(screen.getByText("Why: Lease is active but occupancy state conflicts.")).toBeInTheDocument();
-    expect(screen.getByText("Workflow status: New")).toBeInTheDocument();
-    expect(screen.getByText("Review status: Open")).toBeInTheDocument();
-    expect(screen.getAllByText("Financial status: Review required").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Assignment: Operations owned").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Escalation: Critical").length).toBeGreaterThan(0);
-    expect(screen.getByText("Next action: Open payment ledger")).toBeInTheDocument();
+    expect(screen.getAllByText("North Towers · 101 · John Smith").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Next: Open payment ledger").length).toBeGreaterThan(0);
     expect(screen.getByTestId("operational-review-queue")).toBeInTheDocument();
     expect(screen.getByText("Operational review queue")).toBeInTheDocument();
     expect(screen.getByText(/does not create workspaces, route work automatically, or change source records/i)).toBeInTheDocument();
@@ -708,6 +706,7 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(1);
     expect(screen.getAllByText("Payment Ledger Review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Delinquency or payment evidence review").length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toContain("/leases/lease-1/ledger");
     expect(screen.queryByRole("button", { name: /create review workspace/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/tenant-visible review/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/institutional sharing/i)).not.toBeInTheDocument();
@@ -874,12 +873,10 @@ describe("OperationalCommandCenterPage", () => {
 
     await waitFor(() => expect(mocks.fetchOperatorReviewManualMetadata).toHaveBeenCalled());
 
-    expect(screen.getAllByText("Review status: In review").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Assignment: Finance reviewer").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Review status: Blocked").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Assignment: Property manager").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Manual status: In review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Assigned reviewer: Finance reviewer").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Manual status: Blocked").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Assigned reviewer: Property manager").length).toBeGreaterThan(0);
   });
 
   it("persists manual review status and assigned reviewer changes from Operations controls", async () => {
@@ -911,7 +908,7 @@ describe("OperationalCommandCenterPage", () => {
     );
 
     await waitFor(() => expect(screen.getAllByText("Manual status: In review").length).toBeGreaterThan(0));
-    expect(screen.getAllByText("Assignment: Finance reviewer").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Assigned reviewer: Finance reviewer").length).toBeGreaterThan(0);
   });
 
   it("supports combined triage facets while preserving search and reset behavior", async () => {
