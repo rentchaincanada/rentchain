@@ -129,7 +129,7 @@ const CATEGORY_CONFIG: Record<CommandCenterCategory, CategoryConfig> = {
     label: "Lease lifecycle",
     description: "Lease execution, ending-soon, and readiness signals.",
     icon: ClipboardList,
-    destination: "/leases",
+    destination: "/leases#renewal-pipeline",
   },
   payments: {
     label: "Payments / obligations",
@@ -960,7 +960,7 @@ export function deriveCommandCenterSignals(input: {
         severity: endingIn <= 30 ? "warning" : "info",
         priorityGroup: "upcoming",
         title: "Lease ending soon",
-        description: `Lease ends ${formatDate(lease.endDate)}. Review renewal, notice, or move-out workflow timing.`,
+        description: `Lease ends ${formatDate(lease.endDate)}. Review renewal planning, notice timing review, or move-out preparation.`,
         contextLabel: baseLabel,
         destination: leaseRenewalWorkflowDestination(lease.id),
         source: "Lease operations · lifecycle timing",

@@ -41,9 +41,172 @@
   color: #fffaf1 !important;
 }
 
+.rc-renewal-pipeline {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(91, 70, 48, 0.18);
+  border-radius: 12px;
+  background: #fffaf1;
+}
+
+.rc-renewal-pipeline-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rc-renewal-pipeline-title {
+  color: #211c17;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.rc-renewal-pipeline-helper {
+  max-width: 760px;
+  color: #63594d;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.rc-renewal-pipeline-summary-link,
+.rc-renewal-pipeline-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid rgba(91, 70, 48, 0.3);
+  border-radius: 8px;
+  background: #fff6e8;
+  color: #245842;
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.rc-renewal-pipeline-buckets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 8px;
+}
+
+.rc-renewal-pipeline-bucket {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(91, 70, 48, 0.16);
+  border-radius: 8px;
+  background: #fff6e8;
+  color: #63594d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.rc-renewal-pipeline-bucket strong {
+  flex-shrink: 0;
+  color: #211c17;
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.rc-renewal-pipeline-list {
+  display: grid;
+  gap: 10px;
+}
+
+.rc-renewal-pipeline-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, max-content);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(91, 70, 48, 0.16);
+  border-radius: 8px;
+  background: #fffdfa;
+}
+
+.rc-renewal-pipeline-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rc-renewal-pipeline-lease {
+  color: #211c17;
+  font-weight: 900;
+}
+
+.rc-renewal-pipeline-context,
+.rc-renewal-pipeline-detail,
+.rc-renewal-pipeline-status,
+.rc-renewal-pipeline-more,
+.rc-renewal-pipeline-empty {
+  color: #63594d;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.rc-renewal-pipeline-side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.rc-renewal-pipeline-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid rgba(36, 88, 66, 0.22);
+  border-radius: 999px;
+  background: #eef7f0;
+  color: #245842;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.rc-renewal-pipeline-status {
+  font-weight: 800;
+}
+
+.rc-renewal-pipeline-action:focus-visible,
+.rc-renewal-pipeline-summary-link:focus-visible {
+  outline: 3px solid rgba(36, 88, 66, 0.24);
+  outline-offset: 2px;
+}
+
 @media (max-width: 768px) {
   .rc-leases-page {
     padding: 14px;
     border-radius: 12px;
+  }
+
+  .rc-renewal-pipeline {
+    padding: 12px;
+  }
+
+  .rc-renewal-pipeline-row {
+    grid-template-columns: 1fr;
+  }
+
+  .rc-renewal-pipeline-side {
+    justify-content: flex-start;
+  }
+
+  .rc-renewal-pipeline-action,
+  .rc-renewal-pipeline-summary-link {
+    width: 100%;
+    white-space: normal;
   }
 }

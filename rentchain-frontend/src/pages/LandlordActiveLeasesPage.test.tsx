@@ -293,6 +293,19 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.queryByText("Lease execution review recommended")).not.toBeInTheDocument();
     expect(screen.getAllByText("Expiring soon").length).toBeGreaterThan(0);
     expect(screen.getByText(/Prepare renewal notice/i)).toBeInTheDocument();
+    const renewalPipeline = document.querySelector("#renewal-pipeline") as HTMLElement;
+    expect(renewalPipeline).toBeInTheDocument();
+    expect(within(renewalPipeline).getByText("Renewal pipeline")).toBeInTheDocument();
+    expect(within(renewalPipeline).getByText("Next 30 days")).toBeInTheDocument();
+    expect(within(renewalPipeline).getByText("Renewal review")).toBeInTheDocument();
+    expect(within(renewalPipeline).getByText(/check jurisdiction requirements/i)).toBeInTheDocument();
+    expect(
+      within(renewalPipeline).getByRole("link", { name: /Review renewal workflow for Harbour View unit 101/i })
+    ).toHaveAttribute("href", "/leases/lease-1/workflows/renewal");
+    expect(within(renewalPipeline).getByRole("link", { name: "Open operations view" })).toHaveAttribute(
+      "href",
+      "/operations#operations-upcoming-work"
+    );
     expect(screen.getByText("NS Workflow Guidance:")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Renewal Review" })).toHaveAttribute(
       "href",
@@ -336,6 +349,80 @@ describe("LandlordActiveLeasesPage", () => {
     await waitFor(() => expect(mocks.archiveLeaseRecord).toHaveBeenCalledWith("lease-1"));
     fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
     expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
+  });
+
+  it("routes renewal pipeline review actions to existing workflow and summary routes", async () => {
+    mocks.getLeaseReconciliationCandidates.mockResolvedValue({ candidates: [] });
+    mocks.getActiveLeasesForLandlord.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-missing-date",
+          propertyId: "prop-1",
+          propertyName: "North Court",
+          unitNumber: "4A",
+          monthlyRent: 1550,
+          startDate: "2026-01-01",
+          endDate: null,
+          status: "active",
+          tenantName: "Mina Tenant",
+        },
+        {
+          id: "lease-rent-review",
+          propertyId: "prop-2",
+          propertyName: "Market Lofts",
+          unitNumber: "8",
+          monthlyRent: 2200,
+          startDate: "2026-01-01",
+          endDate: "2026-09-30",
+          status: "active",
+          tenantName: "Raj Tenant",
+          leaseLifecycleSummary: {
+            lifecycleStatus: "active",
+            lifecycleLabel: "Active",
+            lifecycleDescription: "Lease lifecycle is active.",
+            requiredNextAction: "none",
+            renewalOutcome: "not_started",
+            daysUntilExpiry: 45,
+            history: [],
+          },
+          jurisdictionPolicies: [
+            {
+              jurisdiction: "NS",
+              policyKey: "rent_increase_workflow_availability",
+              status: "review",
+              severity: "info",
+              label: "Rent increase workflow review",
+              reason: "Rent review metadata is available.",
+              recommendation: "Review current requirements before preparing any notice.",
+              sourceRuleKey: "NS.rent_increase_workflow",
+              confidence: "medium",
+              legalAdvice: false,
+              disclaimer:
+                "RentChain provides operational workflow guidance only. It does not provide legal advice.",
+            },
+          ],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Renewal pipeline");
+    const renewalPipeline = document.querySelector("#renewal-pipeline") as HTMLElement;
+    expect(within(renewalPipeline).getByText("Missing date / needs review")).toBeInTheDocument();
+    expect(within(renewalPipeline).getAllByText("Rent increase review").length).toBeGreaterThan(0);
+    expect(
+      within(renewalPipeline).getByRole("link", { name: /Confirm lease end date for North Court unit 4A/i })
+    ).toHaveAttribute("href", "/leases/lease-missing-date/summary");
+    expect(
+      within(renewalPipeline).getByRole("link", { name: /Review rent increase workflow for Market Lofts unit 8/i })
+    ).toHaveAttribute("href", "/leases/lease-rent-review/workflows/rent-increase");
+    expect(renewalPipeline).not.toHaveTextContent("lease-missing-date");
+    expect(renewalPipeline).not.toHaveTextContent("lease-rent-review");
   });
 
   it("shows a staged rent-terms action instead of enablement when payment setup is not ready", async () => {
