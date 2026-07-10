@@ -20,6 +20,7 @@ import {
 } from "@/lib/payments/paymentStatusGuidance";
 import { isTargetedHiddenLeaseId } from "@/lib/testDataVisibilityTargets";
 import LeaseSigningDashboard from "@/components/LeaseSigningDashboard";
+import RenewalPipelinePanel from "@/components/leases/RenewalPipelinePanel";
 import { downloadLeaseSummaryPdf } from "@/utils/leaseSummaryPdf";
 import { printSummaryDocument } from "@/utils/printSummary";
 import { LockedFeature } from "@/components/billing/LockedFeature";
@@ -995,6 +996,10 @@ export default function LandlordActiveLeasesPage() {
         >
           {view === "archived" ? "No archived leases yet." : "No active leases were found for this landlord yet."}
         </div>
+      ) : null}
+
+      {!entitlements.loading && leasesEnabled && !loading && !error && view === "active" && leases.length > 0 ? (
+        <RenewalPipelinePanel leases={leases} />
       ) : null}
 
       {!entitlements.loading && leasesEnabled && !loading && !error && leases.length > 0 && filteredLeases.length === 0 ? (
