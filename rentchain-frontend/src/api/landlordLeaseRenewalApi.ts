@@ -40,6 +40,45 @@ export type LandlordLeaseRenewalLease = {
   leaseLifecycleSummary?: LeaseLifecycleSummary;
 };
 
+export type RenewalNoticeDraftSnapshotSourceValues = {
+  tenantLabel: string;
+  propertyUnitLabel: string;
+  currentRentLabel: string;
+  renewalRentLabel: string;
+  currentLeaseEndLabel: string;
+  proposedTermLabel: string;
+  tenantResponseTargetDateLabel: string;
+};
+
+export type SaveRenewalNoticeDraftSnapshotPayload = {
+  draftText: string;
+  generatedAt?: string;
+  sourceValues: RenewalNoticeDraftSnapshotSourceValues;
+  noDeliveryFlags: {
+    emailSent: false;
+    noticeServed: false;
+    tenantNotified: false;
+  };
+};
+
+export type RenewalNoticeDraftSnapshot = {
+  snapshotId: string;
+  savedAt: string;
+  actor?: {
+    id?: string | null;
+    email?: string | null;
+  } | null;
+  source: "renewal_notice_draft";
+  status: "draft_saved";
+  flags: {
+    emailSent: false;
+    noticeServed: false;
+    tenantNotified: false;
+  };
+  auditEventId?: string | null;
+  canonicalEventId?: string | null;
+};
+
 export function fetchExpiringLeaseRenewals(params?: {
   propertyId?: string | null;
   withinDays?: number;
@@ -66,4 +105,14 @@ export function saveLeaseRenewalInputs(leaseId: string, payload: LandlordLeaseRe
     method: "PUT",
     body: payload,
   });
+}
+
+export function saveRenewalNoticeDraftSnapshot(leaseId: string, payload: SaveRenewalNoticeDraftSnapshotPayload) {
+  return apiFetch<{ ok: true; snapshot: RenewalNoticeDraftSnapshot }>(
+    `/landlord/leases/${encodeURIComponent(leaseId)}/renewal-notice-draft-snapshots`,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
 }

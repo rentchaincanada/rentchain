@@ -99,6 +99,19 @@ const performLeaseNoticeSendFromPreviewInput = vi.fn(async () => ({
   status: 201,
   payload: { ok: true, noticeId: "notice-1", autopilotPolicy: { outcome: "allow", canAutopilot: true } },
 }));
+const saveRenewalNoticeDraftSnapshot = vi.fn(async () => ({
+  ok: true,
+  snapshot: {
+    snapshotId: "snapshot-1",
+    savedAt: "2026-07-11T12:00:00.000Z",
+    actor: { id: "landlord-1", email: null },
+    source: "renewal_notice_draft",
+    status: "draft_saved",
+    flags: { emailSent: false, noticeServed: false, tenantNotified: false },
+    auditEventId: "event-1",
+    canonicalEventId: "canonical-1",
+  },
+}));
 const sanitizeLeaseRenewalOperatorInput = vi.fn((body: any) => ({
   ok: true,
   data: {
@@ -137,6 +150,7 @@ vi.mock("../../services/leaseNoticeWorkflowService", () => ({
   lookupUserEmail,
   normalizeLeaseRecord,
   performLeaseNoticeSendFromPreviewInput,
+  saveRenewalNoticeDraftSnapshot,
   sanitizeLeaseRenewalOperatorInput,
   sendLeaseWorkflowEmail,
 }));
@@ -341,6 +355,54 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
         responseDeadlineAt: 1700000000000,
       })
     );
+  });
+
+  it("saves a renewal notice draft snapshot without sending notice or email", async () => {
+    const router = (await import("../leaseNoticeLandlordRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/lease-1/renewal-notice-draft-snapshots",
+      body: {
+        draftText: "Hello Jane,\n\nDraft renewal notice text.",
+        generatedAt: "2026-07-11T11:59:00.000Z",
+        sourceValues: {
+          tenantLabel: "Jane Tenant",
+          propertyUnitLabel: "Harbour View · Unit 101",
+          currentRentLabel: "CA$1,850.00",
+          renewalRentLabel: "CA$1,975.00",
+          currentLeaseEndLabel: "December 31, 2026",
+          proposedTermLabel: "Fixed term · January 1, 2027 to December 31, 2027",
+          tenantResponseTargetDateLabel: "November 15, 2026",
+        },
+        noDeliveryFlags: {
+          emailSent: false,
+          noticeServed: false,
+          tenantNotified: false,
+        },
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body?.snapshot).toEqual(
+      expect.objectContaining({
+        snapshotId: "snapshot-1",
+        status: "draft_saved",
+        auditEventId: "event-1",
+        flags: { emailSent: false, noticeServed: false, tenantNotified: false },
+      })
+    );
+    expect(saveRenewalNoticeDraftSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        leaseId: "lease-1",
+        landlordId: "landlord-1",
+        actorId: "landlord-1",
+        input: expect.objectContaining({
+          draftText: expect.stringContaining("Draft renewal notice text"),
+        }),
+      })
+    );
+    expect(performLeaseNoticeSendFromPreviewInput).not.toHaveBeenCalled();
+    expect(sendLeaseWorkflowEmail).not.toHaveBeenCalled();
   });
 
   it("returns only expiring workflow items when the expiring status filter is requested", async () => {

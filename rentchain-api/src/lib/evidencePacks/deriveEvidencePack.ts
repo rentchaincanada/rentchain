@@ -93,6 +93,14 @@ function propertyContextLabel(property: Record<string, any>): string {
   return name && !hasRawReferenceLabel(name) ? name : "Property review";
 }
 
+function canonicalEventLabel(event: Record<string, any>): string {
+  const raw = asString(event.type || event.action, 160);
+  if (raw === "renewal_notice_draft_saved" || raw === "lease.renewal_notice_draft_saved") {
+    return "Renewal notice draft snapshot";
+  }
+  return raw || "Canonical event";
+}
+
 function operationalDecisionLabel(decision: Record<string, any>): string {
   const title = asString(decision.title, 160);
   if (title && !hasRawReferenceLabel(title)) return title;
@@ -277,7 +285,7 @@ function canonicalEventsSection(input: DeriveEvidencePackInput): EvidencePackSec
     items: events.map((event) =>
       evidenceItem({
         itemType: "canonical_event",
-        label: asString(event.type || event.action, 160) || "Canonical event",
+        label: canonicalEventLabel(event),
         description: asString(event.summary, 1000) || "Canonical event is available.",
         source: "canonical_events",
         sourceId: event.id,

@@ -296,6 +296,39 @@ describe("deriveEvidencePack", () => {
     );
   });
 
+  it("surfaces renewal notice draft snapshots as read-only audit context", () => {
+    const pack = deriveEvidencePack({
+      scope: "lease",
+      scopeId: "lease-1",
+      landlordId: "landlord-1",
+      generatedAt: "2026-07-11T12:00:00.000Z",
+      canonicalEvents: [
+        {
+          id: "event-draft-1",
+          type: "renewal_notice_draft_saved",
+          summary: "Renewal notice draft saved. Not sent, not served, tenant not notified.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          occurredAt: "2026-07-11T12:00:00.000Z",
+        },
+      ],
+      leases: [{ id: "lease-1", propertyName: "North Towers", unitNumber: "101", tenantName: "John Smith" }],
+      properties: [{ id: "prop-1", name: "North Towers" }],
+    });
+
+    const auditSection = pack.sections.find((section) => section.sectionKey === "audit_events");
+    expect(auditSection?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          itemType: "canonical_event",
+          label: "Renewal notice draft snapshot",
+          description: "Renewal notice draft saved. Not sent, not served, tenant not notified.",
+        }),
+      ])
+    );
+    expect(JSON.stringify(pack)).not.toMatch(/Notice sent|Tenant notified|Notice served/);
+  });
+
   it("keeps raw provider, banking, debug, and private document fields out of evidence projections", () => {
     const pack = deriveEvidencePack({
       scope: "decision",

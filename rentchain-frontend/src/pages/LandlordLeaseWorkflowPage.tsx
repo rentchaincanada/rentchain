@@ -14,6 +14,7 @@ import {
   buildRenewalNoticeDraftText,
   getRenewalNoticeDraftReadiness,
   LeaseRenewalNoticeDraftCard,
+  RenewalNoticeDraftSnapshotCapture,
 } from "@/components/leases/LeaseRenewalNoticeDraftCard";
 import {
   RENEWAL_PIPELINE_BUCKETS,
@@ -594,8 +595,8 @@ function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLe
       <div style={noticeStatusGridStyle}>
         <NoticeStatus label="Draft readiness" value={statusLabel} tone={readiness.ready ? "ready" : "warning"} />
         <NoticeStatus label="Email delivery" value="Deferred" tone="deferred" />
-        <NoticeStatus label="Evidence capture" value="Deferred" tone="deferred" />
-        <NoticeStatus label="Audit capture" value="Deferred" tone="deferred" />
+        <NoticeStatus label="Evidence capture" value={readiness.ready ? "Available after snapshot save" : "Inputs needed"} tone={readiness.ready ? "ready" : "warning"} />
+        <NoticeStatus label="Audit capture" value={readiness.ready ? "Available after snapshot save" : "Inputs needed"} tone={readiness.ready ? "ready" : "warning"} />
       </div>
 
       {!hasSavedRenewalInputs(renewalLease) ? (
@@ -635,6 +636,10 @@ function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLe
         requirements before tenant communication. No notice record is created here, and email delivery remains deferred.
       </div>
 
+      {draftText ? (
+        <RenewalNoticeDraftSnapshotCapture lease={renewalLease} draftText={draftText} reviewModel={reviewModel} />
+      ) : null}
+
       <div style={noticeActionGridStyle}>
         {draftText ? (
           <>
@@ -649,19 +654,23 @@ function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLe
         <Link to={renewalPath} style={buttonLinkStyle}>
           Return to renewal inputs
         </Link>
-        <Link to={reviewModel.leaseEvidencePath} style={buttonLinkStyle}>
-          Open lease evidence preview
-        </Link>
-        <Link to={reviewModel.leaseTimelinePath} style={buttonLinkStyle}>
-          Open lease review timeline
-        </Link>
+        {!draftText ? (
+          <>
+            <Link to={reviewModel.leaseEvidencePath} style={buttonLinkStyle}>
+              Open lease evidence preview
+            </Link>
+            <Link to={reviewModel.leaseTimelinePath} style={buttonLinkStyle}>
+              Open lease review timeline
+            </Link>
+          </>
+        ) : null}
       </div>
 
       {copyStatus === "success" ? <div style={successTextStyle}>Draft text copied.</div> : null}
       {copyStatus === "error" ? <div style={warningTextStyle}>Draft text could not be copied. Select the preview text manually.</div> : null}
 
       <div style={deferredPanelStyle}>
-        Draft persistence, audit capture, evidence package inclusion, notice record creation, and email delivery are deferred.
+        Notice record creation and email delivery are deferred. Saving a draft snapshot records audit context only.
       </div>
     </section>
   );

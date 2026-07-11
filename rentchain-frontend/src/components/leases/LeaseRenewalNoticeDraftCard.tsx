@@ -1,7 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { evidencePackPath } from "@/api/evidencePackApi";
-import type { LandlordLeaseRenewalLease } from "@/api/landlordLeaseRenewalApi";
+import {
+  saveRenewalNoticeDraftSnapshot,
+  type LandlordLeaseRenewalLease,
+  type RenewalNoticeDraftSnapshot,
+  type SaveRenewalNoticeDraftSnapshotPayload,
+} from "@/api/landlordLeaseRenewalApi";
 import { reviewTimelinePath } from "@/api/reviewTimelineApi";
 import { formatRenewalCurrency } from "./LeaseRenewalOperatorInputsCard";
 
@@ -16,6 +21,12 @@ type DraftReadiness = {
   missing: string[];
   validationMessage?: string | null;
 };
+
+type SnapshotSaveState =
+  | { status: "idle"; snapshot: null; error: null }
+  | { status: "saving"; snapshot: null; error: null }
+  | { status: "saved"; snapshot: RenewalNoticeDraftSnapshot; error: null }
+  | { status: "error"; snapshot: null; error: string };
 
 export type RenewalNoticeReviewModel = {
   tenantLabel: string;
@@ -65,6 +76,20 @@ function formatTargetDate(value: string | number | null | undefined) {
     year: "numeric",
     month: "long",
     day: "numeric",
+  });
+}
+
+function formatSavedAt(value: string | number | null | undefined) {
+  const raw = String(value || "").trim();
+  if (!raw) return "Saved time unavailable";
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleString("en-CA", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
@@ -161,6 +186,30 @@ export function buildRenewalNoticeReviewModel(lease: LandlordLeaseRenewalLease):
     tenantResponseTargetDateLabel: formatTargetDate(lease.renewalDecisionDeadlineAt),
     leaseEvidencePath: evidencePackPath({ scope: "lease", scopeId: lease.id }),
     leaseTimelinePath: reviewTimelinePath({ scope: "lease", scopeId: lease.id }),
+  };
+}
+
+export function buildRenewalNoticeDraftSnapshotPayload(
+  draftText: string,
+  reviewModel: RenewalNoticeReviewModel
+): SaveRenewalNoticeDraftSnapshotPayload {
+  return {
+    draftText,
+    generatedAt: new Date().toISOString(),
+    sourceValues: {
+      tenantLabel: reviewModel.tenantLabel,
+      propertyUnitLabel: reviewModel.propertyUnitLabel,
+      currentRentLabel: reviewModel.currentRentLabel,
+      renewalRentLabel: reviewModel.renewalRentLabel,
+      currentLeaseEndLabel: reviewModel.currentLeaseEndLabel,
+      proposedTermLabel: reviewModel.proposedTermLabel,
+      tenantResponseTargetDateLabel: reviewModel.tenantResponseTargetDateLabel,
+    },
+    noDeliveryFlags: {
+      emailSent: false,
+      noticeServed: false,
+      tenantNotified: false,
+    },
   };
 }
 
@@ -339,24 +388,12 @@ export function LeaseRenewalNoticeDraftCard({
           <StatusItem label="Draft prepared from saved renewal inputs" tone="ready" />
           <StatusItem label="Copy/download actions are available for review" tone="ready" />
           <StatusItem label="Email delivery not enabled" tone="deferred" />
-          <StatusItem label="Draft evidence is not persisted yet" tone="deferred" />
-          <StatusItem label="Audit capture deferred" tone="deferred" />
-          <StatusItem label="Evidence package inclusion deferred" tone="deferred" />
+          <StatusItem label="Notice not sent" tone="deferred" />
+          <StatusItem label="Tenant not notified" tone="deferred" />
         </div>
 
-        <div style={noticeStyle}>
-          Current evidence preview and review timeline routes can show lease context, but this draft text is not saved to an
-          evidence package or audit trail yet.
-        </div>
+        <RenewalNoticeDraftSnapshotCapture lease={lease} draftText={draftText} reviewModel={reviewModel} />
 
-        <div style={actionsStyle}>
-          <Link to={reviewModel.leaseEvidencePath} style={linkButtonStyle}>
-            Open lease evidence preview
-          </Link>
-          <Link to={reviewModel.leaseTimelinePath} style={linkButtonStyle}>
-            Open lease review timeline
-          </Link>
-        </div>
       </section>
 
       <div style={actionsStyle}>
@@ -373,6 +410,85 @@ export function LeaseRenewalNoticeDraftCard({
 
       {copyStatus === "success" ? <div style={successStyle}>Draft text copied.</div> : null}
       {copyStatus === "error" ? <div style={warningStyle}>Draft text could not be copied. Select the preview text manually.</div> : null}
+    </div>
+  );
+}
+
+export function RenewalNoticeDraftSnapshotCapture({
+  lease,
+  draftText,
+  reviewModel,
+}: {
+  lease: LandlordLeaseRenewalLease;
+  draftText: string;
+  reviewModel: RenewalNoticeReviewModel;
+}) {
+  const [saveState, setSaveState] = React.useState<SnapshotSaveState>({ status: "idle", snapshot: null, error: null });
+
+  async function saveSnapshot() {
+    setSaveState({ status: "saving", snapshot: null, error: null });
+    try {
+      const response = await saveRenewalNoticeDraftSnapshot(
+        lease.id,
+        buildRenewalNoticeDraftSnapshotPayload(draftText, reviewModel)
+      );
+      setSaveState({ status: "saved", snapshot: response.snapshot, error: null });
+    } catch (err) {
+      const message = err instanceof Error && err.message ? err.message : "Draft snapshot could not be saved.";
+      setSaveState({ status: "error", snapshot: null, error: message });
+    }
+  }
+
+  const saved = saveState.status === "saved" ? saveState.snapshot : null;
+  const actor = saved?.actor?.email || saved?.actor?.id || null;
+
+  return (
+    <div style={snapshotPanelStyle} aria-label="Draft snapshot persistence">
+      <div style={evidenceReadinessHeaderStyle}>
+        <div>
+          <h4 style={subheadingStyle}>Draft snapshot</h4>
+          <div style={mutedStyle}>
+            Save this generated draft and source-value snapshot for audit review. This does not send email, serve notice, or notify the tenant.
+          </div>
+        </div>
+        <span style={saved ? readyBadgeStyle : evidenceBadgeStyle}>{saved ? "Draft snapshot saved" : "Not saved yet"}</span>
+      </div>
+
+      {saved ? (
+        <dl style={factsGridStyle}>
+          <Fact label="Saved" value={formatSavedAt(saved.savedAt)} />
+          <Fact label="Captured by" value={actor || "Actor unavailable"} />
+          <Fact label="Audit event" value={saved.auditEventId ? "Audit event recorded" : "Audit capture deferred"} />
+          <Fact label="Delivery state" value="Not sent · Not served · Tenant not notified" />
+        </dl>
+      ) : (
+        <div style={noticeStyle}>
+          Draft snapshot not saved yet. Save when the current draft and source values are ready for review capture.
+        </div>
+      )}
+
+      <div style={actionsStyle}>
+        <button
+          type="button"
+          onClick={() => void saveSnapshot()}
+          disabled={saveState.status === "saving"}
+          style={saveState.status === "saving" ? disabledButtonStyle : primaryButtonStyle}
+        >
+          {saveState.status === "saving" ? "Saving draft snapshot…" : "Save draft snapshot"}
+        </button>
+        <Link to={reviewModel.leaseTimelinePath} style={linkButtonStyle}>
+          Open lease review timeline
+        </Link>
+        <Link to={reviewModel.leaseEvidencePath} style={linkButtonStyle}>
+          Open lease evidence preview
+        </Link>
+      </div>
+
+      {saved?.auditEventId ? <div style={successStyle}>Audit event recorded.</div> : null}
+      {saved ? (
+        <div style={mutedStyle}>Evidence preview can include the saved draft snapshot as read-only audit context; no tenant communication was created.</div>
+      ) : null}
+      {saveState.status === "error" ? <div style={warningStyle}>{saveState.error}</div> : null}
     </div>
   );
 }
@@ -510,6 +626,11 @@ const evidenceReadinessStyle: React.CSSProperties = {
   padding: 12,
 };
 
+const snapshotPanelStyle: React.CSSProperties = {
+  ...evidenceReadinessStyle,
+  background: "#fffaf1",
+};
+
 const evidenceReadinessHeaderStyle: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
@@ -575,6 +696,14 @@ const secondaryButtonStyle: React.CSSProperties = {
   border: "1px solid rgba(91, 70, 48, 0.3)",
   background: "#fffaf1",
   color: "#245842",
+};
+
+const disabledButtonStyle: React.CSSProperties = {
+  ...baseButtonStyle,
+  border: "1px solid rgba(91, 70, 48, 0.18)",
+  background: "rgba(91, 70, 48, 0.12)",
+  color: "#7a6b5c",
+  cursor: "wait",
 };
 
 const linkButtonStyle: React.CSSProperties = {
