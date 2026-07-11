@@ -236,6 +236,22 @@ describe("LandlordLeaseWorkflowPage", () => {
     renderWorkflow("/leases/lease-1/workflows/notice");
     expect(await screen.findByRole("heading", { name: "Notice Workflow" })).toBeInTheDocument();
     expect(screen.getByText("Review notice-related lease status, lifecycle timing, and audit context before preparing a notice.")).toBeInTheDocument();
+    const renewalContext = await screen.findByLabelText("Renewal notice draft context");
+    expect(renewalContext).toHaveTextContent("Renewal operator inputs are available for this lease.");
+    expect(renewalContext).toHaveTextContent("Jane Tenant");
+    expect(renewalContext).toHaveTextContent("12 Harbour Road · Unit 101");
+    expect(renewalContext).toHaveTextContent("CA$1,850.00");
+    expect(renewalContext).toHaveTextContent("CA$1,975.00");
+    expect(renewalContext).toHaveTextContent("Tenant response target date");
+    expect((screen.getByLabelText("Draft preview from renewal workflow") as HTMLTextAreaElement).value).toContain(
+      "This message is for renewal planning and review."
+    );
+    expect(screen.getByRole("link", { name: "Back to renewal workflow" })).toHaveAttribute(
+      "href",
+      "/leases/lease-1/workflows/renewal"
+    );
+    expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
 
     cleanup();
     renderWorkflow("/leases/lease-1/workflows/execution");
@@ -286,6 +302,10 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByText("Planning date only. Does not send notice or determine legal deadlines.")).toBeInTheDocument();
     expect(screen.queryByLabelText(/Response deadline/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save renewal inputs" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Renewal workflow status")).toHaveTextContent("Operator inputs saved");
+    expect(screen.getByLabelText("Renewal workflow status")).toHaveTextContent("Tenant notice draft ready");
+    expect(screen.getByLabelText("Renewal workflow status")).toHaveTextContent("Notice review pending");
+    expect(screen.getByLabelText("Renewal workflow status")).toHaveTextContent("Email delivery deferred");
     expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("Draft ready");
     expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("Jane Tenant");
     expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("12 Harbour Road · Unit 101");
@@ -311,6 +331,62 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.queryByRole("link", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/must respond by|notice has been served|legally valid|automatically compliant/i);
     expect(document.body).not.toHaveTextContent("/portfolio-health?entry=lease-renewals&propertyId=prop-1");
+  });
+
+  it("uses workflow-local renewal status instead of stale no-follow-up lifecycle copy", async () => {
+    mocks.fetchExpiringLeaseRenewals.mockResolvedValueOnce({
+      ok: true,
+      items: [
+        {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          propertyAddress: "12 Harbour Road",
+          unitId: "unit-1",
+          status: "active",
+          leaseType: "fixed_term",
+          province: "NS",
+          leaseStartDate: "2026-01-01",
+          leaseEndDate: "2026-12-31",
+          currentRent: 1850,
+          currency: "CAD",
+          nextNoticeDueAt: null,
+          latestNoticeId: null,
+          tenantName: "Jane Tenant",
+          unitLabel: "Unit 101",
+          propertyLabel: "Harbour View",
+          renewalRentChangeMode: "increase",
+          renewalOfferedRent: 1975,
+          renewalDecisionDeadlineAt: dateInputValueToMs("2026-11-20"),
+          renewalNewTermType: "fixed_term",
+          renewalNewLeaseStartDate: "2027-01-01",
+          renewalNewLeaseEndDate: "2027-12-31",
+          renewalUpdatedAt: "2026-07-02T12:00:00.000Z",
+          leaseLifecycleSummary: {
+            lifecycleStatus: "active",
+            lifecycleLabel: "Active",
+            lifecycleDescription: "Lease is active.",
+            requiredNextAction: "none",
+            renewalOutcome: "not_applicable",
+            daysUntilExpiry: 30,
+            history: [{ type: "lease_started", label: "Lease started", at: "2026-01-01" }],
+          },
+        },
+      ],
+      data: [],
+    });
+
+    renderWorkflow("/leases/lease-1/workflows/renewal");
+
+    const statusPanel = await screen.findByLabelText("Renewal workflow status");
+    expect(statusPanel).toHaveTextContent("Operator inputs saved");
+    expect(statusPanel).toHaveTextContent("Tenant notice draft ready");
+    expect(statusPanel).toHaveTextContent("Notice review pending");
+    expect(statusPanel).toHaveTextContent("Email delivery deferred");
+    expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("Draft ready");
+    expect(document.body).not.toHaveTextContent("Outcome: Not applicable");
+    expect(document.body).not.toHaveTextContent("Next step: No follow-up needed");
+    expect(document.body).not.toHaveTextContent("History: Lease started");
   });
 
   it("uses safe draft fallbacks when tenant name is missing and projection labels are raw", async () => {

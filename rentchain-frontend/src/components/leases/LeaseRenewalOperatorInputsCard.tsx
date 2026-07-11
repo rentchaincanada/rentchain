@@ -29,6 +29,7 @@ type LeaseRenewalOperatorInputsCardProps = {
   onFormStateChange?: (leaseId: string, form: LeaseRenewalFormState) => void;
   onSaved?: (lease: LandlordLeaseRenewalLease) => void;
   notify?: (toast: LeaseRenewalToast) => void;
+  showLifecycleSummary?: boolean;
 };
 
 function toLocalDateInputFromDate(date: Date) {
@@ -197,6 +198,7 @@ export function LeaseRenewalOperatorInputsCard({
   onFormStateChange,
   onSaved,
   notify,
+  showLifecycleSummary = true,
 }: LeaseRenewalOperatorInputsCardProps) {
   const [localLease, setLocalLease] = React.useState(lease);
   const [internalForm, setInternalForm] = React.useState(() => createLeaseRenewalFormState(lease));
@@ -324,7 +326,7 @@ export function LeaseRenewalOperatorInputsCard({
         </div>
       </div>
 
-      {localLease.leaseLifecycleSummary ? (
+      {showLifecycleSummary && localLease.leaseLifecycleSummary ? (
         <div style={{ display: "grid", gap: 6, color: "#334155", fontSize: 14 }}>
           <div>
             <strong>Lifecycle:</strong> {localLease.leaseLifecycleSummary.lifecycleLabel}
