@@ -28,6 +28,12 @@ function renderWorkflow(path: string) {
   );
 }
 
+function datetimeLocalValue(value: number) {
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
 describe("LandlordLeaseWorkflowPage", () => {
   beforeEach(() => {
     mocks.getLeaseById.mockReset();
@@ -267,7 +273,9 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByLabelText(/New term type/i)).toHaveValue("fixed_term");
     expect(screen.getByLabelText(/New lease start date/i)).toHaveValue("2027-01-01");
     expect(screen.getByLabelText(/New lease end date/i)).toHaveValue("2027-12-31");
-    expect(screen.getByLabelText(/Tenant response target date/i)).toHaveValue("2026-11-15T09:30");
+    expect(screen.getByLabelText(/Tenant response target date/i)).toHaveValue(
+      datetimeLocalValue(Date.UTC(2026, 10, 15, 13, 30, 0, 0))
+    );
     expect(screen.getByText("Planning date only. Does not send notice or determine legal deadlines.")).toBeInTheDocument();
     expect(screen.queryByLabelText(/Response deadline/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save renewal inputs" })).toBeInTheDocument();
