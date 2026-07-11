@@ -432,7 +432,7 @@ describe("PortfolioHealthSummaryPage", () => {
 
     expect((await screen.findAllByText(/Lease renewal operator inputs/i)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Save renewal term and tenant response target choices/i).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/deadline choices/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/deadline\s+choices/i)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Rent change mode/i), { target: { value: "no_change" } });
     fireEvent.change(screen.getByLabelText(/New term type/i), { target: { value: "fixed_term" } });
     fireEvent.change(screen.getByLabelText(/New lease start date/i), { target: { value: "2026-07-01" } });
