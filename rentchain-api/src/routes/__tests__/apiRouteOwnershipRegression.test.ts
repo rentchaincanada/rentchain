@@ -30,10 +30,27 @@ vi.mock("../../firebase", () => ({
     serverTimestamp: () => "server-timestamp",
   },
   db: {
-    collection: () => ({
+    collection: (collectionName: string) => ({
       doc: (id = "doc-1") => ({
         id,
-        get: async () => ({ id, exists: false, data: () => null }),
+        get: async () => ({
+          id,
+          exists: collectionName === "leases" && id === "lease-mounted-success",
+          data: () =>
+            collectionName === "leases" && id === "lease-mounted-success"
+              ? {
+                  landlordId: "landlord-1",
+                  tenantId: "tenant-1",
+                  propertyId: "property-1",
+                  unitId: "unit-1",
+                  status: "active",
+                  leaseType: "fixed_term",
+                  province: "NS",
+                  currentRent: 1850,
+                  currency: "CAD",
+                }
+              : null,
+        }),
         set: async () => undefined,
       }),
       where: () => buildEmptyQuery(),
@@ -41,6 +58,17 @@ vi.mock("../../firebase", () => ({
       limit: () => buildEmptyQuery(),
       get: async () => ({ docs: [], empty: true, size: 0 }),
     }),
+    batch: () => {
+      const ops: Array<() => Promise<void>> = [];
+      return {
+        set(ref: any, value: any, options?: any) {
+          ops.push(() => ref.set(value, options));
+        },
+        async commit() {
+          for (const op of ops) await op();
+        },
+      };
+    },
   },
 }));
 
@@ -211,11 +239,13 @@ async function invokeApp(
 }
 
 async function buildRuntimeOwnershipApp() {
+  process.env.LEASE_NOTICE_WORKFLOW_ENABLED = "true";
   const { requireLandlord } = await import("../../middleware/requireLandlord");
   const { handleLeaseDocumentUrl } = await import("../leaseRoutes");
   const messagesRoutes = (await import("../messagesRoutes")).default;
   const landlordEvidencePackRoutes = (await import("../landlordEvidencePackRoutes")).default;
   const landlordEvidencePackageGenerationRoutes = (await import("../landlordEvidencePackageGenerationRoutes")).default;
+  const leaseNoticeLandlordRoutes = (await import("../leaseNoticeLandlordRoutes")).default;
   const landlordOperatorReviewRoutes = (await import("../landlordOperatorReviewRoutes")).default;
   const internalReportsRoutes = (await import("../internalReportsRoutes")).default;
   const telemetryRoutes = (await import("../telemetryRoutes")).default;
@@ -235,6 +265,7 @@ async function buildRuntimeOwnershipApp() {
   app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
   app.use("/api/landlord", routeSource("landlordEvidencePackRoutes.ts"), landlordEvidencePackRoutes);
   app.use("/api/landlord", routeSource("landlordEvidencePackageGenerationRoutes.ts"), landlordEvidencePackageGenerationRoutes);
+  app.use("/api/landlord/leases", routeSource("leaseNoticeLandlordRoutes.ts"), leaseNoticeLandlordRoutes);
   app.use("/api/landlord", routeSource("landlordOperatorReviewRoutes.ts"), landlordOperatorReviewRoutes);
   app.use("/api/internal", routeSource("internalReportsRoutes.ts"), internalReportsRoutes);
   app.get("/api/__probe/revision", routeSource("app.build.ts:/api/__probe/revision"), (_req, res) =>
@@ -305,6 +336,9 @@ describe("API route ownership regression", () => {
     const evidencePackageMount = source.indexOf(
       'app.use("/api/landlord", routeSource("landlordEvidencePackageGenerationRoutes.ts"), landlordEvidencePackageGenerationRoutes)'
     );
+    const leaseNoticeLandlordMount = source.indexOf(
+      'app.use("/api/landlord/leases", routeSource("leaseNoticeLandlordRoutes.ts"), leaseNoticeLandlordRoutes)'
+    );
     const statusMount = source.indexOf('app.use("/api/status", statusRoutes)');
     const paymentsBroadMount = source.indexOf('app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes)');
     const publicPortfolioMount = source.indexOf('app.use("/api", routeSource("publicPortfolioScoreRoutes.ts"), publicPortfolioScoreRoutes)');
@@ -329,6 +363,7 @@ describe("API route ownership regression", () => {
     expect(telemetryMount).toBeGreaterThan(-1);
     expect(screeningRoutesMount).toBeGreaterThan(-1);
     expect(evidencePackageMount).toBeGreaterThan(-1);
+    expect(leaseNoticeLandlordMount).toBeGreaterThan(-1);
     expect(statusMount).toBeGreaterThan(-1);
     expect(paymentsBroadMount).toBeGreaterThan(-1);
     expect(publicPortfolioMount).toBeGreaterThan(-1);
@@ -356,6 +391,8 @@ describe("API route ownership regression", () => {
     expect(telemetryMount).toBeLessThan(riskAgentMount);
     expect(screeningRoutesMount).toBeLessThan(riskAgentMount);
     expect(evidencePackageMount).toBeLessThan(screeningJobsMount);
+    expect(leaseNoticeLandlordMount).toBeLessThan(screeningJobsMount);
+    expect(leaseNoticeLandlordMount).toBeLessThan(apiCatchall);
     expect(buildProbeRoute).toBeLessThan(riskAgentMount);
     expect(tenantPortalMount).toBeLessThan(referralsMount);
     expect(tenantPortalMount).toBeLessThan(screeningJobsMount);
@@ -497,6 +534,74 @@ describe("API route ownership regression", () => {
     expect(evidencePackageRes.headers["x-route-source"]).toBe("landlordEvidencePackageGenerationRoutes.ts");
     expect(evidencePackageRes.headers["x-evidence-package-route-version"]).toBe("lease-evidence-package-pdf-v1");
     expect(evidencePackageRes.headers["x-route-source"]).not.toBe("screeningJobsAdminRoutes.ts");
+
+    const draftSnapshotRes = await invokeApp(app, {
+      method: "POST",
+      url: "/api/landlord/leases/lease-mounted-success/renewal-notice-draft-snapshots",
+      headers: { authorization: "Bearer landlord-token" },
+      body: {
+        draftText: "Hello Jane,\n\nThis is a renewal planning draft.",
+        sourceValues: {
+          tenantLabel: "Jane Tenant",
+          propertyUnitLabel: "Harbour View · Unit 101",
+          currentRentLabel: "CA$1,850.00",
+          renewalRentLabel: "CA$1,975.00",
+          currentLeaseEndLabel: "December 31, 2026",
+          proposedTermLabel: "Fixed term · January 1, 2027 to December 31, 2027",
+          tenantResponseTargetDateLabel: "November 15, 2026",
+        },
+        noDeliveryFlags: {
+          emailSent: false,
+          noticeServed: false,
+          tenantNotified: false,
+        },
+      },
+    });
+    expect(draftSnapshotRes.status).toBe(201);
+    expect(draftSnapshotRes.headers["x-route-source"]).toBe("leaseNoticeLandlordRoutes.ts");
+    expect(draftSnapshotRes.headers["x-route-source"]).not.toBe("not-found");
+    expect(draftSnapshotRes.body?.snapshot).toEqual(
+      expect.objectContaining({
+        status: "draft_saved",
+        flags: { emailSent: false, noticeServed: false, tenantNotified: false },
+      })
+    );
+
+    const draftSnapshotMissingAuth = await invokeApp(app, {
+      method: "POST",
+      url: "/api/landlord/leases/lease-mounted-success/renewal-notice-draft-snapshots",
+      body: {},
+    });
+    expect(draftSnapshotMissingAuth.status).toBe(401);
+    expect(draftSnapshotMissingAuth.headers["x-route-source"]).toBe("leaseNoticeLandlordRoutes.ts");
+    expect(draftSnapshotMissingAuth.headers["x-route-source"]).not.toBe("not-found");
+
+    const draftSnapshotUnknownLease = await invokeApp(app, {
+      method: "POST",
+      url: "/api/landlord/leases/lease-missing/renewal-notice-draft-snapshots",
+      headers: { authorization: "Bearer landlord-token" },
+      body: {
+        draftText: "Draft text",
+        sourceValues: {
+          tenantLabel: "Jane Tenant",
+          propertyUnitLabel: "Harbour View · Unit 101",
+          currentRentLabel: "CA$1,850.00",
+          renewalRentLabel: "CA$1,975.00",
+          currentLeaseEndLabel: "December 31, 2026",
+          proposedTermLabel: "Fixed term · January 1, 2027 to December 31, 2027",
+          tenantResponseTargetDateLabel: "November 15, 2026",
+        },
+        noDeliveryFlags: {
+          emailSent: false,
+          noticeServed: false,
+          tenantNotified: false,
+        },
+      },
+    });
+    expect(draftSnapshotUnknownLease.status).toBe(404);
+    expect(draftSnapshotUnknownLease.headers["x-route-source"]).toBe("leaseNoticeLandlordRoutes.ts");
+    expect(draftSnapshotUnknownLease.body?.error).toBe("LEASE_NOT_FOUND");
+    expect(draftSnapshotUnknownLease.body?.error).not.toBe("Not Found");
 
     const internalRes = await invokeApp(app, {
       method: "POST",
