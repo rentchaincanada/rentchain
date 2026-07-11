@@ -31,16 +31,25 @@ function formatDateOnly(value: string | null | undefined) {
   return parsed.toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" });
 }
 
-function formatDateTime(value: number | null | undefined) {
+function isValidDateValue(value: string | number | null | undefined) {
+  if (value == null || value === "") return false;
+  if (typeof value === "number") return Number.isFinite(value) && value > 0;
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return true;
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed);
+}
+
+function formatTargetDate(value: string | number | null | undefined) {
   if (!value) return "Not set";
+  if (typeof value === "string") return formatDateOnly(value);
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Not set";
-  return date.toLocaleString("en-CA", {
+  return date.toLocaleDateString("en-CA", {
     year: "numeric",
     month: "long",
     day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
   });
 }
 
@@ -87,7 +96,7 @@ export function getRenewalNoticeDraftReadiness(lease: LandlordLeaseRenewalLease)
   ) {
     missing.push("new lease end date");
   }
-  if (!lease.renewalDecisionDeadlineAt) {
+  if (!isValidDateValue(lease.renewalDecisionDeadlineAt)) {
     missing.push("tenant response target date");
   }
   return { ready: missing.length === 0, missing };
@@ -101,7 +110,7 @@ export function buildRenewalNoticeDraftText(lease: LandlordLeaseRenewalLease) {
     : "no rent change currently proposed";
   const startDate = formatDateOnly(lease.renewalNewLeaseStartDate);
   const endDate = lease.renewalNewLeaseEndDate ? formatDateOnly(lease.renewalNewLeaseEndDate) : "open-ended";
-  const targetDate = formatDateTime(lease.renewalDecisionDeadlineAt);
+  const targetDate = formatTargetDate(lease.renewalDecisionDeadlineAt);
 
   return [
     `Hello ${tenantName},`,
@@ -204,7 +213,7 @@ export function LeaseRenewalNoticeDraftCard({
             lease.renewalNewLeaseEndDate ? formatDateOnly(lease.renewalNewLeaseEndDate) : "open-ended"
           }`}
         />
-        <Fact label="Tenant response target date" value={formatDateTime(lease.renewalDecisionDeadlineAt)} />
+        <Fact label="Tenant response target date" value={formatTargetDate(lease.renewalDecisionDeadlineAt)} />
       </dl>
 
       <label style={{ display: "grid", gap: 6 }}>

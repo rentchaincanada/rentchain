@@ -31,16 +31,31 @@ type LeaseRenewalOperatorInputsCardProps = {
   notify?: (toast: LeaseRenewalToast) => void;
 };
 
-export function toDatetimeLocalInput(value: number | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+function toLocalDateInputFromDate(date: Date) {
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-export function fromDatetimeLocalInput(value: string) {
+export function toDateInput(value: string | number | null | undefined) {
+  if (!value) return "";
+  const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const date = new Date(value);
+  return toLocalDateInputFromDate(date);
+}
+
+export function fromDateInput(value: string) {
   const raw = String(value || "").trim();
   if (!raw) return null;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly;
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day)).getTime();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
   const parsed = Date.parse(raw);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -52,7 +67,7 @@ export function createLeaseRenewalFormState(lease: LandlordLeaseRenewalLease): L
     newTermType: lease.renewalNewTermType || "",
     newLeaseStartDate: lease.renewalNewLeaseStartDate || "",
     newLeaseEndDate: lease.renewalNewLeaseEndDate || "",
-    responseDeadlineAt: toDatetimeLocalInput(lease.renewalDecisionDeadlineAt),
+    responseDeadlineAt: toDateInput(lease.renewalDecisionDeadlineAt),
   };
 }
 
@@ -247,17 +262,21 @@ export function LeaseRenewalOperatorInputsCard({
         newTermType: form.newTermType || null,
         newLeaseStartDate: form.newLeaseStartDate || null,
         newLeaseEndDate: form.newLeaseEndDate || null,
-        responseDeadlineAt: fromDatetimeLocalInput(form.responseDeadlineAt),
+        responseDeadlineAt: fromDateInput(form.responseDeadlineAt),
       });
-      const savedForm = createLeaseRenewalFormState(response.lease);
-      setLocalLease(response.lease);
+      const savedLease = {
+        ...response.lease,
+        renewalDecisionDeadlineAt: response.lease.renewalDecisionDeadlineAt ?? response.renewalInputs?.responseDeadlineAt ?? null,
+      };
+      const savedForm = createLeaseRenewalFormState(savedLease);
+      setLocalLease(savedLease);
       if (onFormStateChange) {
         onFormStateChange(lease.id, savedForm);
       } else {
         setInternalForm(savedForm);
       }
       setValidation({});
-      onSaved?.(response.lease);
+      onSaved?.(savedLease);
       setStatusMessage({ variant: "success", text: "Lease renewal inputs saved." });
       notify?.({
         message: "Lease renewal inputs saved",
@@ -384,7 +403,7 @@ export function LeaseRenewalOperatorInputsCard({
 
         <label style={fieldStyle}>
           <span>Tenant response target date</span>
-          <input type="datetime-local" value={form.responseDeadlineAt} onChange={(event) => updateForm("responseDeadlineAt", event.target.value)} />
+          <input type="date" value={form.responseDeadlineAt} onChange={(event) => updateForm("responseDeadlineAt", event.target.value)} />
           <span style={{ color: "#64748b", fontSize: 12 }}>
             Planning date only. Does not send notice or determine legal deadlines.
           </span>

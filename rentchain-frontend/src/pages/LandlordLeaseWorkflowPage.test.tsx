@@ -28,10 +28,17 @@ function renderWorkflow(path: string) {
   );
 }
 
-function datetimeLocalValue(value: number) {
+function dateInputValue(value: number) {
   const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateInputValueToMs(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day).getTime();
 }
 
 describe("LandlordLeaseWorkflowPage", () => {
@@ -274,7 +281,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByLabelText(/New lease start date/i)).toHaveValue("2027-01-01");
     expect(screen.getByLabelText(/New lease end date/i)).toHaveValue("2027-12-31");
     expect(screen.getByLabelText(/Tenant response target date/i)).toHaveValue(
-      datetimeLocalValue(Date.UTC(2026, 10, 15, 13, 30, 0, 0))
+      dateInputValue(Date.UTC(2026, 10, 15, 13, 30, 0, 0))
     );
     expect(screen.getByText("Planning date only. Does not send notice or determine legal deadlines.")).toBeInTheDocument();
     expect(screen.queryByLabelText(/Response deadline/i)).not.toBeInTheDocument();
@@ -367,6 +374,44 @@ describe("LandlordLeaseWorkflowPage", () => {
   });
 
   it("saves renewal operator inputs through the existing lease renewal save behavior", async () => {
+    mocks.saveLeaseRenewalInputs.mockResolvedValueOnce({
+      ok: true,
+      lease: {
+        id: "lease-1",
+        tenantId: "tenant-1",
+        propertyId: "prop-1",
+        propertyAddress: "12 Harbour Road",
+        unitId: "unit-1",
+        status: "active",
+        leaseType: "fixed_term",
+        province: "NS",
+        leaseStartDate: "2026-01-01",
+        leaseEndDate: "2026-12-31",
+        currentRent: 1850,
+        currency: "CAD",
+        nextNoticeDueAt: null,
+        latestNoticeId: null,
+        tenantName: "Jane Tenant",
+        unitLabel: "Unit 101",
+        propertyLabel: "Harbour View",
+        renewalRentChangeMode: "no_change",
+        renewalOfferedRent: null,
+        renewalDecisionDeadlineAt: null,
+        renewalNewTermType: "month_to_month",
+        renewalNewLeaseStartDate: "2027-01-01",
+        renewalNewLeaseEndDate: "",
+        renewalUpdatedAt: "2026-07-02T12:00:00.000Z",
+      },
+      renewalInputs: {
+        rentChangeMode: "no_change",
+        proposedRent: null,
+        newTermType: "month_to_month",
+        newLeaseStartDate: "2027-01-01",
+        newLeaseEndDate: null,
+        responseDeadlineAt: dateInputValueToMs("2026-11-20"),
+      },
+    });
+
     renderWorkflow("/leases/lease-1/workflows/renewal");
 
     expect(await screen.findByLabelText(/Rent change mode/i)).toHaveValue("increase");
@@ -374,7 +419,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     fireEvent.change(screen.getByLabelText(/New term type/i), { target: { value: "month_to_month" } });
     fireEvent.change(screen.getByLabelText(/New lease start date/i), { target: { value: "2027-01-01" } });
     fireEvent.change(screen.getByLabelText(/New lease end date/i), { target: { value: "" } });
-    fireEvent.change(screen.getByLabelText(/Tenant response target date/i), { target: { value: "2026-11-20T10:00" } });
+    fireEvent.change(screen.getByLabelText(/Tenant response target date/i), { target: { value: "2026-11-20" } });
     fireEvent.click(screen.getByRole("button", { name: "Save renewal inputs" }));
 
     await waitFor(() => {
@@ -386,10 +431,16 @@ describe("LandlordLeaseWorkflowPage", () => {
           newTermType: "month_to_month",
           newLeaseStartDate: "2027-01-01",
           newLeaseEndDate: null,
+          responseDeadlineAt: dateInputValueToMs("2026-11-20"),
         })
       );
     });
     expect(await screen.findByText("Lease renewal inputs saved.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("Draft ready");
+    expect(screen.getByLabelText("Tenant renewal notice draft")).not.toHaveTextContent("Missing: tenant response target date");
+    expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("November 20, 2026");
+    expect(screen.queryByLabelText(/Response deadline/i)).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/deadline choices/i);
   });
 
   it("shows a clear save failure state for renewal operator inputs", async () => {
