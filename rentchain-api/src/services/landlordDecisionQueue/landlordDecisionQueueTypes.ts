@@ -20,8 +20,12 @@ export type LandlordDecisionQueueWorkspace =
   | "evidence_compliance";
 
 export type LandlordDecisionQueueSourceType =
+  | "renewal_notice_send_review"
+  | "application_review"
+  | "evidence_review"
   | "decision_inbox"
   | "lease_state_coherence"
+  | "payment_obligation"
   | "payment_readiness"
   | "lease_lifecycle"
   | "maintenance_readiness"
@@ -33,7 +37,23 @@ export type LandlordDecisionQueueSourceType =
   | "message_support_escalation"
   | "unified_inbox_event";
 
-export type LandlordDecisionQueueStatus = "open" | "pending" | "blocked" | "resolved" | "dismissed";
+export type LandlordDecisionQueueStatus =
+  | "open"
+  | "acknowledged"
+  | "in_review"
+  | "pending"
+  | "blocked"
+  | "approved"
+  | "returned"
+  | "deferred"
+  | "resolved"
+  | "dismissed";
+
+export type LandlordDecisionQueueAssignment = {
+  assignedToUserId: string | null;
+  assignedToEmail: string | null;
+  assignmentLabel: string | null;
+};
 
 export type LandlordDecisionQueueRelatedRefs = {
   propertyId?: string | null;
@@ -49,6 +69,7 @@ export type LandlordDecisionQueueItem = LandlordDecisionQueueRelatedRefs & {
   landlordId: string;
   sourceType: LandlordDecisionQueueSourceType;
   sourceId: string;
+  sourceRoute?: string | null;
   workspace: LandlordDecisionQueueWorkspace;
   severity: LandlordDecisionQueueSeverity;
   title: string;
@@ -59,6 +80,14 @@ export type LandlordDecisionQueueItem = LandlordDecisionQueueRelatedRefs & {
   createdAt: string | null;
   updatedAt: string | null;
   status: LandlordDecisionQueueStatus;
+  assignment?: LandlordDecisionQueueAssignment | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+  lastActionAt?: string | null;
+  lastActionBy?: string | null;
+  sourceSnapshot?: Record<string, unknown> | null;
+  auditEventIds?: string[];
+  metadata?: Record<string, unknown> | null;
   dedupeKey: string;
   sortKey: string;
   priorityRank: number;

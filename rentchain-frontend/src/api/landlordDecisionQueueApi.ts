@@ -18,12 +18,29 @@ export type LandlordDecisionQueueWorkspace =
   | "notices"
   | "evidence_compliance";
 
-export type LandlordDecisionQueueStatus = "open" | "pending" | "blocked" | "resolved" | "dismissed";
+export type LandlordDecisionQueueStatus =
+  | "open"
+  | "acknowledged"
+  | "in_review"
+  | "pending"
+  | "blocked"
+  | "approved"
+  | "returned"
+  | "deferred"
+  | "resolved"
+  | "dismissed";
+
+export type LandlordDecisionQueueAssignment = {
+  assignedToUserId: string | null;
+  assignedToEmail: string | null;
+  assignmentLabel: string | null;
+};
 
 export type LandlordDecisionQueueItem = {
   id: string;
   sourceType: string;
   sourceId: string;
+  sourceRoute?: string | null;
   propertyId?: string | null;
   unitId?: string | null;
   tenantId?: string | null;
@@ -40,6 +57,14 @@ export type LandlordDecisionQueueItem = {
   createdAt: string | null;
   updatedAt: string | null;
   status: LandlordDecisionQueueStatus;
+  assignment?: LandlordDecisionQueueAssignment | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+  lastActionAt?: string | null;
+  lastActionBy?: string | null;
+  sourceSnapshot?: Record<string, unknown> | null;
+  auditEventIds?: string[];
+  metadata?: Record<string, unknown> | null;
   dedupeKey: string;
   sortKey: string;
   priorityRank: number;
