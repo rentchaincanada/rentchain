@@ -237,8 +237,10 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(await screen.findByRole("heading", { name: "Notice Workflow" })).toBeInTheDocument();
     expect(screen.getByText("Review notice-related lease status, lifecycle timing, and audit context before preparing a notice.")).toBeInTheDocument();
     const noticeReview = await screen.findByLabelText("Renewal notice review");
+    await waitFor(() => {
+      expect(noticeReview).toHaveTextContent("Draft ready");
+    });
     expect(noticeReview).toHaveTextContent("Review renewal notice preparation");
-    expect(noticeReview).toHaveTextContent("Draft ready");
     expect(noticeReview).toHaveTextContent("Email delivery");
     expect(noticeReview).toHaveTextContent("Deferred");
     expect(noticeReview).toHaveTextContent("Evidence capture");
@@ -326,7 +328,9 @@ describe("LandlordLeaseWorkflowPage", () => {
     renderWorkflow("/leases/lease-1/workflows/notice");
 
     const noticeReview = await screen.findByLabelText("Renewal notice review");
-    expect(noticeReview).toHaveTextContent("Inputs needed");
+    await waitFor(() => {
+      expect(noticeReview).toHaveTextContent("Inputs needed");
+    });
     expect(noticeReview).toHaveTextContent("Save renewal operator inputs before reviewing tenant-facing notice preparation.");
     expect(noticeReview).toHaveTextContent("Missing: rent change mode, new term type, new lease start date, new lease end date, tenant response target date.");
     expect(screen.queryByLabelText("Tenant notice draft preview")).not.toBeInTheDocument();
@@ -376,7 +380,9 @@ describe("LandlordLeaseWorkflowPage", () => {
     renderWorkflow("/leases/lease-1/workflows/notice");
 
     const noticeReview = await screen.findByLabelText("Renewal notice review");
-    expect(noticeReview).toHaveTextContent("Invalid renewal term dates");
+    await waitFor(() => {
+      expect(noticeReview).toHaveTextContent("Invalid renewal term dates");
+    });
     expect(noticeReview).toHaveTextContent(
       "Review renewal term dates before preparing a tenant notice draft. The new lease start date must be on or before the new lease end date."
     );
