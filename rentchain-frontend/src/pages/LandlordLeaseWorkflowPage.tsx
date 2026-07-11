@@ -5,7 +5,16 @@ import {
   fetchExpiringLeaseRenewals,
   type LandlordLeaseRenewalLease,
 } from "@/api/landlordLeaseRenewalApi";
-import { LeaseRenewalOperatorInputsCard } from "@/components/leases/LeaseRenewalOperatorInputsCard";
+import {
+  formatRenewalCurrency,
+  hasSavedRenewalInputs,
+  LeaseRenewalOperatorInputsCard,
+} from "@/components/leases/LeaseRenewalOperatorInputsCard";
+import {
+  buildRenewalNoticeDraftText,
+  getRenewalNoticeDraftReadiness,
+  LeaseRenewalNoticeDraftCard,
+} from "@/components/leases/LeaseRenewalNoticeDraftCard";
 import {
   RENEWAL_PIPELINE_BUCKETS,
   deriveRenewalPipelineItems,
@@ -236,13 +245,65 @@ function renewalSourceContextItem(lease: LandlordActiveLease): RenewalPipelineIt
   return deriveRenewalPipelineItems([lease])[0] || null;
 }
 
+function looksLikeWorkflowRawIdentifier(value: string) {
+  const raw = value.trim();
+  if (raw.length < 12 || /\s/.test(raw)) return false;
+  return /^[A-Za-z0-9_-]+$/.test(raw) && /[A-Za-z]/.test(raw) && /\d/.test(raw);
+}
+
+function workflowDisplayLabel(value: string | null | undefined, genericPattern?: RegExp) {
+  const label = String(value || "").trim();
+  if (!label) return null;
+  if (genericPattern?.test(label)) return null;
+  if (looksLikeWorkflowRawIdentifier(label)) return null;
+  return label;
+}
+
+function workflowUnitLabel(lease: LandlordActiveLease) {
+  const unitNumber = workflowDisplayLabel(lease.unitNumber, /^unit$/i);
+  if (unitNumber) return /^unit\b/i.test(unitNumber) ? unitNumber : `Unit ${unitNumber}`;
+  const unitLabel = workflowDisplayLabel(lease.unitLabel, /^unit$/i);
+  if (!unitLabel) return null;
+  return /^unit\b/i.test(unitLabel) ? unitLabel : `Unit ${unitLabel}`;
+}
+
+function workflowPropertyLabel(lease: LandlordActiveLease) {
+  return (
+    workflowDisplayLabel(lease.propertyName, /^property$/i) ||
+    workflowDisplayLabel(lease.propertyLabel, /^property$/i) ||
+    workflowDisplayLabel(lease.propertyAddress, /^property$/i)
+  );
+}
+
+function renewalProjectionWithLeaseContext(
+  projectedLease: LandlordLeaseRenewalLease,
+  sourceLease: LandlordActiveLease
+): LandlordLeaseRenewalLease {
+  return {
+    ...projectedLease,
+    tenantName: workflowDisplayLabel(projectedLease.tenantName, /^tenant$/i) || workflowDisplayLabel(sourceLease.tenantName, /^tenant$/i),
+    propertyAddress:
+      workflowDisplayLabel(projectedLease.propertyAddress, /^property$/i) ||
+      workflowDisplayLabel(sourceLease.propertyAddress, /^property$/i) ||
+      null,
+    propertyLabel:
+      workflowDisplayLabel(projectedLease.propertyLabel, /^property$/i) ||
+      workflowPropertyLabel(sourceLease) ||
+      null,
+    unitLabel:
+      workflowDisplayLabel(projectedLease.unitLabel, /^unit$/i) ||
+      workflowUnitLabel(sourceLease) ||
+      null,
+  };
+}
+
 function renewalProjectionFallbackFromLease(lease: LandlordActiveLease): LandlordLeaseRenewalLease {
   const projectedLease = lease as LandlordActiveLease & Partial<LandlordLeaseRenewalLease>;
   return {
     id: lease.id,
     tenantId: lease.tenantId || lease.primaryTenantId || "",
     propertyId: lease.propertyId || null,
-    propertyAddress: lease.propertyAddress || null,
+    propertyAddress: workflowDisplayLabel(lease.propertyAddress, /^property$/i),
     unitId: lease.unitId || null,
     status: lease.status,
     leaseType: projectedLease.leaseType || "fixed_term",
@@ -253,9 +314,9 @@ function renewalProjectionFallbackFromLease(lease: LandlordActiveLease): Landlor
     currency: projectedLease.currency || "CAD",
     nextNoticeDueAt: projectedLease.nextNoticeDueAt || null,
     latestNoticeId: projectedLease.latestNoticeId || null,
-    tenantName: lease.tenantName || null,
-    unitLabel: lease.unitLabel || (lease.unitNumber ? `Unit ${lease.unitNumber}` : null),
-    propertyLabel: lease.propertyLabel || lease.propertyName || null,
+    tenantName: workflowDisplayLabel(lease.tenantName, /^tenant$/i),
+    unitLabel: workflowUnitLabel(lease),
+    propertyLabel: workflowPropertyLabel(lease),
     renewalRentChangeMode: projectedLease.renewalRentChangeMode || null,
     renewalOfferedRent: typeof projectedLease.renewalOfferedRent === "number" ? projectedLease.renewalOfferedRent : null,
     renewalDecisionDeadlineAt: projectedLease.renewalDecisionDeadlineAt || null,
@@ -268,7 +329,7 @@ function renewalProjectionFallbackFromLease(lease: LandlordActiveLease): Landlor
   };
 }
 
-function RenewalOperatorInputsWorkspace({ lease }: { lease: LandlordActiveLease }) {
+function useRenewalLeaseProjection(lease: LandlordActiveLease) {
   const propertyId = String(lease.propertyId || "").trim();
   const [renewalLease, setRenewalLease] = React.useState<LandlordLeaseRenewalLease | null>(null);
   const [loadingRenewalInputs, setLoadingRenewalInputs] = React.useState(false);
@@ -291,7 +352,11 @@ function RenewalOperatorInputsWorkspace({ lease }: { lease: LandlordActiveLease 
         if (!active) return;
         const renewalItems = response.items?.length ? response.items : response.data || [];
         const projectedLease = renewalItems.find((item) => item.id === lease.id);
-        setRenewalLease(projectedLease || renewalProjectionFallbackFromLease(lease));
+        setRenewalLease(
+          projectedLease
+            ? renewalProjectionWithLeaseContext(projectedLease, lease)
+            : renewalProjectionFallbackFromLease(lease)
+        );
       } catch (err: unknown) {
         if (!active) return;
         setRenewalLease(null);
@@ -305,6 +370,81 @@ function RenewalOperatorInputsWorkspace({ lease }: { lease: LandlordActiveLease 
       active = false;
     };
   }, [lease, propertyId]);
+
+  return { propertyId, renewalLease, setRenewalLease, loadingRenewalInputs, renewalInputsError };
+}
+
+function formatRenewalWorkflowDate(value: string | null | undefined) {
+  return formatDate(value);
+}
+
+function formatRenewalTargetDate(value: string | number | null | undefined) {
+  if (!value) return "Not set";
+  if (typeof value === "string") return formatRenewalWorkflowDate(value);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not set";
+  return date.toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" });
+}
+
+function renewalProjectionLocationLabel(lease: LandlordLeaseRenewalLease) {
+  const property =
+    workflowDisplayLabel(lease.propertyAddress, /^property$/i) ||
+    workflowDisplayLabel(lease.propertyLabel, /^property$/i);
+  const unitRaw = workflowDisplayLabel(lease.unitLabel, /^unit$/i);
+  const unit = unitRaw ? (/^unit\b/i.test(unitRaw) ? unitRaw : `Unit ${unitRaw}`) : null;
+  if (property && unit) return `${property} · ${unit}`;
+  if (property) return property;
+  if (unit) return unit;
+  return "Property/unit unavailable";
+}
+
+function renewalProjectionTenantLabel(lease: LandlordLeaseRenewalLease) {
+  return workflowDisplayLabel(lease.tenantName, /^tenant$/i) || "Tenant name unavailable";
+}
+
+function renewalProjectionRentLabel(lease: LandlordLeaseRenewalLease) {
+  const requiresRent = lease.renewalRentChangeMode === "increase" || lease.renewalRentChangeMode === "decrease";
+  if (!requiresRent) return "No rent change currently proposed";
+  return formatRenewalCurrency(lease.renewalOfferedRent, lease.currency) || "Renewal rent not set";
+}
+
+function renewalProjectionTermLabel(lease: LandlordLeaseRenewalLease) {
+  const start = formatRenewalWorkflowDate(lease.renewalNewLeaseStartDate);
+  const end = lease.renewalNewLeaseEndDate ? formatRenewalWorkflowDate(lease.renewalNewLeaseEndDate) : "open-ended";
+  return `${start} to ${end}`;
+}
+
+function RenewalWorkflowStatusPanel({ lease }: { lease: LandlordLeaseRenewalLease }) {
+  const readiness = getRenewalNoticeDraftReadiness(lease);
+  const saved = hasSavedRenewalInputs(lease);
+  return (
+    <div style={sourceContextStyle} aria-label="Renewal workflow status">
+      <div style={sourceContextTitleStyle}>Renewal workflow status</div>
+      <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, margin: 0 }}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Operator inputs</dt>
+          <dd style={sourceValueStyle}>{saved ? "Operator inputs saved" : "Operator inputs pending"}</dd>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Tenant notice draft</dt>
+          <dd style={sourceValueStyle}>{readiness.ready ? "Tenant notice draft ready" : "Review inputs before draft"}</dd>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Notice review</dt>
+          <dd style={sourceValueStyle}>Notice review pending</dd>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Email delivery</dt>
+          <dd style={sourceValueStyle}>Email delivery deferred</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
+function RenewalOperatorInputsWorkspace({ lease }: { lease: LandlordActiveLease }) {
+  const { propertyId, renewalLease, setRenewalLease, loadingRenewalInputs, renewalInputsError } = useRenewalLeaseProjection(lease);
+  const inputsRef = React.useRef<HTMLDivElement | null>(null);
 
   if (!propertyId) {
     return (
@@ -374,12 +514,104 @@ function RenewalOperatorInputsWorkspace({ lease }: { lease: LandlordActiveLease 
       {loadingRenewalInputs ? <div>Loading renewal operator inputs…</div> : null}
       {!loadingRenewalInputs && renewalInputsError ? <div style={{ color: "#b91c1c" }}>{renewalInputsError}</div> : null}
       {!loadingRenewalInputs && !renewalInputsError && renewalLease ? (
-        <LeaseRenewalOperatorInputsCard
-          lease={renewalLease}
-          onSaved={(updatedLease) => setRenewalLease(updatedLease)}
-        />
+        <>
+          <RenewalWorkflowStatusPanel lease={renewalLease} />
+          <div ref={inputsRef} tabIndex={-1} style={{ outline: "none" }}>
+            <LeaseRenewalOperatorInputsCard
+              lease={renewalLease}
+              onSaved={(updatedLease) => setRenewalLease(updatedLease)}
+              showLifecycleSummary={false}
+            />
+          </div>
+          <LeaseRenewalNoticeDraftCard
+            lease={renewalLease}
+            noticeWorkflowPath={`/leases/${encodeURIComponent(lease.id)}/workflows/notice`}
+            onReviewInputs={() => {
+              inputsRef.current?.focus();
+              inputsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          />
+        </>
       ) : null}
     </>
+  );
+}
+
+function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLease }) {
+  const { propertyId, renewalLease, loadingRenewalInputs, renewalInputsError } = useRenewalLeaseProjection(lease);
+  const renewalPath = `/leases/${encodeURIComponent(lease.id)}/workflows/renewal`;
+
+  if (!propertyId) return null;
+  if (loadingRenewalInputs) return <div>Loading renewal notice draft context…</div>;
+  if (renewalInputsError) {
+    return <div style={{ color: "#b91c1c" }}>Renewal notice draft context could not be loaded.</div>;
+  }
+  if (!renewalLease || !hasSavedRenewalInputs(renewalLease)) return null;
+
+  const readiness = getRenewalNoticeDraftReadiness(renewalLease);
+  const draftText = readiness.ready ? buildRenewalNoticeDraftText(renewalLease) : null;
+
+  return (
+    <section style={panelStyle} aria-label="Renewal notice draft context">
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <h2 style={sectionHeadingStyle}>Renewal notice draft context</h2>
+          <div style={{ color: workflowTheme.muted, lineHeight: 1.6 }}>
+            Renewal operator inputs are available for this lease. Review this context before preparing tenant-facing notice steps.
+          </div>
+        </div>
+        <Link to={renewalPath} style={buttonLinkStyle}>
+          Back to renewal workflow
+        </Link>
+      </div>
+
+      <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, margin: 0 }}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Tenant</dt>
+          <dd style={sourceValueStyle}>{renewalProjectionTenantLabel(renewalLease)}</dd>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Unit/property</dt>
+          <dd style={sourceValueStyle}>{renewalProjectionLocationLabel(renewalLease)}</dd>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Current rent</dt>
+          <dd style={sourceValueStyle}>{formatRenewalCurrency(renewalLease.currentRent, renewalLease.currency) || "Current rent unavailable"}</dd>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Renewal rent entered for review</dt>
+          <dd style={sourceValueStyle}>{renewalProjectionRentLabel(renewalLease)}</dd>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Current lease end</dt>
+          <dd style={sourceValueStyle}>{formatRenewalWorkflowDate(renewalLease.leaseEndDate)}</dd>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Proposed term</dt>
+          <dd style={sourceValueStyle}>{renewalProjectionTermLabel(renewalLease)}</dd>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <dt style={termStyle}>Tenant response target date</dt>
+          <dd style={sourceValueStyle}>{formatRenewalTargetDate(renewalLease.renewalDecisionDeadlineAt)}</dd>
+        </div>
+      </dl>
+
+      {draftText ? (
+        <label style={{ display: "grid", gap: 6 }}>
+          <span style={termStyle}>Draft preview from renewal workflow</span>
+          <textarea readOnly rows={7} value={draftText} style={draftPreviewStyle} />
+        </label>
+      ) : (
+        <div style={{ color: workflowTheme.muted, lineHeight: 1.6 }}>
+          Renewal operator inputs are present, but the tenant notice draft still needs review in the renewal workflow before
+          tenant-facing notice steps are prepared.
+        </div>
+      )}
+
+      <div style={{ color: workflowTheme.subtle, lineHeight: 1.6 }}>
+        This is review context only. No notice record is created here, and email delivery remains deferred.
+      </div>
+    </section>
   );
 }
 
@@ -479,21 +711,16 @@ export default function LandlordLeaseWorkflowPage() {
             </ul>
           </section>
 
+          {workflow.key === "notice" ? <RenewalNoticeDraftContextWorkspace lease={lease} /> : null}
+
           {workflow.key === "renewal" ? (
             <section style={panelStyle} aria-label="Renewal operator inputs">
               <h2 style={sectionHeadingStyle}>Renewal operator inputs</h2>
               <div style={{ color: workflowTheme.muted, lineHeight: 1.6 }}>
-                Review and save unit-specific renewal inputs such as proposed rent, term dates, and response deadline
+                Review and save unit-specific renewal inputs such as proposed rent, term dates, and tenant response target date
                 before preparing tenant-facing notices.
               </div>
               <RenewalOperatorInputsWorkspace lease={lease} />
-              <div style={deferredNoticeStyle} aria-label="Tenant notice email workflow">
-                <div style={{ color: workflowTheme.charcoal, fontWeight: 900 }}>Tenant notice/email workflow</div>
-                <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
-                  Tenant-facing renewal notices are not sent from this workflow yet. Review and save operator inputs here first;
-                  notice drafting, email delivery, and evidence tracking should be handled in a dedicated notice workflow.
-                </div>
-              </div>
             </section>
           ) : null}
 
@@ -579,20 +806,24 @@ const sourceContextTitleStyle: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const deferredNoticeStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-  padding: 12,
-  border: `1px dashed ${workflowTheme.borderStrong}`,
-  borderRadius: 10,
-  background: "rgba(255, 246, 232, 0.72)",
-};
-
 const sourceValueStyle: React.CSSProperties = {
   margin: 0,
   color: workflowTheme.charcoal,
   fontWeight: 700,
   lineHeight: 1.35,
+};
+
+const draftPreviewStyle: React.CSSProperties = {
+  width: "100%",
+  minHeight: 160,
+  boxSizing: "border-box",
+  resize: "vertical",
+  border: `1px solid ${workflowTheme.borderStrong}`,
+  borderRadius: 10,
+  padding: 10,
+  color: workflowTheme.charcoal,
+  background: "#fff",
+  lineHeight: 1.55,
 };
 
 const termStyle: React.CSSProperties = {

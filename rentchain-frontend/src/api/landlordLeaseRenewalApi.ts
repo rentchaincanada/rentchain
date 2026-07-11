@@ -30,7 +30,7 @@ export type LandlordLeaseRenewalLease = {
   propertyLabel: string | null;
   renewalRentChangeMode: "no_change" | "increase" | "decrease" | "undecided" | null;
   renewalOfferedRent: number | null;
-  renewalDecisionDeadlineAt: number | null;
+  renewalDecisionDeadlineAt: string | number | null;
   renewalNewTermType: "fixed_term" | "year_to_year" | "month_to_month" | null;
   renewalNewLeaseStartDate: string | null;
   renewalNewLeaseEndDate: string | null;
