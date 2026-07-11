@@ -324,6 +324,32 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(draftPreview.value).not.toContain("Please review these proposed renewal details");
     expect((draftPreview.value.match(/\bproposed\b/gi) || []).length).toBeLessThanOrEqual(1);
     expect(screen.getByText(/Email delivery is not enabled from this workflow yet/i)).toBeInTheDocument();
+    const evidenceReadiness = screen.getByLabelText("Evidence readiness");
+    expect(evidenceReadiness).toHaveTextContent("Evidence readiness");
+    expect(evidenceReadiness).toHaveTextContent("Operational record only");
+    expect(evidenceReadiness).toHaveTextContent("Draft prepared from saved renewal inputs");
+    expect(evidenceReadiness).toHaveTextContent("Review values before tenant communication");
+    expect(evidenceReadiness).toHaveTextContent("Jane Tenant");
+    expect(evidenceReadiness).toHaveTextContent("12 Harbour Road · Unit 101");
+    expect(evidenceReadiness).toHaveTextContent("CA$1,850.00");
+    expect(evidenceReadiness).toHaveTextContent("CA$1,975.00");
+    expect(evidenceReadiness).toHaveTextContent("December 31, 2026");
+    expect(evidenceReadiness).toHaveTextContent("Fixed term · January 1, 2027 to December 31, 2027");
+    expect(evidenceReadiness).toHaveTextContent("Tenant response target date");
+    expect(evidenceReadiness).toHaveTextContent("Copy/download actions are available for review");
+    expect(evidenceReadiness).toHaveTextContent("Email delivery not enabled");
+    expect(evidenceReadiness).toHaveTextContent("Draft evidence is not persisted yet");
+    expect(evidenceReadiness).toHaveTextContent("Audit capture deferred");
+    expect(evidenceReadiness).toHaveTextContent("Evidence package inclusion deferred");
+    expect(evidenceReadiness).toHaveTextContent("this draft text is not saved to an evidence package or audit trail yet");
+    expect(screen.getByRole("link", { name: "Open lease evidence preview" })).toHaveAttribute(
+      "href",
+      "/evidence-packs?scope=lease&scopeId=lease-1"
+    );
+    expect(screen.getByRole("link", { name: "Open lease review timeline" })).toHaveAttribute(
+      "href",
+      "/review-timeline?scope=lease&scopeId=lease-1"
+    );
     expect(screen.getByRole("link", { name: "Open notice review workflow" })).toHaveAttribute(
       "href",
       "/leases/lease-1/workflows/notice"
@@ -333,6 +359,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/must respond by|notice has been served|legally valid|automatically compliant/i);
+    expect(document.body).not.toHaveTextContent(/audit event created|evidence saved|notice served|tenant notified|email sent/i);
     expect(document.body).not.toHaveTextContent("/portfolio-health?entry=lease-renewals&propertyId=prop-1");
   });
 
@@ -516,6 +543,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     );
     expect(draftCard).not.toHaveTextContent("Draft ready");
     expect(screen.queryByLabelText("Draft message preview")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Evidence readiness")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Copy draft text" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Download draft" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();

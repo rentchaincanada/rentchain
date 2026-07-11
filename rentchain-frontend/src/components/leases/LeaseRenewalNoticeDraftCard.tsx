@@ -1,6 +1,8 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { evidencePackPath } from "@/api/evidencePackApi";
 import type { LandlordLeaseRenewalLease } from "@/api/landlordLeaseRenewalApi";
+import { reviewTimelinePath } from "@/api/reviewTimelineApi";
 import { formatRenewalCurrency } from "./LeaseRenewalOperatorInputsCard";
 
 type LeaseRenewalNoticeDraftCardProps = {
@@ -76,6 +78,12 @@ function formatTermType(value: LandlordLeaseRenewalLease["renewalNewTermType"]) 
     default:
       return "Not set";
   }
+}
+
+function formatEvidenceTermLabel(lease: LandlordLeaseRenewalLease) {
+  return `${formatTermType(lease.renewalNewTermType)} · ${formatDateOnly(lease.renewalNewLeaseStartDate)} to ${formatDateOnly(
+    lease.renewalNewLeaseEndDate
+  )}`;
 }
 
 function cleanDisplayLabel(value: string | null | undefined) {
@@ -194,6 +202,8 @@ export function LeaseRenewalNoticeDraftCard({
   const proposedRent = proposedRentRequired(lease)
     ? formatRenewalCurrency(lease.renewalOfferedRent, lease.currency) || "Proposed rent not set"
     : "No rent change currently proposed";
+  const leaseEvidencePath = evidencePackPath({ scope: "lease", scopeId: lease.id });
+  const leaseTimelinePath = reviewTimelinePath({ scope: "lease", scopeId: lease.id });
 
   async function copyDraft() {
     try {
@@ -285,6 +295,49 @@ export function LeaseRenewalNoticeDraftCard({
         evidence tracking should be completed in the dedicated communication workflow when available.
       </div>
 
+      <section style={evidenceReadinessStyle} aria-label="Evidence readiness">
+        <div style={evidenceReadinessHeaderStyle}>
+          <div>
+            <h4 style={subheadingStyle}>Evidence readiness</h4>
+            <div style={mutedStyle}>Draft prepared from saved renewal inputs. Review values before tenant communication.</div>
+          </div>
+          <span style={evidenceBadgeStyle}>Operational record only</span>
+        </div>
+
+        <dl style={factsGridStyle}>
+          <Fact label="Tenant" value={tenantMetadataLabel(lease)} />
+          <Fact label="Property/unit" value={propertyUnitLabel(lease)} />
+          <Fact label="Current rent" value={currentRent} />
+          <Fact label="Renewal rent" value={proposedRent} />
+          <Fact label="Current lease end" value={formatDateOnly(lease.leaseEndDate)} />
+          <Fact label="Proposed term" value={formatEvidenceTermLabel(lease)} />
+          <Fact label="Tenant response target date" value={formatTargetDate(lease.renewalDecisionDeadlineAt)} />
+        </dl>
+
+        <div style={statusListStyle}>
+          <StatusItem label="Draft prepared from saved renewal inputs" tone="ready" />
+          <StatusItem label="Copy/download actions are available for review" tone="ready" />
+          <StatusItem label="Email delivery not enabled" tone="deferred" />
+          <StatusItem label="Draft evidence is not persisted yet" tone="deferred" />
+          <StatusItem label="Audit capture deferred" tone="deferred" />
+          <StatusItem label="Evidence package inclusion deferred" tone="deferred" />
+        </div>
+
+        <div style={noticeStyle}>
+          Current evidence preview and review timeline routes can show lease context, but this draft text is not saved to an
+          evidence package or audit trail yet.
+        </div>
+
+        <div style={actionsStyle}>
+          <Link to={leaseEvidencePath} style={linkButtonStyle}>
+            Open lease evidence preview
+          </Link>
+          <Link to={leaseTimelinePath} style={linkButtonStyle}>
+            Open lease review timeline
+          </Link>
+        </div>
+      </section>
+
       <div style={actionsStyle}>
         <button type="button" onClick={() => void copyDraft()} style={primaryButtonStyle}>
           Copy draft text
@@ -308,6 +361,16 @@ function Fact({ label, value }: { label: string; value: string }) {
     <div style={{ display: "grid", gap: 4 }}>
       <dt style={termStyle}>{label}</dt>
       <dd style={valueStyle}>{value}</dd>
+    </div>
+  );
+}
+
+function StatusItem({ label, tone }: { label: string; tone: "ready" | "deferred" }) {
+  const markerStyle = tone === "ready" ? readyMarkerStyle : deferredMarkerStyle;
+  return (
+    <div style={statusItemStyle}>
+      <span aria-hidden="true" style={markerStyle} />
+      <span>{label}</span>
     </div>
   );
 }
@@ -336,6 +399,13 @@ const headingStyle: React.CSSProperties = {
   letterSpacing: 0,
 };
 
+const subheadingStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 15,
+  color: "#211c17",
+  letterSpacing: 0,
+};
+
 const mutedStyle: React.CSSProperties = {
   color: "#63594d",
   lineHeight: 1.55,
@@ -357,6 +427,13 @@ const readyBadgeStyle: React.CSSProperties = {
   border: "1px solid rgba(22, 101, 52, 0.28)",
   background: "rgba(22, 101, 52, 0.10)",
   color: "#166534",
+};
+
+const evidenceBadgeStyle: React.CSSProperties = {
+  ...badgeStyle,
+  border: "1px solid rgba(91, 70, 48, 0.24)",
+  background: "rgba(255, 246, 232, 0.95)",
+  color: "#5b4630",
 };
 
 const factsGridStyle: React.CSSProperties = {
@@ -401,6 +478,55 @@ const noticeStyle: React.CSSProperties = {
   borderRadius: 10,
   background: "rgba(255, 246, 232, 0.72)",
   padding: 10,
+};
+
+const evidenceReadinessStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  border: "1px solid rgba(91, 70, 48, 0.18)",
+  borderRadius: 10,
+  background: "rgba(255, 246, 232, 0.62)",
+  padding: 12,
+};
+
+const evidenceReadinessHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const statusListStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+  gap: 8,
+};
+
+const statusItemStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  color: "#211c17",
+  fontWeight: 700,
+  lineHeight: 1.4,
+};
+
+const statusMarkerBaseStyle: React.CSSProperties = {
+  width: 9,
+  height: 9,
+  borderRadius: 999,
+  flexShrink: 0,
+};
+
+const readyMarkerStyle: React.CSSProperties = {
+  ...statusMarkerBaseStyle,
+  background: "#166534",
+};
+
+const deferredMarkerStyle: React.CSSProperties = {
+  ...statusMarkerBaseStyle,
+  background: "#b45309",
 };
 
 const actionsStyle: React.CSSProperties = {
