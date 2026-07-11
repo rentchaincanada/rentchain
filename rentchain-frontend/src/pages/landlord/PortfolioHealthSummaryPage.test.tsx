@@ -274,6 +274,7 @@ describe("PortfolioHealthSummaryPage", () => {
     expect((await screen.findAllByText(/Taylor Tenant/i)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("123 Harbour St • Unit 2")).length).toBeGreaterThan(0);
     expect(screen.getByText("Expires 2026-06-30")).toBeInTheDocument();
+    expect(screen.getByLabelText("Current rent")).toHaveTextContent(/1,800/);
     expect(screen.queryByText(/^Updated/)).not.toBeInTheDocument();
     expect(screen.getByText("Visible leases: 1")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Print / Save renewal view" })).toBeInTheDocument();
@@ -430,11 +431,13 @@ describe("PortfolioHealthSummaryPage", () => {
     );
 
     expect((await screen.findAllByText(/Lease renewal operator inputs/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Save renewal term and tenant response target choices/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/deadline\s+choices/i)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Rent change mode/i), { target: { value: "no_change" } });
     fireEvent.change(screen.getByLabelText(/New term type/i), { target: { value: "fixed_term" } });
     fireEvent.change(screen.getByLabelText(/New lease start date/i), { target: { value: "2026-07-01" } });
     fireEvent.change(screen.getByLabelText(/New lease end date/i), { target: { value: "2027-06-30" } });
-    fireEvent.change(screen.getByLabelText(/Response deadline/i), { target: { value: "2026-05-01T08:00" } });
+    fireEvent.change(screen.getByLabelText(/Tenant response target date/i), { target: { value: "2026-05-01T08:00" } });
     fireEvent.click(screen.getByRole("button", { name: /Save renewal inputs/i }));
 
     await waitFor(() => {

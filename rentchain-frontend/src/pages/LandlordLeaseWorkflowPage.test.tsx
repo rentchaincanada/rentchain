@@ -1,14 +1,21 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import LandlordLeaseWorkflowPage from "./LandlordLeaseWorkflowPage";
 
 const mocks = vi.hoisted(() => ({
   getLeaseById: vi.fn(),
+  fetchExpiringLeaseRenewals: vi.fn(),
+  saveLeaseRenewalInputs: vi.fn(),
 }));
 
 vi.mock("@/api/leasesApi", () => ({
   getLeaseById: mocks.getLeaseById,
+}));
+
+vi.mock("@/api/landlordLeaseRenewalApi", () => ({
+  fetchExpiringLeaseRenewals: mocks.fetchExpiringLeaseRenewals,
+  saveLeaseRenewalInputs: mocks.saveLeaseRenewalInputs,
 }));
 
 function renderWorkflow(path: string) {
@@ -21,12 +28,21 @@ function renderWorkflow(path: string) {
   );
 }
 
+function datetimeLocalValue(value: number) {
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
 describe("LandlordLeaseWorkflowPage", () => {
   beforeEach(() => {
     mocks.getLeaseById.mockReset();
+    mocks.fetchExpiringLeaseRenewals.mockReset();
+    mocks.saveLeaseRenewalInputs.mockReset();
     mocks.getLeaseById.mockResolvedValue({
       lease: {
         id: "lease-1",
+        tenantId: "tenant-1",
         propertyId: "prop-1",
         propertyName: "Harbour View",
         unitNumber: "101",
@@ -105,6 +121,84 @@ describe("LandlordLeaseWorkflowPage", () => {
         ],
       },
     });
+    mocks.fetchExpiringLeaseRenewals.mockResolvedValue({
+      ok: true,
+      items: [
+        {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          propertyAddress: "12 Harbour Road",
+          unitId: "unit-1",
+          status: "active",
+          leaseType: "fixed_term",
+          province: "NS",
+          leaseStartDate: "2026-01-01",
+          leaseEndDate: "2026-12-31",
+          currentRent: 1850,
+          currency: "CAD",
+          nextNoticeDueAt: null,
+          latestNoticeId: null,
+          tenantName: "Jane Tenant",
+          unitLabel: "Unit 101",
+          propertyLabel: "Harbour View",
+          renewalRentChangeMode: "increase",
+          renewalOfferedRent: 1975,
+          renewalDecisionDeadlineAt: Date.UTC(2026, 10, 15, 13, 30, 0, 0),
+          renewalNewTermType: "fixed_term",
+          renewalNewLeaseStartDate: "2027-01-01",
+          renewalNewLeaseEndDate: "2027-12-31",
+          renewalUpdatedAt: "2026-07-01T12:00:00.000Z",
+          leaseLifecycleSummary: {
+            lifecycleStatus: "expiring_soon",
+            lifecycleLabel: "Expiring soon",
+            lifecycleDescription: "This lease is approaching notice timing.",
+            requiredNextAction: "prepare_renewal_notice",
+            renewalOutcome: "not_started",
+            daysUntilExpiry: 30,
+            history: [],
+          },
+        },
+      ],
+      data: [],
+    });
+    mocks.saveLeaseRenewalInputs.mockResolvedValue({
+      ok: true,
+      lease: {
+        id: "lease-1",
+        tenantId: "tenant-1",
+        propertyId: "prop-1",
+        propertyAddress: "12 Harbour Road",
+        unitId: "unit-1",
+        status: "active",
+        leaseType: "fixed_term",
+        province: "NS",
+        leaseStartDate: "2026-01-01",
+        leaseEndDate: "2026-12-31",
+        currentRent: 1850,
+        currency: "CAD",
+        nextNoticeDueAt: null,
+        latestNoticeId: null,
+        tenantName: "Jane Tenant",
+        unitLabel: "Unit 101",
+        propertyLabel: "Harbour View",
+        renewalRentChangeMode: "no_change",
+        renewalOfferedRent: null,
+        renewalDecisionDeadlineAt: Date.UTC(2026, 10, 20, 14, 0, 0, 0),
+        renewalNewTermType: "month_to_month",
+        renewalNewLeaseStartDate: "2027-01-01",
+        renewalNewLeaseEndDate: "",
+        renewalUpdatedAt: "2026-07-02T12:00:00.000Z",
+      },
+      renewalInputs: {
+        rentChangeMode: "no_change",
+        proposedRent: null,
+        newTermType: "month_to_month",
+        newLeaseStartDate: "2027-01-01",
+        newLeaseEndDate: null,
+        responseDeadlineAt: Date.UTC(2026, 10, 20, 14, 0, 0, 0),
+      },
+    });
   });
 
   afterEach(() => {
@@ -151,18 +245,167 @@ describe("LandlordLeaseWorkflowPage", () => {
     });
   });
 
-  it("preserves the lease renewal workflow and links to portfolio renewal inputs", async () => {
+  it("renders editable renewal operator inputs with prefilled values and source link", async () => {
     renderWorkflow("/leases/lease-1/workflows/renewal");
 
     expect(await screen.findByRole("heading", { name: "Renewal Review" })).toBeInTheDocument();
     expect(screen.getByText("Review lease end timing and renewal context before deciding on renewal, continuation, or move-out next steps.")).toBeInTheDocument();
-    expect(screen.getByText("Expiring soon")).toBeInTheDocument();
+    expect(screen.getAllByText("Expiring soon").length).toBeGreaterThan(0);
     expect(screen.getByText("30 days")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Renewal operator inputs" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open renewal inputs" })).toHaveAttribute(
+    const sourceContext = screen.getByLabelText("Renewal source context");
+    expect(sourceContext).toHaveTextContent("Portfolio renewal context for this lease, scoped to the property source view.");
+    expect(sourceContext).toHaveTextContent("Harbour View");
+    expect(sourceContext).toHaveTextContent("Unit 101 · Jane Tenant");
+    expect(sourceContext).toHaveTextContent("December 31, 2026");
+    expect(sourceContext).toHaveTextContent("Next 30 days · 30 days to lease end");
+    expect(sourceContext).toHaveTextContent("Expiring soon");
+    expect(sourceContext).toHaveTextContent(/Review the renewal planning window and check jurisdiction requirements/i);
+    expect(screen.getByRole("link", { name: "Open portfolio renewal view" })).toHaveAttribute(
       "href",
       "/portfolio-health?entry=lease-renewals&propertyId=prop-1"
     );
+    expect(await screen.findByLabelText(/Rent change mode/i)).toHaveValue("increase");
+    expect(mocks.fetchExpiringLeaseRenewals).toHaveBeenCalledWith({ propertyId: "prop-1" });
+    expect(screen.getByLabelText("Current rent")).toHaveTextContent(/1,850/);
+    expect(screen.getByText("Compare proposed rent against the current lease rent before saving renewal inputs.")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Proposed rent/i)).toHaveValue(1975);
+    expect(screen.getByLabelText(/New term type/i)).toHaveValue("fixed_term");
+    expect(screen.getByLabelText(/New lease start date/i)).toHaveValue("2027-01-01");
+    expect(screen.getByLabelText(/New lease end date/i)).toHaveValue("2027-12-31");
+    expect(screen.getByLabelText(/Tenant response target date/i)).toHaveValue(
+      datetimeLocalValue(Date.UTC(2026, 10, 15, 13, 30, 0, 0))
+    );
+    expect(screen.getByText("Planning date only. Does not send notice or determine legal deadlines.")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Response deadline/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save renewal inputs" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Tenant notice email workflow")).toHaveTextContent(
+      "Tenant-facing renewal notices are not sent from this workflow yet."
+    );
+    expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("/portfolio-health?entry=lease-renewals&propertyId=prop-1");
+  });
+
+  it("shows current rent unavailable when renewal projection rent is missing", async () => {
+    mocks.fetchExpiringLeaseRenewals.mockResolvedValueOnce({
+      ok: true,
+      items: [
+        {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          propertyAddress: "12 Harbour Road",
+          unitId: "unit-1",
+          status: "active",
+          leaseType: "fixed_term",
+          province: "NS",
+          leaseStartDate: "2026-01-01",
+          leaseEndDate: "2026-12-31",
+          currentRent: null,
+          currency: "CAD",
+          nextNoticeDueAt: null,
+          latestNoticeId: null,
+          tenantName: "Jane Tenant",
+          unitLabel: "Unit 101",
+          propertyLabel: "Harbour View",
+          renewalRentChangeMode: "undecided",
+          renewalOfferedRent: null,
+          renewalDecisionDeadlineAt: null,
+          renewalNewTermType: null,
+          renewalNewLeaseStartDate: null,
+          renewalNewLeaseEndDate: null,
+        },
+      ],
+      data: [],
+    });
+
+    renderWorkflow("/leases/lease-1/workflows/renewal");
+
+    expect(await screen.findByLabelText("Current rent")).toHaveTextContent("Current rent unavailable");
+    expect(screen.getByText("Review lease terms before changing rent.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save renewal inputs" })).toBeInTheDocument();
+  });
+
+  it("saves renewal operator inputs through the existing lease renewal save behavior", async () => {
+    renderWorkflow("/leases/lease-1/workflows/renewal");
+
+    expect(await screen.findByLabelText(/Rent change mode/i)).toHaveValue("increase");
+    fireEvent.change(screen.getByLabelText(/Rent change mode/i), { target: { value: "no_change" } });
+    fireEvent.change(screen.getByLabelText(/New term type/i), { target: { value: "month_to_month" } });
+    fireEvent.change(screen.getByLabelText(/New lease start date/i), { target: { value: "2027-01-01" } });
+    fireEvent.change(screen.getByLabelText(/New lease end date/i), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText(/Tenant response target date/i), { target: { value: "2026-11-20T10:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save renewal inputs" }));
+
+    await waitFor(() => {
+      expect(mocks.saveLeaseRenewalInputs).toHaveBeenCalledWith(
+        "lease-1",
+        expect.objectContaining({
+          rentChangeMode: "no_change",
+          proposedRent: null,
+          newTermType: "month_to_month",
+          newLeaseStartDate: "2027-01-01",
+          newLeaseEndDate: null,
+        })
+      );
+    });
+    expect(await screen.findByText("Lease renewal inputs saved.")).toBeInTheDocument();
+  });
+
+  it("shows a clear save failure state for renewal operator inputs", async () => {
+    mocks.saveLeaseRenewalInputs.mockRejectedValueOnce(new Error("INVALID_RESPONSE_DEADLINE"));
+    renderWorkflow("/leases/lease-1/workflows/renewal");
+
+    expect(await screen.findByLabelText(/Rent change mode/i)).toHaveValue("increase");
+    fireEvent.click(screen.getByRole("button", { name: "Save renewal inputs" }));
+
+    expect(await screen.findByText("Failed to save renewal inputs: Enter a valid tenant response target date.")).toBeInTheDocument();
+  });
+
+  it("shows a compact unavailable renewal source state when the lease has no property link", async () => {
+    mocks.getLeaseById.mockResolvedValueOnce({
+      lease: {
+        id: "lease-missing-property",
+        propertyId: null,
+        propertyName: null,
+        propertyLabel: null,
+        propertyAddress: null,
+        unitNumber: "202",
+        monthlyRent: 1650,
+        startDate: "2026-01-01",
+        endDate: "2026-10-31",
+        status: "active",
+        tenantName: "No Property Tenant",
+        tenantEmail: "tenant@example.com",
+        leaseExecution: null,
+        paymentReadiness: null,
+        leaseLifecycleSummary: {
+          lifecycleStatus: "expiring_soon",
+          lifecycleLabel: "Expiring soon",
+          lifecycleDescription: "This lease is approaching renewal planning review.",
+          requiredNextAction: "prepare_renewal_notice",
+          renewalOutcome: "not_started",
+          daysUntilExpiry: 45,
+          history: [],
+        },
+        jurisdictionPolicies: [],
+      },
+    });
+
+    renderWorkflow("/leases/lease-missing-property/workflows/renewal");
+
+    expect(await screen.findByRole("heading", { name: "Renewal Review" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Renewal operator inputs" })).toBeInTheDocument();
+    const sourceContext = screen.getByLabelText("Renewal source context");
+    expect(sourceContext).toHaveTextContent(
+      "Portfolio renewal context is not available because this lease is not linked to a property."
+    );
+    expect(screen.getByText("Renewal operator inputs cannot be loaded until this lease is linked to a property.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open portfolio renewal view" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save renewal inputs" })).not.toBeInTheDocument();
+    expect(mocks.fetchExpiringLeaseRenewals).not.toHaveBeenCalled();
+    expect(screen.getByText("45 days")).toBeInTheDocument();
   });
 
   it("uses lease end date fallback copy when lifecycle summary is absent", async () => {
@@ -187,7 +430,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     renderWorkflow("/leases/lease-no-summary/workflows/renewal");
 
     expect(await screen.findByRole("heading", { name: "Renewal Review" })).toBeInTheDocument();
-    expect(screen.getByText("December 31, 2099")).toBeInTheDocument();
+    expect(screen.getAllByText("December 31, 2099").length).toBeGreaterThan(0);
     expect(screen.getByText("Lifecycle summary pending")).toBeInTheDocument();
     expect(screen.getByText(/days$/)).toBeInTheDocument();
     expect(screen.queryByText("Not available")).not.toBeInTheDocument();
