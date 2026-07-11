@@ -101,6 +101,44 @@ function canonicalEventLabel(event: Record<string, any>): string {
   return raw || "Canonical event";
 }
 
+function isRenewalNoticeDraftSavedEvent(event: Record<string, any>): boolean {
+  const raw = asString(event.type || event.action, 160);
+  return raw === "renewal_notice_draft_saved" || raw === "lease.renewal_notice_draft_saved";
+}
+
+function eventTimestamp(event: Record<string, any>): string | null {
+  return normalizeTimestamp(event.occurredAt || event.recordedAt || event.createdAt);
+}
+
+function formatEvidenceTimestamp(value: string | null): string {
+  if (!value) return "time unavailable";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "time unavailable";
+  return parsed.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+}
+
+function renewalNoticeDraftSnapshotEvidenceItem(events: Record<string, any>[]): EvidenceItem[] {
+  const renewalEvents = events.filter(isRenewalNoticeDraftSavedEvent);
+  if (!renewalEvents.length) return [];
+  const latest = [...renewalEvents].sort((a, b) => (eventTimestamp(b) || "").localeCompare(eventTimestamp(a) || ""))[0];
+  const latestTimestamp = eventTimestamp(latest);
+  const latestLabel = formatEvidenceTimestamp(latestTimestamp);
+  const count = renewalEvents.length;
+  return [
+    evidenceItem({
+      itemType: "canonical_event",
+      label: count === 1 ? `Renewal notice draft snapshot · ${latestLabel}` : "Renewal notice draft snapshots",
+      description:
+        count === 1
+          ? `Renewal notice draft saved at ${latestLabel}. Not sent, not served, tenant not notified.`
+          : `${count} renewal notice draft snapshots saved. Latest saved at ${latestLabel}. Not sent, not served, tenant not notified.`,
+      source: "canonical_events",
+      sourceId: latest.id,
+      timestamp: latestTimestamp,
+    }),
+  ];
+}
+
 function operationalDecisionLabel(decision: Record<string, any>): string {
   const title = asString(decision.title, 160);
   if (title && !hasRawReferenceLabel(title)) return title;
@@ -276,13 +314,12 @@ function operatorReviewSection(input: DeriveEvidencePackInput): EvidencePackSect
 }
 
 function canonicalEventsSection(input: DeriveEvidencePackInput): EvidencePackSection {
-  const events = arrayOf(input.canonicalEvents)
-    .filter((event) => isRelatedToScope(event, input.scope, input.scopeId))
-    .slice(0, 20);
-  return section({
-    sectionKey: "audit_events",
-    label: "Audit events",
-    items: events.map((event) =>
+  const scopedEvents = arrayOf(input.canonicalEvents).filter((event) => isRelatedToScope(event, input.scope, input.scopeId));
+  const renewalDraftItems = renewalNoticeDraftSnapshotEvidenceItem(scopedEvents);
+  const events = scopedEvents.filter((event) => !isRenewalNoticeDraftSavedEvent(event)).slice(0, 20 - renewalDraftItems.length);
+  const items = [
+    ...renewalDraftItems,
+    ...events.map((event) =>
       evidenceItem({
         itemType: "canonical_event",
         label: canonicalEventLabel(event),
@@ -292,7 +329,12 @@ function canonicalEventsSection(input: DeriveEvidencePackInput): EvidencePackSec
         timestamp: event.occurredAt || event.recordedAt,
       })
     ),
-    missingEvidence: events.length ? [] : ["No landlord-scoped canonical events were available for this scope."],
+  ];
+  return section({
+    sectionKey: "audit_events",
+    label: "Audit events",
+    items,
+    missingEvidence: items.length ? [] : ["No landlord-scoped canonical events were available for this scope."],
   });
 }
 
