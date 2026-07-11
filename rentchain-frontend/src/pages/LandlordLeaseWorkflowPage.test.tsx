@@ -290,6 +290,29 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByRole("button", { name: "Copy draft text" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download draft" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save draft snapshot" })).toBeInTheDocument();
+    const sendReview = screen.getByLabelText("Tenant communication send review");
+    expect(sendReview).toHaveTextContent("Recipient preview");
+    expect(sendReview).toHaveTextContent("Jane Tenant");
+    expect(sendReview).toHaveTextContent("jane@example.com");
+    expect(sendReview).toHaveTextContent("Message preview");
+    expect(sendReview).toHaveTextContent("Renewal details for 12 Harbour Road · Unit 101");
+    expect(sendReview).toHaveTextContent("Prepared from current renewal draft");
+    expect((screen.getByLabelText("Tenant communication body preview") as HTMLTextAreaElement).value).toContain(
+      "Hello Jane Tenant,"
+    );
+    expect(sendReview).toHaveTextContent("Renewal operator inputs saved");
+    expect(sendReview).toHaveTextContent("Draft snapshot saved");
+    expect(sendReview).toHaveTextContent("Tenant recipient reviewed");
+    expect(sendReview).toHaveTextContent("Delivery status model required before live send");
+    expect(sendReview).toHaveTextContent("Email delivery");
+    expect(sendReview).toHaveTextContent("Not enabled");
+    expect(sendReview).toHaveTextContent("Tenant notification");
+    expect(sendReview).toHaveTextContent("Not sent");
+    expect(sendReview).toHaveTextContent("Notice service");
+    expect(sendReview).toHaveTextContent("Not established");
+    expect(sendReview).toHaveTextContent("Legal compliance");
+    expect(sendReview).toHaveTextContent("Not determined by this workflow");
+    expect(screen.getByRole("button", { name: "Send tenant communication - not enabled yet" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/evidence saved|notice has been served|email sent/i);
@@ -355,6 +378,10 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.queryByRole("button", { name: "Copy draft text" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Download draft" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save draft snapshot" })).not.toBeInTheDocument();
+    const sendReview = screen.getByLabelText("Tenant communication send review");
+    expect(sendReview).toHaveTextContent("Draft unavailable");
+    expect(sendReview).toHaveTextContent("Draft body unavailable. Complete renewal inputs before future tenant communication review.");
+    expect(screen.getByRole("button", { name: "Send tenant communication - not enabled yet" })).toBeDisabled();
     expect(screen.getByRole("link", { name: "Return to renewal inputs" })).toHaveAttribute(
       "href",
       "/leases/lease-1/workflows/renewal"
@@ -410,7 +437,53 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.queryByRole("button", { name: "Copy draft text" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Download draft" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save draft snapshot" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Tenant communication send review")).toHaveTextContent("Draft unavailable");
     expect(document.body).not.toHaveTextContent(/must respond by|notice has been served|legally valid|automatically compliant/i);
+  });
+
+  it("shows tenant communication send review with missing recipient email but no send behavior", async () => {
+    mocks.getLeaseById.mockResolvedValueOnce({
+      lease: {
+        id: "lease-missing-email",
+        tenantId: "tenant-1",
+        propertyId: "prop-1",
+        propertyName: "Harbour View",
+        unitNumber: "101",
+        monthlyRent: 1850,
+        startDate: "2026-01-01",
+        endDate: "2026-12-31",
+        status: "active",
+        tenantName: "Jane Tenant",
+        tenantEmail: null,
+        leaseExecution: null,
+        paymentReadiness: null,
+        leaseLifecycleSummary: {
+          lifecycleStatus: "expiring_soon",
+          lifecycleLabel: "Expiring soon",
+          lifecycleDescription: "This lease is approaching notice timing.",
+          requiredNextAction: "prepare_renewal_notice",
+          renewalOutcome: "not_started",
+          daysUntilExpiry: 30,
+          history: [],
+        },
+        jurisdictionPolicies: [],
+      },
+    });
+
+    renderWorkflow("/leases/lease-missing-email/workflows/notice");
+
+    const sendReview = await screen.findByLabelText("Tenant communication send review");
+    await waitFor(() => {
+      expect(sendReview).toHaveTextContent("Tenant email unavailable");
+    });
+    expect(sendReview).toHaveTextContent("Jane Tenant");
+    expect(sendReview).toHaveTextContent("Tenant recipient reviewed");
+    expect(sendReview).toHaveTextContent("Needs review");
+    const sendButton = screen.getByRole("button", { name: "Send tenant communication - not enabled yet" });
+    expect(sendButton).toBeDisabled();
+    fireEvent.click(sendButton);
+    expect(mocks.saveRenewalNoticeDraftSnapshot).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent(/email sent|notice served|legally compliant|tenant legally notified/i);
   });
 
   it("copies the notice review draft without sending or creating notice records", async () => {
@@ -462,6 +535,9 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByLabelText("Draft snapshot persistence")).toHaveTextContent("Draft snapshot saved");
     expect(screen.getByLabelText("Draft snapshot persistence")).toHaveTextContent("manager@example.com");
     expect(screen.getByLabelText("Draft snapshot persistence")).toHaveTextContent("Not sent · Not served · Tenant not notified");
+    const sendReview = screen.getByLabelText("Tenant communication send review");
+    expect(sendReview).toHaveTextContent("Prepared from saved renewal notice draft snapshot");
+    expect(sendReview).toHaveTextContent("Draft snapshot captured");
     expect(mocks.saveLeaseRenewalInputs).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/evidence saved|notice has been served|email sent/i);
