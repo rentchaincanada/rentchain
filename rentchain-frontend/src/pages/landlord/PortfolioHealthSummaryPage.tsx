@@ -72,7 +72,7 @@ export default function PortfolioHealthSummaryPage() {
       ? "Showing leases with a sent notice that are still awaiting a tenant response."
       : entryStatus === "no-response"
       ? "Showing leases where the tenant response window has elapsed without a reply."
-      : "Save renewal term and deadline choices on the lease record so readiness checks can observe them canonically.";
+      : "Save renewal term and tenant response target choices on the lease record so readiness checks can observe them consistently.";
   const renewalDisplayItems = React.useMemo(() => renewalItems, [renewalItems]);
 
   React.useEffect(() => {
