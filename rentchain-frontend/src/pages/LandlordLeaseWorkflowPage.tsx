@@ -237,13 +237,65 @@ function renewalSourceContextItem(lease: LandlordActiveLease): RenewalPipelineIt
   return deriveRenewalPipelineItems([lease])[0] || null;
 }
 
+function looksLikeWorkflowRawIdentifier(value: string) {
+  const raw = value.trim();
+  if (raw.length < 12 || /\s/.test(raw)) return false;
+  return /^[A-Za-z0-9_-]+$/.test(raw) && /[A-Za-z]/.test(raw) && /\d/.test(raw);
+}
+
+function workflowDisplayLabel(value: string | null | undefined, genericPattern?: RegExp) {
+  const label = String(value || "").trim();
+  if (!label) return null;
+  if (genericPattern?.test(label)) return null;
+  if (looksLikeWorkflowRawIdentifier(label)) return null;
+  return label;
+}
+
+function workflowUnitLabel(lease: LandlordActiveLease) {
+  const unitNumber = workflowDisplayLabel(lease.unitNumber, /^unit$/i);
+  if (unitNumber) return /^unit\b/i.test(unitNumber) ? unitNumber : `Unit ${unitNumber}`;
+  const unitLabel = workflowDisplayLabel(lease.unitLabel, /^unit$/i);
+  if (!unitLabel) return null;
+  return /^unit\b/i.test(unitLabel) ? unitLabel : `Unit ${unitLabel}`;
+}
+
+function workflowPropertyLabel(lease: LandlordActiveLease) {
+  return (
+    workflowDisplayLabel(lease.propertyName, /^property$/i) ||
+    workflowDisplayLabel(lease.propertyLabel, /^property$/i) ||
+    workflowDisplayLabel(lease.propertyAddress, /^property$/i)
+  );
+}
+
+function renewalProjectionWithLeaseContext(
+  projectedLease: LandlordLeaseRenewalLease,
+  sourceLease: LandlordActiveLease
+): LandlordLeaseRenewalLease {
+  return {
+    ...projectedLease,
+    tenantName: workflowDisplayLabel(projectedLease.tenantName, /^tenant$/i) || workflowDisplayLabel(sourceLease.tenantName, /^tenant$/i),
+    propertyAddress:
+      workflowDisplayLabel(projectedLease.propertyAddress, /^property$/i) ||
+      workflowDisplayLabel(sourceLease.propertyAddress, /^property$/i) ||
+      null,
+    propertyLabel:
+      workflowDisplayLabel(projectedLease.propertyLabel, /^property$/i) ||
+      workflowPropertyLabel(sourceLease) ||
+      null,
+    unitLabel:
+      workflowDisplayLabel(projectedLease.unitLabel, /^unit$/i) ||
+      workflowUnitLabel(sourceLease) ||
+      null,
+  };
+}
+
 function renewalProjectionFallbackFromLease(lease: LandlordActiveLease): LandlordLeaseRenewalLease {
   const projectedLease = lease as LandlordActiveLease & Partial<LandlordLeaseRenewalLease>;
   return {
     id: lease.id,
     tenantId: lease.tenantId || lease.primaryTenantId || "",
     propertyId: lease.propertyId || null,
-    propertyAddress: lease.propertyAddress || null,
+    propertyAddress: workflowDisplayLabel(lease.propertyAddress, /^property$/i),
     unitId: lease.unitId || null,
     status: lease.status,
     leaseType: projectedLease.leaseType || "fixed_term",
@@ -254,9 +306,9 @@ function renewalProjectionFallbackFromLease(lease: LandlordActiveLease): Landlor
     currency: projectedLease.currency || "CAD",
     nextNoticeDueAt: projectedLease.nextNoticeDueAt || null,
     latestNoticeId: projectedLease.latestNoticeId || null,
-    tenantName: lease.tenantName || null,
-    unitLabel: lease.unitLabel || (lease.unitNumber ? `Unit ${lease.unitNumber}` : null),
-    propertyLabel: lease.propertyLabel || lease.propertyName || null,
+    tenantName: workflowDisplayLabel(lease.tenantName, /^tenant$/i),
+    unitLabel: workflowUnitLabel(lease),
+    propertyLabel: workflowPropertyLabel(lease),
     renewalRentChangeMode: projectedLease.renewalRentChangeMode || null,
     renewalOfferedRent: typeof projectedLease.renewalOfferedRent === "number" ? projectedLease.renewalOfferedRent : null,
     renewalDecisionDeadlineAt: projectedLease.renewalDecisionDeadlineAt || null,
@@ -293,7 +345,11 @@ function RenewalOperatorInputsWorkspace({ lease }: { lease: LandlordActiveLease 
         if (!active) return;
         const renewalItems = response.items?.length ? response.items : response.data || [];
         const projectedLease = renewalItems.find((item) => item.id === lease.id);
-        setRenewalLease(projectedLease || renewalProjectionFallbackFromLease(lease));
+        setRenewalLease(
+          projectedLease
+            ? renewalProjectionWithLeaseContext(projectedLease, lease)
+            : renewalProjectionFallbackFromLease(lease)
+        );
       } catch (err: unknown) {
         if (!active) return;
         setRenewalLease(null);

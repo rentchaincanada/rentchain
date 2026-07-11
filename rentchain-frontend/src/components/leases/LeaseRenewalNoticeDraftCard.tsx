@@ -66,10 +66,47 @@ function formatTermType(value: LandlordLeaseRenewalLease["renewalNewTermType"]) 
   }
 }
 
-function locationLabel(lease: LandlordLeaseRenewalLease) {
-  const property = String(lease.propertyAddress || lease.propertyLabel || "Property").trim();
-  const unit = String(lease.unitLabel || "").trim();
-  return unit ? `${property} / ${unit}` : property;
+function cleanDisplayLabel(value: string | null | undefined) {
+  return String(value || "").trim();
+}
+
+function looksLikeRawIdentifier(value: string) {
+  const raw = value.trim();
+  if (raw.length < 12 || /\s/.test(raw)) return false;
+  return /^[A-Za-z0-9_-]+$/.test(raw) && /[A-Za-z]/.test(raw) && /\d/.test(raw);
+}
+
+function usableDisplayLabel(value: string | null | undefined, genericPattern?: RegExp) {
+  const label = cleanDisplayLabel(value);
+  if (!label) return null;
+  if (genericPattern?.test(label)) return null;
+  if (looksLikeRawIdentifier(label)) return null;
+  return label;
+}
+
+function tenantDisplayName(lease: LandlordLeaseRenewalLease) {
+  return usableDisplayLabel(lease.tenantName, /^tenant$/i);
+}
+
+function tenantMetadataLabel(lease: LandlordLeaseRenewalLease) {
+  return tenantDisplayName(lease) || "Tenant name unavailable";
+}
+
+function unitDisplayLabel(lease: LandlordLeaseRenewalLease) {
+  const unit = usableDisplayLabel(lease.unitLabel, /^unit$/i);
+  if (!unit) return null;
+  return /^unit\b/i.test(unit) ? unit : `Unit ${unit}`;
+}
+
+function propertyUnitLabel(lease: LandlordLeaseRenewalLease) {
+  const property =
+    usableDisplayLabel(lease.propertyAddress, /^property$/i) ||
+    usableDisplayLabel(lease.propertyLabel, /^property$/i);
+  const unit = unitDisplayLabel(lease);
+  if (property && unit) return `${property} · ${unit}`;
+  if (property) return property;
+  if (unit) return unit;
+  return "Property/unit unavailable";
 }
 
 function proposedRentRequired(lease: LandlordLeaseRenewalLease) {
@@ -103,7 +140,7 @@ export function getRenewalNoticeDraftReadiness(lease: LandlordLeaseRenewalLease)
 }
 
 export function buildRenewalNoticeDraftText(lease: LandlordLeaseRenewalLease) {
-  const tenantName = String(lease.tenantName || "").trim() || "Tenant";
+  const tenantName = tenantDisplayName(lease);
   const currentRent = formatRenewalCurrency(lease.currentRent, lease.currency) || "not available";
   const proposedRent = proposedRentRequired(lease)
     ? formatRenewalCurrency(lease.renewalOfferedRent, lease.currency) || "not set"
@@ -111,13 +148,14 @@ export function buildRenewalNoticeDraftText(lease: LandlordLeaseRenewalLease) {
   const startDate = formatDateOnly(lease.renewalNewLeaseStartDate);
   const endDate = lease.renewalNewLeaseEndDate ? formatDateOnly(lease.renewalNewLeaseEndDate) : "open-ended";
   const targetDate = formatTargetDate(lease.renewalDecisionDeadlineAt);
+  const greeting = tenantName ? `Hello ${tenantName},` : "Hello,";
 
   return [
-    `Hello ${tenantName},`,
+    greeting,
     "",
-    `We are preparing the renewal details for ${locationLabel(lease)}. The current rent on file is ${currentRent}. The proposed renewal rent is ${proposedRent}, with a proposed term of ${startDate} to ${endDate}.`,
+    `We are preparing the renewal details for ${propertyUnitLabel(lease)}. The current rent on file is ${currentRent}. The proposed renewal rent is ${proposedRent}, with a proposed term of ${startDate} to ${endDate}.`,
     "",
-    `Please review these proposed renewal details. The tenant response target date currently recorded for internal follow-up is ${targetDate}`,
+    `Please review these proposed renewal details. The tenant response target date currently recorded for internal follow-up is ${targetDate}.`,
     "",
     "This message is for renewal planning and review. Please refer to the official lease documents and current provincial requirements before relying on any notice or timing requirement.",
     "",
@@ -202,8 +240,8 @@ export function LeaseRenewalNoticeDraftCard({
       </div>
 
       <dl style={factsGridStyle}>
-        <Fact label="Tenant" value={lease.tenantName || "Tenant"} />
-        <Fact label="Unit/property" value={locationLabel(lease)} />
+        <Fact label="Tenant" value={tenantMetadataLabel(lease)} />
+        <Fact label="Unit/property" value={propertyUnitLabel(lease)} />
         <Fact label="Current rent" value={currentRent} />
         <Fact label="Proposed rent" value={proposedRent} />
         <Fact label="Current lease end" value={formatDateOnly(lease.leaseEndDate)} />
