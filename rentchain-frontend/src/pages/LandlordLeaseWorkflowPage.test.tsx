@@ -267,7 +267,9 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByLabelText(/New term type/i)).toHaveValue("fixed_term");
     expect(screen.getByLabelText(/New lease start date/i)).toHaveValue("2027-01-01");
     expect(screen.getByLabelText(/New lease end date/i)).toHaveValue("2027-12-31");
-    expect(screen.getByLabelText(/Response deadline/i)).toHaveValue("2026-11-15T09:30");
+    expect(screen.getByLabelText(/Tenant response target date/i)).toHaveValue("2026-11-15T09:30");
+    expect(screen.getByText("Planning date only. Does not send notice or determine legal deadlines.")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Response deadline/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save renewal inputs" })).toBeInTheDocument();
     expect(screen.getByLabelText("Tenant notice email workflow")).toHaveTextContent(
       "Tenant-facing renewal notices are not sent from this workflow yet."
@@ -325,7 +327,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     fireEvent.change(screen.getByLabelText(/New term type/i), { target: { value: "month_to_month" } });
     fireEvent.change(screen.getByLabelText(/New lease start date/i), { target: { value: "2027-01-01" } });
     fireEvent.change(screen.getByLabelText(/New lease end date/i), { target: { value: "" } });
-    fireEvent.change(screen.getByLabelText(/Response deadline/i), { target: { value: "2026-11-20T10:00" } });
+    fireEvent.change(screen.getByLabelText(/Tenant response target date/i), { target: { value: "2026-11-20T10:00" } });
     fireEvent.click(screen.getByRole("button", { name: "Save renewal inputs" }));
 
     await waitFor(() => {
@@ -350,7 +352,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(await screen.findByLabelText(/Rent change mode/i)).toHaveValue("increase");
     fireEvent.click(screen.getByRole("button", { name: "Save renewal inputs" }));
 
-    expect(await screen.findByText("Failed to save renewal inputs: Enter a valid response deadline.")).toBeInTheDocument();
+    expect(await screen.findByText("Failed to save renewal inputs: Enter a valid tenant response target date.")).toBeInTheDocument();
   });
 
   it("shows a compact unavailable renewal source state when the lease has no property link", async () => {

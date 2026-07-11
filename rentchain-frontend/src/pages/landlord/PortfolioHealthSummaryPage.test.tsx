@@ -435,7 +435,7 @@ describe("PortfolioHealthSummaryPage", () => {
     fireEvent.change(screen.getByLabelText(/New term type/i), { target: { value: "fixed_term" } });
     fireEvent.change(screen.getByLabelText(/New lease start date/i), { target: { value: "2026-07-01" } });
     fireEvent.change(screen.getByLabelText(/New lease end date/i), { target: { value: "2027-06-30" } });
-    fireEvent.change(screen.getByLabelText(/Response deadline/i), { target: { value: "2026-05-01T08:00" } });
+    fireEvent.change(screen.getByLabelText(/Tenant response target date/i), { target: { value: "2026-05-01T08:00" } });
     fireEvent.click(screen.getByRole("button", { name: /Save renewal inputs/i }));
 
     await waitFor(() => {

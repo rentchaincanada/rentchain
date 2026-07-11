@@ -255,7 +255,7 @@ export default function PortfolioHealthSummaryPage() {
                       form.rentChangeMode ? `Mode: ${form.rentChangeMode.replace(/_/g, " ")}` : null,
                       form.proposedRent.trim() ? `Proposed rent: ${form.proposedRent}` : null,
                       form.newTermType ? `Term: ${form.newTermType.replace(/_/g, " ")}` : null,
-                      form.responseDeadlineAt ? `Deadline: ${form.responseDeadlineAt}` : null,
+                      form.responseDeadlineAt ? `Tenant response target: ${form.responseDeadlineAt}` : null,
                     ]
                       .filter(Boolean)
                       .join(" · ");

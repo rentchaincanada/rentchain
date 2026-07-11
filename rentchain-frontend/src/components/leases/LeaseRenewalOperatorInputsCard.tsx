@@ -170,7 +170,7 @@ export function mapRenewalValidationMessage(errorCode: string | null | undefined
     case "INVALID_NEW_LEASE_END_DATE":
       return "Enter a valid new lease end date.";
     case "INVALID_RESPONSE_DEADLINE":
-      return "Enter a valid response deadline.";
+      return "Enter a valid tenant response target date.";
     default:
       return null;
   }
@@ -383,8 +383,11 @@ export function LeaseRenewalOperatorInputsCard({
         </label>
 
         <label style={fieldStyle}>
-          <span>Response deadline</span>
+          <span>Tenant response target date</span>
           <input type="datetime-local" value={form.responseDeadlineAt} onChange={(event) => updateForm("responseDeadlineAt", event.target.value)} />
+          <span style={{ color: "#64748b", fontSize: 12 }}>
+            Planning date only. Does not send notice or determine legal deadlines.
+          </span>
         </label>
       </div>
 
