@@ -754,7 +754,7 @@ function TenantCommunicationSendReview({
       </div>
 
       <div style={sendReviewGridStyle}>
-        <div style={sendReviewBlockStyle} aria-label="Recipient preview">
+        <div style={sendRecipientPreviewStyle} aria-label="Recipient preview">
           <div style={sendReviewSubheadingStyle}>Recipient preview</div>
           <dl style={{ display: "grid", gap: 8, margin: 0 }}>
             <ReviewFact label="Tenant" value={tenantName} />
@@ -767,7 +767,7 @@ function TenantCommunicationSendReview({
           </div>
         </div>
 
-        <div style={sendReviewBlockStyle} aria-label="Message preview">
+        <div style={sendMessagePreviewStyle} aria-label="Message preview">
           <div style={sendReviewSubheadingStyle}>Message preview</div>
           <dl style={{ display: "grid", gap: 8, margin: 0 }}>
             <ReviewFact label="Subject" value={subject} />
@@ -1134,18 +1134,32 @@ const sendReviewSubheadingStyle: React.CSSProperties = {
 };
 
 const sendReviewGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "stretch",
   gap: 12,
 };
 
 const sendReviewBlockStyle: React.CSSProperties = {
   display: "grid",
   gap: 10,
+  boxSizing: "border-box",
   border: `1px solid ${workflowTheme.border}`,
   borderRadius: 10,
   background: workflowTheme.card,
   padding: 12,
+};
+
+const sendRecipientPreviewStyle: React.CSSProperties = {
+  ...sendReviewBlockStyle,
+  flex: "1 1 220px",
+  minWidth: 220,
+};
+
+const sendMessagePreviewStyle: React.CSSProperties = {
+  ...sendReviewBlockStyle,
+  flex: "2 1 520px",
+  minWidth: "min(100%, 420px)",
 };
 
 const sendChecklistStyle: React.CSSProperties = {
