@@ -4,6 +4,7 @@ import { getLeaseById, type JurisdictionPolicyGuidance, type LandlordActiveLease
 import {
   fetchExpiringLeaseRenewals,
   type LandlordLeaseRenewalLease,
+  type RenewalNoticeDraftSnapshot,
 } from "@/api/landlordLeaseRenewalApi";
 import {
   hasSavedRenewalInputs,
@@ -197,6 +198,15 @@ function prettyValue(value: string | null | undefined) {
 function propertyLabel(lease: LandlordActiveLease) {
   const property = lease.propertyName || lease.propertyLabel || lease.propertyAddress || "Property";
   return lease.unitNumber ? `${property} · Unit ${lease.unitNumber}` : property;
+}
+
+function tenantEmailLabel(lease: LandlordActiveLease) {
+  const email = String(lease.tenantEmail || "").trim();
+  return email || "Tenant email unavailable";
+}
+
+function hasTenantEmail(lease: LandlordActiveLease) {
+  return Boolean(String(lease.tenantEmail || "").trim());
 }
 
 function daysUntilDate(value: string | null | undefined) {
@@ -501,6 +511,7 @@ function RenewalOperatorInputsWorkspace({ lease }: { lease: LandlordActiveLease 
 function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLease }) {
   const { propertyId, renewalLease, loadingRenewalInputs, renewalInputsError } = useRenewalLeaseProjection(lease);
   const [copyStatus, setCopyStatus] = React.useState<"idle" | "success" | "error">("idle");
+  const [savedDraftSnapshot, setSavedDraftSnapshot] = React.useState<RenewalNoticeDraftSnapshot | null>(null);
   const renewalPath = `/leases/${encodeURIComponent(lease.id)}/workflows/renewal`;
 
   async function copyDraft(draftText: string) {
@@ -549,6 +560,13 @@ function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLe
         <div style={warningPanelStyle}>
           Renewal notice review cannot load source inputs until this lease is linked to a property.
         </div>
+        <TenantCommunicationSendReview
+          lease={lease}
+          reviewModel={null}
+          draftText={null}
+          readinessReady={false}
+          savedSnapshot={null}
+        />
       </section>
     );
   }
@@ -575,6 +593,13 @@ function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLe
         <div style={warningPanelStyle}>
           Renewal inputs are not available yet. Return to the renewal workflow before reviewing notice preparation.
         </div>
+        <TenantCommunicationSendReview
+          lease={lease}
+          reviewModel={null}
+          draftText={null}
+          readinessReady={false}
+          savedSnapshot={null}
+        />
       </section>
     );
   }
@@ -637,8 +662,21 @@ function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLe
       </div>
 
       {draftText ? (
-        <RenewalNoticeDraftSnapshotCapture lease={renewalLease} draftText={draftText} reviewModel={reviewModel} />
+        <RenewalNoticeDraftSnapshotCapture
+          lease={renewalLease}
+          draftText={draftText}
+          reviewModel={reviewModel}
+          onSnapshotSaved={setSavedDraftSnapshot}
+        />
       ) : null}
+
+      <TenantCommunicationSendReview
+        lease={lease}
+        reviewModel={reviewModel}
+        draftText={draftText}
+        readinessReady={readiness.ready}
+        savedSnapshot={savedDraftSnapshot}
+      />
 
       <div style={noticeActionGridStyle}>
         {draftText ? (
@@ -674,6 +712,133 @@ function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLe
       </div>
     </section>
   );
+}
+
+function TenantCommunicationSendReview({
+  lease,
+  reviewModel,
+  draftText,
+  readinessReady,
+  savedSnapshot,
+}: {
+  lease: LandlordActiveLease;
+  reviewModel: ReturnType<typeof buildRenewalNoticeReviewModel> | null;
+  draftText: string | null;
+  readinessReady: boolean;
+  savedSnapshot: RenewalNoticeDraftSnapshot | null;
+}) {
+  const tenantName = reviewModel?.tenantLabel || workflowDisplayLabel(lease.tenantName, /^tenant$/i) || "Tenant name unavailable";
+  const recipientEmail = tenantEmailLabel(lease);
+  const recipientReady = hasTenantEmail(lease);
+  const draftAvailable = Boolean(readinessReady && draftText);
+  const subject = reviewModel?.propertyUnitLabel
+    ? `Renewal details for ${reviewModel.propertyUnitLabel}`
+    : "Renewal details for review";
+  const sourceLabel = savedSnapshot
+    ? "Prepared from saved renewal notice draft snapshot"
+    : draftAvailable
+      ? "Prepared from current renewal draft"
+      : "Draft unavailable";
+  const hasMultipleTenants = Array.isArray(lease.tenantIds) && lease.tenantIds.length > 1;
+
+  return (
+    <section style={sendReviewStyle} aria-label="Tenant communication send review">
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <h3 style={sendReviewHeadingStyle}>Tenant communication send review</h3>
+          <div style={{ color: workflowTheme.muted, lineHeight: 1.6 }}>
+            Review the future send model without sending email, notifying the tenant, or creating a notice record.
+          </div>
+        </div>
+        <span style={deferredBadgeStyle}>Send disabled</span>
+      </div>
+
+      <div style={sendReviewGridStyle}>
+        <div style={sendRecipientPreviewStyle} aria-label="Recipient preview">
+          <div style={sendReviewSubheadingStyle}>Recipient preview</div>
+          <dl style={{ display: "grid", gap: 8, margin: 0 }}>
+            <ReviewFact label="Tenant" value={tenantName} />
+            <ReviewFact label="Email" value={recipientEmail} />
+          </dl>
+          <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
+            {hasMultipleTenants
+              ? "V1 is using the available tenant contact only. Multi-recipient review remains deferred."
+              : "V1 reviews the available tenant contact only."}
+          </div>
+        </div>
+
+        <div style={sendMessagePreviewStyle} aria-label="Message preview">
+          <div style={sendReviewSubheadingStyle}>Message preview</div>
+          <dl style={{ display: "grid", gap: 8, margin: 0 }}>
+            <ReviewFact label="Subject" value={subject} />
+            <ReviewFact label="Source" value={sourceLabel} />
+          </dl>
+          {draftText ? (
+            <textarea
+              readOnly
+              rows={6}
+              value={draftText}
+              aria-label="Tenant communication body preview"
+              style={sendBodyPreviewStyle}
+            />
+          ) : (
+            <div style={warningPanelStyle}>Draft body unavailable. Complete renewal inputs before future tenant communication review.</div>
+          )}
+          <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
+            The exact message body must be reviewed and persisted before any future send.
+          </div>
+        </div>
+      </div>
+
+      <div style={sendChecklistStyle} aria-label="Send-readiness checklist">
+        <SendChecklistItem label="Renewal operator inputs saved" status={readinessReady ? "Ready" : "Needs review"} />
+        <SendChecklistItem label="Draft snapshot saved" status={savedSnapshot ? "Ready" : "Needs review"} />
+        <SendChecklistItem label="Tenant recipient reviewed" status={recipientReady ? "Ready" : "Needs review"} />
+        <SendChecklistItem label="Draft body reviewed" status={draftAvailable ? "Needs review" : "Deferred"} />
+        <SendChecklistItem label="Evidence/audit capture available" status={savedSnapshot ? "Ready" : "Needs review"} />
+        <SendChecklistItem label="Delivery status model required before live send" status="Deferred" />
+        <SendChecklistItem label="Legal-service separation acknowledged" status="Deferred" />
+      </div>
+
+      <fieldset disabled style={confirmationPreviewStyle} aria-label="Confirmation model preview">
+        <legend style={sendReviewSubheadingStyle}>Confirmation required before future send</legend>
+        <label style={checkboxLabelStyle}>
+          <input type="checkbox" /> I have reviewed the recipient(s).
+        </label>
+        <label style={checkboxLabelStyle}>
+          <input type="checkbox" /> I have reviewed the message body.
+        </label>
+        <label style={checkboxLabelStyle}>
+          <input type="checkbox" /> I understand this would send tenant communication only.
+        </label>
+        <label style={checkboxLabelStyle}>
+          <input type="checkbox" /> I understand this does not establish legal notice service by itself.
+        </label>
+      </fieldset>
+
+      <div style={noticeStatusGridStyle} aria-label="Delivery and legal status">
+        <NoticeStatus label="Email delivery" value="Not enabled" tone="deferred" />
+        <NoticeStatus label="Tenant notification" value="Not sent" tone="deferred" />
+        <NoticeStatus label="Notice service" value="Not established" tone="deferred" />
+        <NoticeStatus label="Legal compliance" value="Not determined by this workflow" tone="deferred" />
+        <NoticeStatus label="Audit/evidence" value={savedSnapshot ? "Draft snapshot captured" : "Captured when snapshot is saved"} tone={savedSnapshot ? "ready" : "deferred"} />
+      </div>
+
+      <button type="button" disabled style={sendDisabledButtonStyle}>
+        Send tenant communication - not enabled yet
+      </button>
+
+      <div style={deferredPanelStyle}>
+        Email delivery is not enabled in this workflow yet. Future send will require recipient confirmation, exact body
+        persistence, delivery status, audit capture, and legal-service separation.
+      </div>
+    </section>
+  );
+}
+
+function SendChecklistItem({ label, status }: { label: string; status: "Ready" | "Needs review" | "Deferred" }) {
+  const tone = status === "Ready" ? "ready" : status === "Needs review" ? "warning" : "deferred";
+  return <NoticeStatus label={label} value={status} tone={tone} />;
 }
 
 function ReviewWorkspaceHeader({ renewalPath }: { renewalPath: string }) {
@@ -942,6 +1107,118 @@ const noticeStatusStyle: React.CSSProperties = {
   borderRadius: 10,
   background: workflowTheme.cardStrong,
   padding: 10,
+};
+
+const sendReviewStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  border: `1px solid ${workflowTheme.border}`,
+  borderRadius: 12,
+  background: workflowTheme.cardStrong,
+  padding: 14,
+};
+
+const sendReviewHeadingStyle: React.CSSProperties = {
+  margin: 0,
+  color: workflowTheme.charcoal,
+  fontSize: 17,
+  letterSpacing: 0,
+};
+
+const sendReviewSubheadingStyle: React.CSSProperties = {
+  color: workflowTheme.charcoal,
+  fontSize: 14,
+  fontWeight: 900,
+  margin: 0,
+  letterSpacing: 0,
+};
+
+const sendReviewGridStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "stretch",
+  gap: 12,
+};
+
+const sendReviewBlockStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+  boxSizing: "border-box",
+  border: `1px solid ${workflowTheme.border}`,
+  borderRadius: 10,
+  background: workflowTheme.card,
+  padding: 12,
+};
+
+const sendRecipientPreviewStyle: React.CSSProperties = {
+  ...sendReviewBlockStyle,
+  flex: "1 1 220px",
+  minWidth: 220,
+};
+
+const sendMessagePreviewStyle: React.CSSProperties = {
+  ...sendReviewBlockStyle,
+  flex: "2 1 520px",
+  minWidth: "min(100%, 420px)",
+};
+
+const sendChecklistStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 10,
+};
+
+const confirmationPreviewStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+  margin: 0,
+  border: `1px dashed ${workflowTheme.borderStrong}`,
+  borderRadius: 10,
+  background: "rgba(255, 250, 241, 0.72)",
+  padding: 12,
+  color: workflowTheme.muted,
+};
+
+const checkboxLabelStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  lineHeight: 1.45,
+  fontWeight: 700,
+};
+
+const sendBodyPreviewStyle: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  resize: "vertical",
+  border: `1px solid ${workflowTheme.borderStrong}`,
+  borderRadius: 10,
+  padding: 10,
+  color: workflowTheme.charcoal,
+  background: "#fff",
+  lineHeight: 1.55,
+  minHeight: 130,
+};
+
+const deferredBadgeStyle: React.CSSProperties = {
+  border: `1px solid ${workflowTheme.borderStrong}`,
+  borderRadius: 999,
+  background: "rgba(91, 70, 48, 0.08)",
+  color: workflowTheme.subtle,
+  fontSize: 12,
+  fontWeight: 900,
+  padding: "5px 10px",
+  whiteSpace: "nowrap",
+};
+
+const sendDisabledButtonStyle: React.CSSProperties = {
+  ...buttonStyle,
+  width: "fit-content",
+  border: `1px solid ${workflowTheme.borderStrong}`,
+  background: "rgba(91, 70, 48, 0.12)",
+  color: workflowTheme.subtle,
+  cursor: "not-allowed",
+  boxShadow: "none",
 };
 
 const noticeActionGridStyle: React.CSSProperties = {

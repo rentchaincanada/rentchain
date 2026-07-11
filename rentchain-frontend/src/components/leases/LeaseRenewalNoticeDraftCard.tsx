@@ -418,10 +418,12 @@ export function RenewalNoticeDraftSnapshotCapture({
   lease,
   draftText,
   reviewModel,
+  onSnapshotSaved,
 }: {
   lease: LandlordLeaseRenewalLease;
   draftText: string;
   reviewModel: RenewalNoticeReviewModel;
+  onSnapshotSaved?: (snapshot: RenewalNoticeDraftSnapshot) => void;
 }) {
   const [saveState, setSaveState] = React.useState<SnapshotSaveState>({ status: "idle", snapshot: null, error: null });
 
@@ -433,6 +435,7 @@ export function RenewalNoticeDraftSnapshotCapture({
         buildRenewalNoticeDraftSnapshotPayload(draftText, reviewModel)
       );
       setSaveState({ status: "saved", snapshot: response.snapshot, error: null });
+      onSnapshotSaved?.(response.snapshot);
     } catch (err) {
       const message = err instanceof Error && err.message ? err.message : "Draft snapshot could not be saved.";
       setSaveState({ status: "error", snapshot: null, error: message });
