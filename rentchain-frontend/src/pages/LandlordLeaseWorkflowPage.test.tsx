@@ -314,8 +314,11 @@ describe("LandlordLeaseWorkflowPage", () => {
     const draftPreview = screen.getByLabelText("Draft message preview") as HTMLTextAreaElement;
     expect(draftPreview.value).toContain("Hello Jane Tenant,");
     expect(draftPreview.value).toContain("We are preparing renewal details for 12 Harbour Road · Unit 101.");
-    expect(draftPreview.value).toContain("The renewal rent entered for review is CA$1,975.00");
-    expect(draftPreview.value).toContain("with a term from January 1, 2027 to December 31, 2027.");
+    expect(draftPreview.value).toContain("The new fixed term would begin on January 1, 2027 and end on December 31, 2027.");
+    expect(draftPreview.value).toContain("The rent for the unit you occupy would be CA$1,975.00.");
+    expect(draftPreview.value).not.toMatch(/\bwill be\b/i);
+    expect(draftPreview.value).not.toContain("renewal rent entered for review");
+    expect(draftPreview.value).not.toContain("with a term from");
     expect(draftPreview.value).toContain("tenant response target date recorded for internal follow-up");
     expect(draftPreview.value).toMatch(/tenant response target date recorded for internal follow-up is .*?\./);
     expect(draftPreview.value).not.toContain("Please review these proposed renewal details");
@@ -444,7 +447,7 @@ describe("LandlordLeaseWorkflowPage", () => {
           renewalDecisionDeadlineAt: dateInputValueToMs("2026-11-20"),
           renewalNewTermType: "month_to_month",
           renewalNewLeaseStartDate: "2027-01-01",
-          renewalNewLeaseEndDate: "",
+          renewalNewLeaseEndDate: "2027-12-31",
           renewalUpdatedAt: "2026-07-02T12:00:00.000Z",
         },
       ],
@@ -461,6 +464,7 @@ describe("LandlordLeaseWorkflowPage", () => {
 
     const draftPreview = screen.getByLabelText("Draft message preview") as HTMLTextAreaElement;
     expect(draftPreview.value).toContain("Hello,\n\nWe are preparing renewal details for 32 central road · Unit 4.");
+    expect(draftPreview.value).toContain("The renewal term details would begin on January 1, 2027 and end on December 31, 2027.");
     expect(draftPreview.value).not.toContain("Hello Tenant,");
     expect(draftPreview.value).not.toContain("36DDfE1QldevOrw9wVyR");
     expect(draftPreview.value).toMatch(/tenant response target date recorded for internal follow-up is November 20, 2026\./);
@@ -579,7 +583,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByRole("button", { name: "Save renewal inputs" })).toBeInTheDocument();
     expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("Inputs needed");
     expect(screen.getByText("Save renewal operator inputs before preparing a tenant notice draft.")).toBeInTheDocument();
-    expect(screen.getByText(/Missing: rent change mode, new term type, new lease start date, tenant response target date/i)).toBeInTheDocument();
+    expect(screen.getByText(/Missing: rent change mode, new term type, new lease start date, new lease end date, tenant response target date/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Copy draft text" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Download draft" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
@@ -648,9 +652,10 @@ describe("LandlordLeaseWorkflowPage", () => {
       );
     });
     expect(await screen.findByText("Lease renewal inputs saved.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("Draft ready");
+    expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("Inputs needed");
     expect(screen.getByLabelText("Tenant renewal notice draft")).not.toHaveTextContent("Missing: tenant response target date");
-    expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("November 20, 2026");
+    expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("Missing: new lease end date");
+    expect(screen.queryByLabelText("Draft message preview")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Response deadline/i)).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/deadline choices/i);
   });

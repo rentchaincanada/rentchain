@@ -140,10 +140,7 @@ export function getRenewalNoticeDraftReadiness(lease: LandlordLeaseRenewalLease)
   if (!lease.renewalNewLeaseStartDate) {
     missing.push("new lease start date");
   }
-  if (
-    (lease.renewalNewTermType === "fixed_term" || lease.renewalNewTermType === "year_to_year") &&
-    !lease.renewalNewLeaseEndDate
-  ) {
+  if (!lease.renewalNewLeaseEndDate) {
     missing.push("new lease end date");
   }
   if (!isValidDateValue(lease.renewalDecisionDeadlineAt)) {
@@ -161,18 +158,21 @@ export function getRenewalNoticeDraftReadiness(lease: LandlordLeaseRenewalLease)
 export function buildRenewalNoticeDraftText(lease: LandlordLeaseRenewalLease) {
   const tenantName = tenantDisplayName(lease);
   const currentRent = formatRenewalCurrency(lease.currentRent, lease.currency) || "not available";
-  const proposedRent = proposedRentRequired(lease)
-    ? formatRenewalCurrency(lease.renewalOfferedRent, lease.currency) || "not set"
-    : "no rent change currently proposed";
+  const renewalRent = typeof lease.renewalOfferedRent === "number" ? formatRenewalCurrency(lease.renewalOfferedRent, lease.currency) : null;
   const startDate = formatDateOnly(lease.renewalNewLeaseStartDate);
-  const endDate = lease.renewalNewLeaseEndDate ? formatDateOnly(lease.renewalNewLeaseEndDate) : "open-ended";
+  const endDate = formatDateOnly(lease.renewalNewLeaseEndDate);
   const targetDate = formatTargetDate(lease.renewalDecisionDeadlineAt);
   const greeting = tenantName ? `Hello ${tenantName},` : "Hello,";
+  const termSentence =
+    lease.renewalNewTermType === "fixed_term"
+      ? `The new fixed term would begin on ${startDate} and end on ${endDate}.`
+      : `The renewal term details would begin on ${startDate} and end on ${endDate}.`;
+  const rentSentence = renewalRent ? ` The rent for the unit you occupy would be ${renewalRent}.` : "";
 
   return [
     greeting,
     "",
-    `We are preparing renewal details for ${propertyUnitLabel(lease)}. The current rent on file is ${currentRent}. The renewal rent entered for review is ${proposedRent}, with a term from ${startDate} to ${endDate}.`,
+    `We are preparing renewal details for ${propertyUnitLabel(lease)}. The current rent on file is ${currentRent}. ${termSentence}${rentSentence}`,
     "",
     `Please review these renewal details. The tenant response target date recorded for internal follow-up is ${targetDate}.`,
     "",
