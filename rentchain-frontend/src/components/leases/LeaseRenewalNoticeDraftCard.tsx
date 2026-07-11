@@ -12,6 +12,7 @@ type LeaseRenewalNoticeDraftCardProps = {
 type DraftReadiness = {
   ready: boolean;
   missing: string[];
+  validationMessage?: string | null;
 };
 
 function formatDateOnly(value: string | null | undefined) {
@@ -51,6 +52,17 @@ function formatTargetDate(value: string | number | null | undefined) {
     month: "long",
     day: "numeric",
   });
+}
+
+function dateOnlySortValue(value: string | null | undefined) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  const date = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(raw);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getTime();
 }
 
 function formatTermType(value: LandlordLeaseRenewalLease["renewalNewTermType"]) {
@@ -115,6 +127,7 @@ function proposedRentRequired(lease: LandlordLeaseRenewalLease) {
 
 export function getRenewalNoticeDraftReadiness(lease: LandlordLeaseRenewalLease): DraftReadiness {
   const missing: string[] = [];
+  let validationMessage: string | null = null;
   if (!lease.renewalRentChangeMode || lease.renewalRentChangeMode === "undecided") {
     missing.push("rent change mode");
   }
@@ -136,7 +149,13 @@ export function getRenewalNoticeDraftReadiness(lease: LandlordLeaseRenewalLease)
   if (!isValidDateValue(lease.renewalDecisionDeadlineAt)) {
     missing.push("tenant response target date");
   }
-  return { ready: missing.length === 0, missing };
+  const startValue = dateOnlySortValue(lease.renewalNewLeaseStartDate);
+  const endValue = dateOnlySortValue(lease.renewalNewLeaseEndDate);
+  if (startValue != null && endValue != null && startValue > endValue) {
+    validationMessage =
+      "Review renewal term dates before preparing a tenant notice draft. The new lease start date must be on or before the new lease end date.";
+  }
+  return { ready: missing.length === 0 && !validationMessage, missing, validationMessage };
 }
 
 export function buildRenewalNoticeDraftText(lease: LandlordLeaseRenewalLease) {
@@ -153,9 +172,9 @@ export function buildRenewalNoticeDraftText(lease: LandlordLeaseRenewalLease) {
   return [
     greeting,
     "",
-    `We are preparing the renewal details for ${propertyUnitLabel(lease)}. The current rent on file is ${currentRent}. The proposed renewal rent is ${proposedRent}, with a proposed term of ${startDate} to ${endDate}.`,
+    `We are preparing renewal details for ${propertyUnitLabel(lease)}. The current rent on file is ${currentRent}. The renewal rent entered for review is ${proposedRent}, with a term from ${startDate} to ${endDate}.`,
     "",
-    `Please review these proposed renewal details. The tenant response target date currently recorded for internal follow-up is ${targetDate}.`,
+    `Please review these renewal details. The tenant response target date recorded for internal follow-up is ${targetDate}.`,
     "",
     "This message is for renewal planning and review. Please refer to the official lease documents and current provincial requirements before relying on any notice or timing requirement.",
     "",
@@ -220,8 +239,10 @@ export function LeaseRenewalNoticeDraftCard({
           </div>
           <span style={badgeStyle}>Inputs needed</span>
         </div>
-        <div style={warningStyle}>Save renewal operator inputs before preparing a tenant notice draft.</div>
-        <div style={mutedStyle}>Missing: {readiness.missing.join(", ")}.</div>
+        <div style={warningStyle}>
+          {readiness.validationMessage || "Save renewal operator inputs before preparing a tenant notice draft."}
+        </div>
+        {readiness.missing.length > 0 ? <div style={mutedStyle}>Missing: {readiness.missing.join(", ")}.</div> : null}
         <button type="button" onClick={onReviewInputs} style={secondaryButtonStyle}>
           Review renewal operator inputs
         </button>

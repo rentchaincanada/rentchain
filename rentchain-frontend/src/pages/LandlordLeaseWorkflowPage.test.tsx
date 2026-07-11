@@ -293,9 +293,13 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("CA$1,975.00");
     const draftPreview = screen.getByLabelText("Draft message preview") as HTMLTextAreaElement;
     expect(draftPreview.value).toContain("Hello Jane Tenant,");
-    expect(draftPreview.value).toContain("We are preparing the renewal details for 12 Harbour Road · Unit 101.");
-    expect(draftPreview.value).toContain("tenant response target date currently recorded for internal follow-up");
-    expect(draftPreview.value).toMatch(/tenant response target date currently recorded for internal follow-up is .*?\./);
+    expect(draftPreview.value).toContain("We are preparing renewal details for 12 Harbour Road · Unit 101.");
+    expect(draftPreview.value).toContain("The renewal rent entered for review is CA$1,975.00");
+    expect(draftPreview.value).toContain("with a term from January 1, 2027 to December 31, 2027.");
+    expect(draftPreview.value).toContain("tenant response target date recorded for internal follow-up");
+    expect(draftPreview.value).toMatch(/tenant response target date recorded for internal follow-up is .*?\./);
+    expect(draftPreview.value).not.toContain("Please review these proposed renewal details");
+    expect((draftPreview.value.match(/\bproposed\b/gi) || []).length).toBeLessThanOrEqual(1);
     expect(screen.getByText(/Email delivery is not enabled from this workflow yet/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open notice review workflow" })).toHaveAttribute(
       "href",
@@ -380,13 +384,63 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(draftCard).not.toHaveTextContent("36DDfE1QldevOrw9wVyR");
 
     const draftPreview = screen.getByLabelText("Draft message preview") as HTMLTextAreaElement;
-    expect(draftPreview.value).toContain("Hello,\n\nWe are preparing the renewal details for 32 central road · Unit 4.");
+    expect(draftPreview.value).toContain("Hello,\n\nWe are preparing renewal details for 32 central road · Unit 4.");
     expect(draftPreview.value).not.toContain("Hello Tenant,");
     expect(draftPreview.value).not.toContain("36DDfE1QldevOrw9wVyR");
-    expect(draftPreview.value).toMatch(/tenant response target date currently recorded for internal follow-up is November 20, 2026\./);
+    expect(draftPreview.value).toMatch(/tenant response target date recorded for internal follow-up is November 20, 2026\./);
     expect(document.body).not.toHaveTextContent(/must respond by|notice has been served|legally valid|automatically compliant/i);
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
+  });
+
+  it("blocks the tenant renewal notice draft when renewal term dates are invalid", async () => {
+    mocks.fetchExpiringLeaseRenewals.mockResolvedValueOnce({
+      ok: true,
+      items: [
+        {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          propertyAddress: "12 Harbour Road",
+          unitId: "unit-1",
+          status: "active",
+          leaseType: "fixed_term",
+          province: "NS",
+          leaseStartDate: "2026-01-01",
+          leaseEndDate: "2026-12-31",
+          currentRent: 1850,
+          currency: "CAD",
+          nextNoticeDueAt: null,
+          latestNoticeId: null,
+          tenantName: "Jane Tenant",
+          unitLabel: "Unit 101",
+          propertyLabel: "Harbour View",
+          renewalRentChangeMode: "increase",
+          renewalOfferedRent: 1975,
+          renewalDecisionDeadlineAt: dateInputValueToMs("2026-11-20"),
+          renewalNewTermType: "fixed_term",
+          renewalNewLeaseStartDate: "2036-09-01",
+          renewalNewLeaseEndDate: "2027-08-31",
+          renewalUpdatedAt: "2026-07-02T12:00:00.000Z",
+        },
+      ],
+      data: [],
+    });
+
+    renderWorkflow("/leases/lease-1/workflows/renewal");
+
+    const draftCard = await screen.findByLabelText("Tenant renewal notice draft");
+    expect(draftCard).toHaveTextContent("Inputs needed");
+    expect(draftCard).toHaveTextContent(
+      "Review renewal term dates before preparing a tenant notice draft. The new lease start date must be on or before the new lease end date."
+    );
+    expect(draftCard).not.toHaveTextContent("Draft ready");
+    expect(screen.queryByLabelText("Draft message preview")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copy draft text" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Download draft" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/must respond by|notice has been served|legally valid|automatically compliant/i);
   });
 
   it("copies the renewal notice draft without sending or saving a notice", async () => {
