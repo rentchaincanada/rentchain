@@ -279,12 +279,45 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByText("Planning date only. Does not send notice or determine legal deadlines.")).toBeInTheDocument();
     expect(screen.queryByLabelText(/Response deadline/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save renewal inputs" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Tenant notice email workflow")).toHaveTextContent(
-      "Tenant-facing renewal notices are not sent from this workflow yet."
+    expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("Draft ready");
+    expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("Jane Tenant");
+    expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("12 Harbour Road / Unit 101");
+    expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("CA$1,850.00");
+    expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("CA$1,975.00");
+    const draftPreview = screen.getByLabelText("Draft message preview") as HTMLTextAreaElement;
+    expect(draftPreview.value).toContain("Hello Jane Tenant,");
+    expect(draftPreview.value).toContain("tenant response target date currently recorded for internal follow-up");
+    expect(screen.getByText(/Email delivery is not enabled from this workflow yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open notice review workflow" })).toHaveAttribute(
+      "href",
+      "/leases/lease-1/workflows/notice"
     );
+    expect(screen.getByRole("button", { name: "Copy draft text" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download draft" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/must respond by|notice has been served|legally valid|automatically compliant/i);
     expect(document.body).not.toHaveTextContent("/portfolio-health?entry=lease-renewals&propertyId=prop-1");
+  });
+
+  it("copies the renewal notice draft without sending or saving a notice", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    renderWorkflow("/leases/lease-1/workflows/renewal");
+
+    const draftPreview = (await screen.findByLabelText("Draft message preview")) as HTMLTextAreaElement;
+    expect(draftPreview.value).toContain("Hello Jane Tenant,");
+    fireEvent.click(screen.getByRole("button", { name: "Copy draft text" }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining("This message is for renewal planning and review."));
+    });
+    expect(await screen.findByText("Draft text copied.")).toBeInTheDocument();
+    expect(mocks.saveLeaseRenewalInputs).not.toHaveBeenCalled();
   });
 
   it("shows current rent unavailable when renewal projection rent is missing", async () => {
@@ -325,6 +358,12 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(await screen.findByLabelText("Current rent")).toHaveTextContent("Current rent unavailable");
     expect(screen.getByText("Review lease terms before changing rent.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save renewal inputs" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Tenant renewal notice draft")).toHaveTextContent("Inputs needed");
+    expect(screen.getByText("Save renewal operator inputs before preparing a tenant notice draft.")).toBeInTheDocument();
+    expect(screen.getByText(/Missing: rent change mode, new term type, new lease start date, tenant response target date/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copy draft text" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Download draft" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
   });
 
   it("saves renewal operator inputs through the existing lease renewal save behavior", async () => {

@@ -6,6 +6,7 @@ import {
   type LandlordLeaseRenewalLease,
 } from "@/api/landlordLeaseRenewalApi";
 import { LeaseRenewalOperatorInputsCard } from "@/components/leases/LeaseRenewalOperatorInputsCard";
+import { LeaseRenewalNoticeDraftCard } from "@/components/leases/LeaseRenewalNoticeDraftCard";
 import {
   RENEWAL_PIPELINE_BUCKETS,
   deriveRenewalPipelineItems,
@@ -273,6 +274,7 @@ function RenewalOperatorInputsWorkspace({ lease }: { lease: LandlordActiveLease 
   const [renewalLease, setRenewalLease] = React.useState<LandlordLeaseRenewalLease | null>(null);
   const [loadingRenewalInputs, setLoadingRenewalInputs] = React.useState(false);
   const [renewalInputsError, setRenewalInputsError] = React.useState<string | null>(null);
+  const inputsRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     if (!propertyId) {
@@ -374,10 +376,22 @@ function RenewalOperatorInputsWorkspace({ lease }: { lease: LandlordActiveLease 
       {loadingRenewalInputs ? <div>Loading renewal operator inputs…</div> : null}
       {!loadingRenewalInputs && renewalInputsError ? <div style={{ color: "#b91c1c" }}>{renewalInputsError}</div> : null}
       {!loadingRenewalInputs && !renewalInputsError && renewalLease ? (
-        <LeaseRenewalOperatorInputsCard
-          lease={renewalLease}
-          onSaved={(updatedLease) => setRenewalLease(updatedLease)}
-        />
+        <>
+          <div ref={inputsRef} tabIndex={-1} style={{ outline: "none" }}>
+            <LeaseRenewalOperatorInputsCard
+              lease={renewalLease}
+              onSaved={(updatedLease) => setRenewalLease(updatedLease)}
+            />
+          </div>
+          <LeaseRenewalNoticeDraftCard
+            lease={renewalLease}
+            noticeWorkflowPath={`/leases/${encodeURIComponent(lease.id)}/workflows/notice`}
+            onReviewInputs={() => {
+              inputsRef.current?.focus();
+              inputsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          />
+        </>
       ) : null}
     </>
   );
@@ -483,17 +497,10 @@ export default function LandlordLeaseWorkflowPage() {
             <section style={panelStyle} aria-label="Renewal operator inputs">
               <h2 style={sectionHeadingStyle}>Renewal operator inputs</h2>
               <div style={{ color: workflowTheme.muted, lineHeight: 1.6 }}>
-                Review and save unit-specific renewal inputs such as proposed rent, term dates, and response deadline
+                Review and save unit-specific renewal inputs such as proposed rent, term dates, and tenant response target date
                 before preparing tenant-facing notices.
               </div>
               <RenewalOperatorInputsWorkspace lease={lease} />
-              <div style={deferredNoticeStyle} aria-label="Tenant notice email workflow">
-                <div style={{ color: workflowTheme.charcoal, fontWeight: 900 }}>Tenant notice/email workflow</div>
-                <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
-                  Tenant-facing renewal notices are not sent from this workflow yet. Review and save operator inputs here first;
-                  notice drafting, email delivery, and evidence tracking should be handled in a dedicated notice workflow.
-                </div>
-              </div>
             </section>
           ) : null}
 
@@ -577,15 +584,6 @@ const sourceContextStyle: React.CSSProperties = {
 const sourceContextTitleStyle: React.CSSProperties = {
   color: workflowTheme.charcoal,
   fontWeight: 900,
-};
-
-const deferredNoticeStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-  padding: 12,
-  border: `1px dashed ${workflowTheme.borderStrong}`,
-  borderRadius: 10,
-  background: "rgba(255, 246, 232, 0.72)",
 };
 
 const sourceValueStyle: React.CSSProperties = {
