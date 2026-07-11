@@ -17,6 +17,18 @@ type DraftReadiness = {
   validationMessage?: string | null;
 };
 
+export type RenewalNoticeReviewModel = {
+  tenantLabel: string;
+  propertyUnitLabel: string;
+  currentRentLabel: string;
+  renewalRentLabel: string;
+  currentLeaseEndLabel: string;
+  proposedTermLabel: string;
+  tenantResponseTargetDateLabel: string;
+  leaseEvidencePath: string;
+  leaseTimelinePath: string;
+};
+
 function formatDateOnly(value: string | null | undefined) {
   const raw = String(value || "").trim();
   if (!raw) return "Not set";
@@ -133,6 +145,25 @@ function proposedRentRequired(lease: LandlordLeaseRenewalLease) {
   return lease.renewalRentChangeMode === "increase" || lease.renewalRentChangeMode === "decrease";
 }
 
+export function buildRenewalNoticeReviewModel(lease: LandlordLeaseRenewalLease): RenewalNoticeReviewModel {
+  const currentRentLabel = formatRenewalCurrency(lease.currentRent, lease.currency) || "Current rent unavailable";
+  const renewalRentLabel = proposedRentRequired(lease)
+    ? formatRenewalCurrency(lease.renewalOfferedRent, lease.currency) || "Proposed rent not set"
+    : "No rent change currently proposed";
+
+  return {
+    tenantLabel: tenantMetadataLabel(lease),
+    propertyUnitLabel: propertyUnitLabel(lease),
+    currentRentLabel,
+    renewalRentLabel,
+    currentLeaseEndLabel: formatDateOnly(lease.leaseEndDate),
+    proposedTermLabel: formatEvidenceTermLabel(lease),
+    tenantResponseTargetDateLabel: formatTargetDate(lease.renewalDecisionDeadlineAt),
+    leaseEvidencePath: evidencePackPath({ scope: "lease", scopeId: lease.id }),
+    leaseTimelinePath: reviewTimelinePath({ scope: "lease", scopeId: lease.id }),
+  };
+}
+
 export function getRenewalNoticeDraftReadiness(lease: LandlordLeaseRenewalLease): DraftReadiness {
   const missing: string[] = [];
   let validationMessage: string | null = null;
@@ -198,12 +229,7 @@ export function LeaseRenewalNoticeDraftCard({
   const [copyStatus, setCopyStatus] = React.useState<"idle" | "success" | "error">("idle");
   const readiness = getRenewalNoticeDraftReadiness(lease);
   const draftText = React.useMemo(() => buildRenewalNoticeDraftText(lease), [lease]);
-  const currentRent = formatRenewalCurrency(lease.currentRent, lease.currency) || "Current rent unavailable";
-  const proposedRent = proposedRentRequired(lease)
-    ? formatRenewalCurrency(lease.renewalOfferedRent, lease.currency) || "Proposed rent not set"
-    : "No rent change currently proposed";
-  const leaseEvidencePath = evidencePackPath({ scope: "lease", scopeId: lease.id });
-  const leaseTimelinePath = reviewTimelinePath({ scope: "lease", scopeId: lease.id });
+  const reviewModel = React.useMemo(() => buildRenewalNoticeReviewModel(lease), [lease]);
 
   async function copyDraft() {
     try {
@@ -271,18 +297,13 @@ export function LeaseRenewalNoticeDraftCard({
       </div>
 
       <dl style={factsGridStyle}>
-        <Fact label="Tenant" value={tenantMetadataLabel(lease)} />
-        <Fact label="Unit/property" value={propertyUnitLabel(lease)} />
-        <Fact label="Current rent" value={currentRent} />
-        <Fact label="Proposed rent" value={proposedRent} />
-        <Fact label="Current lease end" value={formatDateOnly(lease.leaseEndDate)} />
-        <Fact
-          label="Proposed term"
-          value={`${formatTermType(lease.renewalNewTermType)} · ${formatDateOnly(lease.renewalNewLeaseStartDate)} to ${
-            lease.renewalNewLeaseEndDate ? formatDateOnly(lease.renewalNewLeaseEndDate) : "open-ended"
-          }`}
-        />
-        <Fact label="Tenant response target date" value={formatTargetDate(lease.renewalDecisionDeadlineAt)} />
+        <Fact label="Tenant" value={reviewModel.tenantLabel} />
+        <Fact label="Unit/property" value={reviewModel.propertyUnitLabel} />
+        <Fact label="Current rent" value={reviewModel.currentRentLabel} />
+        <Fact label="Proposed rent" value={reviewModel.renewalRentLabel} />
+        <Fact label="Current lease end" value={reviewModel.currentLeaseEndLabel} />
+        <Fact label="Proposed term" value={reviewModel.proposedTermLabel} />
+        <Fact label="Tenant response target date" value={reviewModel.tenantResponseTargetDateLabel} />
       </dl>
 
       <label style={{ display: "grid", gap: 6 }}>
@@ -305,13 +326,13 @@ export function LeaseRenewalNoticeDraftCard({
         </div>
 
         <dl style={factsGridStyle}>
-          <Fact label="Tenant" value={tenantMetadataLabel(lease)} />
-          <Fact label="Property/unit" value={propertyUnitLabel(lease)} />
-          <Fact label="Current rent" value={currentRent} />
-          <Fact label="Renewal rent" value={proposedRent} />
-          <Fact label="Current lease end" value={formatDateOnly(lease.leaseEndDate)} />
-          <Fact label="Proposed term" value={formatEvidenceTermLabel(lease)} />
-          <Fact label="Tenant response target date" value={formatTargetDate(lease.renewalDecisionDeadlineAt)} />
+          <Fact label="Tenant" value={reviewModel.tenantLabel} />
+          <Fact label="Property/unit" value={reviewModel.propertyUnitLabel} />
+          <Fact label="Current rent" value={reviewModel.currentRentLabel} />
+          <Fact label="Renewal rent" value={reviewModel.renewalRentLabel} />
+          <Fact label="Current lease end" value={reviewModel.currentLeaseEndLabel} />
+          <Fact label="Proposed term" value={reviewModel.proposedTermLabel} />
+          <Fact label="Tenant response target date" value={reviewModel.tenantResponseTargetDateLabel} />
         </dl>
 
         <div style={statusListStyle}>
@@ -329,10 +350,10 @@ export function LeaseRenewalNoticeDraftCard({
         </div>
 
         <div style={actionsStyle}>
-          <Link to={leaseEvidencePath} style={linkButtonStyle}>
+          <Link to={reviewModel.leaseEvidencePath} style={linkButtonStyle}>
             Open lease evidence preview
           </Link>
-          <Link to={leaseTimelinePath} style={linkButtonStyle}>
+          <Link to={reviewModel.leaseTimelinePath} style={linkButtonStyle}>
             Open lease review timeline
           </Link>
         </div>
