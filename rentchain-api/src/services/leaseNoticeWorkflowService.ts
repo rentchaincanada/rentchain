@@ -1,6 +1,7 @@
 import { db } from "../firebase";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "./emailService";
+import { buildEvent, CANONICAL_EVENTS_COLLECTION } from "../lib/events/buildEvent";
 import {
   type LeaseNoticeRule,
   type LeaseNoticeType,
@@ -157,6 +158,47 @@ export type LeaseRenewalOperatorInputRecord = {
   newLeaseEndDate: string | null;
   responseDeadlineAt: number | null;
 };
+
+export type RenewalNoticeDraftSnapshotSourceValues = {
+  tenantLabel: string;
+  propertyUnitLabel: string;
+  currentRentLabel: string;
+  renewalRentLabel: string;
+  currentLeaseEndLabel: string;
+  proposedTermLabel: string;
+  tenantResponseTargetDateLabel: string;
+};
+
+export type SaveRenewalNoticeDraftSnapshotInput = {
+  draftText: string;
+  sourceValues: RenewalNoticeDraftSnapshotSourceValues;
+  generatedAt?: string | number | null;
+  noDeliveryFlags?: {
+    emailSent?: boolean | null;
+    noticeServed?: boolean | null;
+    tenantNotified?: boolean | null;
+  } | null;
+};
+
+export type SaveRenewalNoticeDraftSnapshotResult =
+  | {
+      ok: true;
+      snapshot: {
+        snapshotId: string;
+        savedAt: string;
+        actor: { id: string | null; email: string | null };
+        status: "draft_saved";
+        source: "renewal_notice_draft";
+        flags: {
+          emailSent: false;
+          noticeServed: false;
+          tenantNotified: false;
+        };
+        auditEventId: string;
+        canonicalEventId: string;
+      };
+    }
+  | { ok: false; status: number; error: string; details?: string[] };
 
 function nowMs() {
   return Date.now();
@@ -658,6 +700,240 @@ export async function getLeaseForLandlordWorkflow(leaseId: string, landlordId: s
     return { ok: false as const, status: 403, error: "FORBIDDEN" };
   }
   return { ok: true as const, lease };
+}
+
+function snapshotString(value: unknown, max = 1000): string {
+  return String(value ?? "").trim().slice(0, max);
+}
+
+function snapshotIso(value: unknown, fallback = new Date().toISOString()): string {
+  const raw = snapshotString(value, 120);
+  if (!raw) return fallback;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
+}
+
+function containsUnsafeUrl(value: string): boolean {
+  return /\bhttps?:\/\//i.test(value);
+}
+
+function sanitizeSnapshotSourceValues(value: any): {
+  ok: true;
+  data: RenewalNoticeDraftSnapshotSourceValues;
+} | {
+  ok: false;
+  error: string;
+  details: string[];
+} {
+  const required: Array<keyof RenewalNoticeDraftSnapshotSourceValues> = [
+    "tenantLabel",
+    "propertyUnitLabel",
+    "currentRentLabel",
+    "renewalRentLabel",
+    "currentLeaseEndLabel",
+    "proposedTermLabel",
+    "tenantResponseTargetDateLabel",
+  ];
+  const details: string[] = [];
+  const data = {} as RenewalNoticeDraftSnapshotSourceValues;
+  for (const key of required) {
+    const label = snapshotString(value?.[key], 500);
+    if (!label) {
+      details.push(key);
+    }
+    if (containsUnsafeUrl(label)) {
+      details.push(`${key}:url_not_allowed`);
+    }
+    data[key] = label;
+  }
+  if (details.length) {
+    return { ok: false, error: "DRAFT_SNAPSHOT_SOURCE_VALUES_INVALID", details };
+  }
+  return { ok: true, data };
+}
+
+function sanitizeRenewalNoticeDraftSnapshotInput(
+  input: SaveRenewalNoticeDraftSnapshotInput
+): {
+  ok: true;
+  data: {
+    draftText: string;
+    generatedAt: string;
+    sourceValues: RenewalNoticeDraftSnapshotSourceValues;
+    flags: { emailSent: false; noticeServed: false; tenantNotified: false };
+  };
+} | {
+  ok: false;
+  status: number;
+  error: string;
+  details?: string[];
+} {
+  const draftText = snapshotString(input?.draftText, 20_000);
+  if (!draftText) {
+    return { ok: false, status: 400, error: "DRAFT_TEXT_REQUIRED" };
+  }
+  if (containsUnsafeUrl(draftText)) {
+    return { ok: false, status: 400, error: "DRAFT_TEXT_URLS_NOT_ALLOWED" };
+  }
+  const sourceValues = sanitizeSnapshotSourceValues(input?.sourceValues);
+  if (!sourceValues.ok) {
+    return {
+      ok: false,
+      status: 400,
+      error: sourceValues.error,
+      details: sourceValues.details,
+    };
+  }
+  const flags = input?.noDeliveryFlags || {};
+  if (flags.emailSent === true || flags.noticeServed === true || flags.tenantNotified === true) {
+    return {
+      ok: false,
+      status: 400,
+      error: "DRAFT_SNAPSHOT_DELIVERY_FLAGS_INVALID",
+      details: ["emailSent", "noticeServed", "tenantNotified"],
+    };
+  }
+  return {
+    ok: true,
+    data: {
+      draftText,
+      generatedAt: snapshotIso(input?.generatedAt),
+      sourceValues: sourceValues.data,
+      flags: { emailSent: false, noticeServed: false, tenantNotified: false },
+    },
+  };
+}
+
+export async function saveRenewalNoticeDraftSnapshot(params: {
+  leaseId: string;
+  landlordId: string;
+  actorId?: string | null;
+  actorEmail?: string | null;
+  lease: LeaseWorkflowLease;
+  input: SaveRenewalNoticeDraftSnapshotInput;
+}): Promise<SaveRenewalNoticeDraftSnapshotResult> {
+  const sanitized = sanitizeRenewalNoticeDraftSnapshotInput(params.input);
+  if (!sanitized.ok) return sanitized;
+
+  const nowIso = new Date().toISOString();
+  const actorId = snapshotString(params.actorId, 240) || null;
+  const actorEmail = snapshotString(params.actorEmail, 320) || null;
+  const snapshotRef = db.collection("renewalNoticeDraftSnapshots").doc();
+  const eventRef = db.collection("events").doc();
+  const canonicalEventId = `renewal_notice_draft_saved:${snapshotRef.id}`;
+  const sourceValuesSummary = {
+    tenantLabel: sanitized.data.sourceValues.tenantLabel,
+    propertyUnitLabel: sanitized.data.sourceValues.propertyUnitLabel,
+    currentRentLabel: sanitized.data.sourceValues.currentRentLabel,
+    renewalRentLabel: sanitized.data.sourceValues.renewalRentLabel,
+    currentLeaseEndLabel: sanitized.data.sourceValues.currentLeaseEndLabel,
+    proposedTermLabel: sanitized.data.sourceValues.proposedTermLabel,
+    tenantResponseTargetDateLabel: sanitized.data.sourceValues.tenantResponseTargetDateLabel,
+  };
+  const snapshot = {
+    snapshotId: snapshotRef.id,
+    leaseId: params.leaseId,
+    landlordId: params.landlordId,
+    tenantId: params.lease.tenantId || null,
+    propertyId: params.lease.propertyId || null,
+    unitId: params.lease.unitId || null,
+    tenantLabel: sanitized.data.sourceValues.tenantLabel,
+    propertyUnitLabel: sanitized.data.sourceValues.propertyUnitLabel,
+    currentRentLabel: sanitized.data.sourceValues.currentRentLabel,
+    renewalRentLabel: sanitized.data.sourceValues.renewalRentLabel,
+    currentLeaseEndLabel: sanitized.data.sourceValues.currentLeaseEndLabel,
+    proposedTermLabel: sanitized.data.sourceValues.proposedTermLabel,
+    tenantResponseTargetDateLabel: sanitized.data.sourceValues.tenantResponseTargetDateLabel,
+    generatedDraftText: sanitized.data.draftText,
+    generatedAt: sanitized.data.generatedAt,
+    savedAt: nowIso,
+    actor: { id: actorId, email: actorEmail },
+    source: "renewal_notice_draft",
+    status: "draft_saved",
+    flags: sanitized.data.flags,
+    emailSent: false,
+    noticeServed: false,
+    tenantNotified: false,
+    auditEventId: eventRef.id,
+    canonicalEventId,
+  };
+  const eventPayload = {
+    id: eventRef.id,
+    landlordId: params.landlordId,
+    actorUserId: actorId || undefined,
+    type: "renewal_notice_draft_saved",
+    leaseId: params.leaseId,
+    tenantId: params.lease.tenantId || undefined,
+    propertyId: params.lease.propertyId || undefined,
+    payload: {
+      snapshotId: snapshotRef.id,
+      source: "renewal_notice_draft",
+      status: "draft_saved",
+      sourceValues: sourceValuesSummary,
+      flags: sanitized.data.flags,
+      noDelivery: true,
+      summary: "Renewal notice draft saved. Not sent, not served, tenant not notified.",
+    },
+    summary: "Renewal notice draft saved. Not sent, not served, tenant not notified.",
+    occurredAt: nowIso,
+    createdAt: nowIso,
+  };
+  const canonicalEvent = buildEvent({
+    id: canonicalEventId,
+    type: "renewal_notice_draft_saved",
+    domain: "lease",
+    action: "renewal_notice_draft_saved",
+    status: "completed",
+    actor: {
+      type: "landlord",
+      id: actorId,
+      role: "landlord",
+      displayName: actorEmail,
+    },
+    resource: {
+      type: "lease",
+      id: params.leaseId,
+      parentType: params.lease.propertyId ? "property" : null,
+      parentId: params.lease.propertyId,
+    },
+    occurredAt: nowIso,
+    visibility: "landlord",
+    summary: "Renewal notice draft saved. Not sent, not served, tenant not notified.",
+    metadata: {
+      landlordId: params.landlordId,
+      leaseId: params.leaseId,
+      snapshotId: snapshotRef.id,
+      tenantId: params.lease.tenantId || null,
+      propertyId: params.lease.propertyId || null,
+      unitId: params.lease.unitId || null,
+      source: "renewal_notice_draft",
+      status: "draft_saved",
+      sourceValues: sourceValuesSummary,
+      flags: sanitized.data.flags,
+      noDelivery: true,
+    },
+    tags: ["renewal_notice", "draft_snapshot", "audit_capture"],
+  });
+
+  const batch = db.batch();
+  batch.set(snapshotRef, snapshot);
+  batch.set(eventRef, eventPayload);
+  batch.set(db.collection(CANONICAL_EVENTS_COLLECTION).doc(canonicalEvent.id), canonicalEvent);
+  await batch.commit();
+
+  return {
+    ok: true,
+    snapshot: {
+      snapshotId: snapshotRef.id,
+      savedAt: nowIso,
+      actor: { id: actorId, email: actorEmail },
+      source: "renewal_notice_draft",
+      status: "draft_saved",
+      flags: sanitized.data.flags,
+      auditEventId: eventRef.id,
+      canonicalEventId: canonicalEvent.id,
+    },
+  };
 }
 
 export async function getLeaseForTenantWorkflow(noticeId: string, tenantId: string) {

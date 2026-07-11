@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getLeaseById: vi.fn(),
   fetchExpiringLeaseRenewals: vi.fn(),
   saveLeaseRenewalInputs: vi.fn(),
+  saveRenewalNoticeDraftSnapshot: vi.fn(),
 }));
 
 vi.mock("@/api/leasesApi", () => ({
@@ -16,6 +17,7 @@ vi.mock("@/api/leasesApi", () => ({
 vi.mock("@/api/landlordLeaseRenewalApi", () => ({
   fetchExpiringLeaseRenewals: mocks.fetchExpiringLeaseRenewals,
   saveLeaseRenewalInputs: mocks.saveLeaseRenewalInputs,
+  saveRenewalNoticeDraftSnapshot: mocks.saveRenewalNoticeDraftSnapshot,
 }));
 
 function renderWorkflow(path: string) {
@@ -46,6 +48,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     mocks.getLeaseById.mockReset();
     mocks.fetchExpiringLeaseRenewals.mockReset();
     mocks.saveLeaseRenewalInputs.mockReset();
+    mocks.saveRenewalNoticeDraftSnapshot.mockReset();
     mocks.getLeaseById.mockResolvedValue({
       lease: {
         id: "lease-1",
@@ -206,6 +209,19 @@ describe("LandlordLeaseWorkflowPage", () => {
         responseDeadlineAt: Date.UTC(2026, 10, 20, 14, 0, 0, 0),
       },
     });
+    mocks.saveRenewalNoticeDraftSnapshot.mockResolvedValue({
+      ok: true,
+      snapshot: {
+        snapshotId: "snapshot-1",
+        savedAt: "2026-07-11T12:00:00.000Z",
+        actor: { id: "landlord-1", email: "manager@example.com" },
+        source: "renewal_notice_draft",
+        status: "draft_saved",
+        flags: { emailSent: false, noticeServed: false, tenantNotified: false },
+        auditEventId: "event-1",
+        canonicalEventId: "canonical-1",
+      },
+    });
   });
 
   afterEach(() => {
@@ -245,6 +261,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(noticeReview).toHaveTextContent("Deferred");
     expect(noticeReview).toHaveTextContent("Evidence capture");
     expect(noticeReview).toHaveTextContent("Audit capture");
+    expect(noticeReview).toHaveTextContent("Available after snapshot save");
     expect(noticeReview).toHaveTextContent("Jane Tenant");
     expect(noticeReview).toHaveTextContent("12 Harbour Road · Unit 101");
     expect(noticeReview).toHaveTextContent("CA$1,850.00");
@@ -272,9 +289,10 @@ describe("LandlordLeaseWorkflowPage", () => {
     );
     expect(screen.getByRole("button", { name: "Copy draft text" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download draft" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save draft snapshot" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
-    expect(document.body).not.toHaveTextContent(/audit event created|evidence saved|notice served|tenant notified|email sent/i);
+    expect(document.body).not.toHaveTextContent(/evidence saved|notice has been served|email sent/i);
 
     cleanup();
     renderWorkflow("/leases/lease-1/workflows/execution");
@@ -336,6 +354,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.queryByLabelText("Tenant notice draft preview")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Copy draft text" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Download draft" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save draft snapshot" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Return to renewal inputs" })).toHaveAttribute(
       "href",
       "/leases/lease-1/workflows/renewal"
@@ -390,10 +409,11 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.queryByLabelText("Tenant notice draft preview")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Copy draft text" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Download draft" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save draft snapshot" })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/must respond by|notice has been served|legally valid|automatically compliant/i);
   });
 
-  it("copies the notice review draft without sending, saving, or creating notice records", async () => {
+  it("copies the notice review draft without sending or creating notice records", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -411,8 +431,54 @@ describe("LandlordLeaseWorkflowPage", () => {
     });
     expect(await screen.findByText("Draft text copied.")).toBeInTheDocument();
     expect(mocks.saveLeaseRenewalInputs).not.toHaveBeenCalled();
+    expect(mocks.saveRenewalNoticeDraftSnapshot).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
-    expect(document.body).not.toHaveTextContent(/audit event created|evidence saved|notice served|tenant notified|email sent/i);
+    expect(document.body).not.toHaveTextContent(/evidence saved|notice has been served|email sent/i);
+  });
+
+  it("saves a draft snapshot from notice review without changing renewal inputs or sending email", async () => {
+    renderWorkflow("/leases/lease-1/workflows/notice");
+
+    await screen.findByLabelText("Tenant notice draft preview");
+    fireEvent.click(screen.getByRole("button", { name: "Save draft snapshot" }));
+
+    await waitFor(() => {
+      expect(mocks.saveRenewalNoticeDraftSnapshot).toHaveBeenCalledWith(
+        "lease-1",
+        expect.objectContaining({
+          draftText: expect.stringContaining("Hello Jane Tenant,"),
+          sourceValues: expect.objectContaining({
+            tenantLabel: "Jane Tenant",
+            propertyUnitLabel: "12 Harbour Road · Unit 101",
+            currentRentLabel: "CA$1,850.00",
+            renewalRentLabel: "CA$1,975.00",
+            proposedTermLabel: "Fixed term · January 1, 2027 to December 31, 2027",
+          }),
+          noDeliveryFlags: { emailSent: false, noticeServed: false, tenantNotified: false },
+        })
+      );
+    });
+    expect(await screen.findByText("Audit event recorded.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Draft snapshot persistence")).toHaveTextContent("Draft snapshot saved");
+    expect(screen.getByLabelText("Draft snapshot persistence")).toHaveTextContent("manager@example.com");
+    expect(screen.getByLabelText("Draft snapshot persistence")).toHaveTextContent("Not sent · Not served · Tenant not notified");
+    expect(mocks.saveLeaseRenewalInputs).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/evidence saved|notice has been served|email sent/i);
+  });
+
+  it("shows a draft snapshot save error without implying audit persistence", async () => {
+    mocks.saveRenewalNoticeDraftSnapshot.mockRejectedValueOnce(new Error("Snapshot save failed"));
+
+    renderWorkflow("/leases/lease-1/workflows/notice");
+
+    await screen.findByLabelText("Tenant notice draft preview");
+    fireEvent.click(screen.getByRole("button", { name: "Save draft snapshot" }));
+
+    expect(await screen.findByText("Snapshot save failed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Draft snapshot persistence")).toHaveTextContent("Not saved yet");
+    expect(screen.queryByText("Audit event recorded.")).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/evidence saved|notice has been served|email sent/i);
   });
 
   it("renders editable renewal operator inputs with prefilled values and source link", async () => {
@@ -485,10 +551,10 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(evidenceReadiness).toHaveTextContent("Tenant response target date");
     expect(evidenceReadiness).toHaveTextContent("Copy/download actions are available for review");
     expect(evidenceReadiness).toHaveTextContent("Email delivery not enabled");
-    expect(evidenceReadiness).toHaveTextContent("Draft evidence is not persisted yet");
-    expect(evidenceReadiness).toHaveTextContent("Audit capture deferred");
-    expect(evidenceReadiness).toHaveTextContent("Evidence package inclusion deferred");
-    expect(evidenceReadiness).toHaveTextContent("this draft text is not saved to an evidence package or audit trail yet");
+    expect(evidenceReadiness).toHaveTextContent("Notice not sent");
+    expect(evidenceReadiness).toHaveTextContent("Tenant not notified");
+    expect(evidenceReadiness).toHaveTextContent("Draft snapshot not saved yet");
+    expect(evidenceReadiness).toHaveTextContent("Save draft snapshot");
     expect(screen.getByRole("link", { name: "Open lease evidence preview" })).toHaveAttribute(
       "href",
       "/evidence-packs?scope=lease&scopeId=lease-1"
@@ -506,7 +572,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/must respond by|notice has been served|legally valid|automatically compliant/i);
-    expect(document.body).not.toHaveTextContent(/audit event created|evidence saved|notice served|tenant notified|email sent/i);
+    expect(document.body).not.toHaveTextContent(/evidence saved|notice has been served|email sent/i);
     expect(document.body).not.toHaveTextContent("/portfolio-health?entry=lease-renewals&propertyId=prop-1");
   });
 

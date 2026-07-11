@@ -296,6 +296,58 @@ describe("deriveEvidencePack", () => {
     );
   });
 
+  it("groups repeated renewal notice draft snapshots as read-only audit context", () => {
+    const pack = deriveEvidencePack({
+      scope: "lease",
+      scopeId: "lease-1",
+      landlordId: "landlord-1",
+      generatedAt: "2026-07-11T12:00:00.000Z",
+      canonicalEvents: [
+        {
+          id: "event-draft-1",
+          type: "renewal_notice_draft_saved",
+          summary: "Renewal notice draft saved. Not sent, not served, tenant not notified.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          occurredAt: "2026-07-11T12:00:00.000Z",
+        },
+        {
+          id: "event-draft-2",
+          type: "renewal_notice_draft_saved",
+          summary: "Renewal notice draft saved. Not sent, not served, tenant not notified.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          occurredAt: "2026-07-11T12:02:00.000Z",
+        },
+        {
+          id: "event-draft-3",
+          type: "renewal_notice_draft_saved",
+          summary: "Renewal notice draft saved. Not sent, not served, tenant not notified.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          occurredAt: "2026-07-11T12:04:00.000Z",
+        },
+      ],
+      leases: [{ id: "lease-1", propertyName: "North Towers", unitNumber: "101", tenantName: "John Smith" }],
+      properties: [{ id: "prop-1", name: "North Towers" }],
+    });
+
+    const auditSection = pack.sections.find((section) => section.sectionKey === "audit_events");
+    const snapshotItems = auditSection?.items.filter((item) => item.label.includes("Renewal notice draft snapshot"));
+    expect(snapshotItems).toHaveLength(1);
+    expect(snapshotItems?.[0]).toEqual(
+      expect.objectContaining({
+        itemType: "canonical_event",
+        label: "Renewal notice draft snapshots",
+        description:
+          "3 renewal notice draft snapshots saved. Latest saved at 2026-07-11 12:04 UTC. Not sent, not served, tenant not notified.",
+        sourceId: "event-draft-3",
+        timestamp: "2026-07-11T12:04:00.000Z",
+      })
+    );
+    expect(JSON.stringify(pack)).not.toMatch(/Notice sent|Tenant notified|Notice served/);
+  });
+
   it("keeps raw provider, banking, debug, and private document fields out of evidence projections", () => {
     const pack = deriveEvidencePack({
       scope: "decision",

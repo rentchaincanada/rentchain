@@ -18,6 +18,7 @@ import {
   lookupUserEmail,
   normalizeLeaseRecord,
   performLeaseNoticeSendFromPreviewInput,
+  saveRenewalNoticeDraftSnapshot,
   sanitizeLeaseRenewalOperatorInput,
   sendLeaseWorkflowEmail,
 } from "../services/leaseNoticeWorkflowService";
@@ -218,6 +219,36 @@ router.put("/:id/renewal-inputs", async (req: any, res) => {
   } catch (err: any) {
     console.error("[lease-notice] renewal-inputs save failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "LEASE_RENEWAL_INPUT_SAVE_FAILED" });
+  }
+});
+
+router.post("/:id/renewal-notice-draft-snapshots", async (req: any, res) => {
+  try {
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const actorId = String(req.user?.id || landlordId || "").trim() || null;
+    const actorEmail = String(req.user?.email || req.user?.claims?.email || "").trim() || null;
+    const leaseId = String(req.params?.id || "").trim();
+    const leaseResult = await getLeaseForLandlordWorkflow(leaseId, landlordId);
+    if (!leaseResult.ok) {
+      return res.status(leaseResult.status).json({ ok: false, error: leaseResult.error });
+    }
+
+    const result = await saveRenewalNoticeDraftSnapshot({
+      leaseId,
+      landlordId,
+      actorId,
+      actorEmail,
+      lease: normalizeLeaseRecord(leaseId, leaseResult.lease),
+      input: req.body || {},
+    });
+    if (!result.ok) {
+      return res.status(result.status).json({ ok: false, error: result.error, details: result.details || [] });
+    }
+
+    return res.status(201).json({ ok: true, snapshot: result.snapshot });
+  } catch (err: any) {
+    console.error("[lease-notice] renewal draft snapshot save failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "LEASE_RENEWAL_DRAFT_SNAPSHOT_SAVE_FAILED" });
   }
 });
 

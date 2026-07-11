@@ -61,6 +61,14 @@ function label(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function canonicalEventLabel(event: Record<string, any>): string {
+  const raw = asString(event.type || event.action, 160);
+  if (raw === "renewal_notice_draft_saved" || raw === "lease.renewal_notice_draft_saved") {
+    return "Renewal notice draft saved";
+  }
+  return raw || "Canonical event";
+}
+
 function normalizeActor(raw: any): ReviewTimelineActor {
   const type = asString(raw?.type || raw?.role, 80).toLowerCase();
   return {
@@ -245,7 +253,7 @@ function canonicalEventEntries(input: DeriveCanonicalReviewTimelineInput): Revie
         key: asString(event.id, 500) || event.type || "canonical_event",
         entryType: "canonical_event",
         timestamp: event.occurredAt || event.recordedAt,
-        label: event.type || event.action || "Canonical event",
+        label: canonicalEventLabel(event),
         description: event.summary || "Canonical event recorded.",
         status: event.status === "blocked" ? "blocked" : "info",
         actor: normalizeActor(event.actor),
