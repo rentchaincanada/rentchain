@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   fetchExpiringLeaseRenewals: vi.fn(),
   saveLeaseRenewalInputs: vi.fn(),
   saveRenewalNoticeDraftSnapshot: vi.fn(),
+  fetchLandlordDecisionQueue: vi.fn(),
+  createLandlordDecisionQueueItem: vi.fn(),
+  updateLandlordDecisionQueueItem: vi.fn(),
 }));
 
 vi.mock("@/api/leasesApi", () => ({
@@ -18,6 +21,12 @@ vi.mock("@/api/landlordLeaseRenewalApi", () => ({
   fetchExpiringLeaseRenewals: mocks.fetchExpiringLeaseRenewals,
   saveLeaseRenewalInputs: mocks.saveLeaseRenewalInputs,
   saveRenewalNoticeDraftSnapshot: mocks.saveRenewalNoticeDraftSnapshot,
+}));
+
+vi.mock("@/api/landlordDecisionQueueApi", () => ({
+  fetchLandlordDecisionQueue: mocks.fetchLandlordDecisionQueue,
+  createLandlordDecisionQueueItem: mocks.createLandlordDecisionQueueItem,
+  updateLandlordDecisionQueueItem: mocks.updateLandlordDecisionQueueItem,
 }));
 
 function renderWorkflow(path: string) {
@@ -43,12 +52,47 @@ function dateInputValueToMs(value: string) {
   return new Date(year, month - 1, day).getTime();
 }
 
+function approvalDecisionFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "decision-1",
+    sourceType: "renewal_notice_send_review",
+    sourceId: "lease:lease-1:renewal_notice_send_review",
+    sourceRoute: "/leases/lease-1/workflows/notice",
+    propertyId: "prop-1",
+    unitId: "unit-1",
+    tenantId: "tenant-1",
+    leaseId: "lease-1",
+    workspace: "notices",
+    severity: "warning",
+    title: "Renewal tenant communication ready for approval",
+    description:
+      "Saved renewal notice draft is ready for send approval review. Email delivery remains disabled until approved send infrastructure is available.",
+    recommendedActionLabel: "Open notice review",
+    recommendedActionHref: "/leases/lease-1/workflows/notice",
+    dueAt: null,
+    createdAt: "2026-07-11T12:00:00.000Z",
+    updatedAt: "2026-07-11T12:00:00.000Z",
+    status: "open",
+    assignment: null,
+    sourceSnapshot: null,
+    auditEventIds: ["decision-audit-1"],
+    metadata: { noSendBehavior: true },
+    dedupeKey: "lease:lease-1:renewal_notice_send_review",
+    sortKey: "2026-07-11T12:00:00.000Z",
+    priorityRank: 2,
+    ...overrides,
+  };
+}
+
 describe("LandlordLeaseWorkflowPage", () => {
   beforeEach(() => {
     mocks.getLeaseById.mockReset();
     mocks.fetchExpiringLeaseRenewals.mockReset();
     mocks.saveLeaseRenewalInputs.mockReset();
     mocks.saveRenewalNoticeDraftSnapshot.mockReset();
+    mocks.fetchLandlordDecisionQueue.mockReset();
+    mocks.createLandlordDecisionQueueItem.mockReset();
+    mocks.updateLandlordDecisionQueueItem.mockReset();
     mocks.getLeaseById.mockResolvedValue({
       lease: {
         id: "lease-1",
@@ -222,6 +266,56 @@ describe("LandlordLeaseWorkflowPage", () => {
         canonicalEventId: "canonical-1",
       },
     });
+    mocks.fetchLandlordDecisionQueue.mockResolvedValue({
+      ok: true,
+      version: "landlord_decision_queue_v1",
+      landlordId: "landlord-1",
+      generatedAt: "2026-07-11T12:00:00.000Z",
+      items: [],
+      summary: {
+        total: 0,
+        critical: 0,
+        warning: 0,
+        needsReview: 0,
+        upcoming: 0,
+        informational: 0,
+        open: 0,
+        blocked: 0,
+      },
+      total: 0,
+      limit: 5,
+      filters: {
+        severity: null,
+        workspace: null,
+        status: null,
+        sourceType: "renewal_notice_send_review",
+        sourceId: "lease:lease-1:renewal_notice_send_review",
+        sourceRoute: null,
+      },
+    });
+    mocks.createLandlordDecisionQueueItem.mockResolvedValue({
+      ok: true,
+      created: true,
+      auditEventId: "decision-audit-1",
+      item: approvalDecisionFixture(),
+    });
+    mocks.updateLandlordDecisionQueueItem.mockImplementation(async (_id: string, payload: { action?: string }) => ({
+      ok: true,
+      auditEventId: "decision-audit-2",
+      item: approvalDecisionFixture({
+        status:
+          payload.action === "approve"
+            ? "approved"
+            : payload.action === "return_to_draft"
+              ? "returned"
+              : payload.action === "defer"
+                ? "deferred"
+                : payload.action === "mark_not_required"
+                  ? "dismissed"
+                  : "acknowledged",
+        auditEventIds: ["decision-audit-1", "decision-audit-2"],
+      }),
+    }));
   });
 
   afterEach(() => {
@@ -314,6 +408,11 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(sendReview).toHaveTextContent("Not established");
     expect(sendReview).toHaveTextContent("Legal compliance");
     expect(sendReview).toHaveTextContent("Not determined by this workflow");
+    expect(sendReview).toHaveTextContent("Approval decision");
+    await waitFor(() => {
+      expect(sendReview).toHaveTextContent("Save a draft snapshot before creating a send approval decision.");
+    });
+    expect(screen.queryByRole("button", { name: "Create send approval decision" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send tenant communication - not enabled yet" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
@@ -343,7 +442,7 @@ describe("LandlordLeaseWorkflowPage", () => {
           tenantId: "tenant-1",
           propertyId: "prop-1",
           propertyAddress: "12 Harbour Road",
-          unitId: "unit-1",
+          unitId: null,
           status: "active",
           leaseType: "fixed_term",
           province: "NS",
@@ -540,9 +639,80 @@ describe("LandlordLeaseWorkflowPage", () => {
     const sendReview = screen.getByLabelText("Tenant communication send review");
     expect(sendReview).toHaveTextContent("Prepared from saved renewal notice draft snapshot");
     expect(sendReview).toHaveTextContent("Draft snapshot captured");
+    expect(await screen.findByRole("button", { name: "Create send approval decision" })).toBeInTheDocument();
     expect(mocks.saveLeaseRenewalInputs).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/evidence saved|notice has been served|email sent/i);
+  });
+
+  it("creates and updates a send approval decision without enabling tenant communication", async () => {
+    renderWorkflow("/leases/lease-1/workflows/notice");
+
+    await screen.findByLabelText("Tenant notice draft preview");
+    fireEvent.click(screen.getByRole("button", { name: "Save draft snapshot" }));
+    await screen.findByText("Audit event recorded.");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create send approval decision" }));
+
+    await waitFor(() => {
+      expect(mocks.createLandlordDecisionQueueItem).toHaveBeenCalled();
+    });
+    const createPayload = mocks.createLandlordDecisionQueueItem.mock.calls[0][0];
+    expect(createPayload).toMatchObject({
+      sourceType: "renewal_notice_send_review",
+      sourceId: "lease:lease-1:renewal_notice_send_review",
+      sourceRoute: "/leases/lease-1/workflows/notice",
+      workspace: "notices",
+      severity: "warning",
+      title: "Renewal tenant communication ready for approval",
+      recommendedActionHref: "/leases/lease-1/workflows/notice",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: null,
+      tenantId: "tenant-1",
+      dedupeKey: "lease:lease-1:renewal_notice_send_review",
+    });
+    expect(createPayload.description).toContain("Email delivery remains disabled");
+    expect(createPayload.sourceSnapshot).toMatchObject({
+      tenantLabel: "Jane Tenant",
+      propertyUnitLabel: "12 Harbour Road · Unit 101",
+      draftSnapshotId: "snapshot-1",
+      emailSent: false,
+      noticeServed: false,
+      tenantNotified: false,
+    });
+    expect(createPayload.metadata).toMatchObject({
+      noSendBehavior: true,
+      noTenantNotification: true,
+      noNoticeServed: true,
+      noLeaseLifecycleMutation: true,
+    });
+    const approvalSection = screen.getByLabelText("Send approval decision");
+    expect(await screen.findByText("Approval decision created.")).toBeInTheDocument();
+    expect(approvalSection).toHaveTextContent("Open");
+    expect(screen.getByRole("link", { name: "Open decision inbox" })).toHaveAttribute("href", "/decision-inbox");
+    expect(screen.getByRole("link", { name: "Open operations" })).toHaveAttribute("href", "/operations");
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve for future send review" }));
+    await waitFor(() => {
+      expect(mocks.updateLandlordDecisionQueueItem).toHaveBeenCalledWith(
+        "decision-1",
+        expect.objectContaining({
+          action: "approve",
+          metadata: expect.objectContaining({
+            noSendBehavior: true,
+            noTenantNotification: true,
+            noNoticeServed: true,
+            noLeaseLifecycleMutation: true,
+          }),
+        })
+      );
+    });
+    expect(await screen.findByText("Future send review approved internally. Send remains disabled.")).toBeInTheDocument();
+    expect(approvalSection).toHaveTextContent("Approved");
+    expect(approvalSection).toHaveTextContent("Approved status does not enable tenant communication.");
+    expect(screen.getByRole("button", { name: "Send tenant communication - not enabled yet" })).toBeDisabled();
+    expect(document.body).not.toHaveTextContent(/email sent|tenant notified|notice served|legal delivery/i);
   });
 
   it("shows a draft snapshot save error without implying audit persistence", async () => {

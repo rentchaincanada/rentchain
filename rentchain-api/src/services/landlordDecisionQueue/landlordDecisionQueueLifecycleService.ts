@@ -291,6 +291,29 @@ export async function loadPersistedLandlordDecisionQueueItems(landlordId: string
   );
 }
 
+export async function findPersistedLandlordDecisionQueueItemBySource(params: {
+  landlordId: string;
+  sourceType: LandlordDecisionQueueSourceType;
+  sourceId: string;
+}): Promise<LandlordDecisionQueueItem | null> {
+  const landlordId = asString(params.landlordId, 240);
+  const sourceType = requireKnown(params.sourceType, SOURCE_TYPES, "source_type");
+  const sourceId = asString(params.sourceId, 300);
+  if (!landlordId || !sourceId) return null;
+  const snapshot = await db
+    .collection(LANDLORD_DECISION_QUEUE_ITEMS_COLLECTION)
+    .where("landlordId", "==", landlordId)
+    .where("sourceType", "==", sourceType)
+    .where("sourceId", "==", sourceId)
+    .get();
+  const items = sortLandlordDecisionQueueItems(
+    (snapshot.docs || [])
+      .map((doc: any) => normalizePersistedItem(doc.id, doc.data?.()))
+      .filter((item: LandlordDecisionQueueItem | null): item is LandlordDecisionQueueItem => Boolean(item))
+  );
+  return items[0] || null;
+}
+
 function overlayLifecycleFields(
   derived: LandlordDecisionQueueItem,
   persisted: LandlordDecisionQueueItem

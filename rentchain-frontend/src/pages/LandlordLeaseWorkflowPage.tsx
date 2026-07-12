@@ -23,6 +23,12 @@ import {
   type RenewalPipelineItem,
   type RenewalPipelineTimingBucketKey,
 } from "@/lib/leases/renewalPipeline";
+import {
+  createLandlordDecisionQueueItem,
+  fetchLandlordDecisionQueue,
+  updateLandlordDecisionQueueItem,
+  type LandlordDecisionQueueItem,
+} from "@/api/landlordDecisionQueueApi";
 
 type WorkflowKey = "execution" | "rent-increase" | "notice" | "deposit" | "renewal" | "move-out";
 
@@ -740,6 +746,120 @@ function TenantCommunicationSendReview({
       ? "Prepared from current renewal draft"
       : "Draft unavailable";
   const hasMultipleTenants = Array.isArray(lease.tenantIds) && lease.tenantIds.length > 1;
+  const decisionSourceId = `lease:${lease.id}:renewal_notice_send_review`;
+  const decisionRoute = `/leases/${encodeURIComponent(lease.id)}/workflows/notice`;
+  const [approvalDecision, setApprovalDecision] = React.useState<LandlordDecisionQueueItem | null>(null);
+  const [decisionLoading, setDecisionLoading] = React.useState(false);
+  const [decisionSubmitting, setDecisionSubmitting] = React.useState(false);
+  const [decisionNotice, setDecisionNotice] = React.useState<string | null>(null);
+  const [decisionError, setDecisionError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+    async function loadApprovalDecision() {
+      setDecisionLoading(true);
+      setDecisionError(null);
+      try {
+        const response = await fetchLandlordDecisionQueue({
+          limit: 5,
+          sourceType: "renewal_notice_send_review",
+          sourceId: decisionSourceId,
+        });
+        if (!active) return;
+        setApprovalDecision(response.items[0] || null);
+      } catch {
+        if (active) setDecisionError("Approval decision could not be loaded.");
+      } finally {
+        if (active) setDecisionLoading(false);
+      }
+    }
+    void loadApprovalDecision();
+    return () => {
+      active = false;
+    };
+  }, [decisionSourceId]);
+
+  async function createApprovalDecision() {
+    if (!savedSnapshot || !reviewModel || decisionSubmitting) return;
+    setDecisionSubmitting(true);
+    setDecisionError(null);
+    setDecisionNotice(null);
+    try {
+      const response = await createLandlordDecisionQueueItem({
+        sourceType: "renewal_notice_send_review",
+        sourceId: decisionSourceId,
+        sourceRoute: decisionRoute,
+        workspace: "notices",
+        severity: "warning",
+        title: "Renewal tenant communication ready for approval",
+        description:
+          "Saved renewal notice draft is ready for send approval review. Email delivery remains disabled until approved send infrastructure is available.",
+        recommendedActionLabel: "Open notice review",
+        recommendedActionHref: decisionRoute,
+        status: "open",
+        leaseId: lease.id,
+        propertyId: lease.propertyId || null,
+        unitId: lease.unitId || null,
+        tenantId: lease.tenantId || (Array.isArray(lease.tenantIds) ? lease.tenantIds[0] : null) || null,
+        sourceSnapshot: {
+          leaseId: lease.id,
+          tenantLabel: reviewModel.tenantLabel,
+          propertyUnitLabel: reviewModel.propertyUnitLabel,
+          currentRentLabel: reviewModel.currentRentLabel,
+          renewalRentLabel: reviewModel.renewalRentLabel,
+          currentLeaseEndLabel: reviewModel.currentLeaseEndLabel,
+          proposedTermLabel: reviewModel.proposedTermLabel,
+          tenantResponseTargetDateLabel: reviewModel.tenantResponseTargetDateLabel,
+          draftSnapshotId: savedSnapshot.snapshotId,
+          draftSnapshotSavedAt: savedSnapshot.savedAt,
+          emailSent: false,
+          noticeServed: false,
+          tenantNotified: false,
+        },
+        metadata: {
+          approvalPurpose: "future_send_review",
+          draftSnapshotId: savedSnapshot.snapshotId,
+          noSendBehavior: true,
+          noTenantNotification: true,
+          noNoticeServed: true,
+          noLeaseLifecycleMutation: true,
+        },
+        dedupeKey: decisionSourceId,
+      });
+      setApprovalDecision(response.item);
+      setDecisionNotice(response.created === false ? "Existing approval decision loaded." : "Approval decision created.");
+    } catch {
+      setDecisionError("Approval decision could not be created.");
+    } finally {
+      setDecisionSubmitting(false);
+    }
+  }
+
+  async function updateApprovalDecision(action: string, successLabel: string) {
+    if (!approvalDecision || decisionSubmitting) return;
+    setDecisionSubmitting(true);
+    setDecisionError(null);
+    setDecisionNotice(null);
+    try {
+      const response = await updateLandlordDecisionQueueItem(approvalDecision.id, {
+        action,
+        metadata: {
+          approvalPurpose: "future_send_review",
+          lastApprovalDecisionAction: action,
+          noSendBehavior: true,
+          noTenantNotification: true,
+          noNoticeServed: true,
+          noLeaseLifecycleMutation: true,
+        },
+      });
+      setApprovalDecision(response.item);
+      setDecisionNotice(`${successLabel} Send remains disabled.`);
+    } catch {
+      setDecisionError("Approval decision could not be updated.");
+    } finally {
+      setDecisionSubmitting(false);
+    }
+  }
 
   return (
     <section style={sendReviewStyle} aria-label="Tenant communication send review">
@@ -820,6 +940,83 @@ function TenantCommunicationSendReview({
         <NoticeStatus label="Audit/evidence" value={savedSnapshot ? "Draft snapshot captured" : "Captured when snapshot is saved"} tone={savedSnapshot ? "ready" : "deferred"} />
       </div>
 
+      <section style={approvalDecisionStyle} aria-label="Send approval decision">
+        <div style={{ display: "grid", gap: 4 }}>
+          <h4 style={sendReviewSubheadingStyle}>Approval decision</h4>
+          <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
+            Create an internal decision queue item for future send approval review. This does not send email, notify the tenant,
+            serve notice, or change lease lifecycle state.
+          </div>
+        </div>
+
+        {decisionLoading ? <div style={{ color: workflowTheme.muted }}>Loading approval decision…</div> : null}
+        {decisionError ? <div style={warningTextStyle}>{decisionError}</div> : null}
+        {decisionNotice ? <div style={successTextStyle}>{decisionNotice}</div> : null}
+
+        {!approvalDecision && !savedSnapshot && !decisionLoading ? (
+          <div style={warningPanelStyle}>Save a draft snapshot before creating a send approval decision.</div>
+        ) : null}
+
+        {!approvalDecision && savedSnapshot ? (
+          <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
+              The saved draft snapshot can now be queued for internal send approval review.
+            </div>
+            <button
+              type="button"
+              onClick={() => void createApprovalDecision()}
+              disabled={decisionSubmitting}
+              style={primaryButtonStyle}
+            >
+              {decisionSubmitting ? "Creating approval decision…" : "Create send approval decision"}
+            </button>
+          </div>
+        ) : null}
+
+        {approvalDecision ? (
+          <div style={{ display: "grid", gap: 10 }}>
+            <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, margin: 0 }}>
+              <ReviewFact label="Decision" value={approvalDecision.title} />
+              <ReviewFact label="Status" value={decisionStatusLabel(approvalDecision.status)} />
+              <ReviewFact label="Assignment" value={decisionAssignmentLabel(approvalDecision)} />
+              <ReviewFact label="Due date" value={approvalDecision.dueAt ? formatDate(approvalDecision.dueAt) : "Not set"} />
+              <ReviewFact
+                label="Audit capture"
+                value={approvalDecision.auditEventIds?.length ? "Decision audit captured" : "Decision queue item recorded"}
+              />
+            </dl>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Link to="/decision-inbox" style={buttonLinkStyle}>
+                Open decision inbox
+              </Link>
+              <Link to="/operations" style={buttonLinkStyle}>
+                Open operations
+              </Link>
+            </div>
+            <div style={decisionActionGridStyle}>
+              <button type="button" onClick={() => void updateApprovalDecision("acknowledge", "Decision acknowledged.")} disabled={decisionSubmitting} style={buttonStyle}>
+                Acknowledge
+              </button>
+              <button type="button" onClick={() => void updateApprovalDecision("defer", "Decision deferred.")} disabled={decisionSubmitting} style={buttonStyle}>
+                Defer
+              </button>
+              <button type="button" onClick={() => void updateApprovalDecision("return_to_draft", "Decision returned to draft review.")} disabled={decisionSubmitting} style={buttonStyle}>
+                Return to draft
+              </button>
+              <button type="button" onClick={() => void updateApprovalDecision("mark_not_required", "Decision marked not required.")} disabled={decisionSubmitting} style={buttonStyle}>
+                Mark not required
+              </button>
+              <button type="button" onClick={() => void updateApprovalDecision("approve", "Future send review approved internally.")} disabled={decisionSubmitting} style={primaryButtonStyle}>
+                Approve for future send review
+              </button>
+            </div>
+            <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
+              Approved status does not enable tenant communication. Future send infrastructure remains required.
+            </div>
+          </div>
+        ) : null}
+      </section>
+
       <button type="button" disabled style={sendDisabledButtonStyle}>
         Send tenant communication - not enabled yet
       </button>
@@ -835,6 +1032,27 @@ function TenantCommunicationSendReview({
 function SendChecklistItem({ label, status }: { label: string; status: "Ready" | "Needs review" | "Deferred" }) {
   const tone = status === "Ready" ? "ready" : status === "Needs review" ? "warning" : "deferred";
   return <NoticeStatus label={label} value={status} tone={tone} />;
+}
+
+function decisionStatusLabel(status: LandlordDecisionQueueItem["status"]) {
+  const labels: Record<LandlordDecisionQueueItem["status"], string> = {
+    open: "Open",
+    acknowledged: "Acknowledged",
+    in_review: "In review",
+    pending: "Pending",
+    blocked: "Blocked",
+    approved: "Approved",
+    returned: "Returned to draft",
+    deferred: "Deferred",
+    resolved: "Resolved",
+    dismissed: "Not required",
+  };
+  return labels[status] || status;
+}
+
+function decisionAssignmentLabel(item: LandlordDecisionQueueItem) {
+  const assignment = item.assignment;
+  return assignment?.assignmentLabel || assignment?.assignedToEmail || assignment?.assignedToUserId || "Unassigned";
 }
 
 function ReviewWorkspaceHeader({ renewalPath }: { renewalPath: string }) {
@@ -1173,6 +1391,22 @@ const confirmationPreviewStyle: React.CSSProperties = {
   background: "rgba(255, 250, 241, 0.72)",
   padding: 12,
   color: workflowTheme.muted,
+};
+
+const approvalDecisionStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  border: `1px solid ${workflowTheme.border}`,
+  borderRadius: 10,
+  background: workflowTheme.card,
+  padding: 12,
+};
+
+const decisionActionGridStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  alignItems: "center",
 };
 
 const checkboxLabelStyle: React.CSSProperties = {
