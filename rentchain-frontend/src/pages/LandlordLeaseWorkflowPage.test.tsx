@@ -400,7 +400,11 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(sendReview).toHaveTextContent("Renewal operator inputs saved");
     expect(sendReview).toHaveTextContent("Draft snapshot saved");
     expect(sendReview).toHaveTextContent("Tenant recipient reviewed");
-    expect(sendReview).toHaveTextContent("Delivery status model required before live send");
+    expect(sendReview).toHaveTextContent("Delivery status model");
+    expect(sendReview).toHaveTextContent("Deferred");
+    expect(screen.getByLabelText("Future send confirmation model")).toHaveTextContent(
+      "These confirmations will be required before live tenant communication is enabled."
+    );
     expect(sendReview).toHaveTextContent("Email delivery");
     expect(sendReview).toHaveTextContent("Not enabled");
     expect(sendReview).toHaveTextContent("Tenant notification");
@@ -831,7 +835,17 @@ describe("LandlordLeaseWorkflowPage", () => {
     });
     expect(await screen.findByText("Future send review approved internally. Send remains disabled.")).toBeInTheDocument();
     expect(approvalSection).toHaveTextContent("Approved");
-    expect(approvalSection).toHaveTextContent("Approved status does not enable tenant communication.");
+    expect(approvalSection).toHaveTextContent("Internal approval has been recorded. Send remains disabled");
+    expect(screen.queryByRole("button", { name: "Approve for future send review" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Send-readiness checklist")).toHaveTextContent("Approved internally");
+    expect(screen.getByLabelText("Send-readiness checklist")).toHaveTextContent("Acknowledged for approval");
+    expect(screen.getByLabelText("Send-readiness checklist")).toHaveTextContent("Still required before live send");
+    expect(screen.getByLabelText("Tenant communication send review")).toHaveTextContent(
+      "Checklist status reflects internal approval only. Live send confirmation remains deferred"
+    );
+    expect(screen.getByLabelText("Future send confirmation model")).toHaveTextContent(
+      "These confirmations will be required before live tenant communication is enabled."
+    );
     expect(screen.getByRole("button", { name: "Send tenant communication - not enabled yet" })).toBeDisabled();
     expect(document.body).not.toHaveTextContent(/email sent|tenant notified|notice served|legal delivery/i);
   });

@@ -753,6 +753,7 @@ function TenantCommunicationSendReview({
   const [decisionSubmitting, setDecisionSubmitting] = React.useState(false);
   const [decisionNotice, setDecisionNotice] = React.useState<string | null>(null);
   const [decisionError, setDecisionError] = React.useState<string | null>(null);
+  const approvalDecisionApproved = approvalDecision?.status === "approved";
 
   React.useEffect(() => {
     let active = true;
@@ -934,14 +935,33 @@ function TenantCommunicationSendReview({
         <SendChecklistItem label="Renewal operator inputs saved" status={readinessReady ? "Ready" : "Needs review"} />
         <SendChecklistItem label="Draft snapshot saved" status={savedSnapshot ? "Ready" : "Needs review"} />
         <SendChecklistItem label="Tenant recipient reviewed" status={recipientReady ? "Ready" : "Needs review"} />
-        <SendChecklistItem label="Draft body reviewed" status={draftAvailable ? "Needs review" : "Deferred"} />
+        <SendChecklistItem
+          label="Draft body review"
+          status={approvalDecisionApproved ? "Approved internally" : draftAvailable ? "Needs review" : "Deferred"}
+        />
         <SendChecklistItem label="Evidence/audit capture available" status={savedSnapshot ? "Ready" : "Needs review"} />
-        <SendChecklistItem label="Delivery status model required before live send" status="Deferred" />
-        <SendChecklistItem label="Legal-service separation acknowledged" status="Deferred" />
+        <SendChecklistItem
+          label="Delivery status model"
+          status={approvalDecisionApproved ? "Still required before live send" : "Deferred"}
+        />
+        <SendChecklistItem
+          label="Legal-service separation"
+          status={approvalDecisionApproved ? "Acknowledged for approval" : "Deferred"}
+        />
       </div>
 
-      <fieldset disabled style={confirmationPreviewStyle} aria-label="Confirmation model preview">
-        <legend style={sendReviewSubheadingStyle}>Confirmation required before future send</legend>
+      {approvalDecisionApproved ? (
+        <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
+          Checklist status reflects internal approval only. Live send confirmation remains deferred until tenant communication
+          infrastructure is enabled.
+        </div>
+      ) : null}
+
+      <fieldset disabled style={confirmationPreviewStyle} aria-label="Future send confirmation model">
+        <legend style={sendReviewSubheadingStyle}>Future send confirmation model</legend>
+        <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
+          These confirmations will be required before live tenant communication is enabled.
+        </div>
         <label style={checkboxLabelStyle}>
           <input type="checkbox" /> I have reviewed the recipient(s).
         </label>
@@ -1018,9 +1038,11 @@ function TenantCommunicationSendReview({
               </Link>
             </div>
             <div style={decisionActionGridStyle}>
-              <button type="button" onClick={() => void updateApprovalDecision("acknowledge", "Decision acknowledged.")} disabled={decisionSubmitting} style={buttonStyle}>
-                Acknowledge
-              </button>
+              {!approvalDecisionApproved ? (
+                <button type="button" onClick={() => void updateApprovalDecision("acknowledge", "Decision acknowledged.")} disabled={decisionSubmitting} style={buttonStyle}>
+                  Acknowledge
+                </button>
+              ) : null}
               <button type="button" onClick={() => void updateApprovalDecision("defer", "Decision deferred.")} disabled={decisionSubmitting} style={buttonStyle}>
                 Defer
               </button>
@@ -1030,12 +1052,16 @@ function TenantCommunicationSendReview({
               <button type="button" onClick={() => void updateApprovalDecision("mark_not_required", "Decision marked not required.")} disabled={decisionSubmitting} style={buttonStyle}>
                 Mark not required
               </button>
-              <button type="button" onClick={() => void updateApprovalDecision("approve", "Future send review approved internally.")} disabled={decisionSubmitting} style={primaryButtonStyle}>
-                Approve for future send review
-              </button>
+              {!approvalDecisionApproved ? (
+                <button type="button" onClick={() => void updateApprovalDecision("approve", "Future send review approved internally.")} disabled={decisionSubmitting} style={primaryButtonStyle}>
+                  Approve for future send review
+                </button>
+              ) : null}
             </div>
             <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
-              Approved status does not enable tenant communication. Future send infrastructure remains required.
+              {approvalDecisionApproved
+                ? "Internal approval has been recorded. Send remains disabled and future send infrastructure remains required."
+                : "Approved status does not enable tenant communication. Future send infrastructure remains required."}
             </div>
           </div>
         ) : null}
@@ -1053,8 +1079,21 @@ function TenantCommunicationSendReview({
   );
 }
 
-function SendChecklistItem({ label, status }: { label: string; status: "Ready" | "Needs review" | "Deferred" }) {
-  const tone = status === "Ready" ? "ready" : status === "Needs review" ? "warning" : "deferred";
+type SendChecklistStatus =
+  | "Ready"
+  | "Needs review"
+  | "Deferred"
+  | "Approved internally"
+  | "Acknowledged for approval"
+  | "Still required before live send";
+
+function SendChecklistItem({ label, status }: { label: string; status: SendChecklistStatus }) {
+  const tone =
+    status === "Ready" || status === "Approved internally" || status === "Acknowledged for approval"
+      ? "ready"
+      : status === "Needs review"
+        ? "warning"
+        : "deferred";
   return <NoticeStatus label={label} value={status} tone={tone} />;
 }
 
