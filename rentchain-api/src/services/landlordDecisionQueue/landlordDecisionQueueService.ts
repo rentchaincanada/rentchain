@@ -170,6 +170,7 @@ export function buildLandlordDecisionQueueItem(input: Omit<LandlordDecisionQueue
   const dueOrDate = input.dueAt || input.updatedAt || input.createdAt || "";
   return {
     ...input,
+    persistence: input.persistence || "derived",
     priorityRank: rank,
     sortKey: [String(rank).padStart(2, "0"), dueOrDate || "9999-12-31T23:59:59.999Z", input.id].join("|"),
   };

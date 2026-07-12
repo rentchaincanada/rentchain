@@ -67,6 +67,7 @@ export type LandlordDecisionQueueRelatedRefs = {
 export type LandlordDecisionQueueItem = LandlordDecisionQueueRelatedRefs & {
   id: string;
   landlordId: string;
+  persistence?: "derived" | "persisted";
   sourceType: LandlordDecisionQueueSourceType;
   sourceId: string;
   sourceRoute?: string | null;

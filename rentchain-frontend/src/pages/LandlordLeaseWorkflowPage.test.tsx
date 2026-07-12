@@ -80,6 +80,7 @@ function approvalDecisionFixture(overrides: Record<string, unknown> = {}) {
     dedupeKey: "lease:lease-1:renewal_notice_send_review",
     sortKey: "2026-07-11T12:00:00.000Z",
     priorityRank: 2,
+    persistence: "persisted",
     ...overrides,
   };
 }
@@ -413,6 +414,8 @@ describe("LandlordLeaseWorkflowPage", () => {
       expect(sendReview).toHaveTextContent("Save a draft snapshot before creating a send approval decision.");
     });
     expect(screen.queryByRole("button", { name: "Create send approval decision" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Acknowledge" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve for future send review" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send tenant communication - not enabled yet" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
@@ -643,6 +646,124 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(mocks.saveLeaseRenewalInputs).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /email renewal notice|send renewal notice/i })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/evidence saved|notice has been served|email sent/i);
+  });
+
+  it("does not bind approval lifecycle controls to unrelated derived decision queue items", async () => {
+    mocks.fetchLandlordDecisionQueue.mockResolvedValue({
+      ok: true,
+      version: "landlord_decision_queue_v1",
+      landlordId: "landlord-1",
+      generatedAt: "2026-07-11T12:00:00.000Z",
+      items: [
+        approvalDecisionFixture({
+          id: "decision_queue:decision_inbox:decision:review_overdue_rent:delinquency:overdue:pi_rent_3d25",
+          persistence: "derived",
+          sourceType: "decision_inbox",
+          sourceId: "decision:review_overdue_rent:delinquency:overdue:pi_rent_3d25",
+          sourceRoute: "/leases/lease-1/ledger",
+          workspace: "payments",
+          title: "Review Overdue Rent",
+          status: "pending",
+          dueAt: "2026-05-31T00:00:00.000Z",
+        }),
+      ],
+      summary: {
+        total: 1,
+        critical: 0,
+        warning: 1,
+        needsReview: 0,
+        upcoming: 0,
+        informational: 0,
+        open: 1,
+        blocked: 0,
+      },
+      total: 1,
+      limit: 5,
+      filters: {
+        severity: null,
+        workspace: null,
+        status: null,
+        sourceType: "renewal_notice_send_review",
+        sourceId: "lease:lease-1:renewal_notice_send_review",
+        sourceRoute: "/leases/lease-1/workflows/notice",
+      },
+    });
+
+    renderWorkflow("/leases/lease-1/workflows/notice");
+
+    await screen.findByLabelText("Tenant notice draft preview");
+    expect(mocks.fetchLandlordDecisionQueue).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Send approval decision")).toHaveTextContent(
+      "Save a draft snapshot before creating a send approval decision."
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft snapshot" }));
+    await screen.findByText("Audit event recorded.");
+
+    expect(await screen.findByRole("button", { name: "Create send approval decision" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Send approval decision")).not.toHaveTextContent("Review Overdue Rent");
+    expect(screen.queryByRole("button", { name: "Acknowledge" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve for future send review" })).not.toBeInTheDocument();
+    expect(mocks.updateLandlordDecisionQueueItem).not.toHaveBeenCalled();
+  });
+
+  it("shows an existing persisted renewal approval decision only after the draft snapshot is saved", async () => {
+    mocks.fetchLandlordDecisionQueue.mockResolvedValue({
+      ok: true,
+      version: "landlord_decision_queue_v1",
+      landlordId: "landlord-1",
+      generatedAt: "2026-07-11T12:00:00.000Z",
+      items: [
+        approvalDecisionFixture({
+          status: "in_review",
+          assignment: {
+            assignedToUserId: "manager-1",
+            assignedToEmail: "manager@example.com",
+            assignmentLabel: "Portfolio manager",
+          },
+          dueAt: "2026-07-18T00:00:00.000Z",
+        }),
+      ],
+      summary: {
+        total: 1,
+        critical: 0,
+        warning: 1,
+        needsReview: 0,
+        upcoming: 0,
+        informational: 0,
+        open: 1,
+        blocked: 0,
+      },
+      total: 1,
+      limit: 5,
+      filters: {
+        severity: null,
+        workspace: null,
+        status: null,
+        sourceType: "renewal_notice_send_review",
+        sourceId: "lease:lease-1:renewal_notice_send_review",
+        sourceRoute: "/leases/lease-1/workflows/notice",
+      },
+    });
+
+    renderWorkflow("/leases/lease-1/workflows/notice");
+
+    await screen.findByLabelText("Tenant notice draft preview");
+    expect(screen.getByLabelText("Send approval decision")).toHaveTextContent(
+      "Save a draft snapshot before creating a send approval decision."
+    );
+    expect(mocks.fetchLandlordDecisionQueue).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft snapshot" }));
+
+    const approvalSection = await screen.findByLabelText("Send approval decision");
+    await waitFor(() => {
+      expect(approvalSection).toHaveTextContent("In review");
+    });
+    expect(approvalSection).toHaveTextContent("Portfolio manager");
+    expect(approvalSection).toHaveTextContent("Decision audit captured");
+    expect(screen.queryByRole("button", { name: "Create send approval decision" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve for future send review" })).toBeInTheDocument();
   });
 
   it("creates and updates a send approval decision without enabling tenant communication", async () => {

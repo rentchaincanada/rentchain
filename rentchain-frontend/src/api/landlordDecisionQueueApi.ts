@@ -56,6 +56,7 @@ export type LandlordDecisionQueueAssignment = {
 
 export type LandlordDecisionQueueItem = {
   id: string;
+  persistence?: "derived" | "persisted";
   sourceType: string;
   sourceId: string;
   sourceRoute?: string | null;

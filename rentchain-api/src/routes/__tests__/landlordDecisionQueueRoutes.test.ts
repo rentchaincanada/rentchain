@@ -245,12 +245,14 @@ describe("landlordDecisionQueueRoutes", () => {
         expect.objectContaining({
           landlordId: "landlord-1",
           sourceType: "decision_inbox",
+          persistence: "derived",
           workspace: "payments",
           severity: "warning",
         }),
         expect.objectContaining({
           landlordId: "landlord-1",
           sourceType: "message_unread_priority",
+          persistence: "derived",
           workspace: "tenant",
           severity: "warning",
         }),
@@ -295,6 +297,7 @@ describe("landlordDecisionQueueRoutes", () => {
     expect(res.body.items).toEqual([
       expect.objectContaining({
         id: "persisted-message-review",
+        persistence: "persisted",
         sourceType: "message_unread_priority",
         sourceId: "tenant-message-1",
         status: "deferred",
@@ -316,6 +319,7 @@ describe("landlordDecisionQueueRoutes", () => {
       url: "/decision-queue/items",
       body: {
         sourceType: "renewal_notice_send_review",
+        persistence: "persisted",
         sourceId: "lease-1:notice-review",
         workspace: "notices",
         severity: "needs_review",
@@ -347,6 +351,7 @@ describe("landlordDecisionQueueRoutes", () => {
       expect.objectContaining({
         landlordId: "landlord-1",
         sourceType: "renewal_notice_send_review",
+        persistence: "persisted",
         auditEventIds: ["canonical-event-1"],
       })
     );
@@ -414,6 +419,7 @@ describe("landlordDecisionQueueRoutes", () => {
       ok: true,
       item: expect.objectContaining({
         id: "existing-send-approval",
+        persistence: "persisted",
         sourceType: "renewal_notice_send_review",
         sourceId: "lease:lease-1:renewal_notice_send_review",
         auditEventIds: ["existing-audit-event"],
@@ -656,6 +662,7 @@ describe("landlordDecisionQueueRoutes", () => {
     expect(res.body.items).toEqual([
       expect.objectContaining({
         id: "send-approval-lease-1",
+        persistence: "persisted",
         sourceId: "lease:lease-1:renewal_notice_send_review",
         sourceRoute: "/leases/lease-1/workflows/notice",
       }),

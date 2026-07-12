@@ -211,6 +211,7 @@ function normalizePersistedItem(id: string, raw: Record<string, unknown> | undef
     return buildLandlordDecisionQueueItem({
       id: asString(raw.id, 300) || id,
       landlordId,
+      persistence: "persisted",
       sourceType,
       sourceId,
       sourceRoute: asString(raw.sourceRoute, 700) || null,
@@ -246,6 +247,7 @@ function itemToDocument(item: LandlordDecisionQueueItem): Record<string, unknown
   return {
     id: item.id,
     landlordId: item.landlordId,
+    persistence: item.persistence || "persisted",
     sourceType: item.sourceType,
     sourceId: item.sourceId,
     sourceRoute: item.sourceRoute || null,
@@ -321,6 +323,7 @@ function overlayLifecycleFields(
   return buildLandlordDecisionQueueItem({
     ...derived,
     id: persisted.id,
+    persistence: "persisted",
     status: persisted.status,
     dueAt: persisted.dueAt || derived.dueAt,
     updatedAt: persisted.updatedAt || derived.updatedAt,
@@ -399,6 +402,7 @@ export async function createLandlordDecisionQueueItem(
   const item = buildLandlordDecisionQueueItem({
     id,
     landlordId,
+    persistence: "persisted",
     sourceType,
     sourceId,
     sourceRoute: asString(input.sourceRoute, 700) || null,

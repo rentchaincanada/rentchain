@@ -757,6 +757,13 @@ function TenantCommunicationSendReview({
   React.useEffect(() => {
     let active = true;
     async function loadApprovalDecision() {
+      if (!savedSnapshot) {
+        setApprovalDecision(null);
+        setDecisionLoading(false);
+        setDecisionError(null);
+        setDecisionNotice(null);
+        return;
+      }
       setDecisionLoading(true);
       setDecisionError(null);
       try {
@@ -764,9 +771,12 @@ function TenantCommunicationSendReview({
           limit: 5,
           sourceType: "renewal_notice_send_review",
           sourceId: decisionSourceId,
+          sourceRoute: decisionRoute,
         });
         if (!active) return;
-        setApprovalDecision(response.items[0] || null);
+        const matchedDecision =
+          response.items.find((item) => isPersistedApprovalDecisionItem(item, decisionSourceId, decisionRoute)) || null;
+        setApprovalDecision(matchedDecision);
       } catch {
         if (active) setDecisionError("Approval decision could not be loaded.");
       } finally {
@@ -777,7 +787,7 @@ function TenantCommunicationSendReview({
     return () => {
       active = false;
     };
-  }, [decisionSourceId]);
+  }, [decisionRoute, decisionSourceId, savedSnapshot]);
 
   async function createApprovalDecision() {
     if (!savedSnapshot || !reviewModel || decisionSubmitting) return;
@@ -826,6 +836,9 @@ function TenantCommunicationSendReview({
         },
         dedupeKey: decisionSourceId,
       });
+      if (!isPersistedApprovalDecisionItem(response.item, decisionSourceId, decisionRoute)) {
+        throw new Error("approval_decision_source_mismatch");
+      }
       setApprovalDecision(response.item);
       setDecisionNotice(response.created === false ? "Existing approval decision loaded." : "Approval decision created.");
     } catch {
@@ -837,6 +850,11 @@ function TenantCommunicationSendReview({
 
   async function updateApprovalDecision(action: string, successLabel: string) {
     if (!approvalDecision || decisionSubmitting) return;
+    if (!isPersistedApprovalDecisionItem(approvalDecision, decisionSourceId, decisionRoute)) {
+      setApprovalDecision(null);
+      setDecisionError("Approval decision could not be updated. Refresh the decision state or create a new approval decision.");
+      return;
+    }
     setDecisionSubmitting(true);
     setDecisionError(null);
     setDecisionNotice(null);
@@ -852,10 +870,16 @@ function TenantCommunicationSendReview({
           noLeaseLifecycleMutation: true,
         },
       });
+      if (!isPersistedApprovalDecisionItem(response.item, decisionSourceId, decisionRoute)) {
+        throw new Error("approval_decision_source_mismatch");
+      }
       setApprovalDecision(response.item);
       setDecisionNotice(`${successLabel} Send remains disabled.`);
-    } catch {
-      setDecisionError("Approval decision could not be updated.");
+    } catch (error) {
+      if (String((error as Error)?.message || error).includes("decision_item_not_found")) {
+        setApprovalDecision(null);
+      }
+      setDecisionError("Approval decision could not be updated. Refresh the decision state or create a new approval decision.");
     } finally {
       setDecisionSubmitting(false);
     }
@@ -957,7 +981,7 @@ function TenantCommunicationSendReview({
           <div style={warningPanelStyle}>Save a draft snapshot before creating a send approval decision.</div>
         ) : null}
 
-        {!approvalDecision && savedSnapshot ? (
+        {!approvalDecision && savedSnapshot && !decisionLoading ? (
           <div style={{ display: "grid", gap: 10 }}>
             <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
               The saved draft snapshot can now be queued for internal send approval review.
@@ -1032,6 +1056,20 @@ function TenantCommunicationSendReview({
 function SendChecklistItem({ label, status }: { label: string; status: "Ready" | "Needs review" | "Deferred" }) {
   const tone = status === "Ready" ? "ready" : status === "Needs review" ? "warning" : "deferred";
   return <NoticeStatus label={label} value={status} tone={tone} />;
+}
+
+function isPersistedApprovalDecisionItem(
+  item: LandlordDecisionQueueItem | null | undefined,
+  sourceId: string,
+  sourceRoute: string
+) {
+  if (!item) return false;
+  if (item.sourceType !== "renewal_notice_send_review") return false;
+  if (item.sourceId !== sourceId) return false;
+  if (item.sourceRoute && item.sourceRoute !== sourceRoute) return false;
+  if (item.persistence === "derived") return false;
+  if (item.id.startsWith("decision_queue:")) return false;
+  return true;
 }
 
 function decisionStatusLabel(status: LandlordDecisionQueueItem["status"]) {
