@@ -16,6 +16,24 @@ const stripeMocks = vi.hoisted(() => ({
   constructEvent: vi.fn(),
 }));
 
+const renewalNoticeCommunicationMocks = vi.hoisted(() => ({
+  sendRenewalNoticeCommunication: vi.fn(async () => ({
+    ok: true,
+    communicationId: "communication-mounted-success",
+    status: "email_sent",
+    deliveryStatus: "delivery_status_unknown",
+    attemptedAt: "2026-07-11T12:10:00.000Z",
+    sentAt: "2026-07-11T12:10:01.000Z",
+    providerMessageId: null,
+    auditEventId: "event-communication-mounted-success",
+    timelineEventId: "canonical-communication-mounted-success",
+    noLegalServiceClaim: true,
+    noticeServed: false,
+    tenantNotified: true,
+    legalServiceEstablished: false,
+  })),
+}));
+
 function buildEmptyQuery() {
   return {
     where: () => buildEmptyQuery(),
@@ -159,21 +177,7 @@ vi.mock("../../services/emailService", () => ({
 }));
 
 vi.mock("../../services/renewalNoticeCommunicationService", () => ({
-  sendRenewalNoticeCommunication: vi.fn(async () => ({
-    ok: true,
-    communicationId: "communication-mounted-success",
-    status: "email_sent",
-    deliveryStatus: "delivery_status_unknown",
-    attemptedAt: "2026-07-11T12:10:00.000Z",
-    sentAt: "2026-07-11T12:10:01.000Z",
-    providerMessageId: null,
-    auditEventId: "event-communication-mounted-success",
-    timelineEventId: "canonical-communication-mounted-success",
-    noLegalServiceClaim: true,
-    noticeServed: false,
-    tenantNotified: true,
-    legalServiceEstablished: false,
-  })),
+  sendRenewalNoticeCommunication: renewalNoticeCommunicationMocks.sendRenewalNoticeCommunication,
 }));
 
 function appBuildSource() {
@@ -646,6 +650,31 @@ describe("API route ownership regression", () => {
         legalServiceEstablished: false,
       })
     );
+
+    renewalNoticeCommunicationMocks.sendRenewalNoticeCommunication.mockResolvedValueOnce({
+      ok: false,
+      statusCode: 400,
+      error: "RENEWAL_NOTICE_SNAPSHOT_ID_REQUIRED",
+      details: ["snapshotId"],
+    });
+    const communicationValidationRes = await invokeApp(app, {
+      method: "POST",
+      url: "/api/landlord/leases/lease-mounted-success/renewal-notice-communications",
+      headers: { authorization: "Bearer landlord-token" },
+      body: {
+        approvalDecisionItemId: "decision-mounted-success",
+        confirmationAccepted: true,
+        recipientReviewed: true,
+        bodyReviewed: true,
+        legalServiceAcknowledged: true,
+        noLegalServiceClaim: true,
+        idempotencyKey: "idem-mounted-success",
+      },
+    });
+    expect(communicationValidationRes.status).toBe(400);
+    expect(communicationValidationRes.headers["x-route-source"]).toBe("leaseNoticeLandlordRoutes.ts");
+    expect(communicationValidationRes.body?.error).toBe("RENEWAL_NOTICE_SNAPSHOT_ID_REQUIRED");
+    expect(communicationValidationRes.body?.error).not.toBe("Not Found");
 
     const communicationMissingAuth = await invokeApp(app, {
       method: "POST",

@@ -112,7 +112,7 @@ const saveRenewalNoticeDraftSnapshot = vi.fn(async () => ({
     canonicalEventId: "canonical-1",
   },
 }));
-const sendRenewalNoticeCommunication = vi.fn(async () => ({
+const renewalNoticeCommunicationSuccess = {
   ok: true,
   communicationId: "communication-1",
   status: "email_sent",
@@ -126,7 +126,8 @@ const sendRenewalNoticeCommunication = vi.fn(async () => ({
   noticeServed: false,
   tenantNotified: true,
   legalServiceEstablished: false,
-}));
+};
+const sendRenewalNoticeCommunication = vi.fn(async () => renewalNoticeCommunicationSuccess);
 const sanitizeLeaseRenewalOperatorInput = vi.fn((body: any) => ({
   ok: true,
   data: {
@@ -247,6 +248,7 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
         summary: { title: "Lease notice preview", body: "Preview body" },
       },
     });
+    sendRenewalNoticeCommunication.mockResolvedValue(renewalNoticeCommunicationSuccess);
   });
 
   it("blocks lease notice preview when required legal inputs are missing", async () => {
@@ -460,6 +462,175 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
         input: body,
       })
     );
+    expect(performLeaseNoticeSendFromPreviewInput).not.toHaveBeenCalled();
+    expect(sendLeaseWorkflowEmail).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "missing snapshotId",
+      {
+        approvalDecisionItemId: "decision-1",
+        confirmationAccepted: true,
+        recipientReviewed: true,
+        bodyReviewed: true,
+        legalServiceAcknowledged: true,
+        noLegalServiceClaim: true,
+        idempotencyKey: "idem-1",
+      },
+      400,
+      "RENEWAL_NOTICE_SNAPSHOT_ID_REQUIRED",
+    ],
+    [
+      "missing approvalDecisionItemId",
+      {
+        snapshotId: "snapshot-1",
+        confirmationAccepted: true,
+        recipientReviewed: true,
+        bodyReviewed: true,
+        legalServiceAcknowledged: true,
+        noLegalServiceClaim: true,
+        idempotencyKey: "idem-1",
+      },
+      400,
+      "RENEWAL_NOTICE_APPROVAL_DECISION_ITEM_ID_REQUIRED",
+    ],
+    [
+      "missing confirmationAccepted",
+      {
+        snapshotId: "snapshot-1",
+        approvalDecisionItemId: "decision-1",
+        recipientReviewed: true,
+        bodyReviewed: true,
+        legalServiceAcknowledged: true,
+        noLegalServiceClaim: true,
+        idempotencyKey: "idem-1",
+      },
+      400,
+      "RENEWAL_NOTICE_CONFIRMATION_ACCEPTED_REQUIRED",
+    ],
+    [
+      "missing recipientReviewed",
+      {
+        snapshotId: "snapshot-1",
+        approvalDecisionItemId: "decision-1",
+        confirmationAccepted: true,
+        bodyReviewed: true,
+        legalServiceAcknowledged: true,
+        noLegalServiceClaim: true,
+        idempotencyKey: "idem-1",
+      },
+      400,
+      "RENEWAL_NOTICE_RECIPIENT_REVIEWED_REQUIRED",
+    ],
+    [
+      "missing bodyReviewed",
+      {
+        snapshotId: "snapshot-1",
+        approvalDecisionItemId: "decision-1",
+        confirmationAccepted: true,
+        recipientReviewed: true,
+        legalServiceAcknowledged: true,
+        noLegalServiceClaim: true,
+        idempotencyKey: "idem-1",
+      },
+      400,
+      "RENEWAL_NOTICE_BODY_REVIEWED_REQUIRED",
+    ],
+    [
+      "missing legalServiceAcknowledged",
+      {
+        snapshotId: "snapshot-1",
+        approvalDecisionItemId: "decision-1",
+        confirmationAccepted: true,
+        recipientReviewed: true,
+        bodyReviewed: true,
+        noLegalServiceClaim: true,
+        idempotencyKey: "idem-1",
+      },
+      400,
+      "RENEWAL_NOTICE_LEGAL_SERVICE_ACKNOWLEDGED_REQUIRED",
+    ],
+    [
+      "missing noLegalServiceClaim",
+      {
+        snapshotId: "snapshot-1",
+        approvalDecisionItemId: "decision-1",
+        confirmationAccepted: true,
+        recipientReviewed: true,
+        bodyReviewed: true,
+        legalServiceAcknowledged: true,
+        idempotencyKey: "idem-1",
+      },
+      400,
+      "RENEWAL_NOTICE_NO_LEGAL_SERVICE_CLAIM_REQUIRED",
+    ],
+    [
+      "missing idempotencyKey",
+      {
+        snapshotId: "snapshot-1",
+        approvalDecisionItemId: "decision-1",
+        confirmationAccepted: true,
+        recipientReviewed: true,
+        bodyReviewed: true,
+        legalServiceAcknowledged: true,
+        noLegalServiceClaim: true,
+      },
+      400,
+      "RENEWAL_NOTICE_IDEMPOTENCY_KEY_REQUIRED",
+    ],
+    [
+      "invalid snapshotId",
+      {
+        snapshotId: "missing-snapshot",
+        approvalDecisionItemId: "decision-1",
+        confirmationAccepted: true,
+        recipientReviewed: true,
+        bodyReviewed: true,
+        legalServiceAcknowledged: true,
+        noLegalServiceClaim: true,
+        idempotencyKey: "idem-1",
+      },
+      404,
+      "RENEWAL_NOTICE_DRAFT_SNAPSHOT_NOT_FOUND",
+    ],
+    [
+      "invalid approvalDecisionItemId",
+      {
+        snapshotId: "snapshot-1",
+        approvalDecisionItemId: "missing-decision",
+        confirmationAccepted: true,
+        recipientReviewed: true,
+        bodyReviewed: true,
+        legalServiceAcknowledged: true,
+        noLegalServiceClaim: true,
+        idempotencyKey: "idem-1",
+      },
+      404,
+      "RENEWAL_NOTICE_APPROVAL_DECISION_NOT_FOUND",
+    ],
+  ])("returns route-specific validation/domain error for %s", async (_label, body, statusCode, error) => {
+    sendRenewalNoticeCommunication.mockResolvedValueOnce({
+      ok: false,
+      statusCode,
+      error,
+      details: statusCode === 400 ? ["validation"] : undefined,
+    });
+    const router = (await import("../leaseNoticeLandlordRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/lease-1/renewal-notice-communications",
+      body,
+    });
+
+    expect(res.status).toBe(statusCode);
+    expect(res.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error,
+      })
+    );
+    expect(res.body?.error).not.toBe("Not Found");
     expect(performLeaseNoticeSendFromPreviewInput).not.toHaveBeenCalled();
     expect(sendLeaseWorkflowEmail).not.toHaveBeenCalled();
   });

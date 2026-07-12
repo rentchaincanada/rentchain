@@ -142,25 +142,39 @@ function validateConfirmation(input: SendRenewalNoticeCommunicationInput): {
 } | {
   ok: false;
   error: string;
-  details: string[];
+  details?: string[];
 } {
-  const details: string[] = [];
   const snapshotId = asString(input?.snapshotId, 240);
   const approvalDecisionItemId = asString(input?.approvalDecisionItemId, 240);
   const idempotencyKey = asString(input?.idempotencyKey, 240);
-  if (!snapshotId) details.push("snapshotId");
-  if (!approvalDecisionItemId) details.push("approvalDecisionItemId");
-  if (!idempotencyKey) details.push("idempotencyKey");
-  for (const field of [
-    "confirmationAccepted",
-    "recipientReviewed",
-    "bodyReviewed",
-    "legalServiceAcknowledged",
-    "noLegalServiceClaim",
-  ] as const) {
-    if (input?.[field] !== true) details.push(field);
+  if (!snapshotId) return { ok: false, error: "RENEWAL_NOTICE_SNAPSHOT_ID_REQUIRED", details: ["snapshotId"] };
+  if (!approvalDecisionItemId) {
+    return {
+      ok: false,
+      error: "RENEWAL_NOTICE_APPROVAL_DECISION_ITEM_ID_REQUIRED",
+      details: ["approvalDecisionItemId"],
+    };
   }
-  if (details.length) return { ok: false, error: "RENEWAL_NOTICE_SEND_CONFIRMATION_REQUIRED", details };
+  if (input?.confirmationAccepted !== true) {
+    return { ok: false, error: "RENEWAL_NOTICE_CONFIRMATION_ACCEPTED_REQUIRED", details: ["confirmationAccepted"] };
+  }
+  if (input?.recipientReviewed !== true) {
+    return { ok: false, error: "RENEWAL_NOTICE_RECIPIENT_REVIEWED_REQUIRED", details: ["recipientReviewed"] };
+  }
+  if (input?.bodyReviewed !== true) {
+    return { ok: false, error: "RENEWAL_NOTICE_BODY_REVIEWED_REQUIRED", details: ["bodyReviewed"] };
+  }
+  if (input?.legalServiceAcknowledged !== true) {
+    return {
+      ok: false,
+      error: "RENEWAL_NOTICE_LEGAL_SERVICE_ACKNOWLEDGED_REQUIRED",
+      details: ["legalServiceAcknowledged"],
+    };
+  }
+  if (input?.noLegalServiceClaim !== true) {
+    return { ok: false, error: "RENEWAL_NOTICE_NO_LEGAL_SERVICE_CLAIM_REQUIRED", details: ["noLegalServiceClaim"] };
+  }
+  if (!idempotencyKey) return { ok: false, error: "RENEWAL_NOTICE_IDEMPOTENCY_KEY_REQUIRED", details: ["idempotencyKey"] };
   return { ok: true, snapshotId, approvalDecisionItemId, idempotencyKey };
 }
 

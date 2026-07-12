@@ -189,19 +189,36 @@ describe("sendRenewalNoticeCommunication", () => {
   });
 
   it.each([
-    "confirmationAccepted",
-    "recipientReviewed",
-    "bodyReviewed",
-    "legalServiceAcknowledged",
-    "noLegalServiceClaim",
-  ])("requires %s before attempting send", async (field) => {
+    ["confirmationAccepted", "RENEWAL_NOTICE_CONFIRMATION_ACCEPTED_REQUIRED"],
+    ["recipientReviewed", "RENEWAL_NOTICE_RECIPIENT_REVIEWED_REQUIRED"],
+    ["bodyReviewed", "RENEWAL_NOTICE_BODY_REVIEWED_REQUIRED"],
+    ["legalServiceAcknowledged", "RENEWAL_NOTICE_LEGAL_SERVICE_ACKNOWLEDGED_REQUIRED"],
+    ["noLegalServiceClaim", "RENEWAL_NOTICE_NO_LEGAL_SERVICE_CLAIM_REQUIRED"],
+  ])("requires %s before attempting send", async (field, error) => {
     const result = await send({ [field]: false });
 
     expect(result).toEqual(
       expect.objectContaining({
         ok: false,
         statusCode: 400,
-        error: "RENEWAL_NOTICE_SEND_CONFIRMATION_REQUIRED",
+        error,
+        details: expect.arrayContaining([field]),
+      })
+    );
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["snapshotId", "RENEWAL_NOTICE_SNAPSHOT_ID_REQUIRED"],
+    ["approvalDecisionItemId", "RENEWAL_NOTICE_APPROVAL_DECISION_ITEM_ID_REQUIRED"],
+  ])("requires %s before attempting send", async (field, error) => {
+    const result = await send({ [field]: "" });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        statusCode: 400,
+        error,
         details: expect.arrayContaining([field]),
       })
     );
@@ -215,7 +232,7 @@ describe("sendRenewalNoticeCommunication", () => {
       expect.objectContaining({
         ok: false,
         statusCode: 400,
-        error: "RENEWAL_NOTICE_SEND_CONFIRMATION_REQUIRED",
+        error: "RENEWAL_NOTICE_IDEMPOTENCY_KEY_REQUIRED",
         details: expect.arrayContaining(["idempotencyKey"]),
       })
     );

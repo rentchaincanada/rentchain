@@ -87,7 +87,7 @@ describe("frontend Vercel security headers", () => {
     expect(csp).toContain("script-src 'self' https://vercel.live");
     expect(csp).toContain("style-src 'self' 'unsafe-inline'");
     expect(csp).toContain("connect-src 'self'");
-    expect(csp).toContain("https://rentchain-landlord-api-915921057662.us-central1.run.app");
+    expect(csp).toContain("https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app");
     expect(csp).toContain("https://*.a.run.app");
     expect(csp).toContain("https://*.rentchain.ai");
     expect(csp).toContain("https://*.googleapis.com");
@@ -106,7 +106,7 @@ describe("frontend Vercel security headers", () => {
     expect(apiRewrite).toEqual({
       source: "/api/:path*",
       destination:
-        "https://rentchain-landlord-api-915921057662.us-central1.run.app/api/:path*",
+        "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app/api/:path*",
     });
     expect(rewriteSources.indexOf("/api/:path*")).toBeGreaterThan(-1);
     expect(rewriteSources.indexOf("/:path*")).toBeGreaterThan(rewriteSources.indexOf("/api/:path*"));

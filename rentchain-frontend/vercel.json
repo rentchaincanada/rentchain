@@ -24,7 +24,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' https://vercel.live; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://rentchain-landlord-api-915921057662.us-central1.run.app https://*.a.run.app https://*.rentchain.ai https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://*.gstatic.com https://*.stripe.com wss://*.firebaseio.com; frame-src 'self' blob: data: https:; worker-src 'self' blob:; manifest-src 'self'; media-src 'self' blob: data:; form-action 'self'; upgrade-insecure-requests"
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' https://vercel.live; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app https://*.a.run.app https://*.rentchain.ai https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://*.gstatic.com https://*.stripe.com wss://*.firebaseio.com; frame-src 'self' blob: data: https:; worker-src 'self' blob:; manifest-src 'self'; media-src 'self' blob: data:; form-action 'self'; upgrade-insecure-requests"
         },
         {
           "key": "X-Frame-Options",
@@ -84,11 +84,11 @@
   "rewrites": [
     {
       "source": "/health",
-      "destination": "https://rentchain-landlord-api-915921057662.us-central1.run.app/health"
+      "destination": "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app/health"
     },
     {
       "source": "/api/:path*",
-      "destination": "https://rentchain-landlord-api-915921057662.us-central1.run.app/api/:path*"
+      "destination": "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app/api/:path*"
     },
     {
       "source": "/sample/:path*",
