@@ -30,6 +30,7 @@ export type EvidenceItemType =
   | "readiness_check"
   | "lease_summary"
   | "property_summary"
+  | "communication_record"
   | "ledger_summary"
   | "maintenance_summary"
   | "redaction_note";
@@ -41,6 +42,7 @@ export type EvidenceItemSource =
   | "canonical_events"
   | "institution_exports"
   | "audit_compliance"
+  | "renewal_notice_communications"
   | "lease_ledger"
   | "maintenance"
   | "registry"
@@ -158,6 +160,7 @@ export type DeriveEvidencePackInput = {
   institutionExportPackage?: InstitutionExportPackage | null;
   auditComplianceReadiness?: AuditComplianceReadiness | null;
   canonicalEvents?: Array<Record<string, any>> | null;
+  renewalNoticeCommunications?: Array<Record<string, any>> | null;
   leases?: Array<Record<string, any>> | null;
   properties?: Array<Record<string, any>> | null;
   maintenanceRequests?: Array<Record<string, any>> | null;

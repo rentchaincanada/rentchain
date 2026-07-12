@@ -177,4 +177,36 @@ describe("deriveCanonicalReviewTimeline", () => {
     );
     expect(JSON.stringify(timeline)).not.toMatch(/Notice sent|Tenant notified|Notice served/);
   });
+
+  it("labels renewal tenant communication send events with legal-service guardrails", () => {
+    const timeline = deriveCanonicalReviewTimeline({
+      scope: "lease",
+      scopeId: "lease-1",
+      landlordId: "landlord-1",
+      canonicalEvents: [
+        {
+          id: "event-send-1",
+          type: "renewal_notice_email_sent",
+          action: "renewal_notice_email_sent",
+          summary: "Renewal tenant communication email sent. Not served; legal service not established.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          actor: { type: "landlord", id: "landlord-1" },
+          occurredAt: "2026-07-11T12:10:00.000Z",
+        },
+      ],
+    });
+
+    expect(timeline.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entryType: "canonical_event",
+          source: "canonical_events",
+          label: "Renewal tenant communication email sent",
+          description: "Renewal tenant communication email sent. Not served; legal service not established.",
+        }),
+      ])
+    );
+    expect(JSON.stringify(timeline)).not.toMatch(/legally served|legal delivery|compliant notice/i);
+  });
 });

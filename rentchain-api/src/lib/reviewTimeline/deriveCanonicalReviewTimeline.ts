@@ -66,6 +66,18 @@ function canonicalEventLabel(event: Record<string, any>): string {
   if (raw === "renewal_notice_draft_saved" || raw === "lease.renewal_notice_draft_saved") {
     return "Renewal notice draft saved";
   }
+  if (raw === "renewal_notice_send_confirmed" || raw === "lease.renewal_notice_send_confirmed") {
+    return "Renewal tenant communication send confirmed";
+  }
+  if (raw === "renewal_notice_email_send_attempted" || raw === "lease.renewal_notice_email_send_attempted") {
+    return "Renewal tenant communication send attempted";
+  }
+  if (raw === "renewal_notice_email_sent" || raw === "lease.renewal_notice_email_sent") {
+    return "Renewal tenant communication email sent";
+  }
+  if (raw === "renewal_notice_email_failed" || raw === "lease.renewal_notice_email_failed") {
+    return "Renewal tenant communication email failed";
+  }
   return raw || "Canonical event";
 }
 

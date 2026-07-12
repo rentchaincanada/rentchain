@@ -98,7 +98,7 @@ router.get("/evidence-packs/preview", requireAuth, requireLandlord, async (req: 
     if (!scope || !scopeId) return res.status(400).json({ ok: false, error: "EVIDENCE_PACK_SCOPE_REQUIRED" });
 
     const packageType = requestedPackageType(req.query?.packageType);
-    const [properties, leases, units, maintenanceRequests, rentPayments, events, decisions, operatorReviewSessions] =
+    const [properties, leases, units, maintenanceRequests, rentPayments, events, renewalNoticeCommunications, decisions, operatorReviewSessions] =
       await Promise.all([
         loadLandlordCollection("properties", landlordId),
         loadLandlordCollection("leases", landlordId),
@@ -106,6 +106,7 @@ router.get("/evidence-packs/preview", requireAuth, requireLandlord, async (req: 
         loadLandlordCollection("maintenanceRequests", landlordId),
         loadLandlordCollection("rentPayments", landlordId),
         loadLandlordCollection("events", landlordId),
+        loadLandlordCollection("renewalNoticeCommunications", landlordId),
         loadLandlordDecisionItems(landlordId),
         loadOperatorReviewSessions(landlordId),
       ]);
@@ -143,6 +144,7 @@ router.get("/evidence-packs/preview", requireAuth, requireLandlord, async (req: 
       institutionExportPackage,
       auditComplianceReadiness,
       canonicalEvents: events,
+      renewalNoticeCommunications,
       leases,
       properties,
       maintenanceRequests,

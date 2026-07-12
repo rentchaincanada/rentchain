@@ -348,6 +348,49 @@ describe("deriveEvidencePack", () => {
     expect(JSON.stringify(pack)).not.toMatch(/Notice sent|Tenant notified|Notice served/);
   });
 
+  it("shows renewal tenant communication records without raw message bodies or legal-service claims", () => {
+    const pack = deriveEvidencePack({
+      scope: "lease",
+      scopeId: "lease-1",
+      landlordId: "landlord-1",
+      generatedAt: "2026-07-11T12:00:00.000Z",
+      renewalNoticeCommunications: [
+        {
+          communicationId: "communication-1",
+          leaseId: "lease-1",
+          landlordId: "landlord-1",
+          snapshotId: "snapshot-1",
+          status: "email_sent",
+          deliveryStatus: "delivery_status_unknown",
+          attemptedAt: "2026-07-11T12:10:00.000Z",
+          sentAt: "2026-07-11T12:10:02.000Z",
+          tenantNotified: true,
+          noticeServed: false,
+          legalServiceEstablished: false,
+          generatedDraftText: "Hello Jane, private body text should not project.",
+          providerPayload: { raw: "provider-secret" },
+        },
+      ],
+      leases: [{ id: "lease-1", propertyName: "North Towers", unitNumber: "101", tenantName: "John Smith" }],
+      properties: [{ id: "prop-1", name: "North Towers" }],
+    });
+
+    const auditSection = pack.sections.find((section) => section.sectionKey === "audit_events");
+    expect(auditSection?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          itemType: "communication_record",
+          label: "Renewal tenant communication · Email sent",
+          description:
+            "Email sent at 2026-07-11 12:10 UTC. Tenant notified by email provider acceptance. Not served; legal service not established.",
+          source: "renewal_notice_communications",
+          sourceId: "communication-1",
+        }),
+      ])
+    );
+    expect(JSON.stringify(pack)).not.toMatch(/private body text|provider-secret|legally served|legal delivery/i);
+  });
+
   it("keeps raw provider, banking, debug, and private document fields out of evidence projections", () => {
     const pack = deriveEvidencePack({
       scope: "decision",

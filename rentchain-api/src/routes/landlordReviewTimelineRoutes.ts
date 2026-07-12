@@ -127,7 +127,7 @@ router.get("/review-timeline", requireAuth, requireLandlord, async (req: any, re
     if (!scope || !scopeId) return res.status(400).json({ ok: false, error: "REVIEW_TIMELINE_SCOPE_REQUIRED" });
 
     const packageType = requestedPackageType(queryValue(req, "packageType"));
-    const [properties, leases, units, maintenanceRequests, rentPayments, events, canonicalEvents, decisions, operatorReviewSessions] =
+    const [properties, leases, units, maintenanceRequests, rentPayments, events, canonicalEvents, renewalNoticeCommunications, decisions, operatorReviewSessions] =
       await Promise.all([
         loadLandlordCollection("properties", landlordId),
         loadLandlordCollection("leases", landlordId),
@@ -136,6 +136,7 @@ router.get("/review-timeline", requireAuth, requireLandlord, async (req: any, re
         loadLandlordCollection("rentPayments", landlordId),
         loadLandlordCollection("events", landlordId),
         loadLandlordCanonicalEvents(landlordId),
+        loadLandlordCollection("renewalNoticeCommunications", landlordId),
         loadLandlordDecisionItems(landlordId),
         loadOperatorReviewSessions(landlordId),
       ]);
@@ -173,6 +174,7 @@ router.get("/review-timeline", requireAuth, requireLandlord, async (req: any, re
       institutionExportPackage,
       auditComplianceReadiness,
       canonicalEvents: auditEvents,
+      renewalNoticeCommunications,
       leases,
       properties,
       maintenanceRequests,

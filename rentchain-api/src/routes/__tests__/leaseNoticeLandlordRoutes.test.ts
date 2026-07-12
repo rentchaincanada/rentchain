@@ -112,6 +112,21 @@ const saveRenewalNoticeDraftSnapshot = vi.fn(async () => ({
     canonicalEventId: "canonical-1",
   },
 }));
+const sendRenewalNoticeCommunication = vi.fn(async () => ({
+  ok: true,
+  communicationId: "communication-1",
+  status: "email_sent",
+  deliveryStatus: "delivery_status_unknown",
+  attemptedAt: "2026-07-11T12:01:00.000Z",
+  sentAt: "2026-07-11T12:01:01.000Z",
+  providerMessageId: null,
+  auditEventId: "event-communication-1",
+  timelineEventId: "canonical-communication-1",
+  noLegalServiceClaim: true,
+  noticeServed: false,
+  tenantNotified: true,
+  legalServiceEstablished: false,
+}));
 const sanitizeLeaseRenewalOperatorInput = vi.fn((body: any) => ({
   ok: true,
   data: {
@@ -153,6 +168,10 @@ vi.mock("../../services/leaseNoticeWorkflowService", () => ({
   saveRenewalNoticeDraftSnapshot,
   sanitizeLeaseRenewalOperatorInput,
   sendLeaseWorkflowEmail,
+}));
+
+vi.mock("../../services/renewalNoticeCommunicationService", () => ({
+  sendRenewalNoticeCommunication,
 }));
 
 async function invokeRouter(router: any, options: { method: string; url: string; body?: any }) {
@@ -399,6 +418,46 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
         input: expect.objectContaining({
           draftText: expect.stringContaining("Draft renewal notice text"),
         }),
+      })
+    );
+    expect(performLeaseNoticeSendFromPreviewInput).not.toHaveBeenCalled();
+    expect(sendLeaseWorkflowEmail).not.toHaveBeenCalled();
+  });
+
+  it("sends a renewal tenant communication through the gated API service without legacy notice send", async () => {
+    const router = (await import("../leaseNoticeLandlordRoutes")).default;
+    const body = {
+      snapshotId: "snapshot-1",
+      approvalDecisionItemId: "decision-1",
+      confirmationAccepted: true,
+      recipientReviewed: true,
+      bodyReviewed: true,
+      legalServiceAcknowledged: true,
+      noLegalServiceClaim: true,
+      idempotencyKey: "idem-1",
+    };
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/lease-1/renewal-notice-communications",
+      body,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual(
+      expect.objectContaining({
+        ok: true,
+        communicationId: "communication-1",
+        noticeServed: false,
+        tenantNotified: true,
+        legalServiceEstablished: false,
+      })
+    );
+    expect(sendRenewalNoticeCommunication).toHaveBeenCalledWith(
+      expect.objectContaining({
+        leaseId: "lease-1",
+        landlordId: "landlord-1",
+        actorId: "landlord-1",
+        input: body,
       })
     );
     expect(performLeaseNoticeSendFromPreviewInput).not.toHaveBeenCalled();

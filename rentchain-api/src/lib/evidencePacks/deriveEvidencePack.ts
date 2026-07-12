@@ -98,6 +98,18 @@ function canonicalEventLabel(event: Record<string, any>): string {
   if (raw === "renewal_notice_draft_saved" || raw === "lease.renewal_notice_draft_saved") {
     return "Renewal notice draft snapshot";
   }
+  if (raw === "renewal_notice_send_confirmed" || raw === "lease.renewal_notice_send_confirmed") {
+    return "Renewal tenant communication send confirmed";
+  }
+  if (raw === "renewal_notice_email_send_attempted" || raw === "lease.renewal_notice_email_send_attempted") {
+    return "Renewal tenant communication send attempted";
+  }
+  if (raw === "renewal_notice_email_sent" || raw === "lease.renewal_notice_email_sent") {
+    return "Renewal tenant communication email sent";
+  }
+  if (raw === "renewal_notice_email_failed" || raw === "lease.renewal_notice_email_failed") {
+    return "Renewal tenant communication email failed";
+  }
   return raw || "Canonical event";
 }
 
@@ -315,9 +327,13 @@ function operatorReviewSection(input: DeriveEvidencePackInput): EvidencePackSect
 
 function canonicalEventsSection(input: DeriveEvidencePackInput): EvidencePackSection {
   const scopedEvents = arrayOf(input.canonicalEvents).filter((event) => isRelatedToScope(event, input.scope, input.scopeId));
+  const communicationItems = renewalNoticeCommunicationEvidenceItems(input);
   const renewalDraftItems = renewalNoticeDraftSnapshotEvidenceItem(scopedEvents);
-  const events = scopedEvents.filter((event) => !isRenewalNoticeDraftSavedEvent(event)).slice(0, 20 - renewalDraftItems.length);
+  const events = scopedEvents
+    .filter((event) => !isRenewalNoticeDraftSavedEvent(event))
+    .slice(0, Math.max(0, 20 - renewalDraftItems.length - communicationItems.length));
   const items = [
+    ...communicationItems,
     ...renewalDraftItems,
     ...events.map((event) =>
       evidenceItem({
@@ -336,6 +352,39 @@ function canonicalEventsSection(input: DeriveEvidencePackInput): EvidencePackSec
     items,
     missingEvidence: items.length ? [] : ["No landlord-scoped canonical events were available for this scope."],
   });
+}
+
+function renewalNoticeCommunicationStatusLabel(status: unknown): string {
+  const raw = asString(status, 80);
+  if (raw === "email_sent") return "Email sent";
+  if (raw === "email_failed") return "Email failed";
+  if (raw === "send_attempted") return "Send attempted";
+  return "Communication recorded";
+}
+
+function renewalNoticeCommunicationEvidenceItems(input: DeriveEvidencePackInput): EvidenceItem[] {
+  return arrayOf(input.renewalNoticeCommunications)
+    .filter((record) => isRelatedToScope(record, input.scope, input.scopeId))
+    .sort((a, b) =>
+      asString(b.sentAt || b.failedAt || b.attemptedAt || b.createdAt, 120).localeCompare(
+        asString(a.sentAt || a.failedAt || a.attemptedAt || a.createdAt, 120),
+      ),
+    )
+    .slice(0, 5)
+    .map((record) => {
+      const statusLabel = renewalNoticeCommunicationStatusLabel(record.status);
+      const timestamp = normalizeTimestamp(record.sentAt || record.failedAt || record.attemptedAt || record.createdAt);
+      const timestampLabel = formatEvidenceTimestamp(timestamp);
+      const tenantNotified = record.tenantNotified === true ? "Tenant notified by email provider acceptance." : "Tenant not notified.";
+      return evidenceItem({
+        itemType: "communication_record",
+        label: `Renewal tenant communication · ${statusLabel}`,
+        description: `${statusLabel} at ${timestampLabel}. ${tenantNotified} Not served; legal service not established.`,
+        source: "renewal_notice_communications",
+        sourceId: record.communicationId || record.id,
+        timestamp,
+      });
+    });
 }
 
 function exportSection(input: DeriveEvidencePackInput): EvidencePackSection {
