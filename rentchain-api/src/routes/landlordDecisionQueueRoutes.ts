@@ -10,6 +10,7 @@ import {
   applyLandlordDecisionQueueLifecycleOverlay,
   createLandlordDecisionQueueItem,
   deriveLandlordDecisionQueue,
+  findPersistedLandlordDecisionQueueItemBySource,
   LandlordDecisionQueueLifecycleError,
   loadPersistedLandlordDecisionQueueItems,
   summarizeLandlordDecisionQueueItems,
@@ -205,6 +206,9 @@ function applyFilters(
     severity: LandlordDecisionQueueSeverity | null;
     workspace: LandlordDecisionQueueWorkspace | null;
     status: LandlordDecisionQueueStatus | "open_state" | null;
+    sourceType: LandlordDecisionQueueSourceType | null;
+    sourceId: string | null;
+    sourceRoute: string | null;
   }
 ) {
   return items.filter((item) => {
@@ -212,6 +216,9 @@ function applyFilters(
     if (filters.workspace && item.workspace !== filters.workspace) return false;
     if (filters.status === "open_state" && (item.status === "resolved" || item.status === "dismissed")) return false;
     if (filters.status && filters.status !== "open_state" && item.status !== filters.status) return false;
+    if (filters.sourceType && item.sourceType !== filters.sourceType) return false;
+    if (filters.sourceId && item.sourceId !== filters.sourceId) return false;
+    if (filters.sourceRoute && item.sourceRoute !== filters.sourceRoute) return false;
     return true;
   });
 }
@@ -249,14 +256,20 @@ router.get("/decision-queue", requireAuth, requireLandlord, async (req: any, res
     const summary = summarizeLandlordDecisionQueueItems(queueItems);
 
     const statusRaw = asString(req.query?.status ?? req.query?.open, 80).toLowerCase();
-    const status =
+    const status: LandlordDecisionQueueStatus | "open_state" | null =
       statusRaw === "true" || statusRaw === "open_state"
         ? "open_state"
         : normalizeFilter(req.query?.status, STATUSES);
-    const filteredItems = applyFilters(queueItems, {
+    const filters = {
       severity: normalizeFilter(req.query?.severity, SEVERITIES),
       workspace: normalizeFilter(req.query?.workspace, WORKSPACES),
       status,
+      sourceType: normalizeFilter(req.query?.sourceType, SOURCE_TYPES),
+      sourceId: asString(req.query?.sourceId, 300) || null,
+      sourceRoute: asString(req.query?.sourceRoute, 700) || null,
+    };
+    const filteredItems = applyFilters(queueItems, {
+      ...filters,
     });
     const limit = parseLimit(req.query?.limit);
     const items = filteredItems.slice(0, limit);
@@ -269,9 +282,7 @@ router.get("/decision-queue", requireAuth, requireLandlord, async (req: any, res
       total: filteredItems.length,
       limit,
       filters: {
-        severity: normalizeFilter(req.query?.severity, SEVERITIES),
-        workspace: normalizeFilter(req.query?.workspace, WORKSPACES),
-        status,
+        ...filters,
       },
     });
   } catch (err: any) {
@@ -288,12 +299,24 @@ router.post("/decision-queue/items", requireAuth, requireLandlord, async (req: a
     }
     const body = bodyObject(req);
     const assignment = assignmentFromBody(body);
+    const sourceType = normalizeFilter(body.sourceType, SOURCE_TYPES) as LandlordDecisionQueueSourceType | null;
+    const sourceId = asString(body.sourceId, 300);
+    if (sourceType && sourceId) {
+      const existing = await findPersistedLandlordDecisionQueueItemBySource({
+        landlordId,
+        sourceType,
+        sourceId,
+      });
+      if (existing) {
+        return res.status(200).json({ ok: true, item: existing, auditEventId: null, created: false });
+      }
+    }
     const item = await createLandlordDecisionQueueItem({
       landlordId,
       actorId: actorId(req),
       actorEmail: actorEmail(req),
-      sourceType: normalizeFilter(body.sourceType, SOURCE_TYPES) as any,
-      sourceId: asString(body.sourceId, 300),
+      sourceType: sourceType as any,
+      sourceId,
       sourceRoute: asString(body.sourceRoute, 700) || null,
       workspace: normalizeFilter(body.workspace, WORKSPACES) as any,
       severity: normalizeFilter(body.severity, SEVERITIES) as any,
@@ -323,7 +346,7 @@ router.post("/decision-queue/items", requireAuth, requireLandlord, async (req: a
     const auditedItem = auditEventId
       ? await appendLandlordDecisionQueueAuditEventId(landlordId, item.id, auditEventId)
       : item;
-    return res.status(201).json({ ok: true, item: auditedItem || item, auditEventId });
+    return res.status(201).json({ ok: true, item: auditedItem || item, auditEventId, created: true });
   } catch (err: any) {
     if (err instanceof LandlordDecisionQueueLifecycleError) {
       return res.status(err.statusCode).json({ ok: false, error: err.code });

@@ -245,12 +245,14 @@ describe("landlordDecisionQueueRoutes", () => {
         expect.objectContaining({
           landlordId: "landlord-1",
           sourceType: "decision_inbox",
+          persistence: "derived",
           workspace: "payments",
           severity: "warning",
         }),
         expect.objectContaining({
           landlordId: "landlord-1",
           sourceType: "message_unread_priority",
+          persistence: "derived",
           workspace: "tenant",
           severity: "warning",
         }),
@@ -295,6 +297,7 @@ describe("landlordDecisionQueueRoutes", () => {
     expect(res.body.items).toEqual([
       expect.objectContaining({
         id: "persisted-message-review",
+        persistence: "persisted",
         sourceType: "message_unread_priority",
         sourceId: "tenant-message-1",
         status: "deferred",
@@ -316,6 +319,7 @@ describe("landlordDecisionQueueRoutes", () => {
       url: "/decision-queue/items",
       body: {
         sourceType: "renewal_notice_send_review",
+        persistence: "persisted",
         sourceId: "lease-1:notice-review",
         workspace: "notices",
         severity: "needs_review",
@@ -347,6 +351,7 @@ describe("landlordDecisionQueueRoutes", () => {
       expect.objectContaining({
         landlordId: "landlord-1",
         sourceType: "renewal_notice_send_review",
+        persistence: "persisted",
         auditEventIds: ["canonical-event-1"],
       })
     );
@@ -367,6 +372,62 @@ describe("landlordDecisionQueueRoutes", () => {
         }),
       })
     );
+  });
+
+  it("reuses an existing source-matched approval decision instead of creating a duplicate", async () => {
+    seedDoc("landlordDecisionQueueItems", "existing-send-approval", {
+      id: "existing-send-approval",
+      landlordId: "landlord-1",
+      sourceType: "renewal_notice_send_review",
+      sourceId: "lease:lease-1:renewal_notice_send_review",
+      sourceRoute: "/leases/lease-1/workflows/notice",
+      workspace: "notices",
+      severity: "warning",
+      title: "Renewal tenant communication ready for approval",
+      description: "Saved renewal notice draft is ready for send approval review.",
+      recommendedActionLabel: "Open notice review",
+      recommendedActionHref: "/leases/lease-1/workflows/notice",
+      dueAt: null,
+      createdAt: "2026-07-10T00:00:00.000Z",
+      updatedAt: "2026-07-10T00:00:00.000Z",
+      status: "open",
+      leaseId: "lease-1",
+      dedupeKey: "lease:lease-1:renewal_notice_send_review",
+      auditEventIds: ["existing-audit-event"],
+    });
+    const router = (await import("../landlordDecisionQueueRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/decision-queue/items",
+      body: {
+        sourceType: "renewal_notice_send_review",
+        sourceId: "lease:lease-1:renewal_notice_send_review",
+        sourceRoute: "/leases/lease-1/workflows/notice",
+        workspace: "notices",
+        severity: "warning",
+        title: "Renewal tenant communication ready for approval",
+        description: "Saved renewal notice draft is ready for send approval review.",
+        recommendedActionLabel: "Open notice review",
+        recommendedActionHref: "/leases/lease-1/workflows/notice",
+        leaseId: "lease-1",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ok: true,
+      item: expect.objectContaining({
+        id: "existing-send-approval",
+        persistence: "persisted",
+        sourceType: "renewal_notice_send_review",
+        sourceId: "lease:lease-1:renewal_notice_send_review",
+        auditEventIds: ["existing-audit-event"],
+      }),
+      auditEventId: null,
+      created: false,
+    });
+    expect(writeCanonicalEventMock).not.toHaveBeenCalled();
   });
 
   it("updates lifecycle status and assignment without creating send or notice behavior", async () => {
@@ -525,6 +586,9 @@ describe("landlordDecisionQueueRoutes", () => {
       severity: "warning",
       workspace: "tenant",
       status: null,
+      sourceType: null,
+      sourceId: null,
+      sourceRoute: null,
     });
     expect(res.body.total).toBe(1);
     expect(res.body.limit).toBe(1);
@@ -533,6 +597,74 @@ describe("landlordDecisionQueueRoutes", () => {
         sourceId: "message-1",
         sourceType: "message_unread_priority",
         sortKey: expect.any(String),
+      }),
+    ]);
+  });
+
+  it("filters persisted decision queue items by source context", async () => {
+    seedDoc("landlordDecisionQueueItems", "send-approval-lease-1", {
+      id: "send-approval-lease-1",
+      landlordId: "landlord-1",
+      sourceType: "renewal_notice_send_review",
+      sourceId: "lease:lease-1:renewal_notice_send_review",
+      sourceRoute: "/leases/lease-1/workflows/notice",
+      workspace: "notices",
+      severity: "warning",
+      title: "Renewal tenant communication ready for approval",
+      description: "Saved renewal notice draft is ready for send approval review.",
+      recommendedActionLabel: "Open notice review",
+      recommendedActionHref: "/leases/lease-1/workflows/notice",
+      dueAt: null,
+      createdAt: "2026-07-10T00:00:00.000Z",
+      updatedAt: "2026-07-10T00:00:00.000Z",
+      status: "open",
+      leaseId: "lease-1",
+      dedupeKey: "lease:lease-1:renewal_notice_send_review",
+      auditEventIds: [],
+    });
+    seedDoc("landlordDecisionQueueItems", "send-approval-lease-2", {
+      id: "send-approval-lease-2",
+      landlordId: "landlord-1",
+      sourceType: "renewal_notice_send_review",
+      sourceId: "lease:lease-2:renewal_notice_send_review",
+      sourceRoute: "/leases/lease-2/workflows/notice",
+      workspace: "notices",
+      severity: "warning",
+      title: "Other renewal tenant communication ready for approval",
+      description: "Saved renewal notice draft is ready for send approval review.",
+      recommendedActionLabel: "Open notice review",
+      recommendedActionHref: "/leases/lease-2/workflows/notice",
+      dueAt: null,
+      createdAt: "2026-07-10T00:00:00.000Z",
+      updatedAt: "2026-07-10T00:00:00.000Z",
+      status: "open",
+      leaseId: "lease-2",
+      dedupeKey: "lease:lease-2:renewal_notice_send_review",
+      auditEventIds: [],
+    });
+    const router = (await import("../landlordDecisionQueueRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url:
+        "/decision-queue?sourceType=renewal_notice_send_review&sourceId=lease%3Alease-1%3Arenewal_notice_send_review&sourceRoute=%2Fleases%2Flease-1%2Fworkflows%2Fnotice",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.filters).toEqual({
+      severity: null,
+      workspace: null,
+      status: null,
+      sourceType: "renewal_notice_send_review",
+      sourceId: "lease:lease-1:renewal_notice_send_review",
+      sourceRoute: "/leases/lease-1/workflows/notice",
+    });
+    expect(res.body.items).toEqual([
+      expect.objectContaining({
+        id: "send-approval-lease-1",
+        persistence: "persisted",
+        sourceId: "lease:lease-1:renewal_notice_send_review",
+        sourceRoute: "/leases/lease-1/workflows/notice",
       }),
     ]);
   });
@@ -550,6 +682,9 @@ describe("landlordDecisionQueueRoutes", () => {
       severity: null,
       workspace: null,
       status: null,
+      sourceType: null,
+      sourceId: null,
+      sourceRoute: null,
     });
     expect(res.body.limit).toBe(50);
     expect(res.body.items.length).toBeGreaterThan(0);
