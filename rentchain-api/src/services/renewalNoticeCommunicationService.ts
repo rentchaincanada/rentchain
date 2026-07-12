@@ -134,7 +134,7 @@ function safeErrorMessage(error: unknown): string {
   return asString((error as any)?.message || error || "email_send_failed", 240).replace(/\bhttps?:\/\/\S+/gi, "[url]");
 }
 
-function validateConfirmation(input: SendRenewalNoticeCommunicationInput): {
+export function validateRenewalNoticeCommunicationInput(input: SendRenewalNoticeCommunicationInput): {
   ok: true;
   snapshotId: string;
   approvalDecisionItemId: string;
@@ -333,7 +333,7 @@ export async function sendRenewalNoticeCommunication(
   const landlordId = asString(params.landlordId, 240);
   if (!leaseId || !landlordId) return { ok: false, statusCode: 401, error: "UNAUTHORIZED" };
 
-  const confirmation = validateConfirmation(params.input);
+  const confirmation = validateRenewalNoticeCommunicationInput(params.input);
   if (!confirmation.ok) {
     return { ok: false, statusCode: 400, error: confirmation.error, details: confirmation.details };
   }

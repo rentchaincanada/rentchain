@@ -22,7 +22,10 @@ import {
   sanitizeLeaseRenewalOperatorInput,
   sendLeaseWorkflowEmail,
 } from "../services/leaseNoticeWorkflowService";
-import { sendRenewalNoticeCommunication } from "../services/renewalNoticeCommunicationService";
+import {
+  sendRenewalNoticeCommunication,
+  validateRenewalNoticeCommunicationInput,
+} from "../services/renewalNoticeCommunicationService";
 import { deriveLeaseLifecycleSummary } from "../services/leaseLifecycle/deriveLeaseLifecycleSummary";
 import { executeAutomation } from "../lib/automation/automationExecutor";
 import { buildLeaseNoticePolicyRequest } from "../lib/policy/policyAdapters";
@@ -259,6 +262,11 @@ router.post("/:id/renewal-notice-communications", async (req: any, res) => {
     const actorId = String(req.user?.id || landlordId || "").trim() || null;
     const actorEmail = String(req.user?.email || req.user?.claims?.email || "").trim() || null;
     const leaseId = String(req.params?.id || "").trim();
+    const validation = validateRenewalNoticeCommunicationInput(req.body || {});
+    if (!validation.ok) {
+      return res.status(400).json({ ok: false, error: validation.error, details: validation.details || [] });
+    }
+
     const leaseResult = await getLeaseForLandlordWorkflow(leaseId, landlordId);
     if (!leaseResult.ok) {
       return res.status(leaseResult.status).json({ ok: false, error: leaseResult.error });

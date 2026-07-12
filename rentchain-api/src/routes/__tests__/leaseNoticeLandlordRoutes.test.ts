@@ -128,6 +128,46 @@ const renewalNoticeCommunicationSuccess = {
   legalServiceEstablished: false,
 };
 const sendRenewalNoticeCommunication = vi.fn(async () => renewalNoticeCommunicationSuccess);
+const validateRenewalNoticeCommunicationInput = vi.fn((input: any) => {
+  if (!String(input?.snapshotId || "").trim()) {
+    return { ok: false, error: "RENEWAL_NOTICE_SNAPSHOT_ID_REQUIRED", details: ["snapshotId"] };
+  }
+  if (!String(input?.approvalDecisionItemId || "").trim()) {
+    return {
+      ok: false,
+      error: "RENEWAL_NOTICE_APPROVAL_DECISION_ITEM_ID_REQUIRED",
+      details: ["approvalDecisionItemId"],
+    };
+  }
+  if (input?.confirmationAccepted !== true) {
+    return { ok: false, error: "RENEWAL_NOTICE_CONFIRMATION_ACCEPTED_REQUIRED", details: ["confirmationAccepted"] };
+  }
+  if (input?.recipientReviewed !== true) {
+    return { ok: false, error: "RENEWAL_NOTICE_RECIPIENT_REVIEWED_REQUIRED", details: ["recipientReviewed"] };
+  }
+  if (input?.bodyReviewed !== true) {
+    return { ok: false, error: "RENEWAL_NOTICE_BODY_REVIEWED_REQUIRED", details: ["bodyReviewed"] };
+  }
+  if (input?.legalServiceAcknowledged !== true) {
+    return {
+      ok: false,
+      error: "RENEWAL_NOTICE_LEGAL_SERVICE_ACKNOWLEDGED_REQUIRED",
+      details: ["legalServiceAcknowledged"],
+    };
+  }
+  if (input?.noLegalServiceClaim !== true) {
+    return { ok: false, error: "RENEWAL_NOTICE_NO_LEGAL_SERVICE_CLAIM_REQUIRED", details: ["noLegalServiceClaim"] };
+  }
+  if (!String(input?.idempotencyKey || "").trim()) {
+    return { ok: false, error: "RENEWAL_NOTICE_IDEMPOTENCY_KEY_REQUIRED", details: ["idempotencyKey"] };
+  }
+  return {
+    ok: true,
+    snapshotId: String(input.snapshotId),
+    approvalDecisionItemId: String(input.approvalDecisionItemId),
+    idempotencyKey: String(input.idempotencyKey),
+  };
+});
 const sanitizeLeaseRenewalOperatorInput = vi.fn((body: any) => ({
   ok: true,
   data: {
@@ -173,6 +213,7 @@ vi.mock("../../services/leaseNoticeWorkflowService", () => ({
 
 vi.mock("../../services/renewalNoticeCommunicationService", () => ({
   sendRenewalNoticeCommunication,
+  validateRenewalNoticeCommunicationInput,
 }));
 
 async function invokeRouter(router: any, options: { method: string; url: string; body?: any }) {
@@ -248,6 +289,7 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
         summary: { title: "Lease notice preview", body: "Preview body" },
       },
     });
+    sendRenewalNoticeCommunication.mockReset();
     sendRenewalNoticeCommunication.mockResolvedValue(renewalNoticeCommunicationSuccess);
   });
 
@@ -623,7 +665,7 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
       body,
     });
 
-    expect(res.status).toBe(statusCode);
+    expect(res.status, JSON.stringify(res.body)).toBe(statusCode);
     expect(res.body).toEqual(
       expect.objectContaining({
         ok: false,
