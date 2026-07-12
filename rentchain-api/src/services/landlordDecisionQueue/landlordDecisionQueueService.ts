@@ -14,7 +14,7 @@ import type {
 
 const VERSION = "landlord_decision_queue_v1" as const;
 
-const SEVERITY_RANK: Record<LandlordDecisionQueueSeverity, number> = {
+export const LANDLORD_DECISION_QUEUE_SEVERITY_RANK: Record<LandlordDecisionQueueSeverity, number> = {
   critical: 0,
   warning: 1,
   needs_review: 2,
@@ -165,8 +165,8 @@ function relatedRefs(input: LandlordDecisionQueueRelatedRefs): LandlordDecisionQ
   };
 }
 
-function buildItem(input: Omit<LandlordDecisionQueueItem, "sortKey" | "priorityRank">): LandlordDecisionQueueItem {
-  const rank = SEVERITY_RANK[input.severity];
+export function buildLandlordDecisionQueueItem(input: Omit<LandlordDecisionQueueItem, "sortKey" | "priorityRank">): LandlordDecisionQueueItem {
+  const rank = LANDLORD_DECISION_QUEUE_SEVERITY_RANK[input.severity];
   const dueOrDate = input.dueAt || input.updatedAt || input.createdAt || "";
   return {
     ...input,
@@ -189,7 +189,7 @@ export function normalizeDecisionInboxItems(
       unitId: item.relatedEntity?.kind === "unit" ? item.relatedEntity.id : null,
       maintenanceRequestId: item.relatedEntity?.kind === "maintenance_request" ? item.relatedEntity.id : null,
     });
-    return buildItem({
+    return buildLandlordDecisionQueueItem({
       id: cleanToken(["decision_queue", "decision_inbox", sourceId].join(":"), "decision_queue:decision_inbox"),
       landlordId,
       sourceType: "decision_inbox",
@@ -220,7 +220,7 @@ export function normalizeUnifiedInboxRecords(
       const sourceType = sourceTypeFromUnifiedInbox(record);
       const sourceId = asString(record.id, 300) || "unified_inbox";
       const workspace = workspaceFromUnifiedInbox(record);
-      return buildItem({
+      return buildLandlordDecisionQueueItem({
         id: cleanToken(["decision_queue", sourceType, sourceId].join(":"), "decision_queue:unified_inbox"),
         landlordId,
         sourceType,
@@ -257,7 +257,7 @@ function normalizeScopedSignals(
       const sourceId = asString(signal.sourceId || signal.id, 300) || sourceType;
       const workspace = normalizeWorkspace(signal.workspace, fallbackWorkspace);
       const refs = relatedRefs(signal);
-      return buildItem({
+      return buildLandlordDecisionQueueItem({
         id: cleanToken(["decision_queue", sourceType, sourceId].join(":"), `decision_queue:${sourceType}`),
         landlordId,
         sourceType,
@@ -290,7 +290,7 @@ export function normalizeMessageSignals(
       const sourceId = asString(signal.sourceId || signal.id, 300) || sourceType;
       const workspace = normalizeWorkspace(signal.workspace, sourceType === "message_maintenance_follow_up" ? "maintenance" : sourceType === "message_notice_relevance" ? "notices" : "tenant");
       const refs = relatedRefs(signal);
-      return buildItem({
+      return buildLandlordDecisionQueueItem({
         id: cleanToken(["decision_queue", sourceType, sourceId].join(":"), `decision_queue:${sourceType}`),
         landlordId,
         sourceType,
@@ -330,7 +330,7 @@ function dedupeItems(items: LandlordDecisionQueueItem[]): LandlordDecisionQueueI
   return Array.from(byKey.values());
 }
 
-function sortItems(items: LandlordDecisionQueueItem[]): LandlordDecisionQueueItem[] {
+export function sortLandlordDecisionQueueItems(items: LandlordDecisionQueueItem[]): LandlordDecisionQueueItem[] {
   return [...items].sort((a, b) => {
     const rank = a.priorityRank - b.priorityRank;
     if (rank !== 0) return rank;
@@ -347,7 +347,7 @@ function sortItems(items: LandlordDecisionQueueItem[]): LandlordDecisionQueueIte
 export function deriveLandlordDecisionQueue(input: LandlordDecisionQueueInput): LandlordDecisionQueueResult {
   const landlordId = asString(input.landlordId, 240);
   const generatedAt = normalizeDate(input.generatedAt) || new Date().toISOString();
-  const items = sortItems(
+  const items = sortLandlordDecisionQueueItems(
     dedupeItems([
       ...normalizeDecisionInboxItems(landlordId, input.decisionInboxItems),
       ...normalizeUnifiedInboxRecords(landlordId, input.unifiedInboxRecords),

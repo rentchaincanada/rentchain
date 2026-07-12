@@ -5,6 +5,64 @@ const deriveLeaseDecisionsForInbox = vi.hoisted(() => vi.fn());
 const derivePaymentConsistentDecisionInbox = vi.hoisted(() => vi.fn());
 const getUnifiedInbox = vi.hoisted(() => vi.fn());
 const writeCanonicalEventMock = vi.hoisted(() => vi.fn());
+const { fakeDb, resetFakeDb, seedDoc, getDoc } = vi.hoisted(() => {
+  const collections = new Map<string, Map<string, any>>();
+  let autoId = 0;
+
+  function ensureCollection(name: string) {
+    if (!collections.has(name)) collections.set(name, new Map<string, any>());
+    return collections.get(name)!;
+  }
+
+  function matches(doc: any, filters: Array<{ field: string; op: string; value: any }>) {
+    return filters.every(({ field, op, value }) => {
+      const actual = doc?.[field];
+      if (op === "==") return actual === value;
+      return false;
+    });
+  }
+
+  function makeDoc(name: string, id?: string) {
+    const docId = id || `${name}_${++autoId}`;
+    return {
+      id: docId,
+      get: async () => ({
+        id: docId,
+        exists: ensureCollection(name).has(docId),
+        data: () => ensureCollection(name).get(docId),
+      }),
+      set: async (value: any) => {
+        ensureCollection(name).set(docId, value);
+      },
+    };
+  }
+
+  function makeQuery(name: string, filters: Array<{ field: string; op: string; value: any }> = []) {
+    return {
+      where: (field: string, op: string, value: any) => makeQuery(name, [...filters, { field, op, value }]),
+      get: async () => {
+        const docs = Array.from(ensureCollection(name).entries())
+          .filter(([, data]) => matches(data, filters))
+          .map(([id, data]) => ({ id, exists: true, data: () => data }));
+        return { docs, empty: docs.length === 0, size: docs.length };
+      },
+      doc: (id?: string) => makeDoc(name, id),
+    };
+  }
+
+  return {
+    fakeDb: {
+      collection: (name: string) => ({
+        where: (field: string, op: string, value: any) => makeQuery(name, [{ field, op, value }]),
+        get: async () => makeQuery(name).get(),
+        doc: (id?: string) => makeDoc(name, id),
+      }),
+    },
+    resetFakeDb: () => collections.clear(),
+    seedDoc: (collection: string, id: string, data: any) => ensureCollection(collection).set(id, data),
+    getDoc: (collection: string, id: string) => ensureCollection(collection).get(id),
+  };
+});
 let mockUser: any;
 
 vi.mock("../../services/landlord/landlordAnalyticsSnapshot", () => ({
@@ -20,6 +78,10 @@ vi.mock("../landlordDecisionInboxRoutes", () => {
 
 vi.mock("../../services/unifiedInbox", () => ({
   getUnifiedInbox,
+}));
+
+vi.mock("../../firebase", () => ({
+  db: fakeDb,
 }));
 
 vi.mock("../../lib/events/buildEvent", () => ({
@@ -45,7 +107,7 @@ vi.mock("../../middleware/requireLandlord", () => ({
   },
 }));
 
-async function invokeRouter(router: any, options: { method: string; url: string; user?: Record<string, unknown> | null }) {
+async function invokeRouter(router: any, options: { method: string; url: string; user?: Record<string, unknown> | null; body?: Record<string, unknown> }) {
   return await new Promise<{ status: number; body: any; headers: Record<string, string> }>((resolve, reject) => {
     const [path, queryString] = options.url.split("?");
     const query = new URLSearchParams(queryString || "");
@@ -56,7 +118,7 @@ async function invokeRouter(router: any, options: { method: string; url: string;
       originalUrl: options.url,
       path,
       user: mockUser,
-      body: {},
+      body: options.body || {},
       query: Object.fromEntries(query.entries()),
       params: {},
       headers: {},
@@ -122,7 +184,9 @@ describe("landlordDecisionQueueRoutes", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    resetFakeDb();
     mockUser = { id: "landlord-1", landlordId: "landlord-1", role: "landlord", email: "landlord@example.com" };
+    writeCanonicalEventMock.mockResolvedValue({ id: "canonical-event-1" });
     loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [analyticsDecision()] } });
     deriveLeaseDecisionsForInbox.mockResolvedValue([]);
     derivePaymentConsistentDecisionInbox.mockImplementation(async ({ analyticsDecisions, leaseDecisions }: any) => {
@@ -194,6 +258,230 @@ describe("landlordDecisionQueueRoutes", () => {
     );
     expect(JSON.stringify(res.body)).not.toContain("providerRequestId");
     expect(JSON.stringify(res.body)).not.toContain("gs://");
+    expect(writeCanonicalEventMock).not.toHaveBeenCalled();
+  });
+
+  it("overlays persisted lifecycle state onto derived source items without replacing the source queue", async () => {
+    seedDoc("landlordDecisionQueueItems", "persisted-message-review", {
+      id: "persisted-message-review",
+      landlordId: "landlord-1",
+      sourceType: "message_unread_priority",
+      sourceId: "tenant-message-1",
+      workspace: "tenant",
+      severity: "warning",
+      title: "Tenant awaiting reply",
+      description: "Tenant asked for a response.",
+      recommendedActionLabel: "Open message",
+      recommendedActionHref: "/messages",
+      dueAt: "2026-07-20T00:00:00.000Z",
+      createdAt: "2026-07-10T00:00:00.000Z",
+      updatedAt: "2026-07-11T00:00:00.000Z",
+      status: "deferred",
+      assignment: {
+        assignedToUserId: "manager-1",
+        assignedToEmail: "manager@example.com",
+        assignmentLabel: "Manager",
+      },
+      lastActionAt: "2026-07-11T00:00:00.000Z",
+      lastActionBy: "manager-1",
+      dedupeKey: "message_unread_priority:tenant:tenant-message-1",
+      auditEventIds: ["event-1"],
+    });
+    const router = (await import("../landlordDecisionQueueRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-queue?workspace=tenant" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([
+      expect.objectContaining({
+        id: "persisted-message-review",
+        sourceType: "message_unread_priority",
+        sourceId: "tenant-message-1",
+        status: "deferred",
+        dueAt: "2026-07-20T00:00:00.000Z",
+        assignment: expect.objectContaining({
+          assignedToEmail: "manager@example.com",
+        }),
+        auditEventIds: ["event-1"],
+      }),
+    ]);
+    expect(writeCanonicalEventMock).not.toHaveBeenCalled();
+  });
+
+  it("creates a persisted landlord decision queue item and records canonical audit context", async () => {
+    const router = (await import("../landlordDecisionQueueRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/decision-queue/items",
+      body: {
+        sourceType: "renewal_notice_send_review",
+        sourceId: "lease-1:notice-review",
+        workspace: "notices",
+        severity: "needs_review",
+        title: "Review renewal communication",
+        description: "Confirm the tenant communication before future delivery is enabled.",
+        recommendedActionLabel: "Open notice review",
+        recommendedActionHref: "/leases/lease-1/workflows/notice",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        dueAt: "2026-07-18",
+        assignedToEmail: "manager@example.com",
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.item).toEqual(
+      expect.objectContaining({
+        landlordId: "landlord-1",
+        sourceType: "renewal_notice_send_review",
+        sourceId: "lease-1:notice-review",
+        workspace: "notices",
+        status: "open",
+        leaseId: "lease-1",
+        auditEventIds: ["canonical-event-1"],
+      })
+    );
+    expect(getDoc("landlordDecisionQueueItems", res.body.item.id)).toEqual(
+      expect.objectContaining({
+        landlordId: "landlord-1",
+        sourceType: "renewal_notice_send_review",
+        auditEventIds: ["canonical-event-1"],
+      })
+    );
+    expect(writeCanonicalEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: "system",
+        action: "landlord_decision_queue_item_created",
+        resource: expect.objectContaining({
+          type: "landlord_decision_queue_item",
+          id: res.body.item.id,
+          parentId: "landlord-1",
+        }),
+        metadata: expect.objectContaining({
+          noSendBehavior: true,
+          noTenantNotification: true,
+          noNoticeServed: true,
+          noLeaseLifecycleMutation: true,
+        }),
+      })
+    );
+  });
+
+  it("updates lifecycle status and assignment without creating send or notice behavior", async () => {
+    seedDoc("landlordDecisionQueueItems", "decision-item-1", {
+      id: "decision-item-1",
+      landlordId: "landlord-1",
+      sourceType: "renewal_notice_send_review",
+      sourceId: "lease-1:notice-review",
+      workspace: "notices",
+      severity: "needs_review",
+      title: "Review renewal communication",
+      description: "Confirm the tenant communication before future delivery is enabled.",
+      recommendedActionLabel: "Open notice review",
+      recommendedActionHref: "/leases/lease-1/workflows/notice",
+      dueAt: null,
+      createdAt: "2026-07-10T00:00:00.000Z",
+      updatedAt: "2026-07-10T00:00:00.000Z",
+      status: "open",
+      leaseId: "lease-1",
+      dedupeKey: "renewal_notice_send_review:lease-1:notice-review",
+      auditEventIds: [],
+    });
+    const router = (await import("../landlordDecisionQueueRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/decision-queue/items/decision-item-1",
+      body: {
+        action: "assign",
+        status: "in_review",
+        assignedToUserId: "manager-1",
+        assignedToEmail: "manager@example.com",
+        assignmentLabel: "Manager",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.item).toEqual(
+      expect.objectContaining({
+        id: "decision-item-1",
+        status: "in_review",
+        assignment: expect.objectContaining({
+          assignedToUserId: "manager-1",
+          assignedToEmail: "manager@example.com",
+        }),
+        auditEventIds: ["canonical-event-1"],
+      })
+    );
+    expect(writeCanonicalEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "landlord_decision_queue_item_assign",
+        metadata: expect.objectContaining({
+          noSendBehavior: true,
+          noTenantNotification: true,
+          noNoticeServed: true,
+          noLeaseLifecycleMutation: true,
+        }),
+      })
+    );
+  });
+
+  it("does not reveal or update another landlord decision queue item", async () => {
+    seedDoc("landlordDecisionQueueItems", "other-landlord-item", {
+      id: "other-landlord-item",
+      landlordId: "landlord-2",
+      sourceType: "renewal_notice_send_review",
+      sourceId: "lease-2:notice-review",
+      workspace: "notices",
+      severity: "needs_review",
+      title: "Other landlord item",
+      description: "Should not be visible.",
+      recommendedActionLabel: "Open",
+      recommendedActionHref: "/leases/lease-2/workflows/notice",
+      dueAt: null,
+      createdAt: "2026-07-10T00:00:00.000Z",
+      updatedAt: "2026-07-10T00:00:00.000Z",
+      status: "open",
+      dedupeKey: "other-landlord-item",
+      auditEventIds: [],
+    });
+    const router = (await import("../landlordDecisionQueueRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/decision-queue/items/other-landlord-item",
+      body: { action: "resolve" },
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ ok: false, error: "decision_item_not_found" });
+    expect(getDoc("landlordDecisionQueueItems", "other-landlord-item")?.status).toBe("open");
+    expect(writeCanonicalEventMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid due dates without writing lifecycle state or audit events", async () => {
+    const router = (await import("../landlordDecisionQueueRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/decision-queue/items",
+      body: {
+        sourceType: "renewal_notice_send_review",
+        sourceId: "lease-1:notice-review",
+        workspace: "notices",
+        severity: "needs_review",
+        title: "Review renewal communication",
+        description: "Confirm the tenant communication before future delivery is enabled.",
+        recommendedActionLabel: "Open notice review",
+        recommendedActionHref: "/leases/lease-1/workflows/notice",
+        dueAt: "not-a-date",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ ok: false, error: "due_at_invalid" });
     expect(writeCanonicalEventMock).not.toHaveBeenCalled();
   });
 

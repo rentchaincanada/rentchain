@@ -297,9 +297,11 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(sendReview).toHaveTextContent("Message preview");
     expect(sendReview).toHaveTextContent("Renewal details for 12 Harbour Road · Unit 101");
     expect(sendReview).toHaveTextContent("Prepared from current renewal draft");
-    expect((screen.getByLabelText("Tenant communication body preview") as HTMLTextAreaElement).value).toContain(
-      "Hello Jane Tenant,"
+    expect(screen.queryByLabelText("Tenant communication body preview")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Tenant communication body reference")).toHaveTextContent(
+      "Uses the renewal notice draft shown above. Exact body must be reviewed and persisted before any future send."
     );
+    expect(screen.getAllByLabelText("Tenant notice draft preview")).toHaveLength(1);
     expect(sendReview).toHaveTextContent("Renewal operator inputs saved");
     expect(sendReview).toHaveTextContent("Draft snapshot saved");
     expect(sendReview).toHaveTextContent("Tenant recipient reviewed");
