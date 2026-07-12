@@ -774,13 +774,9 @@ function TenantCommunicationSendReview({
             <ReviewFact label="Source" value={sourceLabel} />
           </dl>
           {draftText ? (
-            <textarea
-              readOnly
-              rows={6}
-              value={draftText}
-              aria-label="Tenant communication body preview"
-              style={sendBodyPreviewStyle}
-            />
+            <div style={sendBodyReferenceStyle} aria-label="Tenant communication body reference">
+              Uses the renewal notice draft shown above. Exact body must be reviewed and persisted before any future send.
+            </div>
           ) : (
             <div style={warningPanelStyle}>Draft body unavailable. Complete renewal inputs before future tenant communication review.</div>
           )}
@@ -1187,17 +1183,15 @@ const checkboxLabelStyle: React.CSSProperties = {
   fontWeight: 700,
 };
 
-const sendBodyPreviewStyle: React.CSSProperties = {
-  width: "100%",
+const sendBodyReferenceStyle: React.CSSProperties = {
   boxSizing: "border-box",
-  resize: "vertical",
   border: `1px solid ${workflowTheme.borderStrong}`,
   borderRadius: 10,
   padding: 10,
   color: workflowTheme.charcoal,
-  background: "#fff",
+  background: "rgba(255, 250, 241, 0.82)",
   lineHeight: 1.55,
-  minHeight: 130,
+  fontWeight: 700,
 };
 
 const deferredBadgeStyle: React.CSSProperties = {
