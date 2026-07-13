@@ -110,22 +110,46 @@ function renewalNoticeCommunicationStatusText(event: Record<string, any>): strin
   return "communication recorded";
 }
 
-function renewalNoticeCommunicationTimelineDescription(event: Record<string, any>): string | null {
-  if (!isRenewalNoticeCommunicationEvent(event)) return null;
-  const metadata = event.metadata || {};
+function renewalNoticeCommunicationRecordFor(
+  event: Record<string, any>,
+  records: Record<string, any>[] | null | undefined
+): Record<string, any> | null {
+  const metadata = { ...(event.payload || {}), ...(event.metadata || {}) };
   const communicationId = asString(metadata.communicationId || event.communicationId, 240);
-  const rawDeliveryStatus = asString(metadata.deliveryStatus || event.deliveryStatus, 120);
+  if (!communicationId) return null;
+  return (records || []).find((record) => asString(record.communicationId || record.id, 240) === communicationId) || null;
+}
+
+function renewalNoticeCommunicationTimelineDescriptionForInput(
+  event: Record<string, any>,
+  input: DeriveCanonicalReviewTimelineInput
+): string | null {
+  if (!isRenewalNoticeCommunicationEvent(event)) return null;
+  const metadata = { ...(event.payload || {}), ...(event.metadata || {}) };
+  const record = renewalNoticeCommunicationRecordFor(event, input.renewalNoticeCommunications);
+  const communicationId = asString(metadata.communicationId || event.communicationId || record?.communicationId || record?.id, 240);
+  const rawDeliveryStatus = asString(metadata.deliveryStatus || event.deliveryStatus || record?.deliveryStatus, 120);
   const deliveryStatus = !rawDeliveryStatus || rawDeliveryStatus === "delivery_status_unknown"
-    ? "unknown"
+    ? "Not tracked yet"
     : rawDeliveryStatus.replace(/_/g, " ");
-  const occurredAt = formatTimelineTimestamp(event.occurredAt || event.recordedAt || event.createdAt);
+  const occurredAt = formatTimelineTimestamp(event.occurredAt || event.recordedAt || event.createdAt || record?.sentAt || record?.attemptedAt);
   const status = renewalNoticeCommunicationStatusText(event);
-  const idText = communicationId ? ` Communication ID: ${communicationId}.` : "";
-  const tenantNoticeText =
-    metadata.tenantNotified === true || event.tenantNotified === true
-      ? " Tenant notified by email provider acceptance."
-      : "";
-  return `Renewal tenant communication ${status} at ${occurredAt}.${idText} Status: ${status}. Provider delivery status: ${deliveryStatus}.${tenantNoticeText} Not served; legal service not established.`;
+  const parts = [
+    `Renewal tenant communication ${status} at ${occurredAt}.`,
+    communicationId ? `Communication ID: ${communicationId}.` : "",
+    `Status: ${status}.`,
+  ];
+  const recipientEmail = asString(record?.recipientEmail, 320);
+  const snapshotId = asString(metadata.snapshotId || record?.snapshotId, 240);
+  const approvalDecisionItemId = asString(metadata.approvalDecisionItemId || record?.approvalDecisionItemId, 240);
+  if (recipientEmail) parts.push(`Recipient email: ${recipientEmail}.`);
+  parts.push(`Delivery confirmation: ${deliveryStatus}.`);
+  if (snapshotId) parts.push(`Draft snapshot ID: ${snapshotId}.`);
+  if (approvalDecisionItemId) parts.push(`Approval decision ID: ${approvalDecisionItemId}.`);
+  if (record?.confirmation) parts.push("Confirmation/audit status: send confirmations captured.");
+  parts.push("Not served; legal service not established.");
+  parts.push("Legal compliance not determined by this workflow.");
+  return parts.filter(Boolean).join(" ");
 }
 
 function normalizeActor(raw: any): ReviewTimelineActor {
@@ -313,7 +337,7 @@ function canonicalEventEntries(input: DeriveCanonicalReviewTimelineInput): Revie
         entryType: "canonical_event",
         timestamp: event.occurredAt || event.recordedAt,
         label: canonicalEventLabel(event),
-        description: renewalNoticeCommunicationTimelineDescription(event) || event.summary || "Canonical event recorded.",
+        description: renewalNoticeCommunicationTimelineDescriptionForInput(event, input) || event.summary || "Canonical event recorded.",
         status: event.status === "blocked" ? "blocked" : "info",
         actor: normalizeActor(event.actor),
         source: "canonical_events",

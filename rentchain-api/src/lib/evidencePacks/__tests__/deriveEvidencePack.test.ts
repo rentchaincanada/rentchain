@@ -360,6 +360,8 @@ describe("deriveEvidencePack", () => {
           leaseId: "lease-1",
           landlordId: "landlord-1",
           snapshotId: "snapshot-1",
+          approvalDecisionItemId: "decision-1",
+          recipientEmail: "hello+tenant@rentchain.ai",
           status: "email_sent",
           deliveryStatus: "delivery_status_unknown",
           attemptedAt: "2026-07-11T12:10:00.000Z",
@@ -367,6 +369,13 @@ describe("deriveEvidencePack", () => {
           tenantNotified: true,
           noticeServed: false,
           legalServiceEstablished: false,
+          confirmation: {
+            confirmationAccepted: true,
+            recipientReviewed: true,
+            bodyReviewed: true,
+            legalServiceAcknowledged: true,
+            noLegalServiceClaim: true,
+          },
           generatedDraftText: "Hello Jane, private body text should not project.",
           providerPayload: { raw: "provider-secret" },
         },
@@ -375,6 +384,8 @@ describe("deriveEvidencePack", () => {
           leaseId: "lease-1",
           landlordId: "landlord-1",
           snapshotId: "snapshot-1",
+          approvalDecisionItemId: "decision-1",
+          recipientEmail: "hello+tenant@rentchain.ai",
           status: "send_attempted",
           deliveryStatus: "delivery_status_unknown",
           attemptedAt: "2026-07-11T12:10:00.000Z",
@@ -431,13 +442,13 @@ describe("deriveEvidencePack", () => {
           itemType: "communication_record",
           label: "Renewal tenant communication email sent",
           description:
-            "Email sent at 2026-07-11 12:10 UTC. Provider delivery status: unknown. Tenant notified by email provider acceptance. Not served; legal service not established. Communication ID: communication-1.",
+            "Email accepted for sending at 2026-07-11 12:10 UTC. Communication ID: communication-1. Lease ID: lease-1. Context: North Towers · Unit 101 · John Smith. Recipient email: hello+tenant@rentchain.ai. Delivery confirmation: Not tracked yet. Draft snapshot ID: snapshot-1. Approval decision ID: decision-1. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
           source: "renewal_notice_communications",
           sourceId: "communication-1",
         }),
       ])
     );
-    expect(JSON.stringify(pack)).not.toMatch(/private body text|provider-secret|legally served|legal delivery/i);
+    expect(JSON.stringify(pack)).not.toMatch(/private body text|provider-secret|legally served|legal delivery|provider delivery confirmed|statutory compliance/i);
   });
 
   it("keeps raw provider, banking, debug, and private document fields out of evidence projections", () => {

@@ -183,6 +183,27 @@ describe("deriveCanonicalReviewTimeline", () => {
       scope: "lease",
       scopeId: "lease-1",
       landlordId: "landlord-1",
+      renewalNoticeCommunications: [
+        {
+          communicationId: "rnc_test",
+          leaseId: "lease-1",
+          snapshotId: "snapshot-1",
+          approvalDecisionItemId: "decision-1",
+          recipientEmail: "hello+tenant@rentchain.ai",
+          status: "email_sent",
+          deliveryStatus: "delivery_status_unknown",
+          sentAt: "2026-07-11T12:10:00.000Z",
+          confirmation: {
+            confirmationAccepted: true,
+            recipientReviewed: true,
+            bodyReviewed: true,
+            legalServiceAcknowledged: true,
+            noLegalServiceClaim: true,
+          },
+          generatedDraftText: "Hello Jane, private body text should not project.",
+          providerPayload: { raw: "provider-secret" },
+        },
+      ],
       canonicalEvents: [
         {
           id: "event-confirmed-1",
@@ -192,7 +213,7 @@ describe("deriveCanonicalReviewTimeline", () => {
           leaseId: "lease-1",
           resource: { id: "lease-1" },
           actor: { type: "landlord", id: "landlord-1" },
-          metadata: {
+          payload: {
             communicationId: "rnc_test",
             deliveryStatus: "delivery_status_unknown",
             tenantNotified: false,
@@ -207,7 +228,7 @@ describe("deriveCanonicalReviewTimeline", () => {
           leaseId: "lease-1",
           resource: { id: "lease-1" },
           actor: { type: "landlord", id: "landlord-1" },
-          metadata: {
+          payload: {
             communicationId: "rnc_test",
             deliveryStatus: "delivery_status_unknown",
             tenantNotified: false,
@@ -246,20 +267,20 @@ describe("deriveCanonicalReviewTimeline", () => {
           source: "canonical_events",
           label: "Renewal tenant communication email sent",
           description:
-            "Renewal tenant communication email sent at 2026-07-11 12:10 UTC. Communication ID: rnc_test. Status: email sent. Provider delivery status: unknown. Tenant notified by email provider acceptance. Not served; legal service not established.",
+            "Renewal tenant communication email sent at 2026-07-11 12:10 UTC. Communication ID: rnc_test. Status: email sent. Recipient email: hello+tenant@rentchain.ai. Delivery confirmation: Not tracked yet. Draft snapshot ID: snapshot-1. Approval decision ID: decision-1. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
         }),
         expect.objectContaining({
           label: "Renewal tenant communication send attempted",
           description:
-            "Renewal tenant communication send attempted at 2026-07-11 12:10 UTC. Communication ID: rnc_test. Status: send attempted. Provider delivery status: unknown. Not served; legal service not established.",
+            "Renewal tenant communication send attempted at 2026-07-11 12:10 UTC. Communication ID: rnc_test. Status: send attempted. Recipient email: hello+tenant@rentchain.ai. Delivery confirmation: Not tracked yet. Draft snapshot ID: snapshot-1. Approval decision ID: decision-1. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
         }),
         expect.objectContaining({
           label: "Renewal tenant communication send confirmed",
           description:
-            "Renewal tenant communication send confirmed internally at 2026-07-11 12:09 UTC. Communication ID: rnc_test. Status: send confirmed internally. Provider delivery status: unknown. Not served; legal service not established.",
+            "Renewal tenant communication send confirmed internally at 2026-07-11 12:09 UTC. Communication ID: rnc_test. Status: send confirmed internally. Recipient email: hello+tenant@rentchain.ai. Delivery confirmation: Not tracked yet. Draft snapshot ID: snapshot-1. Approval decision ID: decision-1. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
         }),
       ])
     );
-    expect(JSON.stringify(timeline)).not.toMatch(/legally served|legal delivery|compliant notice/i);
+    expect(JSON.stringify(timeline)).not.toMatch(/private body text|provider-secret|legally served|legal delivery|compliant notice|provider delivery confirmed/i);
   });
 });
