@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import express from "express";
+import { Readable } from "stream";
 
 const handleWebhookMock = vi.fn();
 
@@ -84,5 +86,45 @@ describe("mailgun webhook routes", () => {
 
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ ok: false, error: "MAILGUN_WEBHOOK_SIGNATURE_INVALID" });
+  });
+
+  it("falls back safely when replay-window env is invalid", async () => {
+    handleWebhookMock.mockResolvedValueOnce({
+      ok: true,
+      statusCode: 200,
+      matched: false,
+      updated: false,
+      receiptId: "receipt-1",
+    });
+
+    await invoke(
+      { signature: {}, "event-data": {} },
+      { MAILGUN_WEBHOOK_SIGNING_KEY: "secret", MAILGUN_WEBHOOK_REPLAY_WINDOW_SECONDS: "not-a-number" }
+    );
+
+    expect(handleWebhookMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        signingKey: "secret",
+        replayWindowSeconds: undefined,
+      })
+    );
+  });
+
+  it("rejects malformed JSON in the route-local parser before processing", async () => {
+    const parser = express.json({ type: "application/json", limit: "1mb" });
+    const req = Readable.from(["{not-json"]) as any;
+    req.method = "POST";
+    req.url = "/api/webhooks/mailgun/events";
+    req.originalUrl = "/api/webhooks/mailgun/events";
+    req.headers = {
+      "content-type": "application/json",
+      "content-length": String("{not-json".length),
+    };
+    const parserError = await new Promise<any>((resolve) => {
+      parser(req, {} as any, (err: any) => resolve(err || null));
+    });
+
+    expect(parserError).toEqual(expect.objectContaining({ type: "entity.parse.failed" }));
+    expect(handleWebhookMock).not.toHaveBeenCalled();
   });
 });

@@ -154,6 +154,16 @@ async function handle(body: any) {
   });
 }
 
+async function handleWithOptions(body: any, options: { replayWindowSeconds?: number; now?: Date } = {}) {
+  const { handleMailgunRenewalCommunicationWebhook } = await import("../renewalNoticeCommunicationDeliveryWebhookService");
+  return handleMailgunRenewalCommunicationWebhook({
+    body,
+    signingKey,
+    now: options.now || now,
+    replayWindowSeconds: options.replayWindowSeconds,
+  });
+}
+
 describe("Mailgun renewal communication delivery webhooks", () => {
   beforeEach(() => {
     collections.clear();
@@ -198,6 +208,55 @@ describe("Mailgun renewal communication delivery webhooks", () => {
 
     const stale = await handle(signedBody(eventData(), "token-3", "1000"));
     expect(stale).toEqual({ ok: false, statusCode: 401, error: "MAILGUN_WEBHOOK_SIGNATURE_STALE" });
+  });
+
+  it.each([
+    ["timestamp", { token: "token", signature: "abc" }],
+    ["token", { timestamp: "1783944000", signature: "abc" }],
+    ["signature", { timestamp: "1783944000", token: "token" }],
+  ])("rejects missing signature.%s without processing", async (_field, signature) => {
+    const result = await handle({ signature, "event-data": eventData() });
+
+    expect(result).toEqual({ ok: false, statusCode: 401, error: "MAILGUN_WEBHOOK_SIGNATURE_REQUIRED" });
+    expect(collections.get("communicationProviderEventReceipts")).toBeUndefined();
+    expect(collections.get("events")).toBeUndefined();
+    expect(collections.get("canonicalEvents")).toBeUndefined();
+  });
+
+  it("rejects non-numeric, far-future, and invalid-format signatures safely", async () => {
+    const nonNumeric = await handle({
+      ...signedBody(eventData(), "token-nonnumeric", "not-a-time"),
+      signature: { timestamp: "not-a-time", token: "token-nonnumeric", signature: "abc123" },
+    });
+    expect(nonNumeric).toEqual({ ok: false, statusCode: 401, error: "MAILGUN_WEBHOOK_SIGNATURE_INVALID" });
+
+    const future = await handle(signedBody(eventData(), "token-future", "9999999999"));
+    expect(future).toEqual({ ok: false, statusCode: 401, error: "MAILGUN_WEBHOOK_SIGNATURE_STALE" });
+
+    const invalidHex = await handle({
+      ...signedBody(eventData(), "token-invalid-format"),
+      signature: { timestamp: "1783944000", token: "token-invalid-format", signature: "not-hex-signature" },
+    });
+    expect(invalidHex).toEqual({ ok: false, statusCode: 401, error: "MAILGUN_WEBHOOK_SIGNATURE_INVALID" });
+    expect(collections.get("communicationProviderEventReceipts")).toBeUndefined();
+  });
+
+  it("uses the default replay window when none is supplied", async () => {
+    const staleByDefault = await handleWithOptions(signedBody(eventData(), "token-default-window", "1000"));
+
+    expect(staleByDefault).toEqual({ ok: false, statusCode: 401, error: "MAILGUN_WEBHOOK_SIGNATURE_STALE" });
+  });
+
+  it("rejects a valid signature with missing event-data without creating receipts", async () => {
+    const timestamp = "1783944000";
+    const token = "token-no-event-data";
+    const signature = crypto.createHmac("sha256", signingKey).update(`${timestamp}${token}`).digest("hex");
+    const result = await handle({ signature: { timestamp, token, signature } });
+
+    expect(result).toEqual({ ok: false, statusCode: 400, error: "MAILGUN_WEBHOOK_EVENT_DATA_REQUIRED" });
+    expect(collections.get("communicationProviderEventReceipts")).toBeUndefined();
+    expect(collections.get("events")).toBeUndefined();
+    expect(collections.get("canonicalEvents")).toBeUndefined();
   });
 
   it("treats duplicate provider events as idempotent without duplicating audit events", async () => {
