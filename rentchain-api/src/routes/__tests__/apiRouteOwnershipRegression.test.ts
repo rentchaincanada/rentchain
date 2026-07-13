@@ -16,6 +16,14 @@ const stripeMocks = vi.hoisted(() => ({
   constructEvent: vi.fn(),
 }));
 
+const mailgunWebhookMocks = vi.hoisted(() => ({
+  handleMailgunRenewalCommunicationWebhook: vi.fn(async () => ({
+    ok: false,
+    statusCode: 401,
+    error: "MAILGUN_WEBHOOK_SIGNATURE_REQUIRED",
+  })),
+}));
+
 const renewalNoticeCommunicationMocks = vi.hoisted(() => ({
   sendRenewalNoticeCommunication: vi.fn(async () => ({
     ok: true,
@@ -193,6 +201,10 @@ vi.mock("../../services/stripeScreeningProcessor", () => ({
   applyScreeningResultsFromOrder: vi.fn(async () => ({ ok: true })),
 }));
 
+vi.mock("../../services/renewalNoticeCommunicationDeliveryWebhookService", () => ({
+  handleMailgunRenewalCommunicationWebhook: mailgunWebhookMocks.handleMailgunRenewalCommunicationWebhook,
+}));
+
 vi.mock("../../services/screening/screeningOrchestrator", () => ({
   beginScreening: vi.fn(async () => ({ ok: true })),
 }));
@@ -320,10 +332,17 @@ async function buildRuntimeOwnershipApp() {
   const screeningJobsAdminRoutes = (await import("../screeningJobsAdminRoutes")).default;
   const { stripeWebhookHandler } = await import("../stripeScreeningOrdersWebhookRoutes");
   const { transunionWebhookHandler } = await import("../transunionWebhookRoutes");
+  const { mailgunEventsWebhookHandler } = await import("../mailgunWebhookRoutes");
 
   const app = express();
   app.post("/api/webhooks/stripe", routeSource("stripeScreeningOrdersWebhookRoutes.ts"), stripeWebhookHandler);
   app.post("/api/webhooks/transunion", routeSource("transunionWebhookRoutes.ts"), transunionWebhookHandler);
+  app.post(
+    "/api/webhooks/mailgun/events",
+    express.json({ type: "application/json" }),
+    routeSource("mailgunWebhookRoutes.ts"),
+    mailgunEventsWebhookHandler
+  );
   app.get("/api/leases/:leaseId/document-url", routeSource("leaseRoutes.ts"), requireLandlord, handleLeaseDocumentUrl);
   app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
   app.use("/api/landlord", routeSource("landlordEvidencePackRoutes.ts"), landlordEvidencePackRoutes);
@@ -379,9 +398,11 @@ describe("API route ownership regression", () => {
     expect(source.indexOf('"/api/webhooks/stripe"')).toBeGreaterThan(-1);
     expect(source.indexOf('"/api/stripe/webhook"')).toBeGreaterThan(-1);
     expect(source.indexOf('"/api/webhooks/transunion"')).toBeGreaterThan(-1);
+    expect(source.indexOf('"/api/webhooks/mailgun/events"')).toBeGreaterThan(-1);
     expect(source.indexOf('"/api/webhooks/stripe"')).toBeLessThan(jsonParserIndex);
     expect(source.indexOf('"/api/stripe/webhook"')).toBeLessThan(jsonParserIndex);
     expect(source.indexOf('"/api/webhooks/transunion"')).toBeLessThan(jsonParserIndex);
+    expect(source.indexOf('"/api/webhooks/mailgun/events"')).toBeLessThan(jsonParserIndex);
   });
 
   it("keeps high-risk prefixed mounts ahead of broad fallback and screening job routes", () => {
@@ -981,6 +1002,23 @@ describe("API route ownership regression", () => {
     expect(transunionRes.status).toBe(400);
     expect(transunionRes.body).toMatchObject({ ok: false, error: "missing_request_id" });
     expect(transunionRes.headers["x-route-source"]).toBe("transunionWebhookRoutes.ts");
+
+    mailgunWebhookMocks.handleMailgunRenewalCommunicationWebhook.mockResolvedValueOnce({
+      ok: false,
+      statusCode: 401,
+      error: "MAILGUN_WEBHOOK_SIGNATURE_REQUIRED",
+    });
+    const mailgunRes = await invokeApp(app, {
+      method: "POST",
+      url: "/api/webhooks/mailgun/events",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: Buffer.from("{}"),
+    });
+    expect(mailgunRes.status).toBe(401);
+    expect(mailgunRes.body).toMatchObject({ ok: false, error: "MAILGUN_WEBHOOK_SIGNATURE_REQUIRED" });
+    expect(mailgunRes.headers["x-route-source"]).toBe("mailgunWebhookRoutes.ts");
   });
 
   it("keeps public-safe probes, gated diagnostics, and API catchall deterministic", async () => {

@@ -78,6 +78,9 @@ function canonicalEventLabel(event: Record<string, any>): string {
   if (raw === "renewal_notice_email_failed" || raw === "lease.renewal_notice_email_failed") {
     return "Renewal tenant communication email failed";
   }
+  if (raw === "renewal_notice_delivery_status_updated" || raw === "lease.renewal_notice_delivery_status_updated") {
+    return "Renewal tenant communication delivery status updated";
+  }
   return raw || "Canonical event";
 }
 
@@ -91,7 +94,9 @@ function isRenewalNoticeCommunicationEvent(event: Record<string, any>): boolean 
     raw === "renewal_notice_email_sent" ||
     raw === "lease.renewal_notice_email_sent" ||
     raw === "renewal_notice_email_failed" ||
-    raw === "lease.renewal_notice_email_failed"
+    raw === "lease.renewal_notice_email_failed" ||
+    raw === "renewal_notice_delivery_status_updated" ||
+    raw === "lease.renewal_notice_delivery_status_updated"
   );
 }
 
@@ -105,6 +110,9 @@ function renewalNoticeCommunicationStatusText(event: Record<string, any>): strin
   const raw = asString(event.type || event.action, 160);
   if (raw === "renewal_notice_email_sent" || raw === "lease.renewal_notice_email_sent") return "email sent";
   if (raw === "renewal_notice_email_failed" || raw === "lease.renewal_notice_email_failed") return "email failed";
+  if (raw === "renewal_notice_delivery_status_updated" || raw === "lease.renewal_notice_delivery_status_updated") {
+    return "delivery status updated";
+  }
   if (raw === "renewal_notice_email_send_attempted" || raw === "lease.renewal_notice_email_send_attempted") return "send attempted";
   if (raw === "renewal_notice_send_confirmed" || raw === "lease.renewal_notice_send_confirmed") return "send confirmed internally";
   return "communication recorded";

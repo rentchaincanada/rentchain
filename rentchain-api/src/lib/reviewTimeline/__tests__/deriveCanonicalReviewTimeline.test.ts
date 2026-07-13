@@ -250,6 +250,24 @@ describe("deriveCanonicalReviewTimeline", () => {
           },
           occurredAt: "2026-07-11T12:10:00.000Z",
         },
+        {
+          id: "event-delivery-1",
+          type: "renewal_notice_delivery_status_updated",
+          action: "renewal_notice_delivery_status_updated",
+          summary:
+            "Renewal tenant communication delivery confirmation updated from Mailgun webhook. Not served; legal service not established.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          actor: { type: "system", id: "mailgun" },
+          metadata: {
+            communicationId: "rnc_test",
+            deliveryStatus: "delivered",
+            deliveryStatusSource: "mailgun_webhook",
+            providerMessageId: "<provider-message@mg.example.com>",
+            providerPayload: { raw: "provider-secret" },
+          },
+          occurredAt: "2026-07-11T12:12:00.000Z",
+        },
       ],
     });
 
@@ -258,6 +276,7 @@ describe("deriveCanonicalReviewTimeline", () => {
         "Renewal tenant communication send confirmed",
         "Renewal tenant communication send attempted",
         "Renewal tenant communication email sent",
+        "Renewal tenant communication delivery status updated",
       ])
     );
     expect(timeline.entries).toEqual(
@@ -268,6 +287,11 @@ describe("deriveCanonicalReviewTimeline", () => {
           label: "Renewal tenant communication email sent",
           description:
             "Renewal tenant communication email sent at 2026-07-11 12:10 UTC. Communication ID: rnc_test. Status: email sent. Recipient email: hello+tenant@rentchain.ai. Delivery confirmation: Accepted for sending. Draft snapshot ID: snapshot-1. Approval decision ID: decision-1. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
+        }),
+        expect.objectContaining({
+          label: "Renewal tenant communication delivery status updated",
+          description:
+            "Renewal tenant communication delivery status updated at 2026-07-11 12:12 UTC. Communication ID: rnc_test. Status: delivery status updated. Recipient email: hello+tenant@rentchain.ai. Delivery confirmation: Delivered by email provider. Draft snapshot ID: snapshot-1. Approval decision ID: decision-1. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
         }),
         expect.objectContaining({
           label: "Renewal tenant communication send attempted",

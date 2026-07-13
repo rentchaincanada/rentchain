@@ -70,6 +70,34 @@ describe("emailService mailgun provider", () => {
     });
   });
 
+  it("passes safe Mailgun variables when metadata is provided", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ id: "<abc123@mg.example.com>" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock as any);
+
+    await sendEmail({
+      to: "tenant@example.com",
+      subject: "Test",
+      html: "<p>Hello</p>",
+      metadata: {
+        communicationId: "rnc_safe_123",
+        workflow: "renewal_notice_communication",
+        "unsafe key": "still-safe",
+        empty: "",
+      },
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = new URLSearchParams(String(init.body));
+    expect(body.get("v:communicationId")).toBe("rnc_safe_123");
+    expect(body.get("v:workflow")).toBe("renewal_notice_communication");
+    expect(body.get("v:unsafekey")).toBe("still-safe");
+    expect(body.has("v:empty")).toBe(false);
+  });
+
   it("rejects when Mailgun responds with failure", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: false,
