@@ -87,6 +87,36 @@ function approvalDecisionFixture(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function decisionQueueResponse(items: unknown[]) {
+  return {
+    ok: true,
+    version: "landlord_decision_queue_v1",
+    landlordId: "landlord-1",
+    generatedAt: "2026-07-11T12:00:00.000Z",
+    items,
+    summary: {
+      total: items.length,
+      critical: 0,
+      warning: items.length,
+      needsReview: 0,
+      upcoming: 0,
+      informational: 0,
+      open: 0,
+      blocked: 0,
+    },
+    total: items.length,
+    limit: 5,
+    filters: {
+      severity: null,
+      workspace: null,
+      status: null,
+      sourceType: "renewal_notice_send_review",
+      sourceId: "lease:lease-1:renewal_notice_send_review",
+      sourceRoute: null,
+    },
+  };
+}
+
 describe("LandlordLeaseWorkflowPage", () => {
   beforeEach(() => {
     mocks.getLeaseById.mockReset();
@@ -312,13 +342,16 @@ describe("LandlordLeaseWorkflowPage", () => {
         sourceRoute: null,
       },
     });
-    mocks.createLandlordDecisionQueueItem.mockResolvedValue({
+    mocks.createLandlordDecisionQueueItem.mockImplementation(async (payload) => ({
       ok: true,
       created: true,
       auditEventId: "decision-audit-1",
-      item: approvalDecisionFixture(),
-    });
-    mocks.updateLandlordDecisionQueueItem.mockImplementation(async (_id: string, payload: { action?: string }) => ({
+      item: approvalDecisionFixture({
+        sourceSnapshot: payload.sourceSnapshot,
+        metadata: payload.metadata,
+      }),
+    }));
+    mocks.updateLandlordDecisionQueueItem.mockImplementation(async (_id: string, payload: { action?: string; metadata?: Record<string, unknown> }) => ({
       ok: true,
       auditEventId: "decision-audit-2",
       item: approvalDecisionFixture({
@@ -333,6 +366,7 @@ describe("LandlordLeaseWorkflowPage", () => {
                   ? "dismissed"
                   : "acknowledged",
         auditEventIds: ["decision-audit-1", "decision-audit-2"],
+        metadata: payload.metadata || { noSendBehavior: false },
       }),
     }));
   });
@@ -929,6 +963,92 @@ describe("LandlordLeaseWorkflowPage", () => {
       "/evidence-packs?scope=lease&scopeId=lease-1"
     );
     expect(screen.queryByRole("button", { name: "Send renewal email" })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/legal notice sent|legally delivered|legally compliant|enforceable|statutory notice satisfied|must respond by|must serve by/i);
+  });
+
+  it("blocks send when approval decision belongs to an older draft snapshot", async () => {
+    mocks.fetchLandlordDecisionQueue.mockResolvedValue(
+      decisionQueueResponse([
+        approvalDecisionFixture({
+          status: "approved",
+          sourceSnapshot: { draftSnapshotId: "older-snapshot", leaseId: "lease-1" },
+          metadata: { draftSnapshotId: "older-snapshot", noSendBehavior: false },
+        }),
+      ])
+    );
+
+    renderWorkflow("/leases/lease-1/workflows/notice");
+
+    await screen.findByLabelText("Tenant notice draft preview");
+    fireEvent.click(screen.getByRole("button", { name: "Save draft snapshot" }));
+    expect(await screen.findByText("Audit event recorded.")).toBeInTheDocument();
+
+    expect(await screen.findByText(/Approval decision is tied to an older draft snapshot/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Send requirements")).toHaveTextContent(
+      "Approval decision is tied to an older draft snapshot. Save and approve the current draft snapshot before sending."
+    );
+    expect(screen.queryByLabelText("Send confirmation checklist")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send renewal email" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Send renewal email" }));
+    expect(mocks.sendRenewalNoticeCommunication).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update approval decision for current draft" }));
+    await waitFor(() => {
+      expect(mocks.updateLandlordDecisionQueueItem).toHaveBeenCalledWith(
+        "decision-1",
+        expect.objectContaining({
+          action: "return_to_draft",
+          metadata: expect.objectContaining({
+            draftSnapshotId: "snapshot-1",
+            noSendBehavior: false,
+            noNoticeServed: true,
+            noLeaseLifecycleMutation: true,
+          }),
+        })
+      );
+    });
+    expect(await screen.findByText("Approval decision updated for the current draft snapshot. Send requires the confirmation checklist.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve for future send review" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve for future send review" }));
+    await waitFor(() => {
+      expect(mocks.updateLandlordDecisionQueueItem).toHaveBeenLastCalledWith(
+        "decision-1",
+        expect.objectContaining({
+          action: "approve",
+          metadata: expect.objectContaining({
+            draftSnapshotId: "snapshot-1",
+          }),
+        })
+      );
+    });
+    expect(await screen.findByLabelText("Send confirmation checklist")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/legal notice sent|legally delivered|legally compliant|enforceable|statutory notice satisfied|must respond by|must serve by/i);
+  });
+
+  it("shows a friendly approval snapshot mismatch error if the backend rejects send", async () => {
+    mocks.sendRenewalNoticeCommunication.mockRejectedValueOnce(new Error("RENEWAL_NOTICE_APPROVAL_SNAPSHOT_MISMATCH"));
+
+    renderWorkflow("/leases/lease-1/workflows/notice");
+
+    await screen.findByLabelText("Tenant notice draft preview");
+    fireEvent.click(screen.getByRole("button", { name: "Save draft snapshot" }));
+    await screen.findByText("Audit event recorded.");
+    fireEvent.click(await screen.findByRole("button", { name: "Create send approval decision" }));
+    await screen.findByText("Approval decision created.");
+    fireEvent.click(screen.getByRole("button", { name: "Approve for future send review" }));
+    await screen.findByText("Future send review approved internally. Send requires the confirmation checklist.");
+
+    fireEvent.click(screen.getByLabelText("I have reviewed the recipient(s)."));
+    fireEvent.click(screen.getByLabelText("I have reviewed the message body."));
+    fireEvent.click(screen.getByLabelText("I understand this sends tenant communication only."));
+    fireEvent.click(screen.getByLabelText("I understand this does not establish legal notice service by itself."));
+    fireEvent.click(screen.getByRole("button", { name: "Send renewal email" }));
+
+    expect(
+      await screen.findByText("This approval belongs to an earlier draft snapshot. Save the current draft snapshot and approve it again before sending.")
+    ).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("RENEWAL_NOTICE_APPROVAL_SNAPSHOT_MISMATCH");
     expect(document.body).not.toHaveTextContent(/legal notice sent|legally delivered|legally compliant|enforceable|statutory notice satisfied|must respond by|must serve by/i);
   });
 

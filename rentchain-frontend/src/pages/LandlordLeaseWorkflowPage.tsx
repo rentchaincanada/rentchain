@@ -251,6 +251,20 @@ function deliveryStatusLabel(status: RenewalNoticeCommunicationResponse["deliver
   return "Delivery status pending";
 }
 
+function recordStringValue(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function approvalDecisionDraftSnapshotId(decision: LandlordDecisionQueueItem | null | undefined) {
+  if (!decision) return "";
+  return (
+    recordStringValue(decision.metadata, "draftSnapshotId") ||
+    recordStringValue(decision.sourceSnapshot, "draftSnapshotId") ||
+    recordStringValue(decision.sourceSnapshot, "snapshotId")
+  );
+}
+
 function daysUntilDate(value: string | null | undefined) {
   if (!value) return null;
   const parsed = new Date(value);
@@ -812,7 +826,13 @@ function TenantCommunicationSendReview({
   const [activeSendContext, setActiveSendContext] = React.useState<string | null>(null);
   const [sendState, setSendState] = React.useState<SendState>({ status: "idle" });
   const approvalDecisionApproved = approvalDecision?.status === "approved";
-  const sendPrerequisitesMet = Boolean(savedSnapshot && approvalDecisionApproved && recipientReady && draftAvailable && approvalDecision);
+  const approvalDecisionSnapshotId = approvalDecisionDraftSnapshotId(approvalDecision);
+  const approvalSnapshotMatches =
+    Boolean(savedSnapshot && approvalDecision) && approvalDecisionSnapshotId === savedSnapshot?.snapshotId;
+  const approvalSnapshotMismatch = Boolean(savedSnapshot && approvalDecision && !approvalSnapshotMatches);
+  const sendPrerequisitesMet = Boolean(
+    savedSnapshot && approvalDecisionApproved && approvalSnapshotMatches && recipientReady && draftAvailable && approvalDecision
+  );
   const allConfirmationsChecked = Object.values(confirmation).every(Boolean);
   const sendContextKey =
     savedSnapshot && approvalDecision ? `${savedSnapshot.snapshotId}:${approvalDecision.id}:${lease.id}` : null;
@@ -956,6 +976,7 @@ function TenantCommunicationSendReview({
         action,
         metadata: {
           approvalPurpose: "future_send_review",
+          draftSnapshotId: savedSnapshot?.snapshotId || null,
           lastApprovalDecisionAction: action,
           noSendBehavior: false,
           noTenantNotification: true,
@@ -980,7 +1001,12 @@ function TenantCommunicationSendReview({
 
   async function sendRenewalEmail() {
     if (!savedSnapshot || !approvalDecision || !idempotencyKey || !sendPrerequisitesMet || !allConfirmationsChecked) {
-      setSendState({ status: "error", message: "Complete the send requirements and confirmations before sending." });
+      setSendState({
+        status: "error",
+        message: approvalSnapshotMismatch
+          ? "This approval belongs to an earlier draft snapshot. Save the current draft snapshot and approve it again before sending."
+          : "Complete the send requirements and confirmations before sending.",
+      });
       return;
     }
     setSendState({ status: "sending" });
@@ -997,9 +1023,12 @@ function TenantCommunicationSendReview({
       });
       setSendState({ status: "success", result });
     } catch (error) {
+      const rawMessage = String((error as Error)?.message || error || "");
       setSendState({
         status: "error",
-        message: errorMessage(error, "Renewal email could not be sent. Review the saved draft, approval decision, and recipient."),
+        message: rawMessage.includes("RENEWAL_NOTICE_APPROVAL_SNAPSHOT_MISMATCH")
+          ? "This approval belongs to an earlier draft snapshot. Save the current draft snapshot and approve it again before sending."
+          : errorMessage(error, "Renewal email could not be sent. Review the saved draft, approval decision, and recipient."),
       });
     }
   }
@@ -1036,9 +1065,19 @@ function TenantCommunicationSendReview({
         <SendStepCard
           step="Step 3"
           title="Approval decision"
-          status={approvalDecisionApproved ? "Approved" : approvalDecision ? "Needs approval" : "Needs review"}
+          status={
+            approvalSnapshotMismatch
+              ? "Needs current draft"
+              : approvalDecisionApproved
+                ? "Approved"
+                : approvalDecision
+                  ? "Needs approval"
+                  : "Needs review"
+          }
           description={
-            approvalDecisionApproved
+            approvalSnapshotMismatch
+              ? "Approval is tied to an older draft snapshot."
+              : approvalDecisionApproved
               ? "Internal approval is recorded."
               : approvalDecision
                 ? "Approve the decision before send confirmation."
@@ -1119,8 +1158,9 @@ function TenantCommunicationSendReview({
 
       {!sendPrerequisitesMet && !sendSucceeded ? (
         <div style={warningPanelStyle} aria-label="Send requirements">
-          Send renewal email unlocks after the draft snapshot is saved, the approval decision is approved, the tenant email
-          is available, and the draft body is ready.
+          {approvalSnapshotMismatch
+            ? "Approval decision is tied to an older draft snapshot. Save and approve the current draft snapshot before sending."
+            : "Send renewal email unlocks after the draft snapshot is saved, the approval decision is approved, the tenant email is available, and the draft body is ready."}
         </div>
       ) : null}
 
@@ -1236,6 +1276,16 @@ function TenantCommunicationSendReview({
               </Link>
             </div>
             <div style={decisionActionGridStyle}>
+              {approvalSnapshotMismatch ? (
+                <button
+                  type="button"
+                  onClick={() => void updateApprovalDecision("return_to_draft", "Approval decision updated for the current draft snapshot.")}
+                  disabled={decisionSubmitting}
+                  style={primaryButtonStyle}
+                >
+                  Update approval decision for current draft
+                </button>
+              ) : null}
               {!approvalDecisionApproved ? (
                 <button type="button" onClick={() => void updateApprovalDecision("acknowledge", "Decision acknowledged.")} disabled={decisionSubmitting} style={buttonStyle}>
                   Acknowledge
@@ -1257,7 +1307,9 @@ function TenantCommunicationSendReview({
               ) : null}
             </div>
             <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
-              {approvalDecisionApproved
+              {approvalSnapshotMismatch
+                ? "This approval belongs to an earlier draft snapshot. Update the approval decision for the current draft, then approve it again before sending."
+                : approvalDecisionApproved
                 ? "Internal approval has been recorded. Send still requires explicit confirmation before tenant communication."
                 : "Approved status is required before tenant communication can be sent."}
             </div>
