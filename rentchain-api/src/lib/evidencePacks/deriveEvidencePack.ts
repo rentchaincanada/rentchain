@@ -391,16 +391,49 @@ function renewalNoticeCommunicationTimestamp(record: Record<string, any>): strin
 
 function renewalNoticeCommunicationDeliveryLabel(value: unknown): string {
   const raw = asString(value, 120);
-  if (!raw || raw === "delivery_status_unknown") return "unknown";
+  if (!raw || raw === "delivery_status_unknown") return "Not tracked yet";
   return raw.replace(/_/g, " ");
 }
 
 function renewalNoticeCommunicationActionText(status: unknown): string {
   const raw = asString(status, 80);
-  if (raw === "email_sent") return "Email sent";
+  if (raw === "email_sent") return "Email accepted for sending";
   if (raw === "email_failed") return "Email failed";
   if (raw === "send_attempted") return "Send attempted";
   return "Communication recorded";
+}
+
+function renewalNoticeCommunicationContextLabel(record: Record<string, any>, input: DeriveEvidencePackInput): string {
+  const leaseId = asString(record.leaseId, 240);
+  const lease = arrayOf(input.leases).find((item) => asString(item.id || item.leaseId, 240) === leaseId);
+  if (lease) return leaseContextLabel(lease);
+  const propertyId = asString(record.propertyId, 240);
+  const property = arrayOf(input.properties).find((item) => asString(item.id || item.propertyId, 240) === propertyId);
+  if (property) return propertyContextLabel(property);
+  return "";
+}
+
+function renewalNoticeCommunicationDetails(record: Record<string, any>, input: DeriveEvidencePackInput): string {
+  const parts: string[] = [];
+  const communicationId = asString(record.communicationId || record.id, 240);
+  const leaseId = asString(record.leaseId, 240);
+  const contextLabel = renewalNoticeCommunicationContextLabel(record, input);
+  const recipientEmail = asString(record.recipientEmail, 320);
+  const snapshotId = asString(record.snapshotId, 240);
+  const approvalDecisionItemId = asString(record.approvalDecisionItemId, 240);
+  const deliveryLabel = renewalNoticeCommunicationDeliveryLabel(record.deliveryStatus);
+
+  if (communicationId) parts.push(`Communication ID: ${communicationId}.`);
+  if (leaseId) parts.push(`Lease ID: ${leaseId}.`);
+  if (contextLabel) parts.push(`Context: ${contextLabel}.`);
+  if (recipientEmail) parts.push(`Recipient email: ${recipientEmail}.`);
+  parts.push(`Delivery confirmation: ${deliveryLabel}.`);
+  if (snapshotId) parts.push(`Draft snapshot ID: ${snapshotId}.`);
+  if (approvalDecisionItemId) parts.push(`Approval decision ID: ${approvalDecisionItemId}.`);
+  if (record.confirmation) parts.push("Confirmation/audit status: send confirmations captured.");
+  parts.push("Not served; legal service not established.");
+  parts.push("Legal compliance not determined by this workflow.");
+  return parts.join(" ");
 }
 
 function groupRenewalNoticeCommunications(records: Record<string, any>[]): Record<string, any>[] {
@@ -436,13 +469,11 @@ function renewalNoticeCommunicationEvidenceItems(input: DeriveEvidencePackInput)
       const actionText = renewalNoticeCommunicationActionText(record.status);
       const timestamp = renewalNoticeCommunicationTimestamp(record);
       const timestampLabel = formatEvidenceTimestamp(timestamp);
-      const deliveryLabel = renewalNoticeCommunicationDeliveryLabel(record.deliveryStatus);
-      const tenantNotified = record.tenantNotified === true ? "Tenant notified by email provider acceptance." : "Tenant not notified.";
       const communicationId = asString(record.communicationId || record.id, 240);
       return evidenceItem({
         itemType: "communication_record",
         label: `Renewal tenant communication ${statusLabel}`,
-        description: `${actionText} at ${timestampLabel}. Provider delivery status: ${deliveryLabel}. ${tenantNotified} Not served; legal service not established.${communicationId ? ` Communication ID: ${communicationId}.` : ""}`,
+        description: `${actionText} at ${timestampLabel}. ${renewalNoticeCommunicationDetails(record, input)}`,
         source: "renewal_notice_communications",
         sourceId: communicationId || record.id,
         timestamp,

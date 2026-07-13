@@ -190,6 +190,7 @@ router.get("/review-timeline", requireAuth, requireLandlord, async (req: any, re
       institutionExportPackage,
       auditComplianceReadiness,
       canonicalEvents: auditEvents,
+      renewalNoticeCommunications,
       filters: {
         entryType: queryValue(req, "entryType"),
         status: queryValue(req, "status"),

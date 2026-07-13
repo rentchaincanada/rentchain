@@ -93,6 +93,7 @@ export type DeriveCanonicalReviewTimelineInput = {
   institutionExportPackage?: Record<string, any> | null;
   auditComplianceReadiness?: Record<string, any> | null;
   canonicalEvents?: Array<Record<string, any>> | null;
+  renewalNoticeCommunications?: Array<Record<string, any>> | null;
   recoveryLogs?: Array<Record<string, unknown>> | null;
   filters?: {
     entryType?: unknown;
