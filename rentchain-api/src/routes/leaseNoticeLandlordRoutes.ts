@@ -22,6 +22,10 @@ import {
   sanitizeLeaseRenewalOperatorInput,
   sendLeaseWorkflowEmail,
 } from "../services/leaseNoticeWorkflowService";
+import {
+  sendRenewalNoticeCommunication,
+  validateRenewalNoticeCommunicationInput,
+} from "../services/renewalNoticeCommunicationService";
 import { deriveLeaseLifecycleSummary } from "../services/leaseLifecycle/deriveLeaseLifecycleSummary";
 import { executeAutomation } from "../lib/automation/automationExecutor";
 import { buildLeaseNoticePolicyRequest } from "../lib/policy/policyAdapters";
@@ -249,6 +253,41 @@ router.post("/:id/renewal-notice-draft-snapshots", async (req: any, res) => {
   } catch (err: any) {
     console.error("[lease-notice] renewal draft snapshot save failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "LEASE_RENEWAL_DRAFT_SNAPSHOT_SAVE_FAILED" });
+  }
+});
+
+router.post("/:id/renewal-notice-communications", async (req: any, res) => {
+  try {
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const actorId = String(req.user?.id || landlordId || "").trim() || null;
+    const actorEmail = String(req.user?.email || req.user?.claims?.email || "").trim() || null;
+    const leaseId = String(req.params?.id || "").trim();
+    const validation = validateRenewalNoticeCommunicationInput(req.body || {});
+    if (!validation.ok) {
+      return res.status(400).json({ ok: false, error: validation.error, details: validation.details || [] });
+    }
+
+    const leaseResult = await getLeaseForLandlordWorkflow(leaseId, landlordId);
+    if (!leaseResult.ok) {
+      return res.status(leaseResult.status).json({ ok: false, error: leaseResult.error });
+    }
+
+    const result = await sendRenewalNoticeCommunication({
+      leaseId,
+      landlordId,
+      actorId,
+      actorEmail,
+      lease: normalizeLeaseRecord(leaseId, leaseResult.lease),
+      input: req.body || {},
+    });
+    if (!result.ok) {
+      const { statusCode, ...payload } = result;
+      return res.status(statusCode).json(payload);
+    }
+    return res.status(result.idempotent ? 200 : 201).json(result);
+  } catch (err: any) {
+    console.error("[lease-notice] renewal tenant communication send failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "RENEWAL_NOTICE_COMMUNICATION_SEND_FAILED" });
   }
 });
 

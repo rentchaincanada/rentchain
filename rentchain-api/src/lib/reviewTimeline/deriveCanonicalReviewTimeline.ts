@@ -66,7 +66,66 @@ function canonicalEventLabel(event: Record<string, any>): string {
   if (raw === "renewal_notice_draft_saved" || raw === "lease.renewal_notice_draft_saved") {
     return "Renewal notice draft saved";
   }
+  if (raw === "renewal_notice_send_confirmed" || raw === "lease.renewal_notice_send_confirmed") {
+    return "Renewal tenant communication send confirmed";
+  }
+  if (raw === "renewal_notice_email_send_attempted" || raw === "lease.renewal_notice_email_send_attempted") {
+    return "Renewal tenant communication send attempted";
+  }
+  if (raw === "renewal_notice_email_sent" || raw === "lease.renewal_notice_email_sent") {
+    return "Renewal tenant communication email sent";
+  }
+  if (raw === "renewal_notice_email_failed" || raw === "lease.renewal_notice_email_failed") {
+    return "Renewal tenant communication email failed";
+  }
   return raw || "Canonical event";
+}
+
+function isRenewalNoticeCommunicationEvent(event: Record<string, any>): boolean {
+  const raw = asString(event.type || event.action, 160);
+  return (
+    raw === "renewal_notice_send_confirmed" ||
+    raw === "lease.renewal_notice_send_confirmed" ||
+    raw === "renewal_notice_email_send_attempted" ||
+    raw === "lease.renewal_notice_email_send_attempted" ||
+    raw === "renewal_notice_email_sent" ||
+    raw === "lease.renewal_notice_email_sent" ||
+    raw === "renewal_notice_email_failed" ||
+    raw === "lease.renewal_notice_email_failed"
+  );
+}
+
+function formatTimelineTimestamp(value: unknown): string {
+  const iso = toIso(value, "");
+  if (!iso) return "time unavailable";
+  return iso.replace("T", " ").slice(0, 16) + " UTC";
+}
+
+function renewalNoticeCommunicationStatusText(event: Record<string, any>): string {
+  const raw = asString(event.type || event.action, 160);
+  if (raw === "renewal_notice_email_sent" || raw === "lease.renewal_notice_email_sent") return "email sent";
+  if (raw === "renewal_notice_email_failed" || raw === "lease.renewal_notice_email_failed") return "email failed";
+  if (raw === "renewal_notice_email_send_attempted" || raw === "lease.renewal_notice_email_send_attempted") return "send attempted";
+  if (raw === "renewal_notice_send_confirmed" || raw === "lease.renewal_notice_send_confirmed") return "send confirmed internally";
+  return "communication recorded";
+}
+
+function renewalNoticeCommunicationTimelineDescription(event: Record<string, any>): string | null {
+  if (!isRenewalNoticeCommunicationEvent(event)) return null;
+  const metadata = event.metadata || {};
+  const communicationId = asString(metadata.communicationId || event.communicationId, 240);
+  const rawDeliveryStatus = asString(metadata.deliveryStatus || event.deliveryStatus, 120);
+  const deliveryStatus = !rawDeliveryStatus || rawDeliveryStatus === "delivery_status_unknown"
+    ? "unknown"
+    : rawDeliveryStatus.replace(/_/g, " ");
+  const occurredAt = formatTimelineTimestamp(event.occurredAt || event.recordedAt || event.createdAt);
+  const status = renewalNoticeCommunicationStatusText(event);
+  const idText = communicationId ? ` Communication ID: ${communicationId}.` : "";
+  const tenantNoticeText =
+    metadata.tenantNotified === true || event.tenantNotified === true
+      ? " Tenant notified by email provider acceptance."
+      : "";
+  return `Renewal tenant communication ${status} at ${occurredAt}.${idText} Status: ${status}. Provider delivery status: ${deliveryStatus}.${tenantNoticeText} Not served; legal service not established.`;
 }
 
 function normalizeActor(raw: any): ReviewTimelineActor {
@@ -254,7 +313,7 @@ function canonicalEventEntries(input: DeriveCanonicalReviewTimelineInput): Revie
         entryType: "canonical_event",
         timestamp: event.occurredAt || event.recordedAt,
         label: canonicalEventLabel(event),
-        description: event.summary || "Canonical event recorded.",
+        description: renewalNoticeCommunicationTimelineDescription(event) || event.summary || "Canonical event recorded.",
         status: event.status === "blocked" ? "blocked" : "info",
         actor: normalizeActor(event.actor),
         source: "canonical_events",

@@ -98,12 +98,38 @@ function canonicalEventLabel(event: Record<string, any>): string {
   if (raw === "renewal_notice_draft_saved" || raw === "lease.renewal_notice_draft_saved") {
     return "Renewal notice draft snapshot";
   }
+  if (raw === "renewal_notice_send_confirmed" || raw === "lease.renewal_notice_send_confirmed") {
+    return "Renewal tenant communication send confirmed";
+  }
+  if (raw === "renewal_notice_email_send_attempted" || raw === "lease.renewal_notice_email_send_attempted") {
+    return "Renewal tenant communication send attempted";
+  }
+  if (raw === "renewal_notice_email_sent" || raw === "lease.renewal_notice_email_sent") {
+    return "Renewal tenant communication email sent";
+  }
+  if (raw === "renewal_notice_email_failed" || raw === "lease.renewal_notice_email_failed") {
+    return "Renewal tenant communication email failed";
+  }
   return raw || "Canonical event";
 }
 
 function isRenewalNoticeDraftSavedEvent(event: Record<string, any>): boolean {
   const raw = asString(event.type || event.action, 160);
   return raw === "renewal_notice_draft_saved" || raw === "lease.renewal_notice_draft_saved";
+}
+
+function isRenewalNoticeCommunicationEvent(event: Record<string, any>): boolean {
+  const raw = asString(event.type || event.action, 160);
+  return (
+    raw === "renewal_notice_send_confirmed" ||
+    raw === "lease.renewal_notice_send_confirmed" ||
+    raw === "renewal_notice_email_send_attempted" ||
+    raw === "lease.renewal_notice_email_send_attempted" ||
+    raw === "renewal_notice_email_sent" ||
+    raw === "lease.renewal_notice_email_sent" ||
+    raw === "renewal_notice_email_failed" ||
+    raw === "lease.renewal_notice_email_failed"
+  );
 }
 
 function eventTimestamp(event: Record<string, any>): string | null {
@@ -315,9 +341,14 @@ function operatorReviewSection(input: DeriveEvidencePackInput): EvidencePackSect
 
 function canonicalEventsSection(input: DeriveEvidencePackInput): EvidencePackSection {
   const scopedEvents = arrayOf(input.canonicalEvents).filter((event) => isRelatedToScope(event, input.scope, input.scopeId));
+  const communicationItems = renewalNoticeCommunicationEvidenceItems(input);
   const renewalDraftItems = renewalNoticeDraftSnapshotEvidenceItem(scopedEvents);
-  const events = scopedEvents.filter((event) => !isRenewalNoticeDraftSavedEvent(event)).slice(0, 20 - renewalDraftItems.length);
+  const events = scopedEvents
+    .filter((event) => !isRenewalNoticeDraftSavedEvent(event))
+    .filter((event) => !(communicationItems.length && isRenewalNoticeCommunicationEvent(event)))
+    .slice(0, Math.max(0, 20 - renewalDraftItems.length - communicationItems.length));
   const items = [
+    ...communicationItems,
     ...renewalDraftItems,
     ...events.map((event) =>
       evidenceItem({
@@ -336,6 +367,87 @@ function canonicalEventsSection(input: DeriveEvidencePackInput): EvidencePackSec
     items,
     missingEvidence: items.length ? [] : ["No landlord-scoped canonical events were available for this scope."],
   });
+}
+
+function renewalNoticeCommunicationStatusLabel(status: unknown): string {
+  const raw = asString(status, 80);
+  if (raw === "email_sent") return "email sent";
+  if (raw === "email_failed") return "email failed";
+  if (raw === "send_attempted") return "send attempted";
+  return "communication recorded";
+}
+
+function renewalNoticeCommunicationRank(record: Record<string, any>): number {
+  const status = asString(record.status, 80);
+  if (status === "email_sent") return 3;
+  if (status === "email_failed") return 2;
+  if (status === "send_attempted") return 1;
+  return 0;
+}
+
+function renewalNoticeCommunicationTimestamp(record: Record<string, any>): string | null {
+  return normalizeTimestamp(record.sentAt || record.failedAt || record.attemptedAt || record.createdAt);
+}
+
+function renewalNoticeCommunicationDeliveryLabel(value: unknown): string {
+  const raw = asString(value, 120);
+  if (!raw || raw === "delivery_status_unknown") return "unknown";
+  return raw.replace(/_/g, " ");
+}
+
+function renewalNoticeCommunicationActionText(status: unknown): string {
+  const raw = asString(status, 80);
+  if (raw === "email_sent") return "Email sent";
+  if (raw === "email_failed") return "Email failed";
+  if (raw === "send_attempted") return "Send attempted";
+  return "Communication recorded";
+}
+
+function groupRenewalNoticeCommunications(records: Record<string, any>[]): Record<string, any>[] {
+  const byCommunicationId = new Map<string, Record<string, any>[]>();
+  for (const record of records) {
+    const key = asString(record.communicationId || record.id, 240) || `missing:${byCommunicationId.size}`;
+    byCommunicationId.set(key, [...(byCommunicationId.get(key) || []), record]);
+  }
+
+  return Array.from(byCommunicationId.entries()).map(([communicationId, group]) => {
+    const ordered = [...group].sort((a, b) => {
+      const rankDelta = renewalNoticeCommunicationRank(b) - renewalNoticeCommunicationRank(a);
+      if (rankDelta) return rankDelta;
+      return (renewalNoticeCommunicationTimestamp(b) || "").localeCompare(renewalNoticeCommunicationTimestamp(a) || "");
+    });
+    return { ...ordered[0], communicationId };
+  });
+}
+
+function renewalNoticeCommunicationEvidenceItems(input: DeriveEvidencePackInput): EvidenceItem[] {
+  const groupedRecords = groupRenewalNoticeCommunications(
+    arrayOf(input.renewalNoticeCommunications)
+    .filter((record) => isRelatedToScope(record, input.scope, input.scopeId))
+  );
+
+  return groupedRecords
+    .sort((a, b) =>
+      (renewalNoticeCommunicationTimestamp(b) || "").localeCompare(renewalNoticeCommunicationTimestamp(a) || ""),
+    )
+    .slice(0, 5)
+    .map((record) => {
+      const statusLabel = renewalNoticeCommunicationStatusLabel(record.status);
+      const actionText = renewalNoticeCommunicationActionText(record.status);
+      const timestamp = renewalNoticeCommunicationTimestamp(record);
+      const timestampLabel = formatEvidenceTimestamp(timestamp);
+      const deliveryLabel = renewalNoticeCommunicationDeliveryLabel(record.deliveryStatus);
+      const tenantNotified = record.tenantNotified === true ? "Tenant notified by email provider acceptance." : "Tenant not notified.";
+      const communicationId = asString(record.communicationId || record.id, 240);
+      return evidenceItem({
+        itemType: "communication_record",
+        label: `Renewal tenant communication ${statusLabel}`,
+        description: `${actionText} at ${timestampLabel}. Provider delivery status: ${deliveryLabel}. ${tenantNotified} Not served; legal service not established.${communicationId ? ` Communication ID: ${communicationId}.` : ""}`,
+        source: "renewal_notice_communications",
+        sourceId: communicationId || record.id,
+        timestamp,
+      });
+    });
 }
 
 function exportSection(input: DeriveEvidencePackInput): EvidencePackSection {

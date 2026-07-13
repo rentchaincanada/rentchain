@@ -16,6 +16,64 @@ const stripeMocks = vi.hoisted(() => ({
   constructEvent: vi.fn(),
 }));
 
+const renewalNoticeCommunicationMocks = vi.hoisted(() => ({
+  sendRenewalNoticeCommunication: vi.fn(async () => ({
+    ok: true,
+    communicationId: "communication-mounted-success",
+    status: "email_sent",
+    deliveryStatus: "delivery_status_unknown",
+    attemptedAt: "2026-07-11T12:10:00.000Z",
+    sentAt: "2026-07-11T12:10:01.000Z",
+    providerMessageId: null,
+    auditEventId: "event-communication-mounted-success",
+    timelineEventId: "canonical-communication-mounted-success",
+    noLegalServiceClaim: true,
+    noticeServed: false,
+    tenantNotified: true,
+    legalServiceEstablished: false,
+  })),
+  validateRenewalNoticeCommunicationInput: vi.fn((input: any) => {
+    if (!String(input?.snapshotId || "").trim()) {
+      return { ok: false, error: "RENEWAL_NOTICE_SNAPSHOT_ID_REQUIRED", details: ["snapshotId"] };
+    }
+    if (!String(input?.approvalDecisionItemId || "").trim()) {
+      return {
+        ok: false,
+        error: "RENEWAL_NOTICE_APPROVAL_DECISION_ITEM_ID_REQUIRED",
+        details: ["approvalDecisionItemId"],
+      };
+    }
+    if (input?.confirmationAccepted !== true) {
+      return { ok: false, error: "RENEWAL_NOTICE_CONFIRMATION_ACCEPTED_REQUIRED", details: ["confirmationAccepted"] };
+    }
+    if (input?.recipientReviewed !== true) {
+      return { ok: false, error: "RENEWAL_NOTICE_RECIPIENT_REVIEWED_REQUIRED", details: ["recipientReviewed"] };
+    }
+    if (input?.bodyReviewed !== true) {
+      return { ok: false, error: "RENEWAL_NOTICE_BODY_REVIEWED_REQUIRED", details: ["bodyReviewed"] };
+    }
+    if (input?.legalServiceAcknowledged !== true) {
+      return {
+        ok: false,
+        error: "RENEWAL_NOTICE_LEGAL_SERVICE_ACKNOWLEDGED_REQUIRED",
+        details: ["legalServiceAcknowledged"],
+      };
+    }
+    if (input?.noLegalServiceClaim !== true) {
+      return { ok: false, error: "RENEWAL_NOTICE_NO_LEGAL_SERVICE_CLAIM_REQUIRED", details: ["noLegalServiceClaim"] };
+    }
+    if (!String(input?.idempotencyKey || "").trim()) {
+      return { ok: false, error: "RENEWAL_NOTICE_IDEMPOTENCY_KEY_REQUIRED", details: ["idempotencyKey"] };
+    }
+    return {
+      ok: true,
+      snapshotId: String(input.snapshotId),
+      approvalDecisionItemId: String(input.approvalDecisionItemId),
+      idempotencyKey: String(input.idempotencyKey),
+    };
+  }),
+}));
+
 function buildEmptyQuery() {
   return {
     where: () => buildEmptyQuery(),
@@ -156,6 +214,11 @@ vi.mock("../../services/screening/screeningEvents", () => ({
 
 vi.mock("../../services/emailService", () => ({
   sendEmail: vi.fn(async () => undefined),
+}));
+
+vi.mock("../../services/renewalNoticeCommunicationService", () => ({
+  sendRenewalNoticeCommunication: renewalNoticeCommunicationMocks.sendRenewalNoticeCommunication,
+  validateRenewalNoticeCommunicationInput: renewalNoticeCommunicationMocks.validateRenewalNoticeCommunicationInput,
 }));
 
 function appBuildSource() {
@@ -339,6 +402,11 @@ describe("API route ownership regression", () => {
     const leaseNoticeLandlordMount = source.indexOf(
       'app.use("/api/landlord/leases", routeSource("leaseNoticeLandlordRoutes.ts"), leaseNoticeLandlordRoutes)'
     );
+    const landlordInboxMount = source.indexOf('app.use("/api/landlord", routeSource("landlordInboxRoutes.ts"), landlordInboxRoutes)');
+    const delegatedAccessLandlordMount = source.indexOf(
+      'app.use("/api/landlord", routeSource("delegatedAccessInvitationRoutes.ts"), delegatedAccessInvitationRoutes)'
+    );
+    const landlordActivationMount = source.indexOf('app.use("/api/landlord", routeSource("landlordActivationRoutes.ts"), landlordActivationRoutes)');
     const statusMount = source.indexOf('app.use("/api/status", statusRoutes)');
     const paymentsBroadMount = source.indexOf('app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes)');
     const publicPortfolioMount = source.indexOf('app.use("/api", routeSource("publicPortfolioScoreRoutes.ts"), publicPortfolioScoreRoutes)');
@@ -364,6 +432,9 @@ describe("API route ownership regression", () => {
     expect(screeningRoutesMount).toBeGreaterThan(-1);
     expect(evidencePackageMount).toBeGreaterThan(-1);
     expect(leaseNoticeLandlordMount).toBeGreaterThan(-1);
+    expect(landlordInboxMount).toBeGreaterThan(-1);
+    expect(delegatedAccessLandlordMount).toBeGreaterThan(-1);
+    expect(landlordActivationMount).toBeGreaterThan(-1);
     expect(statusMount).toBeGreaterThan(-1);
     expect(paymentsBroadMount).toBeGreaterThan(-1);
     expect(publicPortfolioMount).toBeGreaterThan(-1);
@@ -391,6 +462,9 @@ describe("API route ownership regression", () => {
     expect(telemetryMount).toBeLessThan(riskAgentMount);
     expect(screeningRoutesMount).toBeLessThan(riskAgentMount);
     expect(evidencePackageMount).toBeLessThan(screeningJobsMount);
+    expect(leaseNoticeLandlordMount).toBeLessThan(landlordInboxMount);
+    expect(leaseNoticeLandlordMount).toBeLessThan(delegatedAccessLandlordMount);
+    expect(leaseNoticeLandlordMount).toBeLessThan(landlordActivationMount);
     expect(leaseNoticeLandlordMount).toBeLessThan(screeningJobsMount);
     expect(leaseNoticeLandlordMount).toBeLessThan(apiCatchall);
     expect(buildProbeRoute).toBeLessThan(riskAgentMount);
@@ -602,6 +676,84 @@ describe("API route ownership regression", () => {
     expect(draftSnapshotUnknownLease.headers["x-route-source"]).toBe("leaseNoticeLandlordRoutes.ts");
     expect(draftSnapshotUnknownLease.body?.error).toBe("LEASE_NOT_FOUND");
     expect(draftSnapshotUnknownLease.body?.error).not.toBe("Not Found");
+
+    const communicationRes = await invokeApp(app, {
+      method: "POST",
+      url: "/api/landlord/leases/lease-mounted-success/renewal-notice-communications",
+      headers: { authorization: "Bearer landlord-token" },
+      body: {
+        snapshotId: "snapshot-mounted-success",
+        approvalDecisionItemId: "decision-mounted-success",
+        confirmationAccepted: true,
+        recipientReviewed: true,
+        bodyReviewed: true,
+        legalServiceAcknowledged: true,
+        noLegalServiceClaim: true,
+        idempotencyKey: "idem-mounted-success",
+      },
+    });
+    expect(communicationRes.status).toBe(201);
+    expect(communicationRes.headers["x-route-source"]).toBe("leaseNoticeLandlordRoutes.ts");
+    expect(communicationRes.body).toEqual(
+      expect.objectContaining({
+        ok: true,
+        communicationId: "communication-mounted-success",
+        noticeServed: false,
+        legalServiceEstablished: false,
+      })
+    );
+
+    renewalNoticeCommunicationMocks.sendRenewalNoticeCommunication.mockResolvedValueOnce({
+      ok: false,
+      statusCode: 400,
+      error: "RENEWAL_NOTICE_SNAPSHOT_ID_REQUIRED",
+      details: ["snapshotId"],
+    });
+    const communicationValidationRes = await invokeApp(app, {
+      method: "POST",
+      url: "/api/landlord/leases/lease-mounted-success/renewal-notice-communications",
+      headers: { authorization: "Bearer landlord-token" },
+      body: {
+        approvalDecisionItemId: "decision-mounted-success",
+        confirmationAccepted: true,
+        recipientReviewed: true,
+        bodyReviewed: true,
+        legalServiceAcknowledged: true,
+        noLegalServiceClaim: true,
+        idempotencyKey: "idem-mounted-success",
+      },
+    });
+    expect(communicationValidationRes.status).toBe(400);
+    expect(communicationValidationRes.headers["x-route-source"]).toBe("leaseNoticeLandlordRoutes.ts");
+    expect(communicationValidationRes.body?.error).toBe("RENEWAL_NOTICE_SNAPSHOT_ID_REQUIRED");
+    expect(communicationValidationRes.body?.error).not.toBe("Not Found");
+
+    const communicationMissingAuth = await invokeApp(app, {
+      method: "POST",
+      url: "/api/landlord/leases/lease-mounted-success/renewal-notice-communications",
+      body: {},
+    });
+    expect(communicationMissingAuth.status).toBe(401);
+    expect(communicationMissingAuth.headers["x-route-source"]).toBe("leaseNoticeLandlordRoutes.ts");
+
+    const communicationUnknownLease = await invokeApp(app, {
+      method: "POST",
+      url: "/api/landlord/leases/lease-missing/renewal-notice-communications",
+      headers: { authorization: "Bearer landlord-token" },
+      body: {
+        snapshotId: "snapshot-mounted-success",
+        approvalDecisionItemId: "decision-mounted-success",
+        confirmationAccepted: true,
+        recipientReviewed: true,
+        bodyReviewed: true,
+        legalServiceAcknowledged: true,
+        noLegalServiceClaim: true,
+        idempotencyKey: "idem-mounted-success",
+      },
+    });
+    expect(communicationUnknownLease.status).toBe(404);
+    expect(communicationUnknownLease.headers["x-route-source"]).toBe("leaseNoticeLandlordRoutes.ts");
+    expect(communicationUnknownLease.body?.error).toBe("LEASE_NOT_FOUND");
 
     const internalRes = await invokeApp(app, {
       method: "POST",

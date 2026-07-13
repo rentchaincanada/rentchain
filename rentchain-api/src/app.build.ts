@@ -513,6 +513,8 @@ app.use("/api", routeSource("landlordPortfolioScoreRoutes.ts"), landlordPortfoli
 console.log("[route-mount] landlordPortfolioScoreRoutes mounted at /api");
 app.use("/api", routeSource("landlordPortfolioScoreSharingRoutes.ts"), landlordPortfolioScoreSharingRoutes);
 console.log("[route-mount] landlordPortfolioScoreSharingRoutes mounted at /api");
+app.use("/api/landlord/leases", routeSource("leaseNoticeLandlordRoutes.ts"), leaseNoticeLandlordRoutes);
+console.log("[route-mount] leaseNoticeLandlordRoutes mounted at /api/landlord/leases");
 app.use("/api/landlord", routeSource("landlordInboxRoutes.ts"), landlordInboxRoutes);
 console.log("[route-mount] landlordInboxRoutes mounted at /api/landlord");
 app.use("/api/landlord", routeSource("landlordDecisionInboxRoutes.ts"), landlordDecisionInboxRoutes);
@@ -653,7 +655,6 @@ app.use("/api", routeSource("tenantEventsRoutes"), tenantEventsRoutes);
 app.use("/api", routeSource("tenantEventsWriteRoutes"), tenantEventsWriteRoutes);
 app.use("/api", routeSource("ledgerAttachmentsRoutes"), ledgerAttachmentsRoutes);
 app.use("/api", routeSource("tenantNoticesRoutes"), tenantNoticesRoutes);
-app.use("/api/landlord/leases", routeSource("leaseNoticeLandlordRoutes.ts"), leaseNoticeLandlordRoutes);
 app.use("/api/tenant/lease-notices", routeSource("tenantLeaseNoticeRoutes.ts"), tenantLeaseNoticeRoutes);
 app.use("/api", routeSource("maintenanceRequestsRoutes"), maintenanceRequestsRoutes);
 app.use("/api", routeSource("usageBreakdownRoutes.ts"), usageBreakdownRoutes);

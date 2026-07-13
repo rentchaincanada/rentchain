@@ -17,6 +17,7 @@ const SOURCE_COLLECTION_BY_ITEM_SOURCE: Record<EvidenceItemSource, string> = {
   lease_ledger: "leases",
   maintenance: "maintenanceRequests",
   operator_review: "operatorReviewSessions",
+  renewal_notice_communications: "renewalNoticeCommunications",
   registry: "properties",
   workflow_routing: "decisionItems",
   unknown: "unknown",
