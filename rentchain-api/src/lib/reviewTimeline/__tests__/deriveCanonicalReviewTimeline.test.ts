@@ -191,7 +191,7 @@ describe("deriveCanonicalReviewTimeline", () => {
           approvalDecisionItemId: "decision-1",
           recipientEmail: "hello+tenant@rentchain.ai",
           status: "email_sent",
-          deliveryStatus: "delivery_status_unknown",
+          deliveryStatus: "accepted_for_sending",
           sentAt: "2026-07-11T12:10:00.000Z",
           confirmation: {
             confirmationAccepted: true,
@@ -245,7 +245,7 @@ describe("deriveCanonicalReviewTimeline", () => {
           actor: { type: "landlord", id: "landlord-1" },
           metadata: {
             communicationId: "rnc_test",
-            deliveryStatus: "delivery_status_unknown",
+            deliveryStatus: "accepted_for_sending",
             tenantNotified: true,
           },
           occurredAt: "2026-07-11T12:10:00.000Z",
@@ -267,7 +267,7 @@ describe("deriveCanonicalReviewTimeline", () => {
           source: "canonical_events",
           label: "Renewal tenant communication email sent",
           description:
-            "Renewal tenant communication email sent at 2026-07-11 12:10 UTC. Communication ID: rnc_test. Status: email sent. Recipient email: hello+tenant@rentchain.ai. Delivery confirmation: Not tracked yet. Draft snapshot ID: snapshot-1. Approval decision ID: decision-1. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
+            "Renewal tenant communication email sent at 2026-07-11 12:10 UTC. Communication ID: rnc_test. Status: email sent. Recipient email: hello+tenant@rentchain.ai. Delivery confirmation: Accepted for sending. Draft snapshot ID: snapshot-1. Approval decision ID: decision-1. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
         }),
         expect.objectContaining({
           label: "Renewal tenant communication send attempted",
@@ -282,5 +282,71 @@ describe("deriveCanonicalReviewTimeline", () => {
       ])
     );
     expect(JSON.stringify(timeline)).not.toMatch(/private body text|provider-secret|legally served|legal delivery|compliant notice|provider delivery confirmed/i);
+  });
+
+  it("labels failed and legacy renewal tenant communication events without legal-service claims", () => {
+    const timeline = deriveCanonicalReviewTimeline({
+      scope: "lease",
+      scopeId: "lease-1",
+      landlordId: "landlord-1",
+      renewalNoticeCommunications: [
+        {
+          communicationId: "rnc_failed",
+          leaseId: "lease-1",
+          snapshotId: "snapshot-failed",
+          approvalDecisionItemId: "decision-failed",
+          recipientEmail: "hello+tenant@rentchain.ai",
+          status: "email_failed",
+          deliveryStatus: "failed",
+          failedAt: "2026-07-11T12:20:02.000Z",
+          providerPayload: { raw: "provider-secret" },
+        },
+        {
+          communicationId: "rnc_legacy",
+          leaseId: "lease-1",
+          snapshotId: "snapshot-legacy",
+          approvalDecisionItemId: "decision-legacy",
+          recipientEmail: "hello+tenant@rentchain.ai",
+          status: "email_sent",
+          sentAt: "2026-07-11T12:10:02.000Z",
+        },
+      ],
+      canonicalEvents: [
+        {
+          id: "event-failed-1",
+          type: "renewal_notice_email_failed",
+          action: "renewal_notice_email_failed",
+          summary: "Renewal tenant communication email failed. Not served; legal service not established.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          metadata: { communicationId: "rnc_failed", deliveryStatus: "failed" },
+          occurredAt: "2026-07-11T12:20:02.000Z",
+        },
+        {
+          id: "event-legacy-1",
+          type: "renewal_notice_email_sent",
+          action: "renewal_notice_email_sent",
+          summary: "Renewal tenant communication email sent. Not served; legal service not established.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          metadata: { communicationId: "rnc_legacy" },
+          occurredAt: "2026-07-11T12:10:02.000Z",
+        },
+      ],
+    });
+
+    expect(timeline.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Renewal tenant communication email failed",
+          description: expect.stringContaining("Delivery confirmation: Failed by email provider."),
+        }),
+        expect.objectContaining({
+          label: "Renewal tenant communication email sent",
+          description: expect.stringContaining("Delivery confirmation: Not tracked yet."),
+        }),
+      ])
+    );
+    expect(JSON.stringify(timeline)).not.toMatch(/provider-secret|notice served|legally delivered|tenant received|compliance achieved|statutory notice completed/i);
   });
 });

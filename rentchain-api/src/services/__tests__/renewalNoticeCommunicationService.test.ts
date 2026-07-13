@@ -43,7 +43,11 @@ const { collections, dbMock, sendEmailMock, lookupUserEmailMock } = vi.hoisted((
   return {
     collections,
     dbMock,
-    sendEmailMock: vi.fn(async () => undefined),
+    sendEmailMock: vi.fn(async () => ({
+      provider: "mailgun",
+      providerMessageId: "<provider-message@mg.example.com>",
+      providerResponseId: "<provider-message@mg.example.com>",
+    })),
     lookupUserEmailMock: vi.fn(async () => "tenant@example.com"),
   };
 });
@@ -144,7 +148,11 @@ describe("sendRenewalNoticeCommunication", () => {
     collections.clear();
     vi.clearAllMocks();
     lookupUserEmailMock.mockResolvedValue("tenant@example.com");
-    sendEmailMock.mockResolvedValue(undefined);
+    sendEmailMock.mockResolvedValue({
+      provider: "mailgun",
+      providerMessageId: "<provider-message@mg.example.com>",
+      providerResponseId: "<provider-message@mg.example.com>",
+    });
     seedDoc("renewalNoticeDraftSnapshots", "snapshot-1", baseSnapshot());
     seedDoc("landlordDecisionQueueItems", "decision-1", baseDecision());
   });
@@ -156,7 +164,8 @@ describe("sendRenewalNoticeCommunication", () => {
       expect.objectContaining({
         ok: true,
         status: "email_sent",
-        deliveryStatus: "delivery_status_unknown",
+        deliveryStatus: "accepted_for_sending",
+        providerMessageId: "<provider-message@mg.example.com>",
         noticeServed: false,
         tenantNotified: true,
         legalServiceEstablished: false,
@@ -179,6 +188,10 @@ describe("sendRenewalNoticeCommunication", () => {
         snapshotId: "snapshot-1",
         approvalDecisionItemId: "decision-1",
         status: "email_sent",
+        deliveryStatus: "accepted_for_sending",
+        deliveryStatusSource: "send_response",
+        deliveryStatusReason: "mailgun_accepted",
+        providerMessageId: "<provider-message@mg.example.com>",
         tenantNotified: true,
         noticeServed: false,
         legalServiceEstablished: false,
@@ -292,6 +305,7 @@ describe("sendRenewalNoticeCommunication", () => {
         statusCode: 502,
         error: "RENEWAL_NOTICE_EMAIL_SEND_FAILED",
         status: "email_failed",
+        deliveryStatus: "failed",
         tenantNotified: false,
         noticeServed: false,
         legalServiceEstablished: false,
@@ -301,6 +315,9 @@ describe("sendRenewalNoticeCommunication", () => {
     expect(communications[0]).toEqual(
       expect.objectContaining({
         status: "email_failed",
+        deliveryStatus: "failed",
+        deliveryStatusSource: "send_response",
+        deliveryStatusReason: "mailgun_send_failed:500",
         tenantNotified: false,
         noticeServed: false,
         legalServiceEstablished: false,
@@ -331,6 +348,9 @@ describe("sendRenewalNoticeCommunication", () => {
         visibility: "landlord",
         summary: "Renewal tenant communication email sent. Not served; legal service not established.",
         metadata: expect.objectContaining({
+          deliveryStatus: "accepted_for_sending",
+          deliveryStatusSource: "send_response",
+          providerMessageId: "<provider-message@mg.example.com>",
           tenantNotified: true,
           noticeServed: false,
           legalServiceEstablished: false,

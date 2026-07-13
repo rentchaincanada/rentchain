@@ -120,6 +120,24 @@ function renewalNoticeCommunicationRecordFor(
   return (records || []).find((record) => asString(record.communicationId || record.id, 240) === communicationId) || null;
 }
 
+function renewalNoticeCommunicationDeliveryLabel(value: unknown): string {
+  const raw = asString(value, 120);
+  if (!raw || raw === "delivery_status_unknown" || raw === "not_tracked") return "Not tracked yet";
+  if (raw === "accepted_for_sending") return "Accepted for sending";
+  if (raw === "queued") return "Queued by email provider";
+  if (raw === "sent") return "Sent by email provider";
+  if (raw === "delivered") return "Delivered by email provider";
+  if (raw === "bounced") return "Bounce detected by email provider";
+  if (raw === "failed") return "Failed by email provider";
+  if (raw === "deferred") return "Deferred by email provider";
+  if (raw === "rejected") return "Rejected by email provider";
+  if (raw === "complained") return "Complaint reported by email provider";
+  if (raw === "opened") return "Open event recorded by provider";
+  if (raw === "clicked") return "Click event recorded by provider";
+  if (raw === "unknown") return "Unknown";
+  return raw.replace(/_/g, " ");
+}
+
 function renewalNoticeCommunicationTimelineDescriptionForInput(
   event: Record<string, any>,
   input: DeriveCanonicalReviewTimelineInput
@@ -128,10 +146,9 @@ function renewalNoticeCommunicationTimelineDescriptionForInput(
   const metadata = { ...(event.payload || {}), ...(event.metadata || {}) };
   const record = renewalNoticeCommunicationRecordFor(event, input.renewalNoticeCommunications);
   const communicationId = asString(metadata.communicationId || event.communicationId || record?.communicationId || record?.id, 240);
-  const rawDeliveryStatus = asString(metadata.deliveryStatus || event.deliveryStatus || record?.deliveryStatus, 120);
-  const deliveryStatus = !rawDeliveryStatus || rawDeliveryStatus === "delivery_status_unknown"
-    ? "Not tracked yet"
-    : rawDeliveryStatus.replace(/_/g, " ");
+  const deliveryStatus = renewalNoticeCommunicationDeliveryLabel(
+    metadata.deliveryStatus || event.deliveryStatus || record?.deliveryStatus
+  );
   const occurredAt = formatTimelineTimestamp(event.occurredAt || event.recordedAt || event.createdAt || record?.sentAt || record?.attemptedAt);
   const status = renewalNoticeCommunicationStatusText(event);
   const parts = [

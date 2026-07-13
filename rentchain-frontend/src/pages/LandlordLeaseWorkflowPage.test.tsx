@@ -311,10 +311,10 @@ describe("LandlordLeaseWorkflowPage", () => {
       ok: true,
       communicationId: "rnc_test",
       status: "email_sent",
-      deliveryStatus: "delivery_status_unknown",
+      deliveryStatus: "accepted_for_sending",
       attemptedAt: "2026-07-13T12:00:00.000Z",
       sentAt: "2026-07-13T12:00:01.000Z",
-      providerMessageId: null,
+      providerMessageId: "<provider-message@mg.example.com>",
       auditEventId: "communication-audit-1",
       timelineEventId: "renewal_notice_email_sent:rnc_test:2026-07-13T12:00:01.000Z",
       noLegalServiceClaim: true,
@@ -1085,9 +1085,9 @@ describe("LandlordLeaseWorkflowPage", () => {
     });
     expect(await screen.findByLabelText("Renewal email sent status")).toHaveTextContent("Renewal email sent");
     expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Delivery confirmation");
-    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Not tracked yet");
+    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Accepted for sending");
     expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent(
-      "Email was accepted for sending. Provider delivery, bounce, and open tracking are not enabled yet."
+      "Email was accepted for sending. Delivery confirmation beyond provider acceptance is not tracked yet."
     );
     expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Not served; legal service not established");
     expect(screen.getByLabelText("Renewal email sent status")).not.toHaveTextContent("Delivery status unknown");
@@ -1200,10 +1200,10 @@ describe("LandlordLeaseWorkflowPage", () => {
         idempotent: true,
         communicationId: "rnc_retry",
         status: "email_sent",
-        deliveryStatus: "delivery_status_unknown",
+        deliveryStatus: "accepted_for_sending",
         attemptedAt: "2026-07-13T12:00:00.000Z",
         sentAt: "2026-07-13T12:00:01.000Z",
-        providerMessageId: null,
+        providerMessageId: "<provider-message@mg.example.com>",
         auditEventId: "communication-audit-2",
         timelineEventId: "renewal_notice_email_sent:rnc_retry:2026-07-13T12:00:01.000Z",
         noLegalServiceClaim: true,

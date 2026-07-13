@@ -363,7 +363,7 @@ describe("deriveEvidencePack", () => {
           approvalDecisionItemId: "decision-1",
           recipientEmail: "hello+tenant@rentchain.ai",
           status: "email_sent",
-          deliveryStatus: "delivery_status_unknown",
+          deliveryStatus: "accepted_for_sending",
           attemptedAt: "2026-07-11T12:10:00.000Z",
           sentAt: "2026-07-11T12:10:02.000Z",
           tenantNotified: true,
@@ -442,13 +442,69 @@ describe("deriveEvidencePack", () => {
           itemType: "communication_record",
           label: "Renewal tenant communication email sent",
           description:
-            "Email accepted for sending at 2026-07-11 12:10 UTC. Communication ID: communication-1. Lease ID: lease-1. Context: North Towers · Unit 101 · John Smith. Recipient email: hello+tenant@rentchain.ai. Delivery confirmation: Not tracked yet. Draft snapshot ID: snapshot-1. Approval decision ID: decision-1. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
+            "Email accepted for sending at 2026-07-11 12:10 UTC. Communication ID: communication-1. Lease ID: lease-1. Context: North Towers · Unit 101 · John Smith. Recipient email: hello+tenant@rentchain.ai. Delivery confirmation: Accepted for sending. Draft snapshot ID: snapshot-1. Approval decision ID: decision-1. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
           source: "renewal_notice_communications",
           sourceId: "communication-1",
         }),
       ])
     );
     expect(JSON.stringify(pack)).not.toMatch(/private body text|provider-secret|legally served|legal delivery|provider delivery confirmed|statutory compliance/i);
+  });
+
+  it("renders failed and legacy renewal tenant communication delivery status safely", () => {
+    const pack = deriveEvidencePack({
+      scope: "lease",
+      scopeId: "lease-1",
+      landlordId: "landlord-1",
+      generatedAt: "2026-07-11T12:00:00.000Z",
+      renewalNoticeCommunications: [
+        {
+          communicationId: "communication-failed",
+          leaseId: "lease-1",
+          landlordId: "landlord-1",
+          snapshotId: "snapshot-failed",
+          approvalDecisionItemId: "decision-failed",
+          recipientEmail: "hello+tenant@rentchain.ai",
+          status: "email_failed",
+          deliveryStatus: "failed",
+          attemptedAt: "2026-07-11T12:20:00.000Z",
+          failedAt: "2026-07-11T12:20:02.000Z",
+          tenantNotified: false,
+          noticeServed: false,
+          legalServiceEstablished: false,
+          providerPayload: { raw: "provider-secret" },
+        },
+        {
+          communicationId: "communication-legacy",
+          leaseId: "lease-1",
+          landlordId: "landlord-1",
+          snapshotId: "snapshot-legacy",
+          approvalDecisionItemId: "decision-legacy",
+          recipientEmail: "hello+tenant@rentchain.ai",
+          status: "email_sent",
+          attemptedAt: "2026-07-11T12:10:00.000Z",
+          sentAt: "2026-07-11T12:10:02.000Z",
+          tenantNotified: true,
+          noticeServed: false,
+          legalServiceEstablished: false,
+        },
+      ],
+    });
+
+    const auditSection = pack.sections.find((section) => section.sectionKey === "audit_events");
+    expect(auditSection?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Renewal tenant communication email failed",
+          description: expect.stringContaining("Delivery confirmation: Failed by email provider."),
+        }),
+        expect.objectContaining({
+          label: "Renewal tenant communication email sent",
+          description: expect.stringContaining("Delivery confirmation: Not tracked yet."),
+        }),
+      ])
+    );
+    expect(JSON.stringify(pack)).not.toMatch(/provider-secret|notice served|legally delivered|tenant received|compliance achieved|statutory notice completed/i);
   });
 
   it("keeps raw provider, banking, debug, and private document fields out of evidence projections", () => {
