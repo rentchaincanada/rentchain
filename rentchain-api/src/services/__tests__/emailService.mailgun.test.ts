@@ -49,6 +49,27 @@ describe("emailService mailgun provider", () => {
     expect(parseMailgunMessageId("queued")).toBeNull();
   });
 
+  it("does not fail a successful send when Mailgun omits a message id", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ message: "Queued. Thank you." }),
+    }));
+    vi.stubGlobal("fetch", fetchMock as any);
+
+    await expect(
+      sendEmail({
+        to: "tenant@example.com",
+        subject: "Test",
+        html: "<p>Hello</p>",
+      })
+    ).resolves.toEqual({
+      provider: "mailgun",
+      providerMessageId: null,
+      providerResponseId: null,
+    });
+  });
+
   it("rejects when Mailgun responds with failure", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: false,

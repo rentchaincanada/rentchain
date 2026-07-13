@@ -451,6 +451,62 @@ describe("deriveEvidencePack", () => {
     expect(JSON.stringify(pack)).not.toMatch(/private body text|provider-secret|legally served|legal delivery|provider delivery confirmed|statutory compliance/i);
   });
 
+  it("renders failed and legacy renewal tenant communication delivery status safely", () => {
+    const pack = deriveEvidencePack({
+      scope: "lease",
+      scopeId: "lease-1",
+      landlordId: "landlord-1",
+      generatedAt: "2026-07-11T12:00:00.000Z",
+      renewalNoticeCommunications: [
+        {
+          communicationId: "communication-failed",
+          leaseId: "lease-1",
+          landlordId: "landlord-1",
+          snapshotId: "snapshot-failed",
+          approvalDecisionItemId: "decision-failed",
+          recipientEmail: "hello+tenant@rentchain.ai",
+          status: "email_failed",
+          deliveryStatus: "failed",
+          attemptedAt: "2026-07-11T12:20:00.000Z",
+          failedAt: "2026-07-11T12:20:02.000Z",
+          tenantNotified: false,
+          noticeServed: false,
+          legalServiceEstablished: false,
+          providerPayload: { raw: "provider-secret" },
+        },
+        {
+          communicationId: "communication-legacy",
+          leaseId: "lease-1",
+          landlordId: "landlord-1",
+          snapshotId: "snapshot-legacy",
+          approvalDecisionItemId: "decision-legacy",
+          recipientEmail: "hello+tenant@rentchain.ai",
+          status: "email_sent",
+          attemptedAt: "2026-07-11T12:10:00.000Z",
+          sentAt: "2026-07-11T12:10:02.000Z",
+          tenantNotified: true,
+          noticeServed: false,
+          legalServiceEstablished: false,
+        },
+      ],
+    });
+
+    const auditSection = pack.sections.find((section) => section.sectionKey === "audit_events");
+    expect(auditSection?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Renewal tenant communication email failed",
+          description: expect.stringContaining("Delivery confirmation: Failed by email provider."),
+        }),
+        expect.objectContaining({
+          label: "Renewal tenant communication email sent",
+          description: expect.stringContaining("Delivery confirmation: Not tracked yet."),
+        }),
+      ])
+    );
+    expect(JSON.stringify(pack)).not.toMatch(/provider-secret|notice served|legally delivered|tenant received|compliance achieved|statutory notice completed/i);
+  });
+
   it("keeps raw provider, banking, debug, and private document fields out of evidence projections", () => {
     const pack = deriveEvidencePack({
       scope: "decision",
