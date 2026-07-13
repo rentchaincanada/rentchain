@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { sendEmail } from "../emailService";
+import { parseMailgunMessageId, sendEmail } from "../emailService";
 
 describe("emailService mailgun provider", () => {
   const envBackup = { ...process.env };
@@ -21,7 +21,7 @@ describe("emailService mailgun provider", () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       status: 200,
-      text: async () => "queued",
+      text: async () => JSON.stringify({ id: "<abc123@mg.example.com>", message: "Queued. Thank you." }),
     }));
     vi.stubGlobal("fetch", fetchMock as any);
 
@@ -31,12 +31,22 @@ describe("emailService mailgun provider", () => {
         subject: "Test",
         html: "<p>Hello</p>",
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({
+      provider: "mailgun",
+      providerMessageId: "<abc123@mg.example.com>",
+      providerResponseId: "<abc123@mg.example.com>",
+    });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [, init] = fetchMock.mock.calls[0];
     expect(init.method).toBe("POST");
     expect(init.headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
+  });
+
+  it("parses Mailgun message ids from json or plain text responses", () => {
+    expect(parseMailgunMessageId(JSON.stringify({ id: "<json-id@mg.example.com>" }))).toBe("<json-id@mg.example.com>");
+    expect(parseMailgunMessageId("Queued. Thank you. <plain-id@mg.example.com>")).toBe("<plain-id@mg.example.com>");
+    expect(parseMailgunMessageId("queued")).toBeNull();
   });
 
   it("rejects when Mailgun responds with failure", async () => {
@@ -56,4 +66,3 @@ describe("emailService mailgun provider", () => {
     ).rejects.toThrow("mailgun_send_failed:401");
   });
 });
-

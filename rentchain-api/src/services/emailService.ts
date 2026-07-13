@@ -2,6 +2,12 @@ import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemp
 
 type SendResult = { ok: true } | { ok: false; error: string };
 
+export type EmailSendResult = {
+  provider: "mailgun";
+  providerMessageId: string | null;
+  providerResponseId: string | null;
+};
+
 export type EmailMessage = {
   to: string | string[];
   from?: string;
@@ -36,7 +42,20 @@ function getCorrelationId(): string {
   return `em_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function sendViaMailgun(message: EmailMessage): Promise<void> {
+export function parseMailgunMessageId(responseText: string): string | null {
+  const raw = safeStr(responseText);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    const id = safeStr(parsed?.id || parsed?.messageId || parsed?.message_id);
+    return id || null;
+  } catch {
+    const match = raw.match(/<[^>\s]+@[^>\s]+>/);
+    return match?.[0] || null;
+  }
+}
+
+async function sendViaMailgun(message: EmailMessage): Promise<EmailSendResult> {
   const correlationId = getCorrelationId();
   const apiKey = safeStr(process.env.MAILGUN_API_KEY);
   const domain = safeStr(process.env.MAILGUN_DOMAIN);
@@ -88,12 +107,19 @@ async function sendViaMailgun(message: EmailMessage): Promise<void> {
     throw new Error(`mailgun_send_failed:${response.status}`);
   }
 
+  const providerMessageId = parseMailgunMessageId(responseText);
   lastEmailPreview = {
     provider: "mailgun",
     correlationId,
+    providerMessageId,
     to: to.split(",").map(maskEmail),
     subject,
     sentAt: new Date().toISOString(),
+  };
+  return {
+    provider: "mailgun",
+    providerMessageId,
+    providerResponseId: providerMessageId,
   };
 }
 
@@ -199,10 +225,10 @@ export async function sendLandlordWelcomeEmail(params: {
   }
 }
 
-export async function sendEmail(message: EmailMessage) {
+export async function sendEmail(message: EmailMessage): Promise<EmailSendResult> {
   const provider = safeStr(process.env.EMAIL_PROVIDER || "mailgun").toLowerCase();
   if (provider !== "mailgun") {
     throw new Error(`EMAIL_PROVIDER_UNSUPPORTED:${provider || "unset"}`);
   }
-  await sendViaMailgun(message);
+  return sendViaMailgun(message);
 }

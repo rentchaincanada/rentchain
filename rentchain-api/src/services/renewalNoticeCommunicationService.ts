@@ -1,11 +1,34 @@
 import crypto from "crypto";
 import { db } from "../firebase";
 import { CANONICAL_EVENTS_COLLECTION, buildEvent } from "../lib/events/buildEvent";
-import { sendEmail } from "./emailService";
+import { sendEmail, type EmailSendResult } from "./emailService";
 import { lookupUserEmail, type LeaseWorkflowLease } from "./leaseNoticeWorkflowService";
 import { LANDLORD_DECISION_QUEUE_ITEMS_COLLECTION } from "./landlordDecisionQueue/landlordDecisionQueueLifecycleService";
 
 export const RENEWAL_NOTICE_COMMUNICATIONS_COLLECTION = "renewalNoticeCommunications";
+
+type RenewalNoticeDeliveryStatus =
+  | "delivery_status_unknown"
+  | "not_tracked"
+  | "accepted_for_sending"
+  | "queued"
+  | "sent"
+  | "delivered"
+  | "bounced"
+  | "failed"
+  | "deferred"
+  | "rejected"
+  | "complained"
+  | "opened"
+  | "clicked"
+  | "unknown";
+
+type RenewalNoticeDeliveryStatusSource =
+  | "not_tracked"
+  | "send_response"
+  | "mailgun_webhook"
+  | "mailgun_events_api"
+  | "manual_reconciliation";
 
 type SendRenewalNoticeCommunicationInput = {
   snapshotId?: unknown;
@@ -41,9 +64,14 @@ type RenewalNoticeCommunicationRecord = {
   recipientEmail: string;
   bodyHash: string;
   status: "send_attempted" | "email_sent" | "email_failed";
-  deliveryStatus: "delivery_status_unknown";
+  deliveryStatus: RenewalNoticeDeliveryStatus;
+  deliveryStatusUpdatedAt: string | null;
+  deliveryStatusSource: RenewalNoticeDeliveryStatusSource;
+  deliveryStatusReason: string | null;
+  deliveryEventIds: string[];
+  lastProviderEventAt: string | null;
   provider: "mailgun";
-  providerMessageId: null;
+  providerMessageId: string | null;
   attemptedAt: string;
   sentAt: string | null;
   failedAt: string | null;
@@ -77,7 +105,7 @@ type SendRenewalNoticeCommunicationResult =
       deliveryStatus: RenewalNoticeCommunicationRecord["deliveryStatus"];
       attemptedAt: string;
       sentAt: string | null;
-      providerMessageId: null;
+      providerMessageId: string | null;
       auditEventId: string | null;
       timelineEventId: string | null;
       noLegalServiceClaim: true;
@@ -95,7 +123,7 @@ type SendRenewalNoticeCommunicationResult =
       deliveryStatus?: RenewalNoticeCommunicationRecord["deliveryStatus"];
       attemptedAt?: string;
       sentAt?: string | null;
-      providerMessageId?: null;
+      providerMessageId?: string | null;
       auditEventId?: string | null;
       timelineEventId?: string | null;
       noLegalServiceClaim?: true;
@@ -255,6 +283,10 @@ function communicationEvent(input: {
       deliveryStatus: input.record.deliveryStatus,
       provider: input.record.provider,
       providerMessageId: input.record.providerMessageId,
+      deliveryStatusSource: input.record.deliveryStatusSource,
+      deliveryStatusReason: input.record.deliveryStatusReason,
+      deliveryStatusUpdatedAt: input.record.deliveryStatusUpdatedAt,
+      lastProviderEventAt: input.record.lastProviderEventAt,
       noLegalServiceClaim: true,
       noticeServed: false,
       tenantNotified: input.record.tenantNotified,
@@ -293,6 +325,11 @@ async function writeCommunicationEvent(input: {
       status: input.record.status,
       deliveryStatus: input.record.deliveryStatus,
       provider: input.record.provider,
+      providerMessageId: input.record.providerMessageId,
+      deliveryStatusSource: input.record.deliveryStatusSource,
+      deliveryStatusReason: input.record.deliveryStatusReason,
+      deliveryStatusUpdatedAt: input.record.deliveryStatusUpdatedAt,
+      lastProviderEventAt: input.record.lastProviderEventAt,
       noLegalServiceClaim: true,
       noticeServed: false,
       tenantNotified: input.record.tenantNotified,
@@ -358,7 +395,7 @@ export async function sendRenewalNoticeCommunication(
         deliveryStatus: existing.deliveryStatus,
         attemptedAt: existing.attemptedAt,
         sentAt: null,
-        providerMessageId: null,
+        providerMessageId: existing.providerMessageId || null,
         auditEventId: existing.auditEventIds[existing.auditEventIds.length - 1] || null,
         timelineEventId: existing.canonicalEventIds[existing.canonicalEventIds.length - 1] || null,
         noLegalServiceClaim: true,
@@ -423,6 +460,11 @@ export async function sendRenewalNoticeCommunication(
     bodyHash: sha256(body),
     status: "send_attempted",
     deliveryStatus: "delivery_status_unknown",
+    deliveryStatusUpdatedAt: null,
+    deliveryStatusSource: "not_tracked",
+    deliveryStatusReason: null,
+    deliveryEventIds: [],
+    lastProviderEventAt: null,
     provider: "mailgun",
     providerMessageId: null,
     attemptedAt: nowIso,
@@ -468,16 +510,22 @@ export async function sendRenewalNoticeCommunication(
   await communicationRef.set(attemptedWithAudit, { merge: false });
 
   try {
-    await sendEmail({
+    const emailResult = (await sendEmail({
       to: tenantEmail,
       subject,
       text: body,
       html: htmlFromText(body),
-    });
+    })) as EmailSendResult | undefined;
     const sentAt = new Date().toISOString();
     const sentRecord: RenewalNoticeCommunicationRecord = {
       ...attemptedWithAudit,
       status: "email_sent",
+      deliveryStatus: "accepted_for_sending",
+      deliveryStatusUpdatedAt: sentAt,
+      deliveryStatusSource: "send_response",
+      deliveryStatusReason: "mailgun_accepted",
+      lastProviderEventAt: sentAt,
+      providerMessageId: emailResult?.providerMessageId || null,
       sentAt,
       tenantNotified: true,
       updatedAt: sentAt,
@@ -500,6 +548,11 @@ export async function sendRenewalNoticeCommunication(
     const failedRecord: RenewalNoticeCommunicationRecord = {
       ...attemptedWithAudit,
       status: "email_failed",
+      deliveryStatus: "failed",
+      deliveryStatusUpdatedAt: failedAt,
+      deliveryStatusSource: "send_response",
+      deliveryStatusReason: safeErrorMessage(err),
+      lastProviderEventAt: failedAt,
       failedAt,
       updatedAt: failedAt,
       errorCode: "EMAIL_SEND_FAILED",
@@ -526,7 +579,7 @@ export async function sendRenewalNoticeCommunication(
       deliveryStatus: finalRecord.deliveryStatus,
       attemptedAt: finalRecord.attemptedAt,
       sentAt: null,
-      providerMessageId: null,
+      providerMessageId: finalRecord.providerMessageId || null,
       auditEventId: failedEvent.auditEventId,
       timelineEventId: failedEvent.canonicalEventId,
       noLegalServiceClaim: true,

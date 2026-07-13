@@ -249,14 +249,54 @@ function communicationStatusLabel(status: RenewalNoticeCommunicationResponse["st
 }
 
 function deliveryConfirmationLabel(status: RenewalNoticeCommunicationResponse["deliveryStatus"] | null | undefined) {
-  if (status === "delivery_status_unknown") return "Not tracked yet";
+  if (!status || status === "delivery_status_unknown" || status === "not_tracked") return "Not tracked yet";
+  if (status === "accepted_for_sending") return "Accepted for sending";
+  if (status === "queued") return "Queued by email provider";
+  if (status === "sent") return "Sent by email provider";
+  if (status === "delivered") return "Delivered by email provider";
+  if (status === "bounced") return "Bounce detected by email provider";
+  if (status === "failed") return "Failed by email provider";
+  if (status === "deferred") return "Deferred by email provider";
+  if (status === "rejected") return "Rejected by email provider";
+  if (status === "complained") return "Complaint reported by email provider";
+  if (status === "opened") return "Open event recorded by provider";
+  if (status === "clicked") return "Click event recorded by provider";
+  if (status === "unknown") return "Unknown";
   return "Not tracked yet";
+}
+
+function deliveryConfirmationDetail(status: RenewalNoticeCommunicationResponse["deliveryStatus"] | null | undefined) {
+  if (status === "accepted_for_sending") {
+    return "Email was accepted for sending. Delivery confirmation beyond provider acceptance is not tracked yet. This does not establish legal notice service by itself.";
+  }
+  if (status === "delivered") {
+    return "Email provider reported delivery. This does not establish legal notice service by itself.";
+  }
+  if (status === "bounced") {
+    return "Email provider reported a bounce. Review the recipient before any future communication attempt.";
+  }
+  if (status === "failed" || status === "rejected") {
+    return "Email provider reported a send failure. Review the recipient and message state before any future communication attempt.";
+  }
+  return "Email was accepted for sending. Provider delivery, bounce, and open tracking are not enabled yet. This does not establish legal notice service by itself.";
 }
 
 function communicationDeliveryLabel(value: string | null | undefined) {
   const normalized = String(value || "").trim().toLowerCase();
-  if (!normalized || normalized === "delivery_status_unknown" || normalized === "unknown") return "Not tracked yet";
+  if (!normalized || normalized === "delivery_status_unknown" || normalized === "not_tracked") return "Not tracked yet";
   if (normalized === "not tracked yet") return "Not tracked yet";
+  if (normalized === "accepted_for_sending" || normalized === "accepted for sending") return "Accepted for sending";
+  if (normalized === "queued" || normalized === "queued by email provider") return "Queued by email provider";
+  if (normalized === "sent" || normalized === "sent by email provider") return "Sent by email provider";
+  if (normalized === "delivered" || normalized === "delivered by email provider") return "Delivered by email provider";
+  if (normalized === "bounced" || normalized === "bounce detected by email provider") return "Bounce detected by email provider";
+  if (normalized === "failed" || normalized === "failed by email provider") return "Failed by email provider";
+  if (normalized === "deferred" || normalized === "deferred by email provider") return "Deferred by email provider";
+  if (normalized === "rejected" || normalized === "rejected by email provider") return "Rejected by email provider";
+  if (normalized === "complained" || normalized === "complaint reported by email provider") return "Complaint reported by email provider";
+  if (normalized === "opened" || normalized === "open event recorded by provider") return "Open event recorded by provider";
+  if (normalized === "clicked" || normalized === "click event recorded by provider") return "Click event recorded by provider";
+  if (normalized === "unknown") return "Unknown";
   return value || "Not tracked yet";
 }
 
@@ -1512,8 +1552,7 @@ function TenantCommunicationSendReview({
           </dl>
           <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
             {sendState.result.idempotent ? "Idempotent retry returned the existing communication record. " : ""}
-            Email was accepted for sending. Provider delivery, bounce, and open tracking are not enabled yet. This does
-            not establish legal notice service by itself.
+            {deliveryConfirmationDetail(sendState.result.deliveryStatus)}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link to={reviewModel?.leaseTimelinePath || `/review-timeline?scope=lease&scopeId=${encodeURIComponent(lease.id)}`} style={buttonLinkStyle}>

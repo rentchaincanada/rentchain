@@ -363,7 +363,7 @@ describe("deriveEvidencePack", () => {
           approvalDecisionItemId: "decision-1",
           recipientEmail: "hello+tenant@rentchain.ai",
           status: "email_sent",
-          deliveryStatus: "delivery_status_unknown",
+          deliveryStatus: "accepted_for_sending",
           attemptedAt: "2026-07-11T12:10:00.000Z",
           sentAt: "2026-07-11T12:10:02.000Z",
           tenantNotified: true,
@@ -442,7 +442,7 @@ describe("deriveEvidencePack", () => {
           itemType: "communication_record",
           label: "Renewal tenant communication email sent",
           description:
-            "Email accepted for sending at 2026-07-11 12:10 UTC. Communication ID: communication-1. Lease ID: lease-1. Context: North Towers · Unit 101 · John Smith. Recipient email: hello+tenant@rentchain.ai. Delivery confirmation: Not tracked yet. Draft snapshot ID: snapshot-1. Approval decision ID: decision-1. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
+            "Email accepted for sending at 2026-07-11 12:10 UTC. Communication ID: communication-1. Lease ID: lease-1. Context: North Towers · Unit 101 · John Smith. Recipient email: hello+tenant@rentchain.ai. Delivery confirmation: Accepted for sending. Draft snapshot ID: snapshot-1. Approval decision ID: decision-1. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
           source: "renewal_notice_communications",
           sourceId: "communication-1",
         }),

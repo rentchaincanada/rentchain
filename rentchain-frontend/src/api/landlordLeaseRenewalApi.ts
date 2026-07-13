@@ -95,10 +95,24 @@ export type RenewalNoticeCommunicationResponse = {
   idempotent?: boolean;
   communicationId: string;
   status: "send_attempted" | "email_sent" | "email_failed";
-  deliveryStatus: "delivery_status_unknown";
+  deliveryStatus:
+    | "delivery_status_unknown"
+    | "not_tracked"
+    | "accepted_for_sending"
+    | "queued"
+    | "sent"
+    | "delivered"
+    | "bounced"
+    | "failed"
+    | "deferred"
+    | "rejected"
+    | "complained"
+    | "opened"
+    | "clicked"
+    | "unknown";
   attemptedAt: string;
   sentAt: string | null;
-  providerMessageId: null;
+  providerMessageId: string | null;
   auditEventId: string | null;
   timelineEventId: string | null;
   noLegalServiceClaim: true;

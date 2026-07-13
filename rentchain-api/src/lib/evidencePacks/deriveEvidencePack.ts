@@ -391,7 +391,19 @@ function renewalNoticeCommunicationTimestamp(record: Record<string, any>): strin
 
 function renewalNoticeCommunicationDeliveryLabel(value: unknown): string {
   const raw = asString(value, 120);
-  if (!raw || raw === "delivery_status_unknown") return "Not tracked yet";
+  if (!raw || raw === "delivery_status_unknown" || raw === "not_tracked") return "Not tracked yet";
+  if (raw === "accepted_for_sending") return "Accepted for sending";
+  if (raw === "queued") return "Queued by email provider";
+  if (raw === "sent") return "Sent by email provider";
+  if (raw === "delivered") return "Delivered by email provider";
+  if (raw === "bounced") return "Bounce detected by email provider";
+  if (raw === "failed") return "Failed by email provider";
+  if (raw === "deferred") return "Deferred by email provider";
+  if (raw === "rejected") return "Rejected by email provider";
+  if (raw === "complained") return "Complaint reported by email provider";
+  if (raw === "opened") return "Open event recorded by provider";
+  if (raw === "clicked") return "Click event recorded by provider";
+  if (raw === "unknown") return "Unknown";
   return raw.replace(/_/g, " ");
 }
 
