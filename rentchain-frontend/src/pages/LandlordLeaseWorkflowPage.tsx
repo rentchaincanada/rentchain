@@ -31,6 +31,8 @@ import {
   updateLandlordDecisionQueueItem,
   type LandlordDecisionQueueItem,
 } from "@/api/landlordDecisionQueueApi";
+import { fetchReviewTimeline, reviewTimelinePath, type ReviewTimelineEntry } from "@/api/reviewTimelineApi";
+import { evidencePackPath } from "@/api/evidencePackApi";
 
 type WorkflowKey = "execution" | "rent-increase" | "notice" | "deposit" | "renewal" | "move-out";
 
@@ -251,6 +253,21 @@ function deliveryConfirmationLabel(status: RenewalNoticeCommunicationResponse["d
   return "Not tracked yet";
 }
 
+function communicationDeliveryLabel(value: string | null | undefined) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized || normalized === "delivery_status_unknown" || normalized === "unknown") return "Not tracked yet";
+  if (normalized === "not tracked yet") return "Not tracked yet";
+  return value || "Not tracked yet";
+}
+
+function communicationEmailDeliveryLabel(value: string | null | undefined) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "email sent") return "Email sent";
+  if (normalized === "send attempted") return "Send attempted";
+  if (normalized === "send confirmed internally") return "Send confirmed internally";
+  return "Email sent";
+}
+
 function recordStringValue(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
   return typeof value === "string" ? value.trim() : "";
@@ -263,6 +280,67 @@ function approvalDecisionDraftSnapshotId(decision: LandlordDecisionQueueItem | n
     recordStringValue(decision.sourceSnapshot, "draftSnapshotId") ||
     recordStringValue(decision.sourceSnapshot, "snapshotId")
   );
+}
+
+function extractSentenceValue(text: string, label: string) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`${escaped}:\\s*(.*?)(?:\\.\\s+[A-Z][A-Za-z /-]+:|\\.$|$)`, "i").exec(text);
+  return match?.[1]?.trim().replace(/\.$/, "") || "";
+}
+
+type PreviousRenewalCommunication = {
+  communicationId: string;
+  recipientEmail: string;
+  sentTimestamp: string;
+  emailDelivery: string;
+  deliveryConfirmation: string;
+  draftSnapshotId: string;
+  approvalDecisionId: string;
+};
+
+function renewalCommunicationIdForEntry(entry: ReviewTimelineEntry) {
+  return extractSentenceValue(entry.description || "", "Communication ID") || entry.sourceId || "";
+}
+
+function isRenewalCommunicationTimelineEntry(entry: ReviewTimelineEntry) {
+  return /renewal tenant communication/i.test(`${entry.label} ${entry.description}`);
+}
+
+function renewalCommunicationRank(entry: ReviewTimelineEntry) {
+  const text = `${entry.label} ${entry.description}`.toLowerCase();
+  if (text.includes("email sent")) return 3;
+  if (text.includes("send attempted")) return 2;
+  if (text.includes("send confirmed")) return 1;
+  return 0;
+}
+
+function previousRenewalCommunicationsFromTimeline(entries: ReviewTimelineEntry[]) {
+  const grouped = new Map<string, ReviewTimelineEntry[]>();
+  entries.filter(isRenewalCommunicationTimelineEntry).forEach((entry) => {
+    const communicationId = renewalCommunicationIdForEntry(entry);
+    if (!communicationId) return;
+    grouped.set(communicationId, [...(grouped.get(communicationId) || []), entry]);
+  });
+
+  return Array.from(grouped.entries())
+    .map(([communicationId, group]): PreviousRenewalCommunication => {
+      const sorted = [...group].sort((left, right) => {
+        const rank = renewalCommunicationRank(right) - renewalCommunicationRank(left);
+        if (rank !== 0) return rank;
+        return new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime();
+      });
+      const primary = sorted[0];
+      return {
+        communicationId,
+        recipientEmail: extractSentenceValue(primary.description, "Recipient email") || "Recipient not available",
+        sentTimestamp: primary.timestamp,
+        emailDelivery: communicationEmailDeliveryLabel(extractSentenceValue(primary.description, "Status")),
+        deliveryConfirmation: communicationDeliveryLabel(extractSentenceValue(primary.description, "Delivery confirmation")),
+        draftSnapshotId: extractSentenceValue(primary.description, "Draft snapshot ID"),
+        approvalDecisionId: extractSentenceValue(primary.description, "Approval decision ID"),
+      };
+    })
+    .sort((left, right) => new Date(right.sentTimestamp).getTime() - new Date(left.sentTimestamp).getTime());
 }
 
 function daysUntilDate(value: string | null | undefined) {
@@ -656,6 +734,7 @@ function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLe
           readinessReady={false}
           savedSnapshot={null}
         />
+        <PreviousRenewalCommunicationsSection lease={lease} />
       </section>
     );
   }
@@ -739,6 +818,8 @@ function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLe
         savedSnapshot={savedDraftSnapshot}
       />
 
+      <PreviousRenewalCommunicationsSection lease={lease} />
+
       <div style={noticeActionGridStyle}>
         {draftText ? (
           <>
@@ -771,6 +852,104 @@ function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLe
       <div style={deferredPanelStyle}>
         Notice record creation remains separate. Saving a draft snapshot records audit context only; email delivery requires
         internal approval and explicit confirmations.
+      </div>
+    </section>
+  );
+}
+
+function PreviousRenewalCommunicationsSection({ lease }: { lease: LandlordActiveLease }) {
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [communications, setCommunications] = React.useState<PreviousRenewalCommunication[]>([]);
+  const timelineHref = reviewTimelinePath({ scope: "lease", scopeId: lease.id });
+  const evidenceHref = evidencePackPath({ scope: "lease", scopeId: lease.id });
+
+  React.useEffect(() => {
+    let active = true;
+    async function loadHistory() {
+      setLoading(true);
+      setError(null);
+      try {
+        const timeline = await fetchReviewTimeline({ scope: "lease", scopeId: lease.id });
+        if (!active) return;
+        setCommunications(previousRenewalCommunicationsFromTimeline(timeline.entries || []));
+      } catch {
+        if (!active) return;
+        setCommunications([]);
+        setError("Previous renewal communications could not be loaded.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void loadHistory();
+    return () => {
+      active = false;
+    };
+  }, [lease.id]);
+
+  return (
+    <section style={communicationHistoryStyle} aria-label="Previous renewal communications">
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <h3 style={sendReviewHeadingStyle}>Previous renewal communications</h3>
+          <div style={{ color: workflowTheme.muted, lineHeight: 1.6 }}>
+            Renewal emails previously sent through this workflow. These records are audit/evidence references only and do
+            not establish legal notice service.
+          </div>
+        </div>
+        <span style={communications.length ? readyBadgePillStyle : deferredBadgeStyle}>
+          {communications.length ? `${communications.length} recorded` : "No sends recorded"}
+        </span>
+      </div>
+
+      {loading ? <div style={{ color: workflowTheme.muted }}>Loading previous renewal communications…</div> : null}
+      {error ? <div style={warningPanelStyle}>{error}</div> : null}
+      {!loading && !error && communications.length === 0 ? (
+        <div style={deferredPanelStyle}>No renewal communications have been sent for this lease yet.</div>
+      ) : null}
+
+      {communications.length ? (
+        <div style={communicationHistoryListStyle}>
+          {communications.map((communication) => (
+            <article key={communication.communicationId} style={communicationHistoryCardStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <div style={sendReviewSubheadingStyle}>Renewal email sent</div>
+                  <div style={{ color: workflowTheme.muted, lineHeight: 1.5 }}>{formatTimestamp(communication.sentTimestamp)}</div>
+                </div>
+                <span style={readyBadgePillStyle}>Audit/evidence record</span>
+              </div>
+              <dl style={communicationHistoryFactsStyle}>
+                <ReviewFact label="Recipient" value={communication.recipientEmail} valueStyle={communicationIdValueStyle} />
+                <ReviewFact
+                  label="Communication ID"
+                  value={communication.communicationId}
+                  containerStyle={communicationIdFactStyle}
+                  valueStyle={communicationIdValueStyle}
+                />
+                <ReviewFact label="Email delivery" value={communication.emailDelivery} />
+                <ReviewFact label="Delivery confirmation" value={communication.deliveryConfirmation} />
+                <ReviewFact label="Notice service" value="Not served; legal service not established" />
+                <ReviewFact label="Legal compliance" value="Not determined by this workflow" />
+                {communication.draftSnapshotId ? (
+                  <ReviewFact label="Draft snapshot ID" value={communication.draftSnapshotId} valueStyle={communicationIdValueStyle} />
+                ) : null}
+                {communication.approvalDecisionId ? (
+                  <ReviewFact label="Approval decision ID" value={communication.approvalDecisionId} valueStyle={communicationIdValueStyle} />
+                ) : null}
+              </dl>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      <div style={noticeActionGridStyle}>
+        <Link to={timelineHref} style={buttonLinkStyle}>
+          View in timeline
+        </Link>
+        <Link to={evidenceHref} style={buttonLinkStyle}>
+          View evidence package
+        </Link>
       </div>
     </section>
   );
@@ -1895,6 +2074,38 @@ const sentStatusStyle: React.CSSProperties = {
   borderRadius: 10,
   background: "rgba(220, 252, 231, 0.42)",
   padding: 12,
+};
+
+const communicationHistoryStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  border: `1px solid ${workflowTheme.border}`,
+  borderRadius: 12,
+  background: workflowTheme.cardStrong,
+  padding: 14,
+};
+
+const communicationHistoryListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+};
+
+const communicationHistoryCardStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+  border: `1px solid ${workflowTheme.border}`,
+  borderRadius: 10,
+  background: workflowTheme.card,
+  padding: 12,
+  minWidth: 0,
+};
+
+const communicationHistoryFactsStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+  gap: 10,
+  margin: 0,
+  minWidth: 0,
 };
 
 const communicationIdFactStyle: React.CSSProperties = {
