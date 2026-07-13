@@ -185,6 +185,12 @@ describe("sendRenewalNoticeCommunication", () => {
     );
     expect(sendEmailMock.mock.calls[0]?.[0]?.metadata).not.toHaveProperty("leaseId");
     expect(sendEmailMock.mock.calls[0]?.[0]?.metadata).not.toHaveProperty("tenantEmail");
+    expect(sendEmailMock.mock.calls[0]?.[0]?.metadata).not.toHaveProperty("tenantName");
+    expect(sendEmailMock.mock.calls[0]?.[0]?.metadata).not.toHaveProperty("propertyId");
+    expect(Object.keys(sendEmailMock.mock.calls[0]?.[0]?.metadata || {}).sort()).toEqual([
+      "communicationId",
+      "workflow",
+    ]);
     const communications = Array.from((collections.get("renewalNoticeCommunications") || new Map()).values());
     expect(communications).toHaveLength(1);
     expect(communications[0]).toEqual(

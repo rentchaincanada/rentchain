@@ -172,6 +172,7 @@ describe("Mailgun renewal communication delivery webhooks", () => {
   });
 
   it("accepts a valid signature and updates a matching communication to delivered", async () => {
+    const before = collections.get("renewalNoticeCommunications")?.get("rnc_test");
     const result = await handle(signedBody(eventData()));
 
     expect(result).toEqual(expect.objectContaining({ ok: true, matched: true, updated: true, deliveryStatus: "delivered" }));
@@ -185,6 +186,27 @@ describe("Mailgun renewal communication delivery webhooks", () => {
         noticeServed: false,
         legalServiceEstablished: false,
         noLegalServiceClaim: true,
+      })
+    );
+    expect(record).toEqual(
+      expect.objectContaining({
+        communicationId: before.communicationId,
+        leaseId: before.leaseId,
+        landlordId: before.landlordId,
+        tenantId: before.tenantId,
+        propertyId: before.propertyId,
+        unitId: before.unitId,
+        snapshotId: before.snapshotId,
+        approvalDecisionItemId: before.approvalDecisionItemId,
+        idempotencyKeyHash: before.idempotencyKeyHash,
+        subject: before.subject,
+        recipientEmail: before.recipientEmail,
+        bodyHash: before.bodyHash,
+        status: before.status,
+        attemptedAt: before.attemptedAt,
+        sentAt: before.sentAt,
+        failedAt: before.failedAt,
+        tenantNotified: before.tenantNotified,
       })
     );
     expect(collections.get("events")?.size).toBe(1);
@@ -316,6 +338,102 @@ describe("Mailgun renewal communication delivery webhooks", () => {
     const result = await handle(body);
 
     expect(result).toEqual(expect.objectContaining({ ok: true, matched: true, updated: true, communicationId: "rnc_test" }));
+  });
+
+  it("prefers communicationId over providerMessageId when both are present", async () => {
+    seedDoc(
+      "renewalNoticeCommunications",
+      "rnc_other",
+      communication({
+        communicationId: "rnc_other",
+        deliveryStatus: "accepted_for_sending",
+        providerMessageId: "<conflicting-message@mg.example.com>",
+      })
+    );
+    const body = signedBody(
+      eventData({
+        id: "evt-priority",
+        "user-variables": { communicationId: "rnc_test" },
+        message: { headers: { "message-id": "conflicting-message@mg.example.com" } },
+      }),
+      "priority-token"
+    );
+
+    const result = await handle(body);
+
+    expect(result).toEqual(expect.objectContaining({ ok: true, matched: true, updated: true, communicationId: "rnc_test" }));
+    expect(collections.get("renewalNoticeCommunications")?.get("rnc_test")).toEqual(
+      expect.objectContaining({ deliveryStatus: "delivered" })
+    );
+    expect(collections.get("renewalNoticeCommunications")?.get("rnc_other")).toEqual(
+      expect.objectContaining({ deliveryStatus: "accepted_for_sending" })
+    );
+  });
+
+  it("does not update communications when both correlation fields are missing", async () => {
+    const before = { ...collections.get("renewalNoticeCommunications")?.get("rnc_test") };
+    const body = signedBody(
+      eventData({
+        id: "evt-no-correlation",
+        "user-variables": {},
+        message: { headers: {} },
+      }),
+      "no-correlation-token"
+    );
+
+    const result = await handle(body);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        matched: false,
+        updated: false,
+        ignoredReason: "communication_not_found",
+      })
+    );
+    expect(collections.get("renewalNoticeCommunications")?.get("rnc_test")).toEqual(before);
+    const receipts = Array.from((collections.get("communicationProviderEventReceipts") || new Map()).values());
+    expect(receipts[0]).toEqual(expect.objectContaining({ reconciliationState: "unmatched" }));
+    expect(collections.get("events")).toBeUndefined();
+    expect(collections.get("canonicalEvents")).toBeUndefined();
+  });
+
+  it("does not update communications when providerMessageId matches multiple records", async () => {
+    seedDoc(
+      "renewalNoticeCommunications",
+      "rnc_other",
+      communication({
+        communicationId: "rnc_other",
+        providerMessageId: "<message-1@mg.example.com>",
+      })
+    );
+    const beforeFirst = { ...collections.get("renewalNoticeCommunications")?.get("rnc_test") };
+    const beforeSecond = { ...collections.get("renewalNoticeCommunications")?.get("rnc_other") };
+    const body = signedBody(
+      eventData({
+        id: "evt-ambiguous",
+        "user-variables": {},
+        message: { headers: { "message-id": "message-1@mg.example.com" } },
+      }),
+      "ambiguous-token"
+    );
+
+    const result = await handle(body);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        matched: false,
+        updated: false,
+        ignoredReason: "ambiguous_provider_message_id",
+      })
+    );
+    expect(collections.get("renewalNoticeCommunications")?.get("rnc_test")).toEqual(beforeFirst);
+    expect(collections.get("renewalNoticeCommunications")?.get("rnc_other")).toEqual(beforeSecond);
+    const receipts = Array.from((collections.get("communicationProviderEventReceipts") || new Map()).values());
+    expect(receipts[0]).toEqual(expect.objectContaining({ reconciliationState: "ambiguous" }));
+    expect(collections.get("events")).toBeUndefined();
+    expect(collections.get("canonicalEvents")).toBeUndefined();
   });
 
   it("records unmatched provider events safely without updating communication records", async () => {
