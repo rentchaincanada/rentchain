@@ -1589,8 +1589,8 @@ function SendStepCard({
   const ready = ["Ready", "Approved", "Complete"].includes(status);
   return (
     <div style={sendStepCardStyle}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
-        <div style={{ display: "grid", gap: 2 }}>
+      <div style={sendStepHeaderStyle}>
+        <div style={sendStepTitleStyle}>
           <div style={termStyle}>{step}</div>
           <div style={{ color: workflowTheme.charcoal, fontWeight: 900 }}>{title}</div>
         </div>
@@ -1991,6 +1991,22 @@ const sendStepCardStyle: React.CSSProperties = {
   borderRadius: 10,
   background: workflowTheme.card,
   padding: 10,
+};
+
+const sendStepHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: "8px 10px",
+  alignItems: "flex-start",
+  flexWrap: "wrap",
+  minWidth: 0,
+};
+
+const sendStepTitleStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 2,
+  flex: "1 1 140px",
+  minWidth: 0,
 };
 
 const confirmationPreviewStyle: React.CSSProperties = {
