@@ -370,19 +370,68 @@ describe("deriveEvidencePack", () => {
           generatedDraftText: "Hello Jane, private body text should not project.",
           providerPayload: { raw: "provider-secret" },
         },
+        {
+          communicationId: "communication-1",
+          leaseId: "lease-1",
+          landlordId: "landlord-1",
+          snapshotId: "snapshot-1",
+          status: "send_attempted",
+          deliveryStatus: "delivery_status_unknown",
+          attemptedAt: "2026-07-11T12:10:00.000Z",
+          tenantNotified: false,
+          noticeServed: false,
+          legalServiceEstablished: false,
+        },
+      ],
+      canonicalEvents: [
+        {
+          id: "event-confirmed-1",
+          type: "renewal_notice_send_confirmed",
+          summary: "Renewal tenant communication send confirmed internally. Not served; legal service not established.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          metadata: { communicationId: "communication-1" },
+          occurredAt: "2026-07-11T12:09:58.000Z",
+        },
+        {
+          id: "event-attempted-1",
+          type: "renewal_notice_email_send_attempted",
+          summary: "Renewal tenant communication send attempted. Not served; legal service not established.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          metadata: { communicationId: "communication-1" },
+          occurredAt: "2026-07-11T12:10:00.000Z",
+        },
+        {
+          id: "event-sent-1",
+          type: "renewal_notice_email_sent",
+          summary: "Renewal tenant communication email sent. Not served; legal service not established.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          metadata: { communicationId: "communication-1" },
+          occurredAt: "2026-07-11T12:10:02.000Z",
+        },
       ],
       leases: [{ id: "lease-1", propertyName: "North Towers", unitNumber: "101", tenantName: "John Smith" }],
       properties: [{ id: "prop-1", name: "North Towers" }],
     });
 
     const auditSection = pack.sections.find((section) => section.sectionKey === "audit_events");
+    expect(auditSection?.items.filter((item) => item.itemType === "communication_record")).toHaveLength(1);
+    expect(auditSection?.items.map((item) => item.label)).not.toEqual(
+      expect.arrayContaining([
+        "Renewal tenant communication send confirmed",
+        "Renewal tenant communication send attempted",
+        "Renewal tenant communication email sent",
+      ])
+    );
     expect(auditSection?.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           itemType: "communication_record",
-          label: "Renewal tenant communication · Email sent",
+          label: "Renewal tenant communication email sent",
           description:
-            "Email sent at 2026-07-11 12:10 UTC. Tenant notified by email provider acceptance. Not served; legal service not established.",
+            "Email sent at 2026-07-11 12:10 UTC. Provider delivery status: unknown. Tenant notified by email provider acceptance. Not served; legal service not established. Communication ID: communication-1.",
           source: "renewal_notice_communications",
           sourceId: "communication-1",
         }),

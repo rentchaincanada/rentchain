@@ -185,6 +185,36 @@ describe("deriveCanonicalReviewTimeline", () => {
       landlordId: "landlord-1",
       canonicalEvents: [
         {
+          id: "event-confirmed-1",
+          type: "renewal_notice_send_confirmed",
+          action: "renewal_notice_send_confirmed",
+          summary: "Renewal tenant communication send confirmed internally. Not served; legal service not established.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          actor: { type: "landlord", id: "landlord-1" },
+          metadata: {
+            communicationId: "rnc_test",
+            deliveryStatus: "delivery_status_unknown",
+            tenantNotified: false,
+          },
+          occurredAt: "2026-07-11T12:09:58.000Z",
+        },
+        {
+          id: "event-attempted-1",
+          type: "renewal_notice_email_send_attempted",
+          action: "renewal_notice_email_send_attempted",
+          summary: "Renewal tenant communication send attempted. Not served; legal service not established.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          actor: { type: "landlord", id: "landlord-1" },
+          metadata: {
+            communicationId: "rnc_test",
+            deliveryStatus: "delivery_status_unknown",
+            tenantNotified: false,
+          },
+          occurredAt: "2026-07-11T12:10:00.000Z",
+        },
+        {
           id: "event-send-1",
           type: "renewal_notice_email_sent",
           action: "renewal_notice_email_sent",
@@ -192,18 +222,41 @@ describe("deriveCanonicalReviewTimeline", () => {
           leaseId: "lease-1",
           resource: { id: "lease-1" },
           actor: { type: "landlord", id: "landlord-1" },
+          metadata: {
+            communicationId: "rnc_test",
+            deliveryStatus: "delivery_status_unknown",
+            tenantNotified: true,
+          },
           occurredAt: "2026-07-11T12:10:00.000Z",
         },
       ],
     });
 
+    expect(timeline.entries.map((entry) => entry.label)).toEqual(
+      expect.arrayContaining([
+        "Renewal tenant communication send confirmed",
+        "Renewal tenant communication send attempted",
+        "Renewal tenant communication email sent",
+      ])
+    );
     expect(timeline.entries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           entryType: "canonical_event",
           source: "canonical_events",
           label: "Renewal tenant communication email sent",
-          description: "Renewal tenant communication email sent. Not served; legal service not established.",
+          description:
+            "Renewal tenant communication email sent at 2026-07-11 12:10 UTC. Communication ID: rnc_test. Status: email sent. Provider delivery status: unknown. Tenant notified by email provider acceptance. Not served; legal service not established.",
+        }),
+        expect.objectContaining({
+          label: "Renewal tenant communication send attempted",
+          description:
+            "Renewal tenant communication send attempted at 2026-07-11 12:10 UTC. Communication ID: rnc_test. Status: send attempted. Provider delivery status: unknown. Not served; legal service not established.",
+        }),
+        expect.objectContaining({
+          label: "Renewal tenant communication send confirmed",
+          description:
+            "Renewal tenant communication send confirmed internally at 2026-07-11 12:09 UTC. Communication ID: rnc_test. Status: send confirmed internally. Provider delivery status: unknown. Not served; legal service not established.",
         }),
       ])
     );
