@@ -950,8 +950,13 @@ describe("LandlordLeaseWorkflowPage", () => {
       );
     });
     expect(await screen.findByLabelText("Renewal email sent status")).toHaveTextContent("Renewal email sent");
-    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Delivery status unknown");
+    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Delivery confirmation");
+    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Not tracked yet");
+    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent(
+      "Email was accepted for sending. Provider delivery, bounce, and open tracking are not enabled yet."
+    );
     expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Not served; legal service not established");
+    expect(screen.getByLabelText("Renewal email sent status")).not.toHaveTextContent("Delivery status unknown");
     expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("rnc_test");
     expect(screen.getByText("rnc_test")).toHaveStyle({ overflowWrap: "anywhere" });
     const sentStatus = screen.getByLabelText("Renewal email sent status");

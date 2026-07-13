@@ -246,9 +246,9 @@ function communicationStatusLabel(status: RenewalNoticeCommunicationResponse["st
   return "Not sent";
 }
 
-function deliveryStatusLabel(status: RenewalNoticeCommunicationResponse["deliveryStatus"] | null | undefined) {
-  if (status === "delivery_status_unknown") return "Delivery status unknown";
-  return "Delivery status pending";
+function deliveryConfirmationLabel(status: RenewalNoticeCommunicationResponse["deliveryStatus"] | null | undefined) {
+  if (status === "delivery_status_unknown") return "Not tracked yet";
+  return "Not tracked yet";
 }
 
 function recordStringValue(record: Record<string, unknown> | null | undefined, key: string) {
@@ -1212,8 +1212,8 @@ function TenantCommunicationSendReview({
           tone={sendSucceeded ? "ready" : "deferred"}
         />
         <NoticeStatus
-          label="Delivery status"
-          value={sendSucceeded ? deliveryStatusLabel(sendState.result.deliveryStatus) : "Not available yet"}
+          label="Delivery confirmation"
+          value={sendSucceeded ? deliveryConfirmationLabel(sendState.result.deliveryStatus) : "Not available yet"}
           tone={sendSucceeded ? "warning" : "deferred"}
         />
         <NoticeStatus label="Tenant notification" value={sendSucceeded ? "Tenant notified by email provider acceptance" : "Not sent"} tone={sendSucceeded ? "ready" : "deferred"} />
@@ -1322,7 +1322,7 @@ function TenantCommunicationSendReview({
           <h4 style={sendReviewSubheadingStyle}>Renewal email sent</h4>
           <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, margin: 0 }}>
             <ReviewFact label="Sent at" value={formatTimestamp(sendState.result.sentAt || sendState.result.attemptedAt)} />
-            <ReviewFact label="Delivery status" value={deliveryStatusLabel(sendState.result.deliveryStatus)} />
+            <ReviewFact label="Delivery confirmation" value={deliveryConfirmationLabel(sendState.result.deliveryStatus)} />
             <ReviewFact
               label="Communication ID"
               value={sendState.result.communicationId}
@@ -1333,7 +1333,8 @@ function TenantCommunicationSendReview({
           </dl>
           <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
             {sendState.result.idempotent ? "Idempotent retry returned the existing communication record. " : ""}
-            Email was accepted by the communication endpoint. This does not establish legal notice service by itself.
+            Email was accepted for sending. Provider delivery, bounce, and open tracking are not enabled yet. This does
+            not establish legal notice service by itself.
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link to={reviewModel?.leaseTimelinePath || `/review-timeline?scope=lease&scopeId=${encodeURIComponent(lease.id)}`} style={buttonLinkStyle}>
