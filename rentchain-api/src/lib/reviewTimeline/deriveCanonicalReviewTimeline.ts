@@ -114,7 +114,7 @@ function renewalNoticeCommunicationRecordFor(
   event: Record<string, any>,
   records: Record<string, any>[] | null | undefined
 ): Record<string, any> | null {
-  const metadata = event.metadata || {};
+  const metadata = { ...(event.payload || {}), ...(event.metadata || {}) };
   const communicationId = asString(metadata.communicationId || event.communicationId, 240);
   if (!communicationId) return null;
   return (records || []).find((record) => asString(record.communicationId || record.id, 240) === communicationId) || null;
@@ -125,7 +125,7 @@ function renewalNoticeCommunicationTimelineDescriptionForInput(
   input: DeriveCanonicalReviewTimelineInput
 ): string | null {
   if (!isRenewalNoticeCommunicationEvent(event)) return null;
-  const metadata = event.metadata || {};
+  const metadata = { ...(event.payload || {}), ...(event.metadata || {}) };
   const record = renewalNoticeCommunicationRecordFor(event, input.renewalNoticeCommunications);
   const communicationId = asString(metadata.communicationId || event.communicationId || record?.communicationId || record?.id, 240);
   const rawDeliveryStatus = asString(metadata.deliveryStatus || event.deliveryStatus || record?.deliveryStatus, 120);

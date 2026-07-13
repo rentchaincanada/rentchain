@@ -213,7 +213,7 @@ describe("deriveCanonicalReviewTimeline", () => {
           leaseId: "lease-1",
           resource: { id: "lease-1" },
           actor: { type: "landlord", id: "landlord-1" },
-          metadata: {
+          payload: {
             communicationId: "rnc_test",
             deliveryStatus: "delivery_status_unknown",
             tenantNotified: false,
@@ -228,7 +228,7 @@ describe("deriveCanonicalReviewTimeline", () => {
           leaseId: "lease-1",
           resource: { id: "lease-1" },
           actor: { type: "landlord", id: "landlord-1" },
-          metadata: {
+          payload: {
             communicationId: "rnc_test",
             deliveryStatus: "delivery_status_unknown",
             tenantNotified: false,
