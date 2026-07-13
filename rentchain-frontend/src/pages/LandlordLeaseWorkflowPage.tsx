@@ -3,7 +3,9 @@ import { Link, useParams } from "react-router-dom";
 import { getLeaseById, type JurisdictionPolicyGuidance, type LandlordActiveLease } from "@/api/leasesApi";
 import {
   fetchExpiringLeaseRenewals,
+  sendRenewalNoticeCommunication,
   type LandlordLeaseRenewalLease,
+  type RenewalNoticeCommunicationResponse,
   type RenewalNoticeDraftSnapshot,
 } from "@/api/landlordLeaseRenewalApi";
 import {
@@ -213,6 +215,40 @@ function tenantEmailLabel(lease: LandlordActiveLease) {
 
 function hasTenantEmail(lease: LandlordActiveLease) {
   return Boolean(String(lease.tenantEmail || "").trim());
+}
+
+function generateSendIdempotencyKey(leaseId: string, snapshotId: string, decisionId: string) {
+  const random =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `renewal-email:${leaseId}:${snapshotId}:${decisionId}:${random}`;
+}
+
+function formatTimestamp(value: string | null | undefined) {
+  if (!value) return "Not available";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString("en-CA", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
+function communicationStatusLabel(status: RenewalNoticeCommunicationResponse["status"] | null | undefined) {
+  if (status === "email_sent") return "Email sent";
+  if (status === "email_failed") return "Email failed";
+  if (status === "send_attempted") return "Send attempted";
+  return "Not sent";
+}
+
+function deliveryStatusLabel(status: RenewalNoticeCommunicationResponse["deliveryStatus"] | null | undefined) {
+  if (status === "delivery_status_unknown") return "Delivery status unknown";
+  return "Delivery status pending";
 }
 
 function daysUntilDate(value: string | null | undefined) {
@@ -625,7 +661,11 @@ function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLe
 
       <div style={noticeStatusGridStyle}>
         <NoticeStatus label="Draft readiness" value={statusLabel} tone={readiness.ready ? "ready" : "warning"} />
-        <NoticeStatus label="Email delivery" value="Deferred" tone="deferred" />
+        <NoticeStatus
+          label="Email delivery"
+          value={readiness.ready ? "Requires approval and confirmations" : "Inputs needed"}
+          tone={readiness.ready ? "warning" : "deferred"}
+        />
         <NoticeStatus label="Evidence capture" value={readiness.ready ? "Available after snapshot save" : "Inputs needed"} tone={readiness.ready ? "ready" : "warning"} />
         <NoticeStatus label="Audit capture" value={readiness.ready ? "Available after snapshot save" : "Inputs needed"} tone={readiness.ready ? "ready" : "warning"} />
       </div>
@@ -664,7 +704,8 @@ function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLe
 
       <div style={{ color: workflowTheme.subtle, lineHeight: 1.6 }}>
         Renewal operator inputs are the source for this draft. Review official lease documents and current provincial
-        requirements before tenant communication. No notice record is created here, and email delivery remains deferred.
+        requirements before tenant communication. No notice record is created here. Email delivery requires a saved snapshot,
+        internal approval, and explicit confirmations below.
       </div>
 
       {draftText ? (
@@ -714,7 +755,8 @@ function RenewalNoticeDraftContextWorkspace({ lease }: { lease: LandlordActiveLe
       {copyStatus === "error" ? <div style={warningTextStyle}>Draft text could not be copied. Select the preview text manually.</div> : null}
 
       <div style={deferredPanelStyle}>
-        Notice record creation and email delivery are deferred. Saving a draft snapshot records audit context only.
+        Notice record creation remains separate. Saving a draft snapshot records audit context only; email delivery requires
+        internal approval and explicit confirmations.
       </div>
     </section>
   );
@@ -733,6 +775,13 @@ function TenantCommunicationSendReview({
   readinessReady: boolean;
   savedSnapshot: RenewalNoticeDraftSnapshot | null;
 }) {
+  type ConfirmationKey = "recipientReviewed" | "bodyReviewed" | "communicationOnly" | "legalService";
+  type SendState =
+    | { status: "idle" }
+    | { status: "sending" }
+    | { status: "success"; result: RenewalNoticeCommunicationResponse }
+    | { status: "error"; message: string };
+
   const tenantName = reviewModel?.tenantLabel || workflowDisplayLabel(lease.tenantName, /^tenant$/i) || "Tenant name unavailable";
   const recipientEmail = tenantEmailLabel(lease);
   const recipientReady = hasTenantEmail(lease);
@@ -753,7 +802,21 @@ function TenantCommunicationSendReview({
   const [decisionSubmitting, setDecisionSubmitting] = React.useState(false);
   const [decisionNotice, setDecisionNotice] = React.useState<string | null>(null);
   const [decisionError, setDecisionError] = React.useState<string | null>(null);
+  const [confirmation, setConfirmation] = React.useState<Record<ConfirmationKey, boolean>>({
+    recipientReviewed: false,
+    bodyReviewed: false,
+    communicationOnly: false,
+    legalService: false,
+  });
+  const [idempotencyKey, setIdempotencyKey] = React.useState<string | null>(null);
+  const [activeSendContext, setActiveSendContext] = React.useState<string | null>(null);
+  const [sendState, setSendState] = React.useState<SendState>({ status: "idle" });
   const approvalDecisionApproved = approvalDecision?.status === "approved";
+  const sendPrerequisitesMet = Boolean(savedSnapshot && approvalDecisionApproved && recipientReady && draftAvailable && approvalDecision);
+  const allConfirmationsChecked = Object.values(confirmation).every(Boolean);
+  const sendContextKey =
+    savedSnapshot && approvalDecision ? `${savedSnapshot.snapshotId}:${approvalDecision.id}:${lease.id}` : null;
+  const sendSucceeded = sendState.status === "success";
 
   React.useEffect(() => {
     let active = true;
@@ -790,6 +853,35 @@ function TenantCommunicationSendReview({
     };
   }, [decisionRoute, decisionSourceId, savedSnapshot]);
 
+  React.useEffect(() => {
+    if (!sendContextKey || !savedSnapshot || !approvalDecision) {
+      setActiveSendContext(null);
+      setIdempotencyKey(null);
+      setConfirmation({
+        recipientReviewed: false,
+        bodyReviewed: false,
+        communicationOnly: false,
+        legalService: false,
+      });
+      setSendState({ status: "idle" });
+      return;
+    }
+    if (activeSendContext === sendContextKey) return;
+    setActiveSendContext(sendContextKey);
+    setIdempotencyKey(generateSendIdempotencyKey(lease.id, savedSnapshot.snapshotId, approvalDecision.id));
+    setConfirmation({
+      recipientReviewed: false,
+      bodyReviewed: false,
+      communicationOnly: false,
+      legalService: false,
+    });
+    setSendState({ status: "idle" });
+  }, [activeSendContext, approvalDecision, lease.id, savedSnapshot, sendContextKey]);
+
+  function setConfirmationValue(key: ConfirmationKey, value: boolean) {
+    setConfirmation((current) => ({ ...current, [key]: value }));
+  }
+
   async function createApprovalDecision() {
     if (!savedSnapshot || !reviewModel || decisionSubmitting) return;
     setDecisionSubmitting(true);
@@ -804,7 +896,7 @@ function TenantCommunicationSendReview({
         severity: "warning",
         title: "Renewal tenant communication ready for approval",
         description:
-          "Saved renewal notice draft is ready for send approval review. Email delivery remains disabled until approved send infrastructure is available.",
+          "Saved renewal notice draft is ready for send approval review. Email delivery is available only after approval and explicit send confirmations.",
         recommendedActionLabel: "Open notice review",
         recommendedActionHref: decisionRoute,
         status: "open",
@@ -830,7 +922,7 @@ function TenantCommunicationSendReview({
         metadata: {
           approvalPurpose: "future_send_review",
           draftSnapshotId: savedSnapshot.snapshotId,
-          noSendBehavior: true,
+          noSendBehavior: false,
           noTenantNotification: true,
           noNoticeServed: true,
           noLeaseLifecycleMutation: true,
@@ -865,7 +957,7 @@ function TenantCommunicationSendReview({
         metadata: {
           approvalPurpose: "future_send_review",
           lastApprovalDecisionAction: action,
-          noSendBehavior: true,
+          noSendBehavior: false,
           noTenantNotification: true,
           noNoticeServed: true,
           noLeaseLifecycleMutation: true,
@@ -875,7 +967,7 @@ function TenantCommunicationSendReview({
         throw new Error("approval_decision_source_mismatch");
       }
       setApprovalDecision(response.item);
-      setDecisionNotice(`${successLabel} Send remains disabled.`);
+      setDecisionNotice(`${successLabel} Send requires the confirmation checklist.`);
     } catch (error) {
       if (String((error as Error)?.message || error).includes("decision_item_not_found")) {
         setApprovalDecision(null);
@@ -886,16 +978,91 @@ function TenantCommunicationSendReview({
     }
   }
 
+  async function sendRenewalEmail() {
+    if (!savedSnapshot || !approvalDecision || !idempotencyKey || !sendPrerequisitesMet || !allConfirmationsChecked) {
+      setSendState({ status: "error", message: "Complete the send requirements and confirmations before sending." });
+      return;
+    }
+    setSendState({ status: "sending" });
+    try {
+      const result = await sendRenewalNoticeCommunication(lease.id, {
+        snapshotId: savedSnapshot.snapshotId,
+        approvalDecisionItemId: approvalDecision.id,
+        confirmationAccepted: true,
+        recipientReviewed: true,
+        bodyReviewed: true,
+        legalServiceAcknowledged: true,
+        noLegalServiceClaim: true,
+        idempotencyKey,
+      });
+      setSendState({ status: "success", result });
+    } catch (error) {
+      setSendState({
+        status: "error",
+        message: errorMessage(error, "Renewal email could not be sent. Review the saved draft, approval decision, and recipient."),
+      });
+    }
+  }
+
   return (
     <section style={sendReviewStyle} aria-label="Tenant communication send review">
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div style={{ display: "grid", gap: 4 }}>
           <h3 style={sendReviewHeadingStyle}>Tenant communication send review</h3>
           <div style={{ color: workflowTheme.muted, lineHeight: 1.6 }}>
-            Review the future send model without sending email, notifying the tenant, or creating a notice record.
+            Confirm the saved draft, internal approval, recipient, and legal-service separation before sending a renewal email.
           </div>
         </div>
-        <span style={deferredBadgeStyle}>Send disabled</span>
+        <span style={sendSucceeded ? readyBadgePillStyle : sendPrerequisitesMet ? readyBadgePillStyle : deferredBadgeStyle}>
+          {sendSucceeded ? "Email sent" : sendPrerequisitesMet ? "Ready for confirmation" : "Send gated"}
+        </span>
+      </div>
+
+      <div style={sendStepsStyle} aria-label="Renewal send steps">
+        <SendStepCard
+          step="Step 1"
+          title="Renewal inputs"
+          status={readinessReady ? "Ready" : "Needs review"}
+          description={readinessReady ? "Saved renewal inputs are available." : "Fill in renewal inputs before preparing a tenant email."}
+          actionLabel={!readinessReady ? "Open renewal workflow" : undefined}
+          actionHref={!readinessReady ? `/leases/${encodeURIComponent(lease.id)}/workflows/renewal` : undefined}
+        />
+        <SendStepCard
+          step="Step 2"
+          title="Draft snapshot"
+          status={savedSnapshot ? "Ready" : "Needs review"}
+          description={savedSnapshot ? "Draft snapshot is saved for audit and send review." : "Save the draft snapshot above before approval."}
+        />
+        <SendStepCard
+          step="Step 3"
+          title="Approval decision"
+          status={approvalDecisionApproved ? "Approved" : approvalDecision ? "Needs approval" : "Needs review"}
+          description={
+            approvalDecisionApproved
+              ? "Internal approval is recorded."
+              : approvalDecision
+                ? "Approve the decision before send confirmation."
+                : "Create a send approval decision after the draft snapshot is saved."
+          }
+        />
+        <SendStepCard
+          step="Step 4"
+          title="Send confirmation"
+          status={sendSucceeded ? "Complete" : sendPrerequisitesMet ? "Ready" : "Locked"}
+          description={
+            sendSucceeded
+              ? "Renewal email was sent through the controlled communication endpoint."
+              : sendPrerequisitesMet
+                ? "Review and check all confirmations to enable sending."
+                : "Unlocks after snapshot, approval, recipient, and draft are ready."
+          }
+        />
+        <SendStepCard
+          step="Step 5"
+          title="Sent status / evidence"
+          status={sendSucceeded ? "Ready" : "Deferred"}
+          description={sendSucceeded ? "Evidence and timeline links are available below." : "Available after a successful send."}
+        />
       </div>
 
       <div style={sendReviewGridStyle}>
@@ -920,13 +1087,13 @@ function TenantCommunicationSendReview({
           </dl>
           {draftText ? (
             <div style={sendBodyReferenceStyle} aria-label="Tenant communication body reference">
-              Uses the renewal notice draft shown above. Exact body must be reviewed and persisted before any future send.
+              Uses the renewal notice draft shown above. Exact body must be reviewed before sending.
             </div>
           ) : (
-            <div style={warningPanelStyle}>Draft body unavailable. Complete renewal inputs before future tenant communication review.</div>
+            <div style={warningPanelStyle}>Draft body unavailable. Fill in renewal inputs before tenant communication review.</div>
           )}
           <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
-            The exact message body must be reviewed and persisted before any future send.
+            The saved draft snapshot is the source for the outgoing renewal email.
           </div>
         </div>
       </div>
@@ -942,43 +1109,74 @@ function TenantCommunicationSendReview({
         <SendChecklistItem label="Evidence/audit capture available" status={savedSnapshot ? "Ready" : "Needs review"} />
         <SendChecklistItem
           label="Delivery status model"
-          status={approvalDecisionApproved ? "Still required before live send" : "Deferred"}
+          status={sendSucceeded ? "Ready" : approvalDecisionApproved ? "Ready for send" : "Deferred"}
         />
         <SendChecklistItem
           label="Legal-service separation"
-          status={approvalDecisionApproved ? "Acknowledged for approval" : "Deferred"}
+          status={sendSucceeded ? "Acknowledged" : approvalDecisionApproved ? "Ready for confirmation" : "Deferred"}
         />
       </div>
 
-      {approvalDecisionApproved ? (
-        <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
-          Checklist status reflects internal approval only. Live send confirmation remains deferred until tenant communication
-          infrastructure is enabled.
+      {!sendPrerequisitesMet && !sendSucceeded ? (
+        <div style={warningPanelStyle} aria-label="Send requirements">
+          Send renewal email unlocks after the draft snapshot is saved, the approval decision is approved, the tenant email
+          is available, and the draft body is ready.
         </div>
       ) : null}
 
-      <fieldset disabled style={confirmationPreviewStyle} aria-label="Future send confirmation model">
-        <legend style={sendReviewSubheadingStyle}>Future send confirmation model</legend>
-        <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
-          These confirmations will be required before live tenant communication is enabled.
-        </div>
-        <label style={checkboxLabelStyle}>
-          <input type="checkbox" /> I have reviewed the recipient(s).
-        </label>
-        <label style={checkboxLabelStyle}>
-          <input type="checkbox" /> I have reviewed the message body.
-        </label>
-        <label style={checkboxLabelStyle}>
-          <input type="checkbox" /> I understand this would send tenant communication only.
-        </label>
-        <label style={checkboxLabelStyle}>
-          <input type="checkbox" /> I understand this does not establish legal notice service by itself.
-        </label>
-      </fieldset>
+      {sendPrerequisitesMet && !sendSucceeded ? (
+        <fieldset style={confirmationPreviewStyle} aria-label="Send confirmation checklist">
+          <legend style={sendReviewSubheadingStyle}>Send confirmation checklist</legend>
+          <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
+            Sending emails the tenant using the approved renewal draft. This does not establish legal notice service by itself.
+          </div>
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={confirmation.recipientReviewed}
+              onChange={(event) => setConfirmationValue("recipientReviewed", event.currentTarget.checked)}
+            />{" "}
+            I have reviewed the recipient(s).
+          </label>
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={confirmation.bodyReviewed}
+              onChange={(event) => setConfirmationValue("bodyReviewed", event.currentTarget.checked)}
+            />{" "}
+            I have reviewed the message body.
+          </label>
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={confirmation.communicationOnly}
+              onChange={(event) => setConfirmationValue("communicationOnly", event.currentTarget.checked)}
+            />{" "}
+            I understand this sends tenant communication only.
+          </label>
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={confirmation.legalService}
+              onChange={(event) => setConfirmationValue("legalService", event.currentTarget.checked)}
+            />{" "}
+            I understand this does not establish legal notice service by itself.
+          </label>
+        </fieldset>
+      ) : null}
 
       <div style={noticeStatusGridStyle} aria-label="Delivery and legal status">
-        <NoticeStatus label="Email delivery" value="Not enabled" tone="deferred" />
-        <NoticeStatus label="Tenant notification" value="Not sent" tone="deferred" />
+        <NoticeStatus
+          label="Email delivery"
+          value={sendSucceeded ? communicationStatusLabel(sendState.result.status) : "Not sent"}
+          tone={sendSucceeded ? "ready" : "deferred"}
+        />
+        <NoticeStatus
+          label="Delivery status"
+          value={sendSucceeded ? deliveryStatusLabel(sendState.result.deliveryStatus) : "Not available yet"}
+          tone={sendSucceeded ? "warning" : "deferred"}
+        />
+        <NoticeStatus label="Tenant notification" value={sendSucceeded ? "Tenant notified by email provider acceptance" : "Not sent"} tone={sendSucceeded ? "ready" : "deferred"} />
         <NoticeStatus label="Notice service" value="Not established" tone="deferred" />
         <NoticeStatus label="Legal compliance" value="Not determined by this workflow" tone="deferred" />
         <NoticeStatus label="Audit/evidence" value={savedSnapshot ? "Draft snapshot captured" : "Captured when snapshot is saved"} tone={savedSnapshot ? "ready" : "deferred"} />
@@ -988,8 +1186,8 @@ function TenantCommunicationSendReview({
         <div style={{ display: "grid", gap: 4 }}>
           <h4 style={sendReviewSubheadingStyle}>Approval decision</h4>
           <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
-            Create an internal decision queue item for future send approval review. This does not send email, notify the tenant,
-            serve notice, or change lease lifecycle state.
+            Create or review the internal approval decision before enabling send confirmations. Approval does not serve notice
+            or change lease lifecycle state.
           </div>
         </div>
 
@@ -1060,20 +1258,51 @@ function TenantCommunicationSendReview({
             </div>
             <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
               {approvalDecisionApproved
-                ? "Internal approval has been recorded. Send remains disabled and future send infrastructure remains required."
-                : "Approved status does not enable tenant communication. Future send infrastructure remains required."}
+                ? "Internal approval has been recorded. Send still requires explicit confirmation before tenant communication."
+                : "Approved status is required before tenant communication can be sent."}
             </div>
           </div>
         ) : null}
       </section>
 
-      <button type="button" disabled style={sendDisabledButtonStyle}>
-        Send tenant communication - not enabled yet
-      </button>
+      {sendState.status === "success" ? (
+        <section style={sentStatusStyle} aria-label="Renewal email sent status">
+          <h4 style={sendReviewSubheadingStyle}>Renewal email sent</h4>
+          <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, margin: 0 }}>
+            <ReviewFact label="Sent at" value={formatTimestamp(sendState.result.sentAt || sendState.result.attemptedAt)} />
+            <ReviewFact label="Delivery status" value={deliveryStatusLabel(sendState.result.deliveryStatus)} />
+            <ReviewFact label="Communication ID" value={sendState.result.communicationId} />
+            <ReviewFact label="Legal-service status" value="Not served; legal service not established" />
+          </dl>
+          <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
+            {sendState.result.idempotent ? "Idempotent retry returned the existing communication record. " : ""}
+            Email was accepted by the communication endpoint. This does not establish legal notice service by itself.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Link to={reviewModel?.leaseTimelinePath || `/review-timeline?scope=lease&scopeId=${encodeURIComponent(lease.id)}`} style={buttonLinkStyle}>
+              Open lease review timeline
+            </Link>
+            <Link to={reviewModel?.leaseEvidencePath || `/evidence-packs?scope=lease&scopeId=${encodeURIComponent(lease.id)}`} style={buttonLinkStyle}>
+              Open lease evidence preview
+            </Link>
+          </div>
+        </section>
+      ) : (
+        <button
+          type="button"
+          onClick={() => void sendRenewalEmail()}
+          disabled={!sendPrerequisitesMet || !allConfirmationsChecked || sendState.status === "sending"}
+          style={sendPrerequisitesMet && allConfirmationsChecked ? primaryButtonStyle : sendDisabledButtonStyle}
+        >
+          {sendState.status === "sending" ? "Sending renewal email…" : "Send renewal email"}
+        </button>
+      )}
+
+      {sendState.status === "error" ? <div style={warningPanelStyle}>{sendState.message}</div> : null}
 
       <div style={deferredPanelStyle}>
-        Email delivery is not enabled in this workflow yet. Future send will require recipient confirmation, exact body
-        persistence, delivery status, audit capture, and legal-service separation.
+        Renewal email sends use the controlled communication endpoint only. This workflow does not create lease notice
+        records, mark notice served, establish legal service, or change lease lifecycle state.
       </div>
     </section>
   );
@@ -1085,16 +1314,59 @@ type SendChecklistStatus =
   | "Deferred"
   | "Approved internally"
   | "Acknowledged for approval"
-  | "Still required before live send";
+  | "Still required before live send"
+  | "Ready for send"
+  | "Ready for confirmation"
+  | "Acknowledged";
 
 function SendChecklistItem({ label, status }: { label: string; status: SendChecklistStatus }) {
   const tone =
-    status === "Ready" || status === "Approved internally" || status === "Acknowledged for approval"
+    status === "Ready" ||
+    status === "Approved internally" ||
+    status === "Acknowledged for approval" ||
+    status === "Ready for send" ||
+    status === "Ready for confirmation" ||
+    status === "Acknowledged"
       ? "ready"
       : status === "Needs review"
         ? "warning"
         : "deferred";
   return <NoticeStatus label={label} value={status} tone={tone} />;
+}
+
+function SendStepCard({
+  step,
+  title,
+  status,
+  description,
+  actionLabel,
+  actionHref,
+}: {
+  step: string;
+  title: string;
+  status: string;
+  description: string;
+  actionLabel?: string;
+  actionHref?: string;
+}) {
+  const ready = ["Ready", "Approved", "Complete"].includes(status);
+  return (
+    <div style={sendStepCardStyle}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+        <div style={{ display: "grid", gap: 2 }}>
+          <div style={termStyle}>{step}</div>
+          <div style={{ color: workflowTheme.charcoal, fontWeight: 900 }}>{title}</div>
+        </div>
+        <span style={ready ? readyBadgePillStyle : deferredBadgeStyle}>{status}</span>
+      </div>
+      <div style={{ color: workflowTheme.muted, lineHeight: 1.5 }}>{description}</div>
+      {actionHref && actionLabel ? (
+        <Link to={actionHref} style={buttonLinkStyle}>
+          {actionLabel}
+        </Link>
+      ) : null}
+    </div>
+  );
 }
 
 function isPersistedApprovalDecisionItem(
@@ -1459,6 +1731,21 @@ const sendChecklistStyle: React.CSSProperties = {
   gap: 10,
 };
 
+const sendStepsStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 10,
+};
+
+const sendStepCardStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+  border: `1px solid ${workflowTheme.border}`,
+  borderRadius: 10,
+  background: workflowTheme.card,
+  padding: 10,
+};
+
 const confirmationPreviewStyle: React.CSSProperties = {
   display: "grid",
   gap: 8,
@@ -1516,6 +1803,13 @@ const deferredBadgeStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const readyBadgePillStyle: React.CSSProperties = {
+  ...deferredBadgeStyle,
+  border: "1px solid rgba(22, 101, 52, 0.24)",
+  background: "rgba(220, 252, 231, 0.78)",
+  color: "#166534",
+};
+
 const sendDisabledButtonStyle: React.CSSProperties = {
   ...buttonStyle,
   width: "fit-content",
@@ -1524,6 +1818,15 @@ const sendDisabledButtonStyle: React.CSSProperties = {
   color: workflowTheme.subtle,
   cursor: "not-allowed",
   boxShadow: "none",
+};
+
+const sentStatusStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+  border: "1px solid rgba(22, 101, 52, 0.22)",
+  borderRadius: 10,
+  background: "rgba(220, 252, 231, 0.42)",
+  padding: 12,
 };
 
 const noticeActionGridStyle: React.CSSProperties = {

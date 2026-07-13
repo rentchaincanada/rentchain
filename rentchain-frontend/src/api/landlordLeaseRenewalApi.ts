@@ -79,6 +79,34 @@ export type RenewalNoticeDraftSnapshot = {
   canonicalEventId?: string | null;
 };
 
+export type SendRenewalNoticeCommunicationPayload = {
+  snapshotId: string;
+  approvalDecisionItemId: string;
+  confirmationAccepted: true;
+  recipientReviewed: true;
+  bodyReviewed: true;
+  legalServiceAcknowledged: true;
+  noLegalServiceClaim: true;
+  idempotencyKey: string;
+};
+
+export type RenewalNoticeCommunicationResponse = {
+  ok: true;
+  idempotent?: boolean;
+  communicationId: string;
+  status: "send_attempted" | "email_sent" | "email_failed";
+  deliveryStatus: "delivery_status_unknown";
+  attemptedAt: string;
+  sentAt: string | null;
+  providerMessageId: null;
+  auditEventId: string | null;
+  timelineEventId: string | null;
+  noLegalServiceClaim: true;
+  noticeServed: false;
+  tenantNotified: boolean;
+  legalServiceEstablished: false;
+};
+
 export function fetchExpiringLeaseRenewals(params?: {
   propertyId?: string | null;
   withinDays?: number;
@@ -93,6 +121,19 @@ export function fetchExpiringLeaseRenewals(params?: {
   const suffix = search.size ? `?${search.toString()}` : "";
   return apiFetch<{ ok: true; items: LandlordLeaseRenewalLease[]; data: LandlordLeaseRenewalLease[] }>(
     `/landlord/leases/expiring${suffix}`
+  );
+}
+
+export function sendRenewalNoticeCommunication(
+  leaseId: string,
+  payload: SendRenewalNoticeCommunicationPayload
+) {
+  return apiFetch<RenewalNoticeCommunicationResponse>(
+    `/landlord/leases/${encodeURIComponent(leaseId)}/renewal-notice-communications`,
+    {
+      method: "POST",
+      body: payload,
+    }
   );
 }
 
