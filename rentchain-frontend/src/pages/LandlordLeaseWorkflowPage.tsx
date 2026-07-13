@@ -1323,7 +1323,12 @@ function TenantCommunicationSendReview({
           <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, margin: 0 }}>
             <ReviewFact label="Sent at" value={formatTimestamp(sendState.result.sentAt || sendState.result.attemptedAt)} />
             <ReviewFact label="Delivery status" value={deliveryStatusLabel(sendState.result.deliveryStatus)} />
-            <ReviewFact label="Communication ID" value={sendState.result.communicationId} />
+            <ReviewFact
+              label="Communication ID"
+              value={sendState.result.communicationId}
+              containerStyle={communicationIdFactStyle}
+              valueStyle={communicationIdValueStyle}
+            />
             <ReviewFact label="Legal-service status" value="Not served; legal service not established" />
           </dl>
           <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
@@ -1490,11 +1495,21 @@ function NoticeStatus({
   );
 }
 
-function ReviewFact({ label, value }: { label: string; value: string }) {
+function ReviewFact({
+  label,
+  value,
+  containerStyle,
+  valueStyle,
+}: {
+  label: string;
+  value: string;
+  containerStyle?: React.CSSProperties;
+  valueStyle?: React.CSSProperties;
+}) {
   return (
-    <div style={{ display: "grid", gap: 4 }}>
+    <div style={{ display: "grid", gap: 4, ...containerStyle }}>
       <dt style={termStyle}>{label}</dt>
-      <dd style={sourceValueStyle}>{value}</dd>
+      <dd style={{ ...sourceValueStyle, ...valueStyle }}>{value}</dd>
     </div>
   );
 }
@@ -1879,6 +1894,17 @@ const sentStatusStyle: React.CSSProperties = {
   borderRadius: 10,
   background: "rgba(220, 252, 231, 0.42)",
   padding: 12,
+};
+
+const communicationIdFactStyle: React.CSSProperties = {
+  minWidth: 0,
+  gridColumn: "span 2",
+};
+
+const communicationIdValueStyle: React.CSSProperties = {
+  minWidth: 0,
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
 };
 
 const noticeActionGridStyle: React.CSSProperties = {

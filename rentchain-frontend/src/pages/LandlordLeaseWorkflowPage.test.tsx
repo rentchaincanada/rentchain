@@ -953,6 +953,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Delivery status unknown");
     expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Not served; legal service not established");
     expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("rnc_test");
+    expect(screen.getByText("rnc_test")).toHaveStyle({ overflowWrap: "anywhere" });
     const sentStatus = screen.getByLabelText("Renewal email sent status");
     expect(within(sentStatus).getByRole("link", { name: "Open lease review timeline" })).toHaveAttribute(
       "href",
