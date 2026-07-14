@@ -360,6 +360,16 @@ function renewalCommunicationRank(entry: ReviewTimelineEntry) {
   return 0;
 }
 
+function isRenewalCommunicationDeliveryUpdate(entry: ReviewTimelineEntry) {
+  return /delivery status updated/i.test(`${entry.label} ${entry.description}`);
+}
+
+function latestRenewalCommunicationDeliveryEntry(entries: ReviewTimelineEntry[]) {
+  return entries
+    .filter(isRenewalCommunicationDeliveryUpdate)
+    .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())[0];
+}
+
 function previousRenewalCommunicationsFromTimeline(entries: ReviewTimelineEntry[]) {
   const grouped = new Map<string, ReviewTimelineEntry[]>();
   entries.filter(isRenewalCommunicationTimelineEntry).forEach((entry) => {
@@ -376,12 +386,13 @@ function previousRenewalCommunicationsFromTimeline(entries: ReviewTimelineEntry[
         return new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime();
       });
       const primary = sorted[0];
+      const deliveryEntry = latestRenewalCommunicationDeliveryEntry(group) || primary;
       return {
         communicationId,
         recipientEmail: extractSentenceValue(primary.description, "Recipient email") || "Recipient not available",
         sentTimestamp: primary.timestamp,
         emailDelivery: communicationEmailDeliveryLabel(extractSentenceValue(primary.description, "Status")),
-        deliveryConfirmation: communicationDeliveryLabel(extractSentenceValue(primary.description, "Delivery confirmation")),
+        deliveryConfirmation: communicationDeliveryLabel(extractSentenceValue(deliveryEntry.description, "Delivery confirmation")),
         draftSnapshotId: extractSentenceValue(primary.description, "Draft snapshot ID"),
         approvalDecisionId: extractSentenceValue(primary.description, "Approval decision ID"),
       };

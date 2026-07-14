@@ -631,6 +631,92 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(mocks.sendRenewalNoticeCommunication).not.toHaveBeenCalled();
   });
 
+  it("prefers the latest provider delivery status in previous renewal communications", async () => {
+    mocks.fetchReviewTimeline.mockResolvedValue({
+      timelineId: "timeline-lease-1",
+      scope: "lease",
+      scopeId: "lease-1",
+      generatedAt: "2026-07-14T03:00:00.000Z",
+      manualReviewRequired: true,
+      externalSharingEnabled: false,
+      certificationIssued: false,
+      entries: [
+        {
+          timelineEntryId: "renewal_notice_email_sent:rnc_delivered",
+          entryType: "canonical_event",
+          timestamp: "2026-07-14T02:56:04.240Z",
+          label: "Renewal tenant communication email sent",
+          description:
+            "Renewal tenant communication email sent at 2026-07-14 02:56 UTC. Communication ID: rnc_delivered. Status: email sent. Recipient email: jane@example.com. Delivery confirmation: Accepted for sending. Draft snapshot ID: snapshot-delivered. Approval decision ID: decision-delivered. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
+          status: "completed",
+          actor: { type: "landlord", id: "landlord-1" },
+          source: "canonical_events",
+          sourceId: "rnc_delivered",
+          destination: null,
+          redacted: false,
+          redactionReason: null,
+          blockedReason: null,
+          manualOnly: true,
+        },
+        {
+          timelineEntryId: "renewal_notice_delivery_status_updated:rnc_delivered:accepted",
+          entryType: "canonical_event",
+          timestamp: "2026-07-14T02:56:04.193Z",
+          label: "Renewal tenant communication delivery status updated",
+          description:
+            "Renewal tenant communication delivery status updated at 2026-07-14 02:56 UTC. Communication ID: rnc_delivered. Status: delivery status updated. Recipient email: jane@example.com. Delivery confirmation: Accepted for sending. Draft snapshot ID: snapshot-delivered. Approval decision ID: decision-delivered. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
+          status: "completed",
+          actor: { type: "system", id: "mailgun" },
+          source: "canonical_events",
+          sourceId: "rnc_delivered",
+          destination: null,
+          redacted: false,
+          redactionReason: null,
+          blockedReason: null,
+          manualOnly: true,
+        },
+        {
+          timelineEntryId: "renewal_notice_delivery_status_updated:rnc_delivered:delivered",
+          entryType: "canonical_event",
+          timestamp: "2026-07-14T02:56:04.944Z",
+          label: "Renewal tenant communication delivery status updated",
+          description:
+            "Renewal tenant communication delivery status updated at 2026-07-14 02:56 UTC. Communication ID: rnc_delivered. Status: delivery status updated. Recipient email: jane@example.com. Delivery confirmation: Delivered by email provider. Draft snapshot ID: snapshot-delivered. Approval decision ID: decision-delivered. Confirmation/audit status: send confirmations captured. Not served; legal service not established. Legal compliance not determined by this workflow.",
+          status: "completed",
+          actor: { type: "system", id: "mailgun" },
+          source: "canonical_events",
+          sourceId: "rnc_delivered",
+          destination: null,
+          redacted: false,
+          redactionReason: null,
+          blockedReason: null,
+          manualOnly: true,
+        },
+      ],
+      filters: { entryType: ["canonical_event"], status: ["completed"], source: ["canonical_events"] },
+      summary: { total: 3, reviewRequired: 0, blocked: 0, completed: 3, redacted: 0 },
+    });
+
+    renderWorkflow("/leases/lease-1/workflows/notice");
+
+    await screen.findByLabelText("Previous renewal communications");
+    await waitFor(() => {
+      expect(mocks.fetchReviewTimeline).toHaveBeenCalledWith({ scope: "lease", scopeId: "lease-1" });
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Previous renewal communications")).toHaveTextContent("1 recorded");
+    });
+    const history = screen.getByLabelText("Previous renewal communications");
+    expect(history).toHaveTextContent("rnc_delivered");
+    expect(history).toHaveTextContent("Email sent");
+    expect(history).toHaveTextContent("Delivered by email provider");
+    expect(history).not.toHaveTextContent("Delivery confirmation Accepted for sending");
+    expect(history).toHaveTextContent("Not served; legal service not established");
+    expect(history).toHaveTextContent("Not determined by this workflow");
+    expect(document.body).not.toHaveTextContent(/legally delivered|tenant legally notified|tenant received notice|tenant opened notice|compliance achieved|statutory notice completed/i);
+    expect(mocks.sendRenewalNoticeCommunication).not.toHaveBeenCalled();
+  });
+
   it("shows notice review inputs-needed state without draft actions", async () => {
     mocks.fetchExpiringLeaseRenewals.mockResolvedValueOnce({
       ok: true,
