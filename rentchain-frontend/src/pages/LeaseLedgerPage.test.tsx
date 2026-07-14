@@ -627,6 +627,8 @@ describe("LeaseLedgerPage", () => {
     expect(screen.queryByText("Review / resolve")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Mark reviewed:/ })).not.toBeInTheDocument();
     expect(screen.getAllByText("Payments exceed charges in aggregate, but this obligation remains unmatched.").length).toBeGreaterThan(0);
+    expect(screen.getByText("Obligation remains unmatched after due date")).toBeInTheDocument();
+    expect(screen.queryByText("obligation_pending_after_due_date")).not.toBeInTheDocument();
     expect(screen.getAllByText("Reviewed").length).toBeGreaterThan(0);
     expect(screen.getByText(/reviewed or resolved status does not mark rent paid/i)).toBeInTheDocument();
     expect(screen.queryByText("Overdue Rent")).not.toBeInTheDocument();
@@ -699,11 +701,12 @@ describe("LeaseLedgerPage", () => {
     expect(await screen.findByText("$4,250.00")).toBeInTheDocument();
     expect(screen.queryByText("425000")).not.toBeInTheDocument();
 
-    expect(screen.getAllByText("Overdue — Rent past due date (obligation missing after due date)").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Missing — No rent payment found after due date (missing rent payment after due date)").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Underpaid — Partial payment received (obligation partially paid)").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Failed — Payment did not complete (obligation payment failed)").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Manual review required — Payment mismatch or incomplete evidence (obligation requires manual review)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Overdue — Rent past due date (Obligation Missing After Due Date)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Missing — No rent payment found after due date (Missing Rent Payment After Due Date)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Underpaid — Partial payment received (Obligation Partially Paid)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Failed — Payment did not complete (Obligation Payment Failed)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Manual review required — Payment mismatch or incomplete evidence (Obligation Requires Manual Review)").length).toBeGreaterThan(0);
+    expect(screen.queryByText("obligation missing after due date")).not.toBeInTheDocument();
   });
 
   it("renders read-only lease decisions derived from delinquency signals", async () => {
@@ -924,6 +927,37 @@ describe("LeaseLedgerPage", () => {
     );
     expect(document.querySelector('[data-print-root="true"].lease-ledger-print-root')).not.toBeInTheDocument();
     expect(document.body.hasAttribute("data-print-root-active")).toBe(false);
+    printSpy.mockRestore();
+  });
+
+  it("prints allocation-review signal reasons as readable evidence copy", async () => {
+    const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
+    mocks.fetchLeaseLedger.mockClear();
+    mocks.fetchLeaseLedger.mockResolvedValueOnce(buildCreditAllocationLedgerResponse(baseLedgerResponse, "resolved"));
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => {
+      const printRoot = document.querySelector('[data-print-root="true"].lease-ledger-print-root');
+      const printText = printRoot?.textContent || "";
+      expect(printText).toContain("Review payment allocation");
+      expect(printText).toContain("Allocation review");
+      expect(printText).toContain("Payments exceed charges in aggregate, but one or more obligations remain unmatched.");
+      expect(printText).toContain("Review and allocate unmatched payments before taking any overdue-rent action.");
+      expect(printText).toContain("Signal reason: Obligation remains unmatched after due date");
+      expect(printText).not.toContain("obligation_pending_after_due_date");
+      window.dispatchEvent(new Event("afterprint"));
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Review payment allocation");
+    fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
+
+    await waitFor(() => expect(printSpy).toHaveBeenCalled());
     printSpy.mockRestore();
   });
 
