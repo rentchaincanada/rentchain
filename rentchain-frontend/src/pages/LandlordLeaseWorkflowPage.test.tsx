@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   fetchReviewTimeline: vi.fn(),
 }));
 
+const scrollIntoViewMock = vi.fn();
+const focusMock = vi.fn();
+
 vi.mock("@/api/leasesApi", () => ({
   getLeaseById: mocks.getLeaseById,
 }));
@@ -125,6 +128,16 @@ function decisionQueueResponse(items: unknown[]) {
 
 describe("LandlordLeaseWorkflowPage", () => {
   beforeEach(() => {
+    scrollIntoViewMock.mockReset();
+    focusMock.mockReset();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoViewMock,
+    });
+    Object.defineProperty(HTMLElement.prototype, "focus", {
+      configurable: true,
+      value: focusMock,
+    });
     mocks.getLeaseById.mockReset();
     mocks.fetchExpiringLeaseRenewals.mockReset();
     mocks.saveLeaseRenewalInputs.mockReset();
@@ -1121,6 +1134,10 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByLabelText("Send confirmation checklist")).toHaveTextContent(
       "Sending emails the tenant using the approved renewal draft. This does not establish legal notice service by itself."
     );
+    await waitFor(() => {
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+      expect(focusMock).toHaveBeenCalledWith({ preventScroll: true });
+    });
     expect(screen.getByRole("button", { name: "Send renewal email" })).toBeDisabled();
     expect(document.body).not.toHaveTextContent(/email sent|tenant notified by email provider acceptance|legal delivery/i);
   });

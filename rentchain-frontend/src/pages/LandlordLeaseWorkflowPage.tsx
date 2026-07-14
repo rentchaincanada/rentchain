@@ -1052,6 +1052,8 @@ function TenantCommunicationSendReview({
   const [decisionSubmitting, setDecisionSubmitting] = React.useState(false);
   const [decisionNotice, setDecisionNotice] = React.useState<string | null>(null);
   const [decisionError, setDecisionError] = React.useState<string | null>(null);
+  const [sendConfirmationFocusRequested, setSendConfirmationFocusRequested] = React.useState(false);
+  const sendConfirmationChecklistRef = React.useRef<HTMLFieldSetElement | null>(null);
   const [confirmation, setConfirmation] = React.useState<Record<ConfirmationKey, boolean>>({
     recipientReviewed: false,
     bodyReviewed: false,
@@ -1133,6 +1135,15 @@ function TenantCommunicationSendReview({
     });
     setSendState({ status: "idle" });
   }, [activeSendContext, approvalDecision, lease.id, savedSnapshot, sendContextKey]);
+
+  React.useEffect(() => {
+    if (!sendConfirmationFocusRequested || !sendPrerequisitesMet || sendSucceeded) return;
+    const checklist = sendConfirmationChecklistRef.current;
+    if (!checklist) return;
+    checklist.scrollIntoView({ behavior: "smooth", block: "start" });
+    checklist.focus({ preventScroll: true });
+    setSendConfirmationFocusRequested(false);
+  }, [sendConfirmationFocusRequested, sendPrerequisitesMet, sendSucceeded]);
 
   function setConfirmationValue(key: ConfirmationKey, value: boolean) {
     setConfirmation((current) => ({ ...current, [key]: value }));
@@ -1225,6 +1236,9 @@ function TenantCommunicationSendReview({
       }
       setApprovalDecision(response.item);
       setDecisionNotice(`${successLabel} Send requires the confirmation checklist.`);
+      if (action === "approve") {
+        setSendConfirmationFocusRequested(true);
+      }
     } catch (error) {
       if (String((error as Error)?.message || error).includes("decision_item_not_found")) {
         setApprovalDecision(null);
@@ -1401,7 +1415,12 @@ function TenantCommunicationSendReview({
       ) : null}
 
       {sendPrerequisitesMet && !sendSucceeded ? (
-        <fieldset style={confirmationPreviewStyle} aria-label="Send confirmation checklist">
+        <fieldset
+          ref={sendConfirmationChecklistRef}
+          style={confirmationPreviewStyle}
+          aria-label="Send confirmation checklist"
+          tabIndex={-1}
+        >
           <legend style={sendReviewSubheadingStyle}>Send confirmation checklist</legend>
           <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
             Sending emails the tenant using the approved renewal draft. This does not establish legal notice service by itself.
