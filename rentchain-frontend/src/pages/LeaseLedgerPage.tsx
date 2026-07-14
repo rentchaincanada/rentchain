@@ -39,6 +39,7 @@ import {
   type DecisionActionType,
   type DecisionItem,
   type DecisionSeverity,
+  type DecisionStatus,
 } from "@/lib/decisions/decisionDisplay";
 import { findRelatedDelinquencySignal, findRelatedObligationRow } from "@/lib/decisions/decisionContext";
 import { DecisionContextPanel } from "@/components/decisions/DecisionContextPanel";
@@ -210,17 +211,46 @@ function DecisionBadge({ severity, label }: { severity: DecisionSeverity; label:
   );
 }
 
+function statusForDecisionAction(actionType: DecisionActionType): DecisionStatus {
+  if (actionType === "reviewed") return "reviewed";
+  if (actionType === "snoozed") return "snoozed";
+  if (actionType === "assigned") return "assigned";
+  if (actionType === "dismissed") return "dismissed";
+  return "resolved";
+}
+
+function currentDecisionStatus(decision: DecisionItem): DecisionStatus {
+  return decision.status || "detected";
+}
+
+function decisionActionChangesStatus(decision: DecisionItem, actionType: DecisionActionType): boolean {
+  return statusForDecisionAction(actionType) !== currentDecisionStatus(decision);
+}
+
+function isTerminalDecisionStatus(status: DecisionStatus): boolean {
+  return status === "resolved" || status === "dismissed";
+}
+
+function decisionPassiveLabel(decision: DecisionItem): string {
+  const status = currentDecisionStatus(decision);
+  if (status === "resolved") return "Already resolved";
+  if (status === "dismissed") return "Dismissed";
+  return decisionStatusCopy[status];
+}
+
+function DecisionWorkflowPassiveState({ decision }: { decision: DecisionItem }) {
+  return (
+    <div style={{ border: "1px solid rgba(91,70,48,0.16)", background: "#fffaf1", borderRadius: 10, padding: "8px 10px", color: "#3f382f" }}>
+      <strong>{decisionPassiveLabel(decision)}</strong>
+      <div style={{ color: "#63594d", fontSize: 12, marginTop: 2 }}>
+        No state-changing decision action is currently available.
+      </div>
+    </div>
+  );
+}
+
 function decisionWithStatus(decision: DecisionItem, actionType: DecisionActionType): DecisionItem {
-  const nextStatus =
-    actionType === "reviewed"
-      ? "reviewed"
-      : actionType === "snoozed"
-      ? "snoozed"
-      : actionType === "assigned"
-      ? "assigned"
-      : actionType === "dismissed"
-      ? "dismissed"
-      : "resolved";
+  const nextStatus = statusForDecisionAction(actionType);
   return {
     ...decision,
     status: nextStatus,
@@ -239,10 +269,12 @@ function DecisionActionControls({
   decision,
   pending,
   onAction,
+  primaryActionType,
 }: {
   decision: DecisionItem;
   pending: boolean;
   onAction: (decision: DecisionItem, actionType: DecisionActionType) => void;
+  primaryActionType?: DecisionActionType | null;
 }) {
   const actions: Array<{ actionType: DecisionActionType; label: string; description: string }> = [
     {
@@ -271,9 +303,15 @@ function DecisionActionControls({
       description: "Marks the operational review task as resolved. Does not automatically modify balances or obligations.",
     },
   ];
+  const status = currentDecisionStatus(decision);
+  if (isTerminalDecisionStatus(status)) return null;
+  const availableActions = actions.filter(
+    (action) => action.actionType !== primaryActionType && decisionActionChangesStatus(decision, action.actionType)
+  );
+  if (availableActions.length === 0) return <DecisionWorkflowPassiveState decision={decision} />;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-      {actions.map((action) => (
+      {availableActions.map((action) => (
         <button
           key={action.actionType}
           type="button"
@@ -452,6 +490,9 @@ function DecisionRow({
     ? { label: "Review payment allocation", badge: "Allocation review" }
     : copy;
   const summary = buildDecisionSummaryFacts(decision, lease, obligationRows, delinquencySignals, allocationReviewRequired);
+  const currentStatus = currentDecisionStatus(decision);
+  const hasTerminalStatus = isTerminalDecisionStatus(currentStatus);
+  const primaryActionType = summary.recommendedAction.cta === "resolve" && !hasTerminalStatus ? "resolved" : null;
   return (
     <div className="lease-ledger-decision-card">
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -496,13 +537,15 @@ function DecisionRow({
           <span>Recommended next action</span>
           <strong>{summary.recommendedAction.label}</strong>
         </div>
-        {summary.recommendedAction.cta === "record_payment" ? (
+        {hasTerminalStatus ? (
+          <DecisionWorkflowPassiveState decision={decision} />
+        ) : summary.recommendedAction.cta === "record_payment" ? (
           <button type="button" onClick={onRecordPayment} title={summary.recommendedAction.helper}>
             Record payment
           </button>
         ) : (
           <button type="button" disabled={pending} onClick={() => onAction(decision, "resolved")} title={summary.recommendedAction.helper}>
-            {pending ? "Saving..." : "Review / resolve"}
+            {pending ? "Saving..." : "Resolve"}
           </button>
         )}
       </div>
@@ -515,7 +558,7 @@ function DecisionRow({
         delinquencySignals={delinquencySignals}
         internalEvidenceMode="advanced"
       />
-      <DecisionActionControls decision={decision} pending={pending} onAction={onAction} />
+      <DecisionActionControls decision={decision} pending={pending} onAction={onAction} primaryActionType={primaryActionType} />
     </div>
   );
 }
@@ -798,6 +841,7 @@ export default function LeaseLedgerPage() {
 
   const handleDecisionAction = async (decision: DecisionItem, actionType: DecisionActionType) => {
     if (!leaseId) return;
+    if (!decisionActionChangesStatus(decision, actionType)) return;
     setDecisionActionPendingId(decision.decisionId);
     const snoozedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     try {

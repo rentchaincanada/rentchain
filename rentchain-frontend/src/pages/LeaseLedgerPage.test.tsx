@@ -3,6 +3,101 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LeaseLedgerPage from "./LeaseLedgerPage";
 
+function buildCreditAllocationLedgerResponse(baseLedgerResponse: any, status: "reviewed" | "resolved" = "reviewed") {
+  return {
+    ...baseLedgerResponse,
+    totals: { chargesCents: 217300, paymentsCents: 1094200, balanceCents: -876900 },
+    obligationRows: [
+      {
+        rowId: "obligation-pending-credit",
+        leaseId: "lease-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        tenantId: "tenant-1",
+        dueDate: "2026-06-01T00:00:00.000Z",
+        expectedAmountCents: 200000,
+        paidAmountCents: 0,
+        currency: "cad",
+        obligationStatus: "pending",
+        evidenceStatus: "pending",
+        source: "payment_intent",
+        reasons: ["payment_pending"],
+      },
+    ],
+    obligationSummary: {
+      totalRows: 1,
+      expectedAmountCents: 200000,
+      paidAmountCents: 0,
+      outstandingAmountCents: 200000,
+      manualReviewCount: 0,
+      statusCounts: {
+        expected: 0,
+        pending: 1,
+        paid: 0,
+        underpaid: 0,
+        overpaid: 0,
+        failed: 0,
+        missing: 0,
+        manual_review_required: 0,
+        unknown: 0,
+      },
+    },
+    delinquencySignals: [
+      {
+        signalId: "delinquency:overdue:obligation-pending-credit",
+        leaseId: "lease-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        tenantId: "tenant-1",
+        dueDate: "2026-06-01T00:00:00.000Z",
+        expectedAmountCents: 200000,
+        paidAmountCents: 0,
+        outstandingAmountCents: 200000,
+        signalType: "overdue",
+        severity: "critical",
+        detectedAt: "2026-07-02T00:00:00.000Z",
+        reasons: ["obligation_pending_after_due_date"],
+      },
+    ],
+    delinquencySummary: {
+      totalSignals: 1,
+      overdueCount: 1,
+      partiallyPaidCount: 0,
+      failedCount: 0,
+      missingCount: 0,
+      manualReviewCount: 0,
+      totalOutstandingCents: 200000,
+    },
+    decisions: [
+      {
+        decisionId: "decision-reviewed-overdue",
+        leaseId: "lease-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        tenantId: "tenant-1",
+        decisionType: "review_overdue_rent",
+        severity: "critical",
+        status,
+        reason: "Rent obligation is overdue.",
+        metadata: {
+          signalId: "delinquency:overdue:obligation-pending-credit",
+          signalType: "overdue",
+          outstandingAmountCents: 200000,
+          obligationStatus: "pending",
+        },
+        latestAction: {
+          actionId: `action-${status}`,
+          decisionId: "decision-reviewed-overdue",
+          actionType: status,
+          previousStatus: status === "resolved" ? "reviewed" : "detected",
+          nextStatus: status,
+          createdAt: "2026-07-02T12:00:00.000Z",
+        },
+      },
+    ],
+  };
+}
+
 const mocks = vi.hoisted(() => ({
   fetchLeaseLedger: vi.fn(),
   addLeaseCharge: vi.fn(),
@@ -510,98 +605,7 @@ describe("LeaseLedgerPage", () => {
   it("explains aggregate credit balances when specific obligations remain outstanding", async () => {
     const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
     mocks.fetchLeaseLedger.mockClear();
-    mocks.fetchLeaseLedger.mockResolvedValueOnce({
-      ...baseLedgerResponse,
-      totals: { chargesCents: 217300, paymentsCents: 1094200, balanceCents: -876900 },
-      obligationRows: [
-        {
-          rowId: "obligation-pending-credit",
-          leaseId: "lease-1",
-          propertyId: "prop-1",
-          unitId: "unit-1",
-          tenantId: "tenant-1",
-          dueDate: "2026-06-01T00:00:00.000Z",
-          expectedAmountCents: 200000,
-          paidAmountCents: 0,
-          currency: "cad",
-          obligationStatus: "pending",
-          evidenceStatus: "pending",
-          source: "payment_intent",
-          reasons: ["payment_pending"],
-        },
-      ],
-      obligationSummary: {
-        totalRows: 1,
-        expectedAmountCents: 200000,
-        paidAmountCents: 0,
-        outstandingAmountCents: 200000,
-        manualReviewCount: 0,
-        statusCounts: {
-          expected: 0,
-          pending: 1,
-          paid: 0,
-          underpaid: 0,
-          overpaid: 0,
-          failed: 0,
-          missing: 0,
-          manual_review_required: 0,
-          unknown: 0,
-        },
-      },
-      delinquencySignals: [
-        {
-          signalId: "delinquency:overdue:obligation-pending-credit",
-          leaseId: "lease-1",
-          propertyId: "prop-1",
-          unitId: "unit-1",
-          tenantId: "tenant-1",
-          dueDate: "2026-06-01T00:00:00.000Z",
-          expectedAmountCents: 200000,
-          paidAmountCents: 0,
-          outstandingAmountCents: 200000,
-          signalType: "overdue",
-          severity: "critical",
-          detectedAt: "2026-07-02T00:00:00.000Z",
-          reasons: ["obligation_pending_after_due_date"],
-        },
-      ],
-      delinquencySummary: {
-        totalSignals: 1,
-        overdueCount: 1,
-        partiallyPaidCount: 0,
-        failedCount: 0,
-        missingCount: 0,
-        manualReviewCount: 0,
-        totalOutstandingCents: 200000,
-      },
-      decisions: [
-        {
-          decisionId: "decision-reviewed-overdue",
-          leaseId: "lease-1",
-          propertyId: "prop-1",
-          unitId: "unit-1",
-          tenantId: "tenant-1",
-          decisionType: "review_overdue_rent",
-          severity: "critical",
-          status: "reviewed",
-          reason: "Rent obligation is overdue.",
-          metadata: {
-            signalId: "delinquency:overdue:obligation-pending-credit",
-            signalType: "overdue",
-            outstandingAmountCents: 200000,
-            obligationStatus: "pending",
-          },
-          latestAction: {
-            actionId: "action-reviewed",
-            decisionId: "decision-reviewed-overdue",
-            actionType: "reviewed",
-            previousStatus: "detected",
-            nextStatus: "reviewed",
-            createdAt: "2026-07-02T12:00:00.000Z",
-          },
-        },
-      ],
-    });
+    mocks.fetchLeaseLedger.mockResolvedValueOnce(buildCreditAllocationLedgerResponse(baseLedgerResponse, "reviewed"));
 
     render(
       <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
@@ -619,12 +623,42 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getAllByText("Allocation review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Payments exceed charges in aggregate, but one or more obligations remain unmatched.").length).toBeGreaterThan(0);
     expect(screen.getByText("Review and allocate unmatched payments before taking any overdue-rent action.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resolve" })).toBeInTheDocument();
+    expect(screen.queryByText("Review / resolve")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Mark reviewed:/ })).not.toBeInTheDocument();
     expect(screen.getAllByText("Payments exceed charges in aggregate, but this obligation remains unmatched.").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Reviewed").length).toBeGreaterThan(0);
     expect(screen.getByText(/reviewed or resolved status does not mark rent paid/i)).toBeInTheDocument();
     expect(screen.queryByText("Overdue Rent")).not.toBeInTheDocument();
     expect(screen.queryByText("Rent obligation is overdue.")).not.toBeInTheDocument();
     expect(screen.queryByText("Record payment or contact the tenant, then resolve once the ledger is updated.")).not.toBeInTheDocument();
+  });
+
+  it("renders resolved allocation-review decisions as passive workflow state", async () => {
+    const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
+    mocks.fetchLeaseLedger.mockClear();
+    mocks.fetchLeaseLedger.mockResolvedValueOnce(buildCreditAllocationLedgerResponse(baseLedgerResponse, "resolved"));
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Credit balance needs allocation review")).toBeInTheDocument();
+    expect(screen.getByText("Review payment allocation")).toBeInTheDocument();
+    expect(screen.getAllByText("Allocation review").length).toBeGreaterThan(0);
+    expect(screen.getByText("Review and allocate unmatched payments before taking any overdue-rent action.")).toBeInTheDocument();
+    expect(screen.getAllByText("Already resolved").length).toBeGreaterThan(0);
+    expect(screen.getByText("Last action: Resolved")).toBeInTheDocument();
+    expect(screen.queryByText("Review / resolve")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resolve" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Mark reviewed:/ })).not.toBeInTheDocument();
+    expect(mocks.patchDecisionAction).not.toHaveBeenCalled();
+    expect(screen.queryByText("Overdue Rent")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rent obligation is overdue.")).not.toBeInTheDocument();
   });
 
   it("keeps the payment CSV import collapsed until the landlord opens it", async () => {
