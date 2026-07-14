@@ -623,6 +623,8 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getAllByText("Allocation review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Payments exceed charges in aggregate, but one or more obligations remain unmatched.").length).toBeGreaterThan(0);
     expect(screen.getByText("Review and allocate unmatched payments before taking any overdue-rent action.")).toBeInTheDocument();
+    expect(screen.getByText("Recommended next action")).toBeInTheDocument();
+    expect(screen.queryByText("Resolved outcome")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Resolve" })).toBeInTheDocument();
     expect(screen.queryByText("Review / resolve")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Mark reviewed:/ })).not.toBeInTheDocument();
@@ -652,7 +654,10 @@ describe("LeaseLedgerPage", () => {
     expect(await screen.findByText("Credit balance needs allocation review")).toBeInTheDocument();
     expect(screen.getByText("Review payment allocation")).toBeInTheDocument();
     expect(screen.getAllByText("Allocation review").length).toBeGreaterThan(0);
-    expect(screen.getByText("Review and allocate unmatched payments before taking any overdue-rent action.")).toBeInTheDocument();
+    expect(screen.getByText("Resolved outcome")).toBeInTheDocument();
+    expect(screen.getByText("Marked resolved as an allocation-review item. No rent-collection action should be taken until unmatched payments are reviewed.")).toBeInTheDocument();
+    expect(screen.queryByText("Recommended next action")).not.toBeInTheDocument();
+    expect(screen.queryByText("Review and allocate unmatched payments before taking any overdue-rent action.")).not.toBeInTheDocument();
     expect(screen.getAllByText("Already resolved").length).toBeGreaterThan(0);
     expect(screen.getByText("Last action: Resolved")).toBeInTheDocument();
     expect(screen.queryByText("Review / resolve")).not.toBeInTheDocument();
@@ -937,10 +942,14 @@ describe("LeaseLedgerPage", () => {
     const printSpy = vi.spyOn(window, "print").mockImplementation(() => {
       const printRoot = document.querySelector('[data-print-root="true"].lease-ledger-print-root');
       const printText = printRoot?.textContent || "";
+      const printDecisionText = printRoot?.querySelector(".lease-ledger-print-decision")?.textContent || "";
       expect(printText).toContain("Review payment allocation");
       expect(printText).toContain("Allocation review");
       expect(printText).toContain("Payments exceed charges in aggregate, but one or more obligations remain unmatched.");
-      expect(printText).toContain("Review and allocate unmatched payments before taking any overdue-rent action.");
+      expect(printDecisionText).toContain("Resolved outcome");
+      expect(printDecisionText).toContain("Marked resolved as an allocation-review item. No rent-collection action should be taken until unmatched payments are reviewed.");
+      expect(printDecisionText).not.toContain("Recommended next action");
+      expect(printDecisionText).not.toContain("Review and allocate unmatched payments before taking any overdue-rent action.");
       expect(printText).toContain("Signal reason: Obligation remains unmatched after due date");
       expect(printText).not.toContain("obligation_pending_after_due_date");
       window.dispatchEvent(new Event("afterprint"));
