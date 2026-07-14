@@ -281,6 +281,7 @@ Returns:
 - available credit;
 - eligible obligations;
 - suggested allocations;
+- a preview fingerprint or revision token derived from the current ledger balance, eligible obligation keys, active allocation records, and decision context;
 - current decision context if available;
 - guardrail copy/status flags.
 
@@ -304,6 +305,9 @@ Required request body:
   noPaymentAmountEdit: true;
   noLegalOrCollectionClaim: true;
   idempotencyKey: string;
+  previewFingerprint: string;
+  expectedSourceBalanceBeforeCents: number;
+  expectedObligationOutstandingBeforeCents: number;
   note?: string;
   decisionId?: string;
 }
@@ -321,6 +325,23 @@ Validation:
 - idempotency key is present and landlord/lease scoped;
 - confirmations are true;
 - decision ID, if supplied, belongs to the same lease.
+
+### Stale data and race prevention
+
+The create endpoint should rerun the same derivation used by preview inside a transaction or transaction-equivalent critical section before writing. It should reject stale requests when:
+
+- the aggregate ledger balance no longer matches `expectedSourceBalanceBeforeCents`;
+- the selected obligation no longer exists or no longer matches `expectedObligationOutstandingBeforeCents`;
+- another active allocation already consumed the same available credit;
+- the decision context moved to a terminal state that makes the allocation action no longer current.
+
+Recommended response:
+
+```http
+409 CREDIT_ALLOCATION_STATE_STALE
+```
+
+The response should instruct the UI to refresh the allocation preview. This avoids applying credit based on stale balance, stale obligation rows, or concurrent operator activity.
 
 Response:
 
@@ -370,6 +391,7 @@ Panel content:
 - suggested allocation amount;
 - remaining credit preview;
 - confirmation controls;
+- cancel/back control that leaves the ledger unchanged;
 - "Apply credit allocation" action;
 - reversal/correction links for existing active allocations.
 
@@ -483,6 +505,7 @@ The workflow must preserve:
 - no hidden outstanding obligations;
 - no collection/contact-tenant framing;
 - no legal service/compliance/lifecycle claims;
+- no tenant-fault implication when aggregate credit exists;
 - operator confirmation;
 - audit trail;
 - reversal/correction support.
@@ -510,10 +533,16 @@ Add tests for:
 
 - preview returns available credit and eligible obligations;
 - preview returns no allocation action when aggregate balance is not a credit;
+- full allocation clears one obligation and reduces remaining credit;
+- partial allocation reduces one obligation without hiding remaining outstanding amount;
+- multiple obligations receive deterministic suggested allocations without applying them automatically;
+- insufficient credit only suggests/apply-bounds the available credit amount;
 - create allocation rejects missing confirmations;
 - create allocation rejects amount greater than available credit;
 - create allocation rejects amount greater than obligation outstanding;
 - create allocation is idempotent by idempotency key;
+- create allocation rejects stale preview fingerprint/before-state values;
+- create allocation rejects concurrent consumption of the same available credit;
 - allocation record reduces obligation outstanding in derived rows;
 - allocation does not change historical ledger/payment records;
 - allocation creates audit/canonical event;
@@ -622,10 +651,16 @@ If tenant ledger surfaces later expose allocation records, they need a separate 
 
 - Add reversal endpoint.
 - Add correction flow as reverse plus new allocation.
-- Add audit/timeline/evidence projection.
 - Add tests for reversal state restoration.
 
-### PR 6: Decision workflow integration
+### PR 6: Evidence, timeline, and audit projection
+
+- Project allocation and reversal events into evidence packages.
+- Project allocation and reversal events into review timeline.
+- Keep projection wording allocation-safe and legally neutral.
+- Confirm no raw internal/provider payloads are exposed.
+
+### PR 7: Decision workflow integration
 
 - Update allocation-review decisions to show allocation completion and meaningful resolution.
 - Keep true overdue-rent decisions unchanged.
