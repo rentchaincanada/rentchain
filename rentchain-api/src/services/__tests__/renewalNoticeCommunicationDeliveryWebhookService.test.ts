@@ -293,10 +293,15 @@ describe("Mailgun renewal communication delivery webhooks", () => {
   });
 
   it.each([
+    ["accepted", undefined, "accepted_for_sending", "mailgun_event_accepted"],
+    ["delivered", undefined, "delivered", "mailgun_event_delivered"],
     ["failed", "permanent", "bounced", "mailgun_event_failed_permanent"],
     ["failed", "temporary", "deferred", "mailgun_event_failed_temporary"],
+    ["failed", undefined, "failed", "mailgun_event_failed"],
     ["complained", undefined, "complained", "mailgun_event_complained"],
+    ["rejected", undefined, "rejected", "mailgun_event_rejected"],
   ])("maps %s/%s to %s without legal-service state", async (event, severity, status, reason) => {
+    seedDoc("renewalNoticeCommunications", "rnc_test", communication({ deliveryStatus: "delivery_status_unknown", deliveryStatusUpdatedAt: null }));
     const body = signedBody(eventData({ id: `evt-${status}`, event, severity }), `token-${status}`);
     const result = await handle(body);
 
@@ -312,18 +317,95 @@ describe("Mailgun renewal communication delivery webhooks", () => {
     );
   });
 
-  it("does not let accepted events downgrade delivered or complaint states", async () => {
-    seedDoc("renewalNoticeCommunications", "rnc_test", communication({ deliveryStatus: "delivered" }));
+  it("normalizes event casing for supported statuses", async () => {
+    seedDoc("renewalNoticeCommunications", "rnc_test", communication({ deliveryStatus: "delivery_status_unknown", deliveryStatusUpdatedAt: null }));
+    const result = await handle(signedBody(eventData({ id: "evt-case", event: "DeLiVeReD" }), "case-token"));
+
+    expect(result).toEqual(expect.objectContaining({ ok: true, updated: true, deliveryStatus: "delivered" }));
+  });
+
+  it("does not let lower-precedence events downgrade known statuses", async () => {
+    seedDoc("renewalNoticeCommunications", "rnc_test", communication({ deliveryStatus: "delivered", deliveryStatusUpdatedAt: "2026-07-13T11:10:00.000Z" }));
     const deliveredNoop = await handle(signedBody(eventData({ id: "evt-accepted", event: "accepted" }), "accepted-token"));
     expect(deliveredNoop).toEqual(
       expect.objectContaining({ ok: true, matched: true, updated: false, ignoredReason: "delivery_status_precedence_noop" })
     );
     expect(collections.get("renewalNoticeCommunications")?.get("rnc_test").deliveryStatus).toBe("delivered");
 
-    seedDoc("renewalNoticeCommunications", "rnc_test", communication({ deliveryStatus: "complained" }));
-    const complainedNoop = await handle(signedBody(eventData({ id: "evt-accepted-2", event: "accepted" }), "accepted-token-2"));
+    seedDoc("renewalNoticeCommunications", "rnc_test", communication({ deliveryStatus: "bounced", deliveryStatusUpdatedAt: "2026-07-13T11:10:00.000Z" }));
+    const bouncedNoop = await handle(signedBody(eventData({ id: "evt-accepted-2", event: "accepted" }), "accepted-token-2"));
+    expect(bouncedNoop).toEqual(expect.objectContaining({ ok: true, updated: false }));
+    expect(collections.get("renewalNoticeCommunications")?.get("rnc_test").deliveryStatus).toBe("bounced");
+
+    seedDoc("renewalNoticeCommunications", "rnc_test", communication({ deliveryStatus: "failed", deliveryStatusUpdatedAt: "2026-07-13T11:10:00.000Z" }));
+    const failedNoop = await handle(signedBody(eventData({ id: "evt-accepted-3", event: "accepted" }), "accepted-token-3"));
+    expect(failedNoop).toEqual(expect.objectContaining({ ok: true, updated: false }));
+    expect(collections.get("renewalNoticeCommunications")?.get("rnc_test").deliveryStatus).toBe("failed");
+
+    seedDoc("renewalNoticeCommunications", "rnc_test", communication({ deliveryStatus: "complained", deliveryStatusUpdatedAt: "2026-07-13T11:10:00.000Z" }));
+    const complainedNoop = await handle(signedBody(eventData({ id: "evt-accepted-4", event: "accepted" }), "accepted-token-4"));
     expect(complainedNoop).toEqual(expect.objectContaining({ ok: true, updated: false }));
     expect(collections.get("renewalNoticeCommunications")?.get("rnc_test").deliveryStatus).toBe("complained");
+
+    const deliveredComplaintNoop = await handle(signedBody(eventData({ id: "evt-delivered-complaint", event: "delivered" }), "delivered-complaint-token"));
+    expect(deliveredComplaintNoop).toEqual(expect.objectContaining({ ok: true, updated: false }));
+    expect(collections.get("renewalNoticeCommunications")?.get("rnc_test").deliveryStatus).toBe("complained");
+  });
+
+  it("allows higher-precedence status transitions from accepted or deferred", async () => {
+    seedDoc("renewalNoticeCommunications", "rnc_test", communication({ deliveryStatus: "accepted_for_sending" }));
+    const delivered = await handle(signedBody(eventData({ id: "evt-accepted-delivered", event: "delivered" }), "accepted-delivered-token"));
+    expect(delivered).toEqual(expect.objectContaining({ ok: true, updated: true, deliveryStatus: "delivered" }));
+    expect(collections.get("renewalNoticeCommunications")?.get("rnc_test")).toEqual(
+      expect.objectContaining({ deliveryStatus: "delivered" })
+    );
+
+    seedDoc("renewalNoticeCommunications", "rnc_test", communication({ deliveryStatus: "deferred" }));
+    const deferredDelivered = await handle(signedBody(eventData({ id: "evt-deferred-delivered", event: "delivered" }), "deferred-delivered-token"));
+    expect(deferredDelivered).toEqual(expect.objectContaining({ ok: true, updated: true, deliveryStatus: "delivered" }));
+
+    seedDoc("renewalNoticeCommunications", "rnc_test", communication({ deliveryStatus: "deferred" }));
+    const deferredBounced = await handle(
+      signedBody(eventData({ id: "evt-deferred-bounced", event: "failed", severity: "permanent" }), "deferred-bounced-token")
+    );
+    expect(deferredBounced).toEqual(expect.objectContaining({ ok: true, updated: true, deliveryStatus: "bounced" }));
+  });
+
+  it("does not let older same-rank provider events move timestamps backward", async () => {
+    seedDoc(
+      "renewalNoticeCommunications",
+      "rnc_test",
+      communication({
+        deliveryStatus: "delivered",
+        deliveryStatusUpdatedAt: "2026-07-13T11:30:00.000Z",
+        lastProviderEventAt: "2026-07-13T11:30:00.000Z",
+      })
+    );
+    const olderDelivered = await handle(
+      signedBody(eventData({ id: "evt-older-delivered", event: "delivered", timestamp: 1783941300 }), "older-delivered-token")
+    );
+
+    expect(olderDelivered).toEqual(expect.objectContaining({ ok: true, updated: false, ignoredReason: "delivery_status_precedence_noop" }));
+    expect(collections.get("renewalNoticeCommunications")?.get("rnc_test")).toEqual(
+      expect.objectContaining({
+        deliveryStatus: "delivered",
+        deliveryStatusUpdatedAt: "2026-07-13T11:30:00.000Z",
+        lastProviderEventAt: "2026-07-13T11:30:00.000Z",
+      })
+    );
+  });
+
+  it("uses server processing time when provider event timestamp is missing", async () => {
+    seedDoc("renewalNoticeCommunications", "rnc_test", communication({ deliveryStatus: "accepted_for_sending" }));
+    const result = await handle(signedBody(eventData({ id: "evt-no-timestamp", event: "delivered", timestamp: undefined }), "no-timestamp-token"));
+
+    expect(result).toEqual(expect.objectContaining({ ok: true, updated: true, deliveryStatus: "delivered" }));
+    expect(collections.get("renewalNoticeCommunications")?.get("rnc_test")).toEqual(
+      expect.objectContaining({
+        deliveryStatusUpdatedAt: now.toISOString(),
+        lastProviderEventAt: now.toISOString(),
+      })
+    );
   });
 
   it("matches by provider message id when the custom communication id is absent", async () => {
@@ -453,15 +535,16 @@ describe("Mailgun renewal communication delivery webhooks", () => {
     expect(collections.get("events")).toBeUndefined();
   });
 
-  it("ignores unsupported open/click-style events for v1", async () => {
-    const result = await handle(signedBody(eventData({ id: "evt-opened", event: "opened" }), "opened-token"));
+  it.each(["opened", "clicked", "stored", "mystery_event", ""])("ignores unsupported %s events for v1", async (event) => {
+    const eventId = event || "missing-event";
+    const result = await handle(signedBody(eventData({ id: `evt-${eventId}`, event }), `${eventId}-token`));
 
     expect(result).toEqual(
       expect.objectContaining({
         ok: true,
         matched: false,
         updated: false,
-        ignoredReason: "unsupported_event:opened",
+        ignoredReason: event ? `unsupported_event:${event}` : "missing_event_type",
       })
     );
     expect(collections.get("renewalNoticeCommunications")?.get("rnc_test").deliveryStatus).toBe("accepted_for_sending");

@@ -256,11 +256,28 @@ function deliveryStatusRank(value: unknown): number {
   return 0;
 }
 
-function shouldApplyDeliveryStatus(current: unknown, next: RenewalNoticeDeliveryStatus): boolean {
+function timestampMillis(value: unknown): number | null {
+  const iso = toIsoTimestamp(value);
+  if (!iso) return null;
+  const millis = Date.parse(iso);
+  return Number.isFinite(millis) ? millis : null;
+}
+
+function shouldApplyDeliveryStatus(
+  current: unknown,
+  next: RenewalNoticeDeliveryStatus,
+  currentTimestamp?: unknown,
+  nextTimestamp?: unknown
+): boolean {
   const currentRank = deliveryStatusRank(current);
   const nextRank = deliveryStatusRank(next);
   if (nextRank === 0) return false;
-  return nextRank >= currentRank;
+  if (nextRank > currentRank) return true;
+  if (nextRank < currentRank) return false;
+  const currentMillis = timestampMillis(currentTimestamp);
+  const nextMillis = timestampMillis(nextTimestamp);
+  if (currentMillis == null || nextMillis == null) return true;
+  return nextMillis >= currentMillis;
 }
 
 async function findCommunication(input: {
@@ -508,7 +525,7 @@ export async function handleMailgunRenewalCommunicationWebhook(input: {
 
   const record = matched.record;
   const communicationId = record.communicationId || matched.record.id || normalized.communicationId || null;
-  if (!shouldApplyDeliveryStatus(record.deliveryStatus, normalized.deliveryStatus)) {
+  if (!shouldApplyDeliveryStatus(record.deliveryStatus, normalized.deliveryStatus, record.deliveryStatusUpdatedAt, eventTimestamp)) {
     await receiptRef.set(
       {
         ...receiptBase,
