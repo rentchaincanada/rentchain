@@ -193,6 +193,10 @@
   min-width: 0;
 }
 
+.lease-ledger-print-export {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .lease-ledger-page {
     padding: 12px;
@@ -239,6 +243,173 @@
   .lease-ledger-print-root {
     color: #0f172a !important;
     font-size: 11px !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-export {
+    display: grid !important;
+    gap: 10px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    color: #1f2933 !important;
+    background: #fff !important;
+    font-size: 10px !important;
+    line-height: 1.28 !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-header,
+  .lease-ledger-print-root .lease-ledger-print-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border: 1px solid #d7cbbc !important;
+    border-radius: 8px !important;
+    padding: 9px !important;
+    background: #fffdf8 !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-header {
+    display: grid !important;
+    gap: 7px !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-brand {
+    color: #245842 !important;
+    font-size: 12px !important;
+    font-weight: 900 !important;
+    letter-spacing: 0.02em !important;
+    text-transform: uppercase !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-header h1,
+  .lease-ledger-print-root .lease-ledger-print-section h2 {
+    margin: 0 !important;
+    color: #211c17 !important;
+    font-size: 15px !important;
+    line-height: 1.2 !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-section h2 {
+    font-size: 12px !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-header p,
+  .lease-ledger-print-root .lease-ledger-print-section p {
+    margin: 2px 0 0 !important;
+    color: #5f5448 !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-meta,
+  .lease-ledger-print-root .lease-ledger-print-summary-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-meta > div,
+  .lease-ledger-print-root .lease-ledger-print-summary-grid > div {
+    min-width: 0 !important;
+    border: 1px solid #e3d8c9 !important;
+    border-radius: 6px !important;
+    background: #fff !important;
+    padding: 6px !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-meta span,
+  .lease-ledger-print-root .lease-ledger-print-summary-grid span,
+  .lease-ledger-print-root .lease-ledger-print-decision span,
+  .lease-ledger-print-root .lease-ledger-print-note-list strong {
+    display: block !important;
+    color: #6b5e52 !important;
+    font-size: 8px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.03em !important;
+    text-transform: uppercase !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-meta strong,
+  .lease-ledger-print-root .lease-ledger-print-summary-grid strong,
+  .lease-ledger-print-root .lease-ledger-print-decision strong {
+    display: block !important;
+    margin-top: 2px !important;
+    color: #211c17 !important;
+    font-size: 10px !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-warning,
+  .lease-ledger-print-root .lease-ledger-print-detail-block {
+    display: grid !important;
+    gap: 3px !important;
+    margin-top: 6px !important;
+    border: 1px solid #e8bf66 !important;
+    border-radius: 6px !important;
+    background: #fffbeb !important;
+    color: #633a10 !important;
+    padding: 7px !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-detail-block {
+    border-color: #e3d8c9 !important;
+    background: #fff !important;
+    color: #211c17 !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-decision-list,
+  .lease-ledger-print-root .lease-ledger-print-note-list {
+    display: grid !important;
+    gap: 6px !important;
+    margin-top: 6px !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-decision,
+  .lease-ledger-print-root .lease-ledger-print-note-list article {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+    border: 1px solid #e3d8c9 !important;
+    border-radius: 6px !important;
+    background: #fff !important;
+    padding: 7px !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-decision > div:first-child {
+    grid-column: 1 / -1 !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-table-wrap {
+    max-width: 100% !important;
+    margin-top: 6px !important;
+    overflow: visible !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    font-size: 8.5px !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-table th,
+  .lease-ledger-print-root .lease-ledger-print-table td {
+    border: 1px solid #e3d8c9 !important;
+    padding: 4px !important;
+    text-align: left !important;
+    vertical-align: top !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-table th {
+    color: #5f5448 !important;
+    background: #f6eee4 !important;
+    font-size: 8px !important;
+    font-weight: 900 !important;
+    text-transform: uppercase !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-section-compact {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   .lease-ledger-print-root .lease-ledger-page {
