@@ -1054,6 +1054,7 @@ function TenantCommunicationSendReview({
   const [decisionError, setDecisionError] = React.useState<string | null>(null);
   const [sendConfirmationFocusRequested, setSendConfirmationFocusRequested] = React.useState(false);
   const sendConfirmationActionAreaRef = React.useRef<HTMLDivElement | null>(null);
+  const sendSuccessConfirmationRef = React.useRef<HTMLElement | null>(null);
   const [confirmation, setConfirmation] = React.useState<Record<ConfirmationKey, boolean>>({
     recipientReviewed: false,
     bodyReviewed: false,
@@ -1075,6 +1076,7 @@ function TenantCommunicationSendReview({
   const sendContextKey =
     savedSnapshot && approvalDecision ? `${savedSnapshot.snapshotId}:${approvalDecision.id}:${lease.id}` : null;
   const sendSucceeded = sendState.status === "success";
+  const sentCommunicationId = sendState.status === "success" ? sendState.result.communicationId : null;
 
   const focusSendConfirmationChecklist = React.useCallback(() => {
     const actionArea = sendConfirmationActionAreaRef.current;
@@ -1084,6 +1086,18 @@ function TenantCommunicationSendReview({
       if (!currentActionArea) return;
       currentActionArea.scrollIntoView({ behavior: "smooth", block: "center" });
       currentActionArea.focus({ preventScroll: true });
+    }, 0);
+    return true;
+  }, []);
+
+  const focusSendSuccessConfirmation = React.useCallback(() => {
+    const successCard = sendSuccessConfirmationRef.current;
+    if (!successCard) return false;
+    window.setTimeout(() => {
+      const currentSuccessCard = sendSuccessConfirmationRef.current;
+      if (!currentSuccessCard) return;
+      currentSuccessCard.scrollIntoView({ behavior: "smooth", block: "center" });
+      currentSuccessCard.focus({ preventScroll: true });
     }, 0);
     return true;
   }, []);
@@ -1154,6 +1168,11 @@ function TenantCommunicationSendReview({
       setSendConfirmationFocusRequested(false);
     }
   }, [focusSendConfirmationChecklist, sendConfirmationFocusRequested, sendPrerequisitesMet, sendSucceeded]);
+
+  React.useEffect(() => {
+    if (sendState.status !== "success") return;
+    focusSendSuccessConfirmation();
+  }, [focusSendSuccessConfirmation, sendState.status, sentCommunicationId]);
 
   function setConfirmationValue(key: ConfirmationKey, value: boolean) {
     setConfirmation((current) => ({ ...current, [key]: value }));
@@ -1616,7 +1635,12 @@ function TenantCommunicationSendReview({
       </section>
 
       {sendState.status === "success" ? (
-        <section style={sentStatusStyle} aria-label="Renewal email sent status">
+        <section
+          ref={sendSuccessConfirmationRef}
+          style={sentStatusStyle}
+          aria-label="Renewal email sent status"
+          tabIndex={-1}
+        >
           <h4 style={sendReviewSubheadingStyle}>Renewal email sent</h4>
           <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, margin: 0 }}>
             <ReviewFact label="Sent at" value={formatTimestamp(sendState.result.sentAt || sendState.result.attemptedAt)} />

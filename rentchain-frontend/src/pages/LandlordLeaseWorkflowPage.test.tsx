@@ -1183,6 +1183,8 @@ describe("LandlordLeaseWorkflowPage", () => {
     fireEvent.click(screen.getByLabelText("I understand this does not establish legal notice service by itself."));
     expect(sendButton).toBeEnabled();
 
+    scrollIntoViewMock.mockClear();
+    focusMock.mockClear();
     fireEvent.click(sendButton);
 
     await waitFor(() => {
@@ -1200,17 +1202,21 @@ describe("LandlordLeaseWorkflowPage", () => {
         })
       );
     });
-    expect(await screen.findByLabelText("Renewal email sent status")).toHaveTextContent("Renewal email sent");
-    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Delivery confirmation");
-    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Accepted for sending");
-    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent(
+    const sentStatus = await screen.findByLabelText("Renewal email sent status");
+    expect(sentStatus).toHaveTextContent("Renewal email sent");
+    await waitFor(() => {
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+      expect(focusMock).toHaveBeenCalledWith({ preventScroll: true });
+    });
+    expect(sentStatus).toHaveTextContent("Delivery confirmation");
+    expect(sentStatus).toHaveTextContent("Accepted for sending");
+    expect(sentStatus).toHaveTextContent(
       "Email was accepted for sending. Delivery confirmation beyond provider acceptance is not tracked yet."
     );
-    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Not served; legal service not established");
-    expect(screen.getByLabelText("Renewal email sent status")).not.toHaveTextContent("Delivery status unknown");
-    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("rnc_test");
+    expect(sentStatus).toHaveTextContent("Not served; legal service not established");
+    expect(sentStatus).not.toHaveTextContent("Delivery status unknown");
+    expect(sentStatus).toHaveTextContent("rnc_test");
     expect(screen.getByText("rnc_test")).toHaveStyle({ overflowWrap: "anywhere" });
-    const sentStatus = screen.getByLabelText("Renewal email sent status");
     expect(within(sentStatus).getByRole("link", { name: "Open lease review timeline" })).toHaveAttribute(
       "href",
       "/review-timeline?scope=lease&scopeId=lease-1"
