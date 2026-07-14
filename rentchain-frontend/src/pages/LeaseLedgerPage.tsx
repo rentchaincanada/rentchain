@@ -87,6 +87,23 @@ function formatDate(value: string | null | undefined) {
   return parsed.toLocaleDateString();
 }
 
+function formatDateTime(value: string | number | Date | null | undefined) {
+  if (!value) return "—";
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleString();
+}
+
+function prettyLeaseStatus(value: string | null | undefined) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "Unknown";
+  if (normalized === "notice_pending") return "Renew letter needed";
+  if (normalized === "renewal_pending") return "Renewal pending";
+  if (normalized === "renewal_accepted") return "Renewing";
+  if (normalized === "move_out_pending") return "Quitting";
+  return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function formatPeriod(row: LeaseObligationLedgerRow): string {
   const start = formatDate(row.periodStart);
   const end = formatDate(row.periodEnd);
@@ -724,6 +741,417 @@ function LedgerEntryMobileCard({ entry }: { entry: LeaseLedgerEntry }) {
   );
 }
 
+function leasePropertyUnitLabel(lease: LandlordActiveLease | null): string {
+  if (!lease) return "Lease ledger";
+  const propertyLabel = formatOperationalLabel({
+    kind: "property",
+    label: lease.propertyName || lease.propertyAddress || lease.propertyLabel,
+    fallbackLabel: "Property",
+    internalId: lease.propertyId,
+  });
+  const unitLabel = formatOperationalLabel({
+    kind: "unit",
+    label: lease.unitNumber ? `Unit ${lease.unitNumber}` : lease.unitLabel,
+    fallbackLabel: "Unit",
+    internalId: lease.unitId,
+  });
+  return `${propertyLabel} · ${unitLabel}`;
+}
+
+function printFinancialSignalText(
+  row: LeaseObligationLedgerRow,
+  signals: LeaseDelinquencySignal[],
+  allocationReviewRequired: boolean
+): string {
+  const matchingSignals = signals.filter((signal) => signalMatchesRow(signal, row));
+  if (allocationReviewRequired && matchingSignals.length > 0) {
+    return "Allocation review — Payments exceed charges in aggregate, but this obligation remains unmatched.";
+  }
+  if (matchingSignals.length === 0) {
+    const status = row.obligationStatus || "unknown";
+    const copy = obligationStatusCopy[status] || obligationStatusCopy.unknown;
+    return `${copy.label} — ${obligationFallbackReason[status] || obligationFallbackReason.unknown}`;
+  }
+  return matchingSignals.map((signal) => reasonTextFromSignal(signal)).join("; ");
+}
+
+function printLedgerEntryDescription(entry: LeaseLedgerEntry): string {
+  return [
+    readableText(entry.entryType),
+    readableText(entry.category),
+    entry.method ? readableText(entry.method) : null,
+    entry.reference,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function LeaseLedgerPrintExport({
+  lease,
+  totals,
+  monthlyRows,
+  obligationRows,
+  obligationSummary,
+  outstandingObligationCents,
+  hasUnallocatedCreditNotice,
+  delinquencySignals,
+  delinquencySummary,
+  decisions,
+  decisionSummary,
+  entries,
+  notes,
+}: {
+  lease: LandlordActiveLease | null;
+  totals: { chargesCents: number; paymentsCents: number; balanceCents: number };
+  monthlyRows: Array<[string, { chargesCents: number; paymentsCents: number; netCents: number }]>;
+  obligationRows: LeaseObligationLedgerRow[];
+  obligationSummary: LeaseObligationLedgerSummary | null;
+  outstandingObligationCents: number;
+  hasUnallocatedCreditNotice: boolean;
+  delinquencySignals: LeaseDelinquencySignal[];
+  delinquencySummary: LeaseDelinquencySummary | null;
+  decisions: DecisionItem[];
+  decisionSummary: ReturnType<typeof summarizeDecisionItems>;
+  entries: LeaseLedgerEntry[];
+  notes: LeaseNote[];
+}) {
+  const propertyUnitLabel = leasePropertyUnitLabel(lease);
+  const tenantLabel = lease?.tenantName || "Tenant not linked";
+  const singleObligationRow = obligationRows.length === 1 ? obligationRows[0] : null;
+  return (
+    <div className="lease-ledger-print-export">
+      <div className="lease-ledger-print-page lease-ledger-print-page-summary">
+        <header className="lease-ledger-print-header">
+          <div className="lease-ledger-print-brand">RentChain</div>
+          <div>
+            <h1>Lease Ledger</h1>
+            <p>Operational ledger export for review and evidence reference.</p>
+          </div>
+          <div className="lease-ledger-print-meta">
+            <div>
+              <span>Property / unit</span>
+              <strong>{propertyUnitLabel}</strong>
+            </div>
+            <div>
+              <span>Tenant</span>
+              <strong>{tenantLabel}</strong>
+            </div>
+            <div>
+              <span>Lease status</span>
+              <strong>{prettyLeaseStatus(lease?.status)}</strong>
+            </div>
+            <div>
+              <span>Generated</span>
+              <strong>{formatDateTime(new Date())}</strong>
+            </div>
+          </div>
+        </header>
+
+        <section className="lease-ledger-print-section lease-ledger-print-section-compact">
+          <h2>Operational summary</h2>
+          <div className="lease-ledger-print-summary-grid">
+            <div>
+              <span>Charges</span>
+              <strong>{formatCurrencyCents(totals.chargesCents)}</strong>
+            </div>
+            <div>
+              <span>Payments</span>
+              <strong>{formatCurrencyCents(totals.paymentsCents)}</strong>
+            </div>
+            <div>
+              <span>Balance</span>
+              <strong>{formatCurrencyCents(totals.balanceCents)}</strong>
+            </div>
+            <div>
+              <span>Outstanding obligations</span>
+              <strong>{formatCurrencyCents(outstandingObligationCents)}</strong>
+            </div>
+            <div>
+              <span>Overdue signals</span>
+              <strong>{delinquencySummary?.overdueCount || 0}</strong>
+            </div>
+            <div>
+              <span>Manual review signals</span>
+              <strong>{delinquencySummary?.manualReviewCount || 0}</strong>
+            </div>
+          </div>
+          {hasUnallocatedCreditNotice ? (
+            <div className="lease-ledger-print-warning">
+              <strong>Credit balance needs allocation review</strong>
+              <span>
+                This lease has an aggregate credit balance of {formatCurrencyCents(totals.balanceCents)}, but{" "}
+                {formatCurrencyCents(outstandingObligationCents)} remains outstanding on specific obligations because payments have not been matched or allocated.
+              </span>
+              <span>Review and allocate unmatched payments before taking any overdue-rent action.</span>
+            </div>
+          ) : null}
+        </section>
+
+        {lease?.leaseExecution ? (
+          <section className="lease-ledger-print-section lease-ledger-print-section-compact lease-ledger-print-execution-section">
+            <h2>Lease execution summary</h2>
+            <div className="lease-ledger-print-execution-line">
+              <strong>{lease.leaseExecution.executionLabel}</strong>
+              <span>{lease.leaseExecution.executionDescription}</span>
+            </div>
+            <div className="lease-ledger-print-summary-grid lease-ledger-print-summary-grid-tight">
+              <div>
+                <span>Tenant signature</span>
+                <strong>{lease.leaseExecution.tenantSignatureStatus.replace(/_/g, " ")}</strong>
+              </div>
+              <div>
+                <span>Landlord signature</span>
+                <strong>{lease.leaseExecution.landlordSignatureStatus.replace(/_/g, " ")}</strong>
+              </div>
+              <div>
+                <span>Next action</span>
+                <strong>{executionNextActionLabel(lease.leaseExecution.requiredNextAction)}</strong>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        <section className="lease-ledger-print-section lease-ledger-print-section-compact">
+          <h2>Decision summary</h2>
+          {decisions.length === 0 ? (
+            <p>No operational decision items are currently projected for this lease.</p>
+          ) : (
+            <>
+              <div className="lease-ledger-print-summary-grid lease-ledger-print-summary-grid-tight">
+                <div>
+                  <span>Active critical decisions</span>
+                  <strong>{decisionSummary.critical}</strong>
+                </div>
+                <div>
+                  <span>Active warning decisions</span>
+                  <strong>{decisionSummary.warning}</strong>
+                </div>
+                <div>
+                  <span>Active decision count</span>
+                  <strong>{decisionSummary.total}</strong>
+                </div>
+              </div>
+              <div className="lease-ledger-print-decision-list">
+                {decisions.map((decision) => {
+                  const summary = buildDecisionSummaryFacts(
+                    decision,
+                    lease,
+                    obligationRows,
+                    delinquencySignals,
+                    hasUnallocatedCreditNotice
+                  );
+                  const copy = hasUnallocatedCreditNotice
+                    ? { label: "Review payment allocation", badge: "Allocation review" }
+                    : decisionDisplayCopy[decision.decisionType];
+                  return (
+                    <article key={decision.decisionId} className="lease-ledger-print-decision">
+                      <div>
+                        <strong>{copy.label}</strong>
+                        <span>{copy.badge} · {decisionStatusCopy[currentDecisionStatus(decision)]}</span>
+                      </div>
+                      <div>
+                        <span>Issue</span>
+                        <strong>{summary.displayDecision.reason}</strong>
+                      </div>
+                      <div>
+                        <span>Recommended next action</span>
+                        <strong>{summary.recommendedAction.label}</strong>
+                      </div>
+                      {isTerminalDecisionStatus(currentDecisionStatus(decision)) ? (
+                        <div>
+                          <span>Action state</span>
+                          <strong>{decisionPassiveLabel(decision)} · No state-changing decision action is currently available.</strong>
+                        </div>
+                      ) : null}
+                      {decision.latestAction ? (
+                        <div>
+                          <span>Last action</span>
+                          <strong>
+                            {decisionStatusCopy[decision.latestAction.nextStatus]} · {formatDateTime(decision.latestAction.createdAt)}
+                          </strong>
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </section>
+
+        <section className="lease-ledger-print-section lease-ledger-print-section-compact">
+          <h2>Payment obligation summary</h2>
+          <div className="lease-ledger-print-summary-grid lease-ledger-print-summary-grid-tight">
+            <div>
+              <span>Expected</span>
+              <strong>{formatCurrencyCents(obligationSummary?.expectedAmountCents || 0)}</strong>
+            </div>
+            <div>
+              <span>Paid</span>
+              <strong>{formatCurrencyCents(obligationSummary?.paidAmountCents || 0)}</strong>
+            </div>
+            <div>
+              <span>Outstanding</span>
+              <strong>{formatCurrencyCents(obligationSummary?.outstandingAmountCents || 0)}</strong>
+            </div>
+            <div>
+              <span>Manual review</span>
+              <strong>{obligationSummary?.manualReviewCount || 0}</strong>
+            </div>
+          </div>
+          {obligationRows.length === 0 ? (
+            <p>Obligation ledger is not available yet for this lease.</p>
+          ) : singleObligationRow ? (
+            <article className="lease-ledger-print-obligation-card">
+              <div>
+                <span>Period</span>
+                <strong>{formatPeriod(singleObligationRow)}</strong>
+              </div>
+              <div>
+                <span>Due date</span>
+                <strong>{formatDate(singleObligationRow.dueDate)}</strong>
+              </div>
+              <div>
+                <span>Expected</span>
+                <strong>{formatCurrencyCents(singleObligationRow.expectedAmountCents)}</strong>
+              </div>
+              <div>
+                <span>Paid</span>
+                <strong>{formatCurrencyCents(singleObligationRow.paidAmountCents)}</strong>
+              </div>
+              <div>
+                <span>Outstanding</span>
+                <strong>{formatCurrencyCents(obligationOutstandingCents(singleObligationRow))}</strong>
+              </div>
+              <div>
+                <span>Status</span>
+                <strong>{obligationStatusCopy[singleObligationRow.obligationStatus || "unknown"]?.label || obligationStatusCopy.unknown.label}</strong>
+              </div>
+              <div className="lease-ledger-print-obligation-card-wide">
+                <span>Financial signal</span>
+                <strong>{printFinancialSignalText(singleObligationRow, delinquencySignals, hasUnallocatedCreditNotice)}</strong>
+              </div>
+              <div className="lease-ledger-print-obligation-card-wide">
+                <span>Evidence</span>
+                <strong>{prettyEvidenceStatus(singleObligationRow)}</strong>
+              </div>
+            </article>
+          ) : (
+            <div className="lease-ledger-print-table-wrap">
+              <table className="lease-ledger-print-table lease-ledger-print-obligations-table">
+                <thead>
+                  <tr>
+                    <th>Period</th>
+                    <th>Due date</th>
+                    <th>Expected</th>
+                    <th>Paid</th>
+                    <th>Outstanding</th>
+                    <th>Status</th>
+                    <th>Financial signal</th>
+                    <th>Evidence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {obligationRows.map((row) => (
+                    <tr key={row.rowId}>
+                      <td>{formatPeriod(row)}</td>
+                      <td>{formatDate(row.dueDate)}</td>
+                      <td>{formatCurrencyCents(row.expectedAmountCents)}</td>
+                      <td>{formatCurrencyCents(row.paidAmountCents)}</td>
+                      <td>{formatCurrencyCents(obligationOutstandingCents(row))}</td>
+                      <td>{obligationStatusCopy[row.obligationStatus || "unknown"]?.label || obligationStatusCopy.unknown.label}</td>
+                      <td>{printFinancialSignalText(row, delinquencySignals, hasUnallocatedCreditNotice)}</td>
+                      <td>{prettyEvidenceStatus(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="lease-ledger-print-page lease-ledger-print-page-detail">
+        <section className="lease-ledger-print-section">
+          <h2>Ledger entries</h2>
+          {entries.length === 0 ? (
+            <p>No ledger entries are available for this range.</p>
+          ) : (
+            <div className="lease-ledger-print-table-wrap">
+              <table className="lease-ledger-print-table lease-ledger-print-ledger-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Balance</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((entry) => (
+                    <tr key={entry.id}>
+                      <td>{formatDate(entry.effectiveDate)}</td>
+                      <td>{printLedgerEntryDescription(entry)}</td>
+                      <td>{formatSignedCurrencyCents(entry.amountCents, entry.entryType)}</td>
+                      <td>{formatCurrencyCents(entry.balanceCents)}</td>
+                      <td>{entry.notes || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {monthlyRows.length ? (
+          <section className="lease-ledger-print-section lease-ledger-print-section-compact">
+            <h2>Monthly totals</h2>
+            <div className="lease-ledger-print-table-wrap">
+              <table className="lease-ledger-print-table">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Charges</th>
+                    <th>Payments</th>
+                    <th>Net</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthlyRows.map(([month, row]) => (
+                    <tr key={month}>
+                      <td>{month}</td>
+                      <td>{formatCurrencyCents(row.chargesCents)}</td>
+                      <td>{formatCurrencyCents(row.paymentsCents)}</td>
+                      <td>{formatCurrencyCents(row.netCents)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
+
+        <section className="lease-ledger-print-section lease-ledger-print-section-compact lease-ledger-print-notes-section">
+          <h2>Lease notes</h2>
+          {notes.length === 0 ? (
+            <p>No lease notes yet.</p>
+          ) : (
+            <div className="lease-ledger-print-note-list">
+              {notes.map((note) => (
+                <article key={note.id}>
+                  <strong>{formatDateTime(note.createdAt)}</strong>
+                  <span>{note.note}</span>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
 function prettyEvidenceStatus(row: LeaseObligationLedgerRow): string {
   const evidence = String(row.evidenceStatus || "").trim();
   if (evidence) return evidence.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
@@ -773,6 +1201,7 @@ const modalCard: React.CSSProperties = {
 export default function LeaseLedgerPage() {
   const { leaseId = "" } = useParams();
   const printSourceRef = React.useRef<HTMLDivElement | null>(null);
+  const printExportRef = React.useRef<HTMLDivElement | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [loading, setLoading] = useState(true);
@@ -794,6 +1223,7 @@ export default function LeaseLedgerPage() {
   const [notes, setNotes] = useState<LeaseNote[]>([]);
   const [noteText, setNoteText] = useState("");
   const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
+  const [isPrintExportMounted, setIsPrintExportMounted] = useState(false);
 
   const [chargeDate, setChargeDate] = useState(todayIso());
   const [chargeType, setChargeType] = useState<ChargeType>("rent");
@@ -881,16 +1311,6 @@ export default function LeaseLedgerPage() {
     void loadLeaseMeta();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leaseId]);
-
-  function prettyStatus(value: string | null | undefined) {
-    const normalized = String(value || "").trim().toLowerCase();
-    if (!normalized) return "Unknown";
-    if (normalized === "notice_pending") return "Renew letter needed";
-    if (normalized === "renewal_pending") return "Renewal pending";
-    if (normalized === "renewal_accepted") return "Renewing";
-    if (normalized === "move_out_pending") return "Quitting";
-    return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
-  }
 
   async function submitNote() {
     const note = noteText.trim();
@@ -1034,8 +1454,11 @@ export default function LeaseLedgerPage() {
 
   async function printOrExportLedgerPdf() {
     if (typeof window !== "undefined" && typeof window.print === "function") {
-      const printableSource = printSourceRef.current;
+      setIsPrintExportMounted(true);
+      await nextRenderFrame(window);
+      const printableSource = printExportRef.current || printSourceRef.current;
       if (!printableSource || typeof document === "undefined") {
+        setIsPrintExportMounted(false);
         window.print();
         return;
       }
@@ -1052,6 +1475,7 @@ export default function LeaseLedgerPage() {
         cleanedUp = true;
         window.removeEventListener("afterprint", cleanup);
         printableRoot.remove();
+        setIsPrintExportMounted(false);
         body.removeAttribute(PRINT_ROOT_ACTIVE_ATTRIBUTE);
         if (previousMode) {
           body.setAttribute(PRINT_MODE_ATTRIBUTE, previousMode);
@@ -1077,6 +1501,25 @@ export default function LeaseLedgerPage() {
 
   return (
     <div className="lease-ledger-page" ref={printSourceRef}>
+      {isPrintExportMounted ? (
+        <div ref={printExportRef} aria-hidden="true">
+          <LeaseLedgerPrintExport
+            lease={lease}
+            totals={totals}
+            monthlyRows={monthlyRows}
+            obligationRows={obligationRows}
+            obligationSummary={obligationSummary}
+            outstandingObligationCents={outstandingObligationCents}
+            hasUnallocatedCreditNotice={hasUnallocatedCreditNotice}
+            delinquencySignals={delinquencySignals}
+            delinquencySummary={delinquencySummary}
+            decisions={decisions}
+            decisionSummary={decisionSummary}
+            entries={entries}
+            notes={notes}
+          />
+        </div>
+      ) : null}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "1.2rem" }}>Lease Ledger</h1>
@@ -1092,7 +1535,7 @@ export default function LeaseLedgerPage() {
           {lease ? (
             <div style={{ color: "#334155", marginTop: 6, display: "grid", gap: 2 }}>
               <div>
-                {lease.tenantName || "Tenant not linked"} · {prettyStatus(lease.status)}
+                {lease.tenantName || "Tenant not linked"} · {prettyLeaseStatus(lease.status)}
                 {lease.archivedAt ? ` · Archived ${formatDate(lease.archivedAt)}` : ""}
               </div>
             </div>
