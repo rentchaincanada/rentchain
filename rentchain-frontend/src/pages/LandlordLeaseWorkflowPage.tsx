@@ -1076,6 +1076,18 @@ function TenantCommunicationSendReview({
     savedSnapshot && approvalDecision ? `${savedSnapshot.snapshotId}:${approvalDecision.id}:${lease.id}` : null;
   const sendSucceeded = sendState.status === "success";
 
+  const focusSendConfirmationChecklist = React.useCallback(() => {
+    const checklist = sendConfirmationChecklistRef.current;
+    if (!checklist) return false;
+    window.setTimeout(() => {
+      const currentChecklist = sendConfirmationChecklistRef.current;
+      if (!currentChecklist) return;
+      currentChecklist.scrollIntoView({ behavior: "smooth", block: "center" });
+      currentChecklist.focus({ preventScroll: true });
+    }, 0);
+    return true;
+  }, []);
+
   React.useEffect(() => {
     let active = true;
     async function loadApprovalDecision() {
@@ -1138,12 +1150,10 @@ function TenantCommunicationSendReview({
 
   React.useEffect(() => {
     if (!sendConfirmationFocusRequested || !sendPrerequisitesMet || sendSucceeded) return;
-    const checklist = sendConfirmationChecklistRef.current;
-    if (!checklist) return;
-    checklist.scrollIntoView({ behavior: "smooth", block: "start" });
-    checklist.focus({ preventScroll: true });
-    setSendConfirmationFocusRequested(false);
-  }, [sendConfirmationFocusRequested, sendPrerequisitesMet, sendSucceeded]);
+    if (focusSendConfirmationChecklist()) {
+      setSendConfirmationFocusRequested(false);
+    }
+  }, [focusSendConfirmationChecklist, sendConfirmationFocusRequested, sendPrerequisitesMet, sendSucceeded]);
 
   function setConfirmationValue(key: ConfirmationKey, value: boolean) {
     setConfirmation((current) => ({ ...current, [key]: value }));
@@ -1568,6 +1578,13 @@ function TenantCommunicationSendReview({
                 ? "Internal approval has been recorded. Send still requires explicit confirmation before tenant communication."
                 : "Approved status is required before tenant communication can be sent."}
             </div>
+            {sendPrerequisitesMet && !sendSucceeded ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button type="button" onClick={focusSendConfirmationChecklist} style={primaryButtonStyle}>
+                  Continue to send confirmations
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </section>

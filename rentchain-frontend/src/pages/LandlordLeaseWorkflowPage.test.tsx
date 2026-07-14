@@ -1134,8 +1134,16 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByLabelText("Send confirmation checklist")).toHaveTextContent(
       "Sending emails the tenant using the approved renewal draft. This does not establish legal notice service by itself."
     );
+    expect(screen.getByRole("button", { name: "Continue to send confirmations" })).toBeInTheDocument();
     await waitFor(() => {
-      expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+      expect(focusMock).toHaveBeenCalledWith({ preventScroll: true });
+    });
+    scrollIntoViewMock.mockClear();
+    focusMock.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to send confirmations" }));
+    await waitFor(() => {
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
       expect(focusMock).toHaveBeenCalledWith({ preventScroll: true });
     });
     expect(screen.getByRole("button", { name: "Send renewal email" })).toBeDisabled();
