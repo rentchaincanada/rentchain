@@ -507,6 +507,75 @@ describe("deriveEvidencePack", () => {
     expect(JSON.stringify(pack)).not.toMatch(/provider-secret|notice served|legally delivered|tenant received|compliance achieved|statutory notice completed/i);
   });
 
+  it("renders renewal tenant communication delivery confirmations with safe provider-only labels", () => {
+    const cases: Array<{ status?: string; label: string; id: string }> = [
+      { id: "legacy", label: "Not tracked yet" },
+      { id: "not-tracked", status: "not_tracked", label: "Not tracked yet" },
+      { id: "accepted", status: "accepted_for_sending", label: "Accepted for sending" },
+      { id: "delivered", status: "delivered", label: "Delivered by email provider" },
+      { id: "bounced", status: "bounced", label: "Bounce detected by email provider" },
+      { id: "deferred", status: "deferred", label: "Temporary delivery issue detected by email provider" },
+      { id: "complained", status: "complained", label: "Complaint reported by email provider" },
+      { id: "failed", status: "failed", label: "Failed by email provider" },
+      { id: "rejected", status: "rejected", label: "Rejected by email provider" },
+    ];
+
+    for (const item of cases) {
+      const record: Record<string, any> = {
+        communicationId: `communication-${item.id}`,
+        leaseId: "lease-1",
+        landlordId: "landlord-1",
+        snapshotId: `snapshot-${item.id}`,
+        approvalDecisionItemId: `decision-${item.id}`,
+        recipientEmail: "hello+tenant@rentchain.ai",
+        status: "email_sent",
+        attemptedAt: "2026-07-11T12:10:00.000Z",
+        sentAt: "2026-07-11T12:10:02.000Z",
+        tenantNotified: true,
+        noticeServed: false,
+        legalServiceEstablished: false,
+        confirmation: {
+          confirmationAccepted: true,
+          recipientReviewed: true,
+          bodyReviewed: true,
+          legalServiceAcknowledged: true,
+          noLegalServiceClaim: true,
+        },
+        generatedDraftText: "Hello Jane, private body text should not project.",
+        providerPayload: {
+          signature: "mailgun-signature-secret",
+          token: "mailgun-token-secret",
+          event: { raw: "raw-provider-body" },
+        },
+        webhookSigningKey: "mailgun-webhook-signing-key",
+      };
+      if (item.status) record.deliveryStatus = item.status;
+
+      const pack = deriveEvidencePack({
+        scope: "lease",
+        scopeId: "lease-1",
+        landlordId: "landlord-1",
+        generatedAt: "2026-07-11T12:00:00.000Z",
+        renewalNoticeCommunications: [record],
+        leases: [{ id: "lease-1", propertyName: "North Towers", unitNumber: "101", tenantName: "John Smith" }],
+      });
+
+      const evidenceText = JSON.stringify(pack);
+      expect(evidenceText).toContain(`Communication ID: communication-${item.id}.`);
+      expect(evidenceText).toContain("Context: North Towers · Unit 101 · John Smith.");
+      expect(evidenceText).toContain("Recipient email: hello+tenant@rentchain.ai.");
+      expect(evidenceText).toContain(`Delivery confirmation: ${item.label}.`);
+      expect(evidenceText).toContain(`Draft snapshot ID: snapshot-${item.id}.`);
+      expect(evidenceText).toContain(`Approval decision ID: decision-${item.id}.`);
+      expect(evidenceText).toContain("Confirmation/audit status: send confirmations captured.");
+      expect(evidenceText).toContain("Not served; legal service not established.");
+      expect(evidenceText).toContain("Legal compliance not determined by this workflow.");
+      expect(evidenceText).not.toMatch(
+        /private body text|raw-provider-body|mailgun-signature-secret|mailgun-token-secret|mailgun-webhook-signing-key|notice served|legally delivered|tenant received|tenant opened|delivery confirmed|compliance achieved|statutory notice completed/i,
+      );
+    }
+  });
+
   it("keeps raw provider, banking, debug, and private document fields out of evidence projections", () => {
     const pack = deriveEvidencePack({
       scope: "decision",

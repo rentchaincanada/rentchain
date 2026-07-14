@@ -373,4 +373,95 @@ describe("deriveCanonicalReviewTimeline", () => {
     );
     expect(JSON.stringify(timeline)).not.toMatch(/provider-secret|notice served|legally delivered|tenant received|compliance achieved|statutory notice completed/i);
   });
+
+  it("renders renewal communication delivery status updates with safe provider-only labels", () => {
+    const cases: Array<{ status?: string; label: string; id: string }> = [
+      { id: "legacy", label: "Not tracked yet" },
+      { id: "not-tracked", status: "not_tracked", label: "Not tracked yet" },
+      { id: "accepted", status: "accepted_for_sending", label: "Accepted for sending" },
+      { id: "delivered", status: "delivered", label: "Delivered by email provider" },
+      { id: "bounced", status: "bounced", label: "Bounce detected by email provider" },
+      { id: "deferred", status: "deferred", label: "Temporary delivery issue detected by email provider" },
+      { id: "complained", status: "complained", label: "Complaint reported by email provider" },
+      { id: "failed", status: "failed", label: "Failed by email provider" },
+      { id: "rejected", status: "rejected", label: "Rejected by email provider" },
+    ];
+
+    for (const item of cases) {
+      const communicationId = `rnc_${item.id}`;
+      const metadata: Record<string, any> = {
+        communicationId,
+        deliveryStatusSource: "mailgun_webhook",
+        providerMessageId: "<provider-message@mg.example.com>",
+        providerPayload: {
+          signature: "mailgun-signature-secret",
+          token: "mailgun-token-secret",
+          event: { raw: "raw-provider-body" },
+        },
+      };
+      if (item.status) metadata.deliveryStatus = item.status;
+
+      const timeline = deriveCanonicalReviewTimeline({
+        scope: "lease",
+        scopeId: "lease-1",
+        landlordId: "landlord-1",
+        renewalNoticeCommunications: [
+          {
+            communicationId,
+            leaseId: "lease-1",
+            snapshotId: `snapshot-${item.id}`,
+            approvalDecisionItemId: `decision-${item.id}`,
+            recipientEmail: "hello+tenant@rentchain.ai",
+            status: "email_sent",
+            deliveryStatus: item.status,
+            sentAt: "2026-07-11T12:10:02.000Z",
+            confirmation: {
+              confirmationAccepted: true,
+              recipientReviewed: true,
+              bodyReviewed: true,
+              legalServiceAcknowledged: true,
+              noLegalServiceClaim: true,
+            },
+            generatedDraftText: "Hello Jane, private body text should not project.",
+            providerPayload: { raw: "record-provider-secret" },
+          },
+        ],
+        canonicalEvents: [
+          {
+            id: `event-delivery-${item.id}`,
+            type: "renewal_notice_delivery_status_updated",
+            action: "renewal_notice_delivery_status_updated",
+            summary:
+              "Renewal tenant communication delivery confirmation updated from Mailgun webhook. Not served; legal service not established.",
+            leaseId: "lease-1",
+            resource: { id: "lease-1" },
+            actor: { type: "system", id: "mailgun" },
+            metadata,
+            occurredAt: "2026-07-11T12:12:00.000Z",
+          },
+        ],
+      });
+
+      const timelineText = JSON.stringify(timeline);
+      expect(timeline.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: "Renewal tenant communication delivery status updated",
+            description: expect.stringContaining(`Delivery confirmation: ${item.label}.`),
+          }),
+        ]),
+      );
+      expect(timelineText).toContain(`Communication ID: ${communicationId}.`);
+      expect(timelineText).toContain("Status: delivery status updated.");
+      expect(timelineText).toContain("Recipient email: hello+tenant@rentchain.ai.");
+      expect(timelineText).toContain(`Draft snapshot ID: snapshot-${item.id}.`);
+      expect(timelineText).toContain(`Approval decision ID: decision-${item.id}.`);
+      expect(timelineText).toContain("Confirmation/audit status: send confirmations captured.");
+      expect(timelineText).toContain("Not served; legal service not established.");
+      expect(timelineText).toContain("Legal compliance not determined by this workflow.");
+      expect(timelineText).not.toMatch(
+        /private body text|record-provider-secret|raw-provider-body|mailgun-signature-secret|mailgun-token-secret|provider-message@mg\.example\.com|notice served|legally delivered|tenant received|tenant opened|delivery confirmed|compliance achieved|statutory notice completed/i,
+      );
+    }
+  });
 });

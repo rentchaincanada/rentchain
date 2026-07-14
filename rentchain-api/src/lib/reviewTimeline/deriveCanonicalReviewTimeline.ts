@@ -137,7 +137,7 @@ function renewalNoticeCommunicationDeliveryLabel(value: unknown): string {
   if (raw === "delivered") return "Delivered by email provider";
   if (raw === "bounced") return "Bounce detected by email provider";
   if (raw === "failed") return "Failed by email provider";
-  if (raw === "deferred") return "Deferred by email provider";
+  if (raw === "deferred") return "Temporary delivery issue detected by email provider";
   if (raw === "rejected") return "Rejected by email provider";
   if (raw === "complained") return "Complaint reported by email provider";
   if (raw === "opened") return "Open event recorded by provider";

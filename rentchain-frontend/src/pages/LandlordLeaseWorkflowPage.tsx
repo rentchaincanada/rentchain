@@ -256,7 +256,7 @@ function deliveryConfirmationLabel(status: RenewalNoticeCommunicationResponse["d
   if (status === "delivered") return "Delivered by email provider";
   if (status === "bounced") return "Bounce detected by email provider";
   if (status === "failed") return "Failed by email provider";
-  if (status === "deferred") return "Deferred by email provider";
+  if (status === "deferred") return "Temporary delivery issue detected by email provider";
   if (status === "rejected") return "Rejected by email provider";
   if (status === "complained") return "Complaint reported by email provider";
   if (status === "opened") return "Open event recorded by provider";
@@ -291,7 +291,13 @@ function communicationDeliveryLabel(value: string | null | undefined) {
   if (normalized === "delivered" || normalized === "delivered by email provider") return "Delivered by email provider";
   if (normalized === "bounced" || normalized === "bounce detected by email provider") return "Bounce detected by email provider";
   if (normalized === "failed" || normalized === "failed by email provider") return "Failed by email provider";
-  if (normalized === "deferred" || normalized === "deferred by email provider") return "Deferred by email provider";
+  if (
+    normalized === "deferred" ||
+    normalized === "deferred by email provider" ||
+    normalized === "temporary delivery issue detected by email provider"
+  ) {
+    return "Temporary delivery issue detected by email provider";
+  }
   if (normalized === "rejected" || normalized === "rejected by email provider") return "Rejected by email provider";
   if (normalized === "complained" || normalized === "complaint reported by email provider") return "Complaint reported by email provider";
   if (normalized === "opened" || normalized === "open event recorded by provider") return "Open event recorded by provider";
