@@ -418,6 +418,80 @@ describe("leaseCreditAllocationService", () => {
     expect(second.record).toEqual(first.record);
   });
 
+  it("returns persisted allocation records on idempotent Firestore replay without caller-supplied records", async () => {
+    const obligationRows = [row()];
+    const preview = buildLeaseCreditAllocationPreview({
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      aggregateBalanceCents: -876900,
+      obligationRows,
+    });
+    const input = {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      aggregateBalanceCents: -876900,
+      obligationRows,
+      obligationKey: preview.obligations[0].obligationKey,
+      allocationAmountCents: 200000,
+      expectedPreviewFingerprint: preview.previewFingerprint,
+      createdBy: "operator-1",
+      idempotencyKey: "persisted-replay",
+      firestore: fakeDb as FirestoreLike,
+    };
+    const first = await applyLeaseCreditAllocation(input);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    const second = await applyLeaseCreditAllocation(input);
+
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.idempotentReplay).toBe(true);
+    expect(second.record).toEqual(first.record);
+    expect(listDocs(LEASE_CREDIT_ALLOCATION_RECORDS_COLLECTION)).toHaveLength(1);
+  });
+
+  it("rejects reused idempotency keys when request details do not match the existing allocation", async () => {
+    const obligationRows = [row()];
+    const preview = buildLeaseCreditAllocationPreview({
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      aggregateBalanceCents: -876900,
+      obligationRows,
+    });
+    const first = await applyLeaseCreditAllocation({
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      aggregateBalanceCents: -876900,
+      obligationRows,
+      obligationKey: preview.obligations[0].obligationKey,
+      allocationAmountCents: 200000,
+      expectedPreviewFingerprint: preview.previewFingerprint,
+      createdBy: "operator-1",
+      idempotencyKey: "conflicting-replay",
+      firestore: fakeDb as FirestoreLike,
+    });
+    expect(first.ok).toBe(true);
+
+    const second = await applyLeaseCreditAllocation({
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      aggregateBalanceCents: -876900,
+      obligationRows,
+      obligationKey: preview.obligations[0].obligationKey,
+      allocationAmountCents: 100000,
+      expectedPreviewFingerprint: preview.previewFingerprint,
+      createdBy: "operator-1",
+      idempotencyKey: "conflicting-replay",
+      firestore: fakeDb as FirestoreLike,
+    });
+
+    expect(second.ok).toBe(false);
+    if (second.ok) return;
+    expect(second.error.code).toBe("LEASE_CREDIT_ALLOCATION_DUPLICATE_CONFLICT");
+    expect(listDocs(LEASE_CREDIT_ALLOCATION_RECORDS_COLLECTION)).toHaveLength(1);
+  });
+
   it("scopes allocation records by landlord and lease", async () => {
     const baseRow = row();
     const foreignRecord = allocation({

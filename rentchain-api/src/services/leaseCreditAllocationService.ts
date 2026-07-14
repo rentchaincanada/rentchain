@@ -488,6 +488,19 @@ async function patchAllocationRecord(
     .set(patch, { merge: true });
 }
 
+async function getAllocationRecord(
+  allocationId: string,
+  firestore?: FirestoreLike
+): Promise<LeaseCreditAllocationRecord | null> {
+  if (!firestore) return null;
+  const snap = await firestoreDb(firestore)
+    .collection<LeaseCreditAllocationRecord>(LEASE_CREDIT_ALLOCATION_RECORDS_COLLECTION)
+    .doc(allocationId)
+    .get();
+  if (!snap.exists) return null;
+  return snap.data() || null;
+}
+
 export async function listLeaseCreditAllocationRecords(input: {
   landlordId: string;
   leaseId: string;
@@ -512,6 +525,8 @@ export async function applyLeaseCreditAllocation(
 ): Promise<ApplyLeaseCreditAllocationResult> {
   const allocationRecords = input.allocationRecords || [];
   const idempotencyKey = cleanString(input.idempotencyKey, 500);
+  const requestedObligationKey = cleanString(input.obligationKey, 500) || "";
+  const requestedAmountCents = normalizeAmountCents(input.allocationAmountCents);
   const preview = buildLeaseCreditAllocationPreview({
     landlordId: input.landlordId,
     leaseId: input.leaseId,
@@ -527,7 +542,19 @@ export async function applyLeaseCreditAllocation(
         record.leaseId === preview.leaseId
       );
     });
-    if (existing) return { ok: true, record: existing, preview, idempotentReplay: true };
+    if (existing) {
+      if (existing.obligationKey === requestedObligationKey && existing.allocationAmountCents === requestedAmountCents) {
+        return { ok: true, record: existing, preview, idempotentReplay: true };
+      }
+      return {
+        ok: false,
+        error: {
+          code: "LEASE_CREDIT_ALLOCATION_DUPLICATE_CONFLICT",
+          message: "A credit allocation record already exists for this idempotency scope.",
+        },
+        preview,
+      };
+    }
   }
   const validation = validateLeaseCreditAllocationRequest({
     preview,
@@ -537,7 +564,7 @@ export async function applyLeaseCreditAllocation(
   });
   if (!validation.ok) return { ok: false, error: validation.error, preview };
 
-  const amount = normalizeAmountCents(input.allocationAmountCents);
+  const amount = requestedAmountCents;
   const obligation = validation.obligation;
   const allocationId = buildLeaseCreditAllocationRecordId({
     landlordId: preview.landlordId,
@@ -556,6 +583,27 @@ export async function applyLeaseCreditAllocation(
       conflicting.allocationAmountCents === amount
     ) {
       return { ok: true, record: conflicting, preview, idempotentReplay: true };
+    }
+    return {
+      ok: false,
+      error: {
+        code: "LEASE_CREDIT_ALLOCATION_DUPLICATE_CONFLICT",
+        message: "A credit allocation record already exists for this idempotency scope.",
+      },
+      preview,
+    };
+  }
+  const stored = await getAllocationRecord(allocationId, input.firestore);
+  if (stored) {
+    if (
+      idempotencyKey &&
+      stored.idempotencyKey === idempotencyKey &&
+      stored.landlordId === preview.landlordId &&
+      stored.leaseId === preview.leaseId &&
+      stored.obligationKey === obligation.obligationKey &&
+      stored.allocationAmountCents === amount
+    ) {
+      return { ok: true, record: stored, preview, idempotentReplay: true };
     }
     return {
       ok: false,
