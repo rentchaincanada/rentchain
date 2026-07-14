@@ -1131,9 +1131,14 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByLabelText("Send-readiness checklist")).toHaveTextContent("Approved internally");
     expect(screen.getByLabelText("Send-readiness checklist")).toHaveTextContent("Ready for confirmation");
     expect(screen.getByLabelText("Send-readiness checklist")).toHaveTextContent("Ready for send");
-    expect(screen.getByLabelText("Send confirmation checklist")).toHaveTextContent(
+    const sendConfirmationArea = screen.getByLabelText("Send confirmation and action area");
+    expect(within(sendConfirmationArea).getByLabelText("Send confirmation checklist")).toHaveTextContent(
       "Sending emails the tenant using the approved renewal draft. This does not establish legal notice service by itself."
     );
+    expect(within(sendConfirmationArea).getByLabelText("Send renewal email action")).toHaveTextContent(
+      "The send button unlocks only after all confirmations are checked."
+    );
+    expect(within(sendConfirmationArea).getByRole("button", { name: "Send renewal email" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Continue to send confirmations" })).toBeInTheDocument();
     await waitFor(() => {
       expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
@@ -1163,12 +1168,13 @@ describe("LandlordLeaseWorkflowPage", () => {
     await screen.findByText("Future send review approved internally. Send requires the confirmation checklist.");
 
     const confirmationChecklist = screen.getByLabelText("Send confirmation checklist");
+    const sendConfirmationArea = screen.getByLabelText("Send confirmation and action area");
     expect(confirmationChecklist).toHaveTextContent("I have reviewed the recipient(s).");
     expect(confirmationChecklist).toHaveTextContent("I have reviewed the message body.");
     expect(confirmationChecklist).toHaveTextContent("I understand this sends tenant communication only.");
     expect(confirmationChecklist).toHaveTextContent("I understand this does not establish legal notice service by itself.");
 
-    const sendButton = screen.getByRole("button", { name: "Send renewal email" });
+    const sendButton = within(sendConfirmationArea).getByRole("button", { name: "Send renewal email" });
     expect(sendButton).toBeDisabled();
     fireEvent.click(screen.getByLabelText("I have reviewed the recipient(s)."));
     fireEvent.click(screen.getByLabelText("I have reviewed the message body."));
