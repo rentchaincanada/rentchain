@@ -884,6 +884,7 @@ describe("LeaseLedgerPage", () => {
       expect(printRoot?.textContent).toContain("Payment obligation summary");
       expect(printRoot?.textContent).toContain("Decision summary");
       expect(printRoot?.textContent).toContain("Ledger entries");
+      expect(printRoot?.textContent).toContain("Description");
       expect(printRoot?.textContent).toContain("Monthly totals");
       expect(printRoot?.textContent).toContain("Lease notes");
       expect(printRoot?.textContent).toContain("Call tenant next week");
@@ -892,6 +893,7 @@ describe("LeaseLedgerPage", () => {
       expect(printRoot?.querySelector(".lease-ledger-print-ledger-table")).not.toBeNull();
       expect(printRoot?.querySelector('[aria-label="Ledger entry cards"]')).toBeNull();
       expect(printRoot?.querySelector('[aria-label="Payment obligation cards"]')).toBeNull();
+      expect(printRoot?.textContent).not.toContain("Method / ref");
       expect(printRoot?.querySelector("button")).toBeNull();
       expect(printRoot?.querySelector("input")).toBeNull();
       expect(printRoot?.querySelector("select")).toBeNull();

@@ -247,7 +247,7 @@
 
   .lease-ledger-print-root .lease-ledger-print-export {
     display: grid !important;
-    gap: 10px !important;
+    gap: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
     color: #1f2933 !important;
@@ -256,19 +256,32 @@
     line-height: 1.28 !important;
   }
 
+  .lease-ledger-print-root .lease-ledger-print-page {
+    display: grid !important;
+    gap: 8px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-page-detail {
+    break-before: page !important;
+    page-break-before: always !important;
+    padding-top: 0 !important;
+  }
+
   .lease-ledger-print-root .lease-ledger-print-header,
   .lease-ledger-print-root .lease-ledger-print-section {
     break-inside: avoid;
     page-break-inside: avoid;
     border: 1px solid #d7cbbc !important;
     border-radius: 8px !important;
-    padding: 9px !important;
+    padding: 8px !important;
     background: #fffdf8 !important;
   }
 
   .lease-ledger-print-root .lease-ledger-print-header {
     display: grid !important;
-    gap: 7px !important;
+    gap: 6px !important;
   }
 
   .lease-ledger-print-root .lease-ledger-print-brand {
@@ -301,7 +314,11 @@
   .lease-ledger-print-root .lease-ledger-print-summary-grid {
     display: grid !important;
     grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-    gap: 6px !important;
+    gap: 5px !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-summary-grid-tight {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 
   .lease-ledger-print-root .lease-ledger-print-meta > div,
@@ -310,7 +327,7 @@
     border: 1px solid #e3d8c9 !important;
     border-radius: 6px !important;
     background: #fff !important;
-    padding: 6px !important;
+    padding: 5px !important;
   }
 
   .lease-ledger-print-root .lease-ledger-print-meta span,
@@ -336,32 +353,39 @@
   }
 
   .lease-ledger-print-root .lease-ledger-print-warning,
-  .lease-ledger-print-root .lease-ledger-print-detail-block {
+  .lease-ledger-print-root .lease-ledger-print-detail-block,
+  .lease-ledger-print-root .lease-ledger-print-execution-line {
     display: grid !important;
     gap: 3px !important;
-    margin-top: 6px !important;
+    margin-top: 5px !important;
     border: 1px solid #e8bf66 !important;
     border-radius: 6px !important;
     background: #fffbeb !important;
     color: #633a10 !important;
-    padding: 7px !important;
+    padding: 6px !important;
   }
 
-  .lease-ledger-print-root .lease-ledger-print-detail-block {
+  .lease-ledger-print-root .lease-ledger-print-detail-block,
+  .lease-ledger-print-root .lease-ledger-print-execution-line {
     border-color: #e3d8c9 !important;
     background: #fff !important;
     color: #211c17 !important;
   }
 
+  .lease-ledger-print-root .lease-ledger-print-execution-section {
+    padding-bottom: 6px !important;
+  }
+
   .lease-ledger-print-root .lease-ledger-print-decision-list,
   .lease-ledger-print-root .lease-ledger-print-note-list {
     display: grid !important;
-    gap: 6px !important;
-    margin-top: 6px !important;
+    gap: 5px !important;
+    margin-top: 5px !important;
   }
 
   .lease-ledger-print-root .lease-ledger-print-decision,
-  .lease-ledger-print-root .lease-ledger-print-note-list article {
+  .lease-ledger-print-root .lease-ledger-print-note-list article,
+  .lease-ledger-print-root .lease-ledger-print-obligation-card {
     break-inside: avoid;
     page-break-inside: avoid;
     display: grid !important;
@@ -370,16 +394,39 @@
     border: 1px solid #e3d8c9 !important;
     border-radius: 6px !important;
     background: #fff !important;
-    padding: 7px !important;
+    padding: 6px !important;
   }
 
-  .lease-ledger-print-root .lease-ledger-print-decision > div:first-child {
+  .lease-ledger-print-root .lease-ledger-print-decision > div:first-child,
+  .lease-ledger-print-root .lease-ledger-print-obligation-card-wide {
     grid-column: 1 / -1 !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-obligation-card {
+    margin-top: 5px !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-obligation-card span {
+    display: block !important;
+    color: #6b5e52 !important;
+    font-size: 8px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.03em !important;
+    text-transform: uppercase !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-obligation-card strong {
+    display: block !important;
+    margin-top: 2px !important;
+    color: #211c17 !important;
+    font-size: 10px !important;
+    overflow-wrap: anywhere !important;
   }
 
   .lease-ledger-print-root .lease-ledger-print-table-wrap {
     max-width: 100% !important;
-    margin-top: 6px !important;
+    margin-top: 5px !important;
     overflow: visible !important;
   }
 
@@ -387,7 +434,7 @@
     width: 100% !important;
     table-layout: fixed !important;
     border-collapse: collapse !important;
-    font-size: 8.5px !important;
+    font-size: 8.25px !important;
   }
 
   .lease-ledger-print-root .lease-ledger-print-table th,
@@ -405,6 +452,39 @@
     font-size: 8px !important;
     font-weight: 900 !important;
     text-transform: uppercase !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-ledger-table th:nth-child(1),
+  .lease-ledger-print-root .lease-ledger-print-ledger-table td:nth-child(1) {
+    width: 13% !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-ledger-table th:nth-child(2),
+  .lease-ledger-print-root .lease-ledger-print-ledger-table td:nth-child(2) {
+    width: 34% !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-ledger-table th:nth-child(3),
+  .lease-ledger-print-root .lease-ledger-print-ledger-table td:nth-child(3),
+  .lease-ledger-print-root .lease-ledger-print-ledger-table th:nth-child(4),
+  .lease-ledger-print-root .lease-ledger-print-ledger-table td:nth-child(4) {
+    width: 14% !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-ledger-table th:nth-child(5),
+  .lease-ledger-print-root .lease-ledger-print-ledger-table td:nth-child(5) {
+    width: 25% !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-page-detail .lease-ledger-print-section {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  .lease-ledger-print-root .lease-ledger-print-notes-section,
+  .lease-ledger-print-root .lease-ledger-print-notes-section article {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   .lease-ledger-print-root .lease-ledger-print-section-compact {
