@@ -211,11 +211,18 @@ describe("Mailgun renewal communication delivery webhooks", () => {
     );
     expect(collections.get("events")?.size).toBe(1);
     expect(collections.get("canonicalEvents")?.size).toBe(1);
-    expect(JSON.stringify(Array.from(collections.values()).map((items) => Array.from(items.values())))).not.toContain(
-      "must-not-project"
-    );
+    const allStoredJson = JSON.stringify(Array.from(collections.values()).map((items) => Array.from(items.values())));
+    expect(allStoredJson).not.toContain("must-not-project");
+    expect(allStoredJson).not.toMatch(/notice served|legally delivered|tenant legally notified|tenant received notice|compliance achieved|statutory notice completed|enforceable notice/i);
+    expect(record).not.toHaveProperty("servedAt");
+    expect(record).not.toHaveProperty("legalComplianceEstablished");
+    expect(record).not.toHaveProperty("complianceStatus");
+    expect(record).not.toHaveProperty("lifecycleStatus");
     expect(collections.get("leaseNotices")).toBeUndefined();
     expect(collections.get("leases")).toBeUndefined();
+    expect(collections.get("leaseLifecycleEvents")).toBeUndefined();
+    expect(collections.get("tenantLegalNotifications")).toBeUndefined();
+    expect(collections.get("complianceEvents")).toBeUndefined();
   });
 
   it("rejects missing, invalid, and stale signatures", async () => {
