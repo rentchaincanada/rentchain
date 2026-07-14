@@ -41,7 +41,7 @@ import {
   type DecisionSeverity,
   type DecisionStatus,
 } from "@/lib/decisions/decisionDisplay";
-import { findRelatedDelinquencySignal, findRelatedObligationRow } from "@/lib/decisions/decisionContext";
+import { findRelatedDelinquencySignal, findRelatedObligationRow, formatSignalReason } from "@/lib/decisions/decisionContext";
 import { DecisionContextPanel } from "@/components/decisions/DecisionContextPanel";
 import { PaymentCsvImportPreviewCard } from "@/components/ledger/PaymentCsvImportPreviewCard";
 import "./LeaseLedgerPage.css";
@@ -582,8 +582,8 @@ function DecisionRow({
 
 function reasonTextFromSignal(signal: LeaseDelinquencySignal): string {
   const copy = delinquencySignalCopy[signal.signalType];
-  const reason = (signal.reasons || [])[0]?.replace(/_/g, " ");
-  return `${copy.label} — ${copy.reason}${reason ? ` (${reason})` : ""}`;
+  const reason = (signal.reasons || [])[0];
+  return `${copy.label} — ${copy.reason}${reason ? ` (${formatSignalReason(reason)})` : ""}`;
 }
 
 function comparableDate(value: string | null | undefined): string | null {
@@ -773,6 +773,22 @@ function printFinancialSignalText(
     return `${copy.label} — ${obligationFallbackReason[status] || obligationFallbackReason.unknown}`;
   }
   return matchingSignals.map((signal) => reasonTextFromSignal(signal)).join("; ");
+}
+
+function printSignalReasonText(row: LeaseObligationLedgerRow, signals: LeaseDelinquencySignal[]): string | null {
+  const labels = signals
+    .filter((signal) => signalMatchesRow(signal, row))
+    .flatMap((signal) => signal.reasons || [])
+    .map((reason) => formatSignalReason(reason))
+    .filter((reason) => reason !== "Not specified");
+  const uniqueLabels = Array.from(new Set(labels));
+  return uniqueLabels.length ? uniqueLabels.join("; ") : null;
+}
+
+function printEvidenceText(row: LeaseObligationLedgerRow, signals: LeaseDelinquencySignal[]): string {
+  const signalReason = printSignalReasonText(row, signals);
+  const evidence = prettyEvidenceStatus(row);
+  return signalReason ? `${evidence}. Signal reason: ${signalReason}` : evidence;
 }
 
 function printLedgerEntryDescription(entry: LeaseLedgerEntry): string {
@@ -1033,7 +1049,7 @@ function LeaseLedgerPrintExport({
               </div>
               <div className="lease-ledger-print-obligation-card-wide">
                 <span>Evidence</span>
-                <strong>{prettyEvidenceStatus(singleObligationRow)}</strong>
+                <strong>{printEvidenceText(singleObligationRow, delinquencySignals)}</strong>
               </div>
             </article>
           ) : (
@@ -1061,7 +1077,7 @@ function LeaseLedgerPrintExport({
                       <td>{formatCurrencyCents(obligationOutstandingCents(row))}</td>
                       <td>{obligationStatusCopy[row.obligationStatus || "unknown"]?.label || obligationStatusCopy.unknown.label}</td>
                       <td>{printFinancialSignalText(row, delinquencySignals, hasUnallocatedCreditNotice)}</td>
-                      <td>{prettyEvidenceStatus(row)}</td>
+                      <td>{printEvidenceText(row, delinquencySignals)}</td>
                     </tr>
                   ))}
                 </tbody>

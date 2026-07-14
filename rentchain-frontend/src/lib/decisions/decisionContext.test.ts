@@ -100,4 +100,29 @@ describe("decisionContext", () => {
     );
     expect(items.map((item) => item.value)).not.toContain("undefined");
   });
+
+  it("formats signal reasons as operator-readable evidence copy", () => {
+    const items = buildDecisionEvidenceItems(decision, {
+      delinquencySignals: [
+        {
+          signalId: "signal-1",
+          leaseId: "lease-1",
+          paymentIntentId: "pi-1",
+          propertyId: "property-1",
+          expectedAmountCents: 145000,
+          paidAmountCents: 0,
+          outstandingAmountCents: 145000,
+          signalType: "overdue",
+          severity: "critical",
+          detectedAt: "2026-05-05T12:00:00.000Z",
+          reasons: ["obligation_pending_after_due_date"],
+        },
+      ],
+    });
+
+    expect(items).toEqual(
+      expect.arrayContaining([{ label: "Signal reason", value: "Obligation remains unmatched after due date" }])
+    );
+    expect(items.map((item) => item.value)).not.toContain("obligation_pending_after_due_date");
+  });
 });

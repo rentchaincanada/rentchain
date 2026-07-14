@@ -62,6 +62,26 @@ function titleCase(value: unknown): string {
   return text.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+const signalReasonDisplayCopy: Record<string, string> = {
+  aggregate_credit_balance_with_unmatched_obligations: "Aggregate credit balance with unmatched obligations",
+  manual_review_required: "Manual review required",
+  obligation_pending_after_due_date: "Obligation remains unmatched after due date",
+  provider_received: "Provider received payment evidence",
+  rent_payment_checkout_created: "Provider checkout was created",
+};
+
+export function formatSignalReason(value: unknown): string {
+  const reason = cleanString(value);
+  if (!reason) return "Not specified";
+  return signalReasonDisplayCopy[reason] || titleCase(reason);
+}
+
+function formatSignalReasons(values: unknown[] | null | undefined): string | null {
+  if (!values?.length) return null;
+  const labels = values.map((reason) => formatSignalReason(reason)).filter((reason) => reason !== "Not specified");
+  return labels.length ? labels.join(", ") : null;
+}
+
 function datesMatch(a: unknown, b: unknown): boolean {
   const left = cleanString(a);
   const right = cleanString(b);
@@ -177,12 +197,13 @@ export function buildDecisionEvidenceItems(
     (relatedRow
       ? Math.max(0, Number(relatedRow.expectedAmountCents || 0) - Number(relatedRow.paidAmountCents || 0))
       : null);
-  const signalType = relatedSignal?.signalType || metadataString(decision, "signalType");
-  const signalReasons = relatedSignal?.reasons?.length
-    ? relatedSignal.reasons.join(", ")
+  const signalType = metadataString(decision, "signalType") || relatedSignal?.signalType;
+  const signalReasonValues = relatedSignal?.reasons?.length
+    ? relatedSignal.reasons
     : Array.isArray(decision.metadata?.signalReasons)
-    ? (decision.metadata.signalReasons as unknown[]).map((reason) => String(reason)).join(", ")
+    ? (decision.metadata.signalReasons as unknown[])
     : null;
+  const signalReasons = formatSignalReasons(signalReasonValues);
   const lifecycleState = metadataString(decision, "lifecycleState");
   const lifecycleReasons = Array.isArray(decision.metadata?.lifecycleReasons)
     ? (decision.metadata.lifecycleReasons as unknown[]).map((reason) => String(reason)).join(", ")
