@@ -454,8 +454,9 @@ describe("DashboardPage", () => {
     renderDashboard();
 
     expect(await screen.findByTestId("upcoming-actions-section")).toHaveTextContent("Review payment allocation");
-    expect(screen.getByTestId("upcoming-actions-section")).toHaveTextContent("Payments");
+    expect(screen.getByTestId("upcoming-actions-section")).toHaveTextContent("Payments · Allocation review");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Review payment allocation");
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Payments · Allocation review");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("aggregate credit balance of -$8,769.00");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Review payment allocation before taking overdue-rent action.");
     expect(screen.getByRole("link", { name: /Open payment ledger: Review payment allocation/i })).toHaveAttribute(
@@ -465,6 +466,59 @@ describe("DashboardPage", () => {
     expect(screen.queryByText("Review Overdue Rent")).not.toBeInTheDocument();
     expect(screen.queryByText("Review overdue rent")).not.toBeInTheDocument();
     expect(screen.queryByText("tenant owes")).not.toBeInTheDocument();
+  });
+
+  it("defensively relabels legacy overdue-rent dashboard titles when allocation context is present", async () => {
+    mocks.fetchLandlordDecisionQueueMock.mockResolvedValue(
+      queueResponse({
+        total: 1,
+        summary: {
+          total: 1,
+          critical: 1,
+          warning: 0,
+          needsReview: 0,
+          upcoming: 0,
+          informational: 0,
+          open: 1,
+          blocked: 0,
+        },
+        items: [
+          {
+            id: "decision-credit-allocation-legacy-title",
+            sourceType: "decision_inbox",
+            sourceId: "decision:review_overdue_rent:delinquency:overdue:y7XM6BFXIzWW0fV3mu1L",
+            workspace: "payments",
+            severity: "critical",
+            title: "Review Overdue Rent",
+            description:
+              "Lease has an aggregate credit balance of -$8,769.00, but $2,000.00 remains outstanding on specific obligations. Review payment allocation before taking overdue-rent action.",
+            recommendedActionLabel: "Review",
+            recommendedActionHref: "/leases/y7XM6BFXIzWW0fV3mu1L/ledger",
+            dueAt: "2026-05-31T00:00:00.000Z",
+            createdAt: "2026-06-18T12:00:00.000Z",
+            updatedAt: "2026-06-19T12:00:00.000Z",
+            status: "open",
+            leaseId: "y7XM6BFXIzWW0fV3mu1L",
+            dedupeKey: "payment-allocation:y7XM6BFXIzWW0fV3mu1L",
+            sortKey: "1",
+            priorityRank: 1,
+          },
+        ],
+      })
+    );
+
+    renderDashboard();
+
+    expect(await screen.findByTestId("upcoming-actions-section")).toHaveTextContent("Review payment allocation");
+    expect(screen.getByTestId("upcoming-actions-section")).toHaveTextContent("Payments · Allocation review");
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Review payment allocation");
+    expect(screen.getByRole("link", { name: /Open payment ledger: Review payment allocation/i })).toHaveAttribute(
+      "href",
+      "/leases/y7XM6BFXIzWW0fV3mu1L/ledger"
+    );
+    expect(screen.queryByText("Review Overdue Rent")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rent obligation is overdue.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Record payment or contact the tenant")).not.toBeInTheDocument();
   });
 
   it("stacks Dashboard decision card actions below content on mobile", async () => {

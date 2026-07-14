@@ -224,6 +224,9 @@ function decisionDestinationCopy(item: LandlordDecisionQueueItem): { meta: strin
     return { meta: "Lease renewals · Review operator inputs", action: "Review renewals" };
   }
   if (href.includes("/ledger")) {
+    if (isPaymentAllocationReviewItem(item)) {
+      return { meta: "Payments · Allocation review", action: "Open payment ledger" };
+    }
     return {
       meta: "Payment ledger · Review obligation",
       action: label && !isGenericActionLabel(label) && !isLegacyLedgerActionLabel(label) ? label : "Open payment ledger",
@@ -249,8 +252,40 @@ function decisionContextLabel(item: LandlordDecisionQueueItem): string {
   return decisionDestinationCopy(item).meta;
 }
 
+function isPaymentAllocationReviewItem(item: LandlordDecisionQueueItem): boolean {
+  const href = String(item.recommendedActionHref || "").toLowerCase();
+  if (!href.includes("/ledger")) return false;
+  const haystack = [
+    item.title,
+    item.description,
+    item.recommendedActionLabel,
+    item.sourceSnapshot?.title,
+    item.sourceSnapshot?.description,
+  ]
+    .map((value) => String(value || "").toLowerCase())
+    .join(" ");
+  return (
+    haystack.includes("review payment allocation") ||
+    haystack.includes("aggregate credit balance") ||
+    haystack.includes("unmatched obligations") ||
+    haystack.includes("unmatched payments")
+  );
+}
+
+function decisionTitle(item: LandlordDecisionQueueItem): string {
+  if (isPaymentAllocationReviewItem(item)) return "Review payment allocation";
+  return item.title || "Review required";
+}
+
 function decisionReason(item: LandlordDecisionQueueItem): string {
   const description = String(item.description || "").replace(/\s+/g, " ").trim();
+  if (isPaymentAllocationReviewItem(item)) {
+    const hasSafeAllocationContext =
+      /aggregate credit balance|unmatched obligations|unmatched payments|payment allocation/i.test(description);
+    return hasSafeAllocationContext
+      ? description
+      : "Lease has an aggregate credit balance, but one or more obligations remain unmatched. Review payment allocation before taking overdue-rent action.";
+  }
   return description || "Review the recommended next step for this operational decision.";
 }
 
@@ -695,6 +730,7 @@ function DecisionQueuePreview({ queue }: { queue: LandlordDecisionQueueResponse 
 
 function DecisionRow({ item }: { item: LandlordDecisionQueueItem }) {
   const destinationLabel = decisionDestinationLabel(item);
+  const title = decisionTitle(item);
   const isMobileDecisionCard = useMediaQuery("(max-width: 640px)");
   return (
     <div
@@ -711,7 +747,7 @@ function DecisionRow({ item }: { item: LandlordDecisionQueueItem }) {
       }}
     >
       <div style={{ display: "grid", gap: 7, minWidth: 0 }}>
-        <div style={{ fontWeight: 850, color: text.primary, overflowWrap: "anywhere" }}>{item.title || "Review required"}</div>
+        <div style={{ fontWeight: 850, color: text.primary, overflowWrap: "anywhere" }}>{title}</div>
         <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.35, overflowWrap: "anywhere" }}>
           {decisionContextLabel(item)}
         </div>
@@ -729,7 +765,7 @@ function DecisionRow({ item }: { item: LandlordDecisionQueueItem }) {
       </div>
       <Link
         to={operationalHref(item)}
-        aria-label={`${destinationLabel}: ${item.title || "Review required"}`}
+        aria-label={`${destinationLabel}: ${title}`}
         style={{
           ...compactButton,
           width: isMobileDecisionCard ? "100%" : "fit-content",
@@ -769,10 +805,12 @@ function UpcomingActions({ queue }: { queue: LandlordDecisionQueueResponse | nul
           {actions.map((item) => (
             <div key={item.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, borderBottom: `1px solid ${colors.border}`, paddingBottom: 10, alignItems: "center" }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 800, overflowWrap: "anywhere" }}>{item.title}</div>
-                <div style={{ color: text.muted, fontSize: 13 }}>{workspaceLabel(item.workspace)} · {formatDate(item.dueAt)}</div>
+                <div style={{ fontWeight: 800, overflowWrap: "anywhere" }}>{decisionTitle(item)}</div>
+                <div style={{ color: text.muted, fontSize: 13 }}>
+                  {isPaymentAllocationReviewItem(item) ? "Payments · Allocation review" : `${workspaceLabel(item.workspace)} · ${formatDate(item.dueAt)}`}
+                </div>
               </div>
-              <Link to={operationalHref(item)} aria-label={`Open ${item.title}`} style={{ ...compactButton, flex: "0 0 auto" }}>
+              <Link to={operationalHref(item)} aria-label={`Open ${decisionTitle(item)}`} style={{ ...compactButton, flex: "0 0 auto" }}>
                 <ArrowRight size={16} />
               </Link>
             </div>
