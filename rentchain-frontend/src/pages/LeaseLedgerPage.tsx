@@ -400,6 +400,25 @@ function allocationReviewRecommendedAction(): { label: string; cta: "resolve"; h
   };
 }
 
+function decisionActionDisplay(
+  action: { label: string; cta: "record_payment" | "resolve"; helper: string },
+  options: { allocationReviewRequired: boolean; status: DecisionStatus }
+): { heading: string; label: string; cta: "record_payment" | "resolve"; helper: string } {
+  if (options.allocationReviewRequired && options.status === "resolved") {
+    return {
+      heading: "Resolved outcome",
+      label:
+        "Marked resolved as an allocation-review item. No rent-collection action should be taken until unmatched payments are reviewed.",
+      cta: action.cta,
+      helper: action.helper,
+    };
+  }
+  return {
+    heading: "Recommended next action",
+    ...action,
+  };
+}
+
 function allocationReviewDecision(decision: DecisionItem): DecisionItem {
   return {
     ...decision,
@@ -509,7 +528,8 @@ function DecisionRow({
   const summary = buildDecisionSummaryFacts(decision, lease, obligationRows, delinquencySignals, allocationReviewRequired);
   const currentStatus = currentDecisionStatus(decision);
   const hasTerminalStatus = isTerminalDecisionStatus(currentStatus);
-  const primaryActionType = summary.recommendedAction.cta === "resolve" && !hasTerminalStatus ? "resolved" : null;
+  const actionDisplay = decisionActionDisplay(summary.recommendedAction, { allocationReviewRequired, status: currentStatus });
+  const primaryActionType = actionDisplay.cta === "resolve" && !hasTerminalStatus ? "resolved" : null;
   return (
     <div className="lease-ledger-decision-card">
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -551,17 +571,17 @@ function DecisionRow({
       </div>
       <div className="lease-ledger-next-action">
         <div>
-          <span>Recommended next action</span>
-          <strong>{summary.recommendedAction.label}</strong>
+          <span>{actionDisplay.heading}</span>
+          <strong>{actionDisplay.label}</strong>
         </div>
         {hasTerminalStatus ? (
           <DecisionWorkflowPassiveState decision={decision} />
-        ) : summary.recommendedAction.cta === "record_payment" ? (
-          <button type="button" onClick={onRecordPayment} title={summary.recommendedAction.helper}>
+        ) : actionDisplay.cta === "record_payment" ? (
+          <button type="button" onClick={onRecordPayment} title={actionDisplay.helper}>
             Record payment
           </button>
         ) : (
-          <button type="button" disabled={pending} onClick={() => onAction(decision, "resolved")} title={summary.recommendedAction.helper}>
+          <button type="button" disabled={pending} onClick={() => onAction(decision, "resolved")} title={actionDisplay.helper}>
             {pending ? "Saving..." : "Resolve"}
           </button>
         )}
@@ -956,6 +976,11 @@ function LeaseLedgerPrintExport({
                     delinquencySignals,
                     hasUnallocatedCreditNotice
                   );
+                  const currentStatus = currentDecisionStatus(decision);
+                  const actionDisplay = decisionActionDisplay(summary.recommendedAction, {
+                    allocationReviewRequired: hasUnallocatedCreditNotice,
+                    status: currentStatus,
+                  });
                   const copy = hasUnallocatedCreditNotice
                     ? { label: "Review payment allocation", badge: "Allocation review" }
                     : decisionDisplayCopy[decision.decisionType];
@@ -970,10 +995,10 @@ function LeaseLedgerPrintExport({
                         <strong>{summary.displayDecision.reason}</strong>
                       </div>
                       <div>
-                        <span>Recommended next action</span>
-                        <strong>{summary.recommendedAction.label}</strong>
+                        <span>{actionDisplay.heading}</span>
+                        <strong>{actionDisplay.label}</strong>
                       </div>
-                      {isTerminalDecisionStatus(currentDecisionStatus(decision)) ? (
+                      {isTerminalDecisionStatus(currentStatus) ? (
                         <div>
                           <span>Action state</span>
                           <strong>{decisionPassiveLabel(decision)} · No state-changing decision action is currently available.</strong>
