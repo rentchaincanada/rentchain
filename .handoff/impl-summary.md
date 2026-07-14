@@ -8,6 +8,7 @@ WHAT WAS DONE:
 - Added deterministic obligation keys for derived payment obligation rows.
 - Added preview logic for aggregate available credit, eligible outstanding obligations, suggested allocation amounts, before/after values, and preview fingerprints.
 - Added internal apply logic with stale-preview validation, amount validation, idempotent replay handling, landlord/lease scoping, and append-safe record creation through injected Firestore.
+- Tightened idempotent replay handling so persisted Firestore records are returned safely even when caller-supplied allocation records are omitted, and mismatched idempotency-key reuse returns a duplicate conflict.
 - Added reversal support by marking allocation records reversed while preserving original allocation details.
 - Added focused service tests for preview, apply, reversal, idempotency, landlord scoping, active/reversed allocations, and stale fingerprint behavior.
 
@@ -17,6 +18,7 @@ AUDIT FINDINGS:
 - Current allocation-review decision behavior is signal and copy only; it does not create allocation state or resolve decisions.
 - paymentReconciliationRecords are provider/payment evidence records and are not the right source of truth for lease credit allocations.
 - Existing canonical audit event types are limited to current review and recovery workflows, so allocation audit event wiring is deferred to the API phase rather than broadening audit types in this foundation PR.
+- Review found and fixed one idempotency edge case: persisted duplicate submissions through Firestore now return an idempotent replay or duplicate conflict instead of relying only on caller-supplied allocationRecords.
 
 KEY DECISIONS:
 - Kept this PR backend-service-only with no public route or UI.
@@ -29,16 +31,16 @@ KEY DECISIONS:
 CURRENT STATE:
 - Draft PR #1372 is open.
 - Branch is pushed to origin.
-- Head commit is c6f37fee2528edf89b8d208b3e9938324da8b5b8.
+- Latest implementation commit is cb4af7c0a782b8f5ee9456e16cd2970f031e6df8.
 - Changed files are limited to:
   - rentchain-api/src/services/leaseCreditAllocationService.ts
   - rentchain-api/src/services/__tests__/leaseCreditAllocationService.test.ts
-- npm run test -- leaseCreditAllocationService passed under Node 20.20.2.
+- npm run test -- leaseCreditAllocationService passed under Node 20.20.2 with 15 tests.
 - npm run test -- paymentObligationLedger landlordDecisionInboxRoutes landlordDecisionQueueRoutes passed under Node 20.20.2.
 - npm run build passed under Node 20.20.2.
-- git diff --check passed.
-- git diff --cached --check passed before the PR was opened.
-- GitHub PR checks after the handoff commit: merge-gate passed; backend, frontend, Terraform Cloud, and Vercel checks were pending; review comment/status jobs were skipped.
+- git diff --check passed after review fix.
+- git diff --cached --check passed after review fix.
+- GitHub PR checks need a fresh read after the review fix is pushed.
 
 KNOWN LIMITATIONS:
 - No public API route was added.
