@@ -29,7 +29,7 @@ KEY DECISIONS:
 CURRENT STATE:
 - Draft PR #1372 is open.
 - Branch is pushed to origin.
-- Head commit is fe9ca8584628798f03b13a14144f797034241e4b.
+- Head commit is c6f37fee2528edf89b8d208b3e9938324da8b5b8.
 - Changed files are limited to:
   - rentchain-api/src/services/leaseCreditAllocationService.ts
   - rentchain-api/src/services/__tests__/leaseCreditAllocationService.test.ts
@@ -38,7 +38,7 @@ CURRENT STATE:
 - npm run build passed under Node 20.20.2.
 - git diff --check passed.
 - git diff --cached --check passed before the PR was opened.
-- GitHub PR checks were not yet verified after PR creation.
+- GitHub PR checks after the handoff commit: merge-gate passed; backend, frontend, Terraform Cloud, and Vercel checks were pending; review comment/status jobs were skipped.
 
 KNOWN LIMITATIONS:
 - No public API route was added.
