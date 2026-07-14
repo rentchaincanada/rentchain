@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   fetchReviewTimeline: vi.fn(),
 }));
 
+const scrollIntoViewMock = vi.fn();
+const focusMock = vi.fn();
+
 vi.mock("@/api/leasesApi", () => ({
   getLeaseById: mocks.getLeaseById,
 }));
@@ -125,6 +128,16 @@ function decisionQueueResponse(items: unknown[]) {
 
 describe("LandlordLeaseWorkflowPage", () => {
   beforeEach(() => {
+    scrollIntoViewMock.mockReset();
+    focusMock.mockReset();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoViewMock,
+    });
+    Object.defineProperty(HTMLElement.prototype, "focus", {
+      configurable: true,
+      value: focusMock,
+    });
     mocks.getLeaseById.mockReset();
     mocks.fetchExpiringLeaseRenewals.mockReset();
     mocks.saveLeaseRenewalInputs.mockReset();
@@ -1118,9 +1131,26 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(screen.getByLabelText("Send-readiness checklist")).toHaveTextContent("Approved internally");
     expect(screen.getByLabelText("Send-readiness checklist")).toHaveTextContent("Ready for confirmation");
     expect(screen.getByLabelText("Send-readiness checklist")).toHaveTextContent("Ready for send");
-    expect(screen.getByLabelText("Send confirmation checklist")).toHaveTextContent(
+    const sendConfirmationArea = screen.getByLabelText("Send confirmation and action area");
+    expect(within(sendConfirmationArea).getByLabelText("Send confirmation checklist")).toHaveTextContent(
       "Sending emails the tenant using the approved renewal draft. This does not establish legal notice service by itself."
     );
+    expect(within(sendConfirmationArea).getByLabelText("Send renewal email action")).toHaveTextContent(
+      "The send button unlocks only after all confirmations are checked."
+    );
+    expect(within(sendConfirmationArea).getByRole("button", { name: "Send renewal email" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Continue to send confirmations" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+      expect(focusMock).toHaveBeenCalledWith({ preventScroll: true });
+    });
+    scrollIntoViewMock.mockClear();
+    focusMock.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to send confirmations" }));
+    await waitFor(() => {
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+      expect(focusMock).toHaveBeenCalledWith({ preventScroll: true });
+    });
     expect(screen.getByRole("button", { name: "Send renewal email" })).toBeDisabled();
     expect(document.body).not.toHaveTextContent(/email sent|tenant notified by email provider acceptance|legal delivery/i);
   });
@@ -1138,12 +1168,13 @@ describe("LandlordLeaseWorkflowPage", () => {
     await screen.findByText("Future send review approved internally. Send requires the confirmation checklist.");
 
     const confirmationChecklist = screen.getByLabelText("Send confirmation checklist");
+    const sendConfirmationArea = screen.getByLabelText("Send confirmation and action area");
     expect(confirmationChecklist).toHaveTextContent("I have reviewed the recipient(s).");
     expect(confirmationChecklist).toHaveTextContent("I have reviewed the message body.");
     expect(confirmationChecklist).toHaveTextContent("I understand this sends tenant communication only.");
     expect(confirmationChecklist).toHaveTextContent("I understand this does not establish legal notice service by itself.");
 
-    const sendButton = screen.getByRole("button", { name: "Send renewal email" });
+    const sendButton = within(sendConfirmationArea).getByRole("button", { name: "Send renewal email" });
     expect(sendButton).toBeDisabled();
     fireEvent.click(screen.getByLabelText("I have reviewed the recipient(s)."));
     fireEvent.click(screen.getByLabelText("I have reviewed the message body."));
@@ -1152,6 +1183,8 @@ describe("LandlordLeaseWorkflowPage", () => {
     fireEvent.click(screen.getByLabelText("I understand this does not establish legal notice service by itself."));
     expect(sendButton).toBeEnabled();
 
+    scrollIntoViewMock.mockClear();
+    focusMock.mockClear();
     fireEvent.click(sendButton);
 
     await waitFor(() => {
@@ -1169,17 +1202,21 @@ describe("LandlordLeaseWorkflowPage", () => {
         })
       );
     });
-    expect(await screen.findByLabelText("Renewal email sent status")).toHaveTextContent("Renewal email sent");
-    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Delivery confirmation");
-    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Accepted for sending");
-    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent(
+    const sentStatus = await screen.findByLabelText("Renewal email sent status");
+    expect(sentStatus).toHaveTextContent("Renewal email sent");
+    await waitFor(() => {
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+      expect(focusMock).toHaveBeenCalledWith({ preventScroll: true });
+    });
+    expect(sentStatus).toHaveTextContent("Delivery confirmation");
+    expect(sentStatus).toHaveTextContent("Accepted for sending");
+    expect(sentStatus).toHaveTextContent(
       "Email was accepted for sending. Delivery confirmation beyond provider acceptance is not tracked yet."
     );
-    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("Not served; legal service not established");
-    expect(screen.getByLabelText("Renewal email sent status")).not.toHaveTextContent("Delivery status unknown");
-    expect(screen.getByLabelText("Renewal email sent status")).toHaveTextContent("rnc_test");
+    expect(sentStatus).toHaveTextContent("Not served; legal service not established");
+    expect(sentStatus).not.toHaveTextContent("Delivery status unknown");
+    expect(sentStatus).toHaveTextContent("rnc_test");
     expect(screen.getByText("rnc_test")).toHaveStyle({ overflowWrap: "anywhere" });
-    const sentStatus = screen.getByLabelText("Renewal email sent status");
     expect(within(sentStatus).getByRole("link", { name: "Open lease review timeline" })).toHaveAttribute(
       "href",
       "/review-timeline?scope=lease&scopeId=lease-1"

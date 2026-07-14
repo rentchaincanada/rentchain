@@ -1052,6 +1052,9 @@ function TenantCommunicationSendReview({
   const [decisionSubmitting, setDecisionSubmitting] = React.useState(false);
   const [decisionNotice, setDecisionNotice] = React.useState<string | null>(null);
   const [decisionError, setDecisionError] = React.useState<string | null>(null);
+  const [sendConfirmationFocusRequested, setSendConfirmationFocusRequested] = React.useState(false);
+  const sendConfirmationActionAreaRef = React.useRef<HTMLDivElement | null>(null);
+  const sendSuccessConfirmationRef = React.useRef<HTMLElement | null>(null);
   const [confirmation, setConfirmation] = React.useState<Record<ConfirmationKey, boolean>>({
     recipientReviewed: false,
     bodyReviewed: false,
@@ -1073,6 +1076,31 @@ function TenantCommunicationSendReview({
   const sendContextKey =
     savedSnapshot && approvalDecision ? `${savedSnapshot.snapshotId}:${approvalDecision.id}:${lease.id}` : null;
   const sendSucceeded = sendState.status === "success";
+  const sentCommunicationId = sendState.status === "success" ? sendState.result.communicationId : null;
+
+  const focusSendConfirmationChecklist = React.useCallback(() => {
+    const actionArea = sendConfirmationActionAreaRef.current;
+    if (!actionArea) return false;
+    window.setTimeout(() => {
+      const currentActionArea = sendConfirmationActionAreaRef.current;
+      if (!currentActionArea) return;
+      currentActionArea.scrollIntoView({ behavior: "smooth", block: "center" });
+      currentActionArea.focus({ preventScroll: true });
+    }, 0);
+    return true;
+  }, []);
+
+  const focusSendSuccessConfirmation = React.useCallback(() => {
+    const successCard = sendSuccessConfirmationRef.current;
+    if (!successCard) return false;
+    window.setTimeout(() => {
+      const currentSuccessCard = sendSuccessConfirmationRef.current;
+      if (!currentSuccessCard) return;
+      currentSuccessCard.scrollIntoView({ behavior: "smooth", block: "center" });
+      currentSuccessCard.focus({ preventScroll: true });
+    }, 0);
+    return true;
+  }, []);
 
   React.useEffect(() => {
     let active = true;
@@ -1133,6 +1161,18 @@ function TenantCommunicationSendReview({
     });
     setSendState({ status: "idle" });
   }, [activeSendContext, approvalDecision, lease.id, savedSnapshot, sendContextKey]);
+
+  React.useEffect(() => {
+    if (!sendConfirmationFocusRequested || !sendPrerequisitesMet || sendSucceeded) return;
+    if (focusSendConfirmationChecklist()) {
+      setSendConfirmationFocusRequested(false);
+    }
+  }, [focusSendConfirmationChecklist, sendConfirmationFocusRequested, sendPrerequisitesMet, sendSucceeded]);
+
+  React.useEffect(() => {
+    if (sendState.status !== "success") return;
+    focusSendSuccessConfirmation();
+  }, [focusSendSuccessConfirmation, sendState.status, sentCommunicationId]);
 
   function setConfirmationValue(key: ConfirmationKey, value: boolean) {
     setConfirmation((current) => ({ ...current, [key]: value }));
@@ -1225,6 +1265,9 @@ function TenantCommunicationSendReview({
       }
       setApprovalDecision(response.item);
       setDecisionNotice(`${successLabel} Send requires the confirmation checklist.`);
+      if (action === "approve") {
+        setSendConfirmationFocusRequested(true);
+      }
     } catch (error) {
       if (String((error as Error)?.message || error).includes("decision_item_not_found")) {
         setApprovalDecision(null);
@@ -1401,44 +1444,75 @@ function TenantCommunicationSendReview({
       ) : null}
 
       {sendPrerequisitesMet && !sendSucceeded ? (
-        <fieldset style={confirmationPreviewStyle} aria-label="Send confirmation checklist">
-          <legend style={sendReviewSubheadingStyle}>Send confirmation checklist</legend>
-          <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
-            Sending emails the tenant using the approved renewal draft. This does not establish legal notice service by itself.
+        <section
+          ref={sendConfirmationActionAreaRef}
+          style={sendConfirmationActionPanelStyle}
+          aria-label="Send confirmation and action area"
+          tabIndex={-1}
+        >
+          <fieldset
+            style={{ ...confirmationPreviewStyle, flex: "2 1 360px", minWidth: "min(100%, 280px)", boxSizing: "border-box" }}
+            aria-label="Send confirmation checklist"
+          >
+            <legend style={sendReviewSubheadingStyle}>Send confirmation checklist</legend>
+            <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
+              Sending emails the tenant using the approved renewal draft. This does not establish legal notice service by itself.
+            </div>
+            <label style={checkboxLabelStyle}>
+              <input
+                type="checkbox"
+                checked={confirmation.recipientReviewed}
+                onChange={(event) => setConfirmationValue("recipientReviewed", event.currentTarget.checked)}
+              />{" "}
+              I have reviewed the recipient(s).
+            </label>
+            <label style={checkboxLabelStyle}>
+              <input
+                type="checkbox"
+                checked={confirmation.bodyReviewed}
+                onChange={(event) => setConfirmationValue("bodyReviewed", event.currentTarget.checked)}
+              />{" "}
+              I have reviewed the message body.
+            </label>
+            <label style={checkboxLabelStyle}>
+              <input
+                type="checkbox"
+                checked={confirmation.communicationOnly}
+                onChange={(event) => setConfirmationValue("communicationOnly", event.currentTarget.checked)}
+              />{" "}
+              I understand this sends tenant communication only.
+            </label>
+            <label style={checkboxLabelStyle}>
+              <input
+                type="checkbox"
+                checked={confirmation.legalService}
+                onChange={(event) => setConfirmationValue("legalService", event.currentTarget.checked)}
+              />{" "}
+              I understand this does not establish legal notice service by itself.
+            </label>
+          </fieldset>
+          <div style={sendActionPanelStyle} aria-label="Send renewal email action">
+            <div style={{ display: "grid", gap: 4 }}>
+              <h4 style={sendReviewSubheadingStyle}>Send renewal email</h4>
+              <div style={{ color: workflowTheme.subtle, lineHeight: 1.55 }}>
+                The send button unlocks only after all confirmations are checked.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void sendRenewalEmail()}
+              disabled={!allConfirmationsChecked || sendState.status === "sending"}
+              style={allConfirmationsChecked ? primaryButtonStyle : sendDisabledButtonStyle}
+            >
+              {sendState.status === "sending" ? "Sending renewal email…" : "Send renewal email"}
+            </button>
+            {sendState.status === "error" ? <div style={warningPanelStyle}>{sendState.message}</div> : null}
+            <div style={deferredPanelStyle}>
+              Renewal email sends use the controlled communication endpoint only. This workflow does not create lease notice
+              records, mark notice served, establish legal service, or change lease lifecycle state.
+            </div>
           </div>
-          <label style={checkboxLabelStyle}>
-            <input
-              type="checkbox"
-              checked={confirmation.recipientReviewed}
-              onChange={(event) => setConfirmationValue("recipientReviewed", event.currentTarget.checked)}
-            />{" "}
-            I have reviewed the recipient(s).
-          </label>
-          <label style={checkboxLabelStyle}>
-            <input
-              type="checkbox"
-              checked={confirmation.bodyReviewed}
-              onChange={(event) => setConfirmationValue("bodyReviewed", event.currentTarget.checked)}
-            />{" "}
-            I have reviewed the message body.
-          </label>
-          <label style={checkboxLabelStyle}>
-            <input
-              type="checkbox"
-              checked={confirmation.communicationOnly}
-              onChange={(event) => setConfirmationValue("communicationOnly", event.currentTarget.checked)}
-            />{" "}
-            I understand this sends tenant communication only.
-          </label>
-          <label style={checkboxLabelStyle}>
-            <input
-              type="checkbox"
-              checked={confirmation.legalService}
-              onChange={(event) => setConfirmationValue("legalService", event.currentTarget.checked)}
-            />{" "}
-            I understand this does not establish legal notice service by itself.
-          </label>
-        </fieldset>
+        </section>
       ) : null}
 
       <div style={noticeStatusGridStyle} aria-label="Delivery and legal status">
@@ -1549,12 +1623,24 @@ function TenantCommunicationSendReview({
                 ? "Internal approval has been recorded. Send still requires explicit confirmation before tenant communication."
                 : "Approved status is required before tenant communication can be sent."}
             </div>
+            {sendPrerequisitesMet && !sendSucceeded ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button type="button" onClick={focusSendConfirmationChecklist} style={primaryButtonStyle}>
+                  Continue to send confirmations
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </section>
 
       {sendState.status === "success" ? (
-        <section style={sentStatusStyle} aria-label="Renewal email sent status">
+        <section
+          ref={sendSuccessConfirmationRef}
+          style={sentStatusStyle}
+          aria-label="Renewal email sent status"
+          tabIndex={-1}
+        >
           <h4 style={sendReviewSubheadingStyle}>Renewal email sent</h4>
           <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, margin: 0 }}>
             <ReviewFact label="Sent at" value={formatTimestamp(sendState.result.sentAt || sendState.result.attemptedAt)} />
@@ -1580,7 +1666,7 @@ function TenantCommunicationSendReview({
             </Link>
           </div>
         </section>
-      ) : (
+      ) : !sendPrerequisitesMet ? (
         <button
           type="button"
           onClick={() => void sendRenewalEmail()}
@@ -1589,14 +1675,16 @@ function TenantCommunicationSendReview({
         >
           {sendState.status === "sending" ? "Sending renewal email…" : "Send renewal email"}
         </button>
-      )}
+      ) : null}
 
-      {sendState.status === "error" ? <div style={warningPanelStyle}>{sendState.message}</div> : null}
+      {sendState.status === "error" && !sendPrerequisitesMet ? <div style={warningPanelStyle}>{sendState.message}</div> : null}
 
-      <div style={deferredPanelStyle}>
-        Renewal email sends use the controlled communication endpoint only. This workflow does not create lease notice
-        records, mark notice served, establish legal service, or change lease lifecycle state.
-      </div>
+      {!sendPrerequisitesMet || sendSucceeded ? (
+        <div style={deferredPanelStyle}>
+          Renewal email sends use the controlled communication endpoint only. This workflow does not create lease notice
+          records, mark notice served, establish legal service, or change lease lifecycle state.
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -2074,6 +2162,25 @@ const confirmationPreviewStyle: React.CSSProperties = {
   background: "rgba(255, 250, 241, 0.72)",
   padding: 12,
   color: workflowTheme.muted,
+};
+
+const sendConfirmationActionPanelStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 12,
+  alignItems: "stretch",
+  border: `1px solid ${workflowTheme.borderStrong}`,
+  borderRadius: 10,
+  background: workflowTheme.cardStrong,
+  padding: 12,
+};
+
+const sendActionPanelStyle: React.CSSProperties = {
+  display: "grid",
+  alignContent: "start",
+  gap: 10,
+  flex: "1 1 260px",
+  minWidth: 0,
 };
 
 const approvalDecisionStyle: React.CSSProperties = {
