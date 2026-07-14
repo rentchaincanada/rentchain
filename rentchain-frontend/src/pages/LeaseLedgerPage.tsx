@@ -107,6 +107,10 @@ function totalOutstandingObligationCents(
   return obligationRows.reduce((sum, row) => sum + obligationOutstandingCents(row), 0);
 }
 
+function hasCreditBalanceAllocationReview(balanceCents: number, outstandingObligationCents: number): boolean {
+  return Number(balanceCents || 0) < 0 && Number(outstandingObligationCents || 0) > 0;
+}
+
 const obligationStatusCopy: Record<PaymentObligationStatus, { label: string; bg: string; color: string; border: string }> = {
   expected: { label: "Expected", bg: "#fffaf1", color: "#63594d", border: "rgba(91,70,48,0.18)" },
   pending: { label: "Pending", bg: "#fef9c3", color: "#854d0e", border: "#fde68a" },
@@ -333,13 +337,34 @@ function recommendedDecisionAction(decision: DecisionItem): { label: string; cta
   }
 }
 
+function allocationReviewRecommendedAction(): { label: string; cta: "resolve"; helper: string } {
+  return {
+    label: "Review and allocate unmatched payments before taking any overdue-rent action.",
+    cta: "resolve",
+    helper: "Marks the operational review item resolved only after allocation review is complete.",
+  };
+}
+
+function allocationReviewDecision(decision: DecisionItem): DecisionItem {
+  return {
+    ...decision,
+    reason: "Payments exceed charges in aggregate, but one or more obligations remain unmatched.",
+    metadata: {
+      ...(decision.metadata || {}),
+      signalType: "allocation_review",
+      signalReasons: ["aggregate_credit_balance_with_unmatched_obligations"],
+    },
+  };
+}
+
 function buildDecisionSummaryFacts(
   decision: DecisionItem,
   lease: LandlordActiveLease | null,
   obligationRows: LeaseObligationLedgerRow[],
-  delinquencySignals: LeaseDelinquencySignal[]
+  delinquencySignals: LeaseDelinquencySignal[],
+  allocationReviewRequired: boolean
 ) {
-  const displayDecision = withDecisionReviewContext(decision, lease);
+  const displayDecision = withDecisionReviewContext(allocationReviewRequired ? allocationReviewDecision(decision) : decision, lease);
   const reviewContext = displayDecision.metadata?.reviewContext as Record<string, string | undefined> | undefined;
   const relatedRow = findRelatedObligationRow(displayDecision, obligationRows);
   const relatedSignal = findRelatedDelinquencySignal(displayDecision, delinquencySignals);
@@ -361,7 +386,7 @@ function buildDecisionSummaryFacts(
     outstandingAmount: outstandingAmountCents != null ? formatCurrencyCents(outstandingAmountCents) : "Not available",
     dueDate: dueDate ? formatDate(dueDate) : "Not available",
     obligationStatus: readableText(obligationStatus),
-    recommendedAction: recommendedDecisionAction(displayDecision),
+    recommendedAction: allocationReviewRequired ? allocationReviewRecommendedAction() : recommendedDecisionAction(displayDecision),
   };
 }
 
@@ -408,6 +433,7 @@ function DecisionRow({
   lease,
   obligationRows,
   delinquencySignals,
+  allocationReviewRequired,
   pending,
   onAction,
   onRecordPayment,
@@ -416,20 +442,24 @@ function DecisionRow({
   lease: LandlordActiveLease | null;
   obligationRows: LeaseObligationLedgerRow[];
   delinquencySignals: LeaseDelinquencySignal[];
+  allocationReviewRequired: boolean;
   pending: boolean;
   onAction: (decision: DecisionItem, actionType: DecisionActionType) => void;
   onRecordPayment: () => void;
 }) {
   const copy = decisionDisplayCopy[decision.decisionType];
-  const summary = buildDecisionSummaryFacts(decision, lease, obligationRows, delinquencySignals);
+  const displayCopy = allocationReviewRequired
+    ? { label: "Review payment allocation", badge: "Allocation review" }
+    : copy;
+  const summary = buildDecisionSummaryFacts(decision, lease, obligationRows, delinquencySignals, allocationReviewRequired);
   return (
     <div className="lease-ledger-decision-card">
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <strong>{copy.label}</strong>
+        <strong>{displayCopy.label}</strong>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <span style={{ color: "#63594d", fontSize: 12, fontWeight: 800 }}>Financial signal</span>
-        <DecisionBadge severity={decision.severity} label={copy.badge} />
+        <DecisionBadge severity={allocationReviewRequired ? "warning" : decision.severity} label={displayCopy.badge} />
         <span style={{ color: "#63594d", fontSize: 12, fontWeight: 800 }}>Workflow status</span>
         <span style={{ border: "1px solid rgba(91,70,48,0.18)", background: "#fffaf1", borderRadius: 999, padding: "3px 8px", fontSize: 12, fontWeight: 800 }}>
           {decisionStatusCopy[decision.status || "detected"]}
@@ -438,7 +468,7 @@ function DecisionRow({
       <div className="lease-ledger-decision-summary">
         <div className="lease-ledger-decision-primary">
           <span>Issue</span>
-          <strong>{decision.reason}</strong>
+          <strong>{summary.displayDecision.reason}</strong>
         </div>
         <div>
           <span>Tenant</span>
@@ -520,11 +550,23 @@ function signalMatchesRow(signal: LeaseDelinquencySignal, row: LeaseObligationLe
 function DelinquencyIndicators({
   row,
   signals,
+  allocationReviewRequired = false,
 }: {
   row: LeaseObligationLedgerRow;
   signals: LeaseDelinquencySignal[];
+  allocationReviewRequired?: boolean;
 }) {
   const matchingSignals = signals.filter((signal) => signalMatchesRow(signal, row));
+  if (allocationReviewRequired && matchingSignals.length > 0) {
+    return (
+      <div style={{ display: "grid", gap: 4 }}>
+        <span style={{ color: "#854d0e", fontWeight: 800 }}>Allocation review</span>
+        <span style={{ color: "#475569", fontSize: 12 }}>
+          Payments exceed charges in aggregate, but this obligation remains unmatched.
+        </span>
+      </div>
+    );
+  }
   if (matchingSignals.length === 0) {
     const status = row.obligationStatus || "unknown";
     const copy = obligationStatusCopy[status] || obligationStatusCopy.unknown;
@@ -554,9 +596,11 @@ function DelinquencyIndicators({
 function ObligationMobileCard({
   row,
   signals,
+  allocationReviewRequired,
 }: {
   row: LeaseObligationLedgerRow;
   signals: LeaseDelinquencySignal[];
+  allocationReviewRequired: boolean;
 }) {
   return (
     <article className="lease-ledger-obligation-card">
@@ -587,7 +631,7 @@ function ObligationMobileCard({
       </div>
       <div className="lease-ledger-obligation-card-section">
         <span>Financial signal</span>
-        <DelinquencyIndicators row={row} signals={signals} />
+        <DelinquencyIndicators row={row} signals={signals} allocationReviewRequired={allocationReviewRequired} />
       </div>
       <div className="lease-ledger-obligation-card-section">
         <span>Evidence</span>
@@ -724,7 +768,7 @@ export default function LeaseLedgerPage() {
     () => totalOutstandingObligationCents(obligationRows, obligationSummary),
     [obligationRows, obligationSummary]
   );
-  const hasUnallocatedCreditNotice = totals.balanceCents < 0 && outstandingObligationCents > 0;
+  const hasUnallocatedCreditNotice = hasCreditBalanceAllocationReview(totals.balanceCents, outstandingObligationCents);
 
   const monthlyRows = useMemo(() => {
     return Object.entries(monthlyTotals).sort((a, b) => (a[0] < b[0] ? 1 : -1));
@@ -1142,6 +1186,7 @@ export default function LeaseLedgerPage() {
                   lease={lease}
                   obligationRows={obligationRows}
                   delinquencySignals={delinquencySignals}
+                  allocationReviewRequired={hasUnallocatedCreditNotice}
                   pending={decisionActionPendingId === decision.decisionId}
                   onAction={handleDecisionAction}
                   onRecordPayment={() => setShowPaymentModal(true)}
@@ -1239,7 +1284,7 @@ export default function LeaseLedgerPage() {
                       <ObligationStatusBadge status={row.obligationStatus || "unknown"} />
                     </td>
                     <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)", minWidth: 220 }}>
-                      <DelinquencyIndicators row={row} signals={delinquencySignals} />
+                      <DelinquencyIndicators row={row} signals={delinquencySignals} allocationReviewRequired={hasUnallocatedCreditNotice} />
                     </td>
                     <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)", color: "#3f382f" }}>{prettyEvidenceStatus(row)}</td>
                   </tr>
@@ -1249,7 +1294,12 @@ export default function LeaseLedgerPage() {
           </div>
           <div className="lease-ledger-obligation-cards" aria-label="Payment obligation cards">
             {obligationRows.map((row) => (
-              <ObligationMobileCard key={row.rowId} row={row} signals={delinquencySignals} />
+              <ObligationMobileCard
+                key={row.rowId}
+                row={row}
+                signals={delinquencySignals}
+                allocationReviewRequired={hasUnallocatedCreditNotice}
+              />
             ))}
           </div>
           </>

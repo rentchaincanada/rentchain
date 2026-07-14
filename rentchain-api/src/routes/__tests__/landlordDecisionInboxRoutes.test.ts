@@ -557,6 +557,90 @@ describe("landlordDecisionInboxRoutes", () => {
     );
   });
 
+  it("labels aggregate credit plus outstanding obligations as payment allocation review", async () => {
+    seedLease({
+      id: "y7XM6BFXIzWW0fV3mu1L",
+      monthlyRent: 2000,
+      dueDate: "2026-04-01",
+      startDate: "2026-04-01",
+      endDate: "2027-03-31",
+    });
+    seedDoc("ledgerEntries", "ledger-credit-adjustment", {
+      leaseId: "y7XM6BFXIzWW0fV3mu1L",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "adjustment",
+      amountCents: -876900,
+      effectiveDate: "2026-05-31",
+      source: "manual_credit_adjustment",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [] } });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "lease_ledger",
+          type: "billing",
+          title: "Review payment allocation",
+          destination: "/leases/y7XM6BFXIzWW0fV3mu1L/ledger",
+          dueAt: "2026-04-01T00:00:00.000Z",
+          description: "Lease has an aggregate credit balance of -$8,769.00, but $2,000.00 remains outstanding on specific obligations. Review payment allocation before taking overdue-rent action.",
+        }),
+      ])
+    );
+    expect(res.body.items.map((item: any) => item.title)).not.toContain("Review Overdue Rent");
+    expect(res.body.items.map((item: any) => item.title)).not.toContain("Review Missing Payment");
+    expect(JSON.stringify(res.body)).not.toContain("tenant owes");
+  });
+
+  it("does not emit overdue payment actions for neutral settled ledger balances", async () => {
+    seedLease({
+      id: "lease-neutral",
+      monthlyRent: 2000,
+      dueDate: "2026-04-01",
+      startDate: "2026-04-01",
+      endDate: "2027-03-31",
+    });
+    seedDoc("ledgerEntries", "ledger-neutral-charge", {
+      leaseId: "lease-neutral",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "charge",
+      amountCents: 200000,
+      effectiveDate: "2026-04-01",
+      source: "manual_ledger_charge",
+    });
+    seedDoc("ledgerEntries", "ledger-neutral-payment", {
+      leaseId: "lease-neutral",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "payment",
+      amountCents: 200000,
+      effectiveDate: "2026-04-01",
+      source: "manual_ledger_payment",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [] } });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+    expect(JSON.stringify(res.body)).not.toContain("Review Overdue Rent");
+    expect(JSON.stringify(res.body)).not.toContain("Review payment allocation");
+  });
+
   it("does not expose another landlord's lease decisions", async () => {
     seedLease({ id: "lease-other", landlordId: "landlord-2" });
     loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [] } });

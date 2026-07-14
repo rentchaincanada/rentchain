@@ -779,6 +779,93 @@ describe("landlordDecisionQueueRoutes", () => {
     expect(JSON.stringify(res.body)).not.toContain("76c2961b-eae5-4574-9f51-66096976b5dc");
   });
 
+  it("returns allocation-safe dashboard payment decisions from the settled-payment-aware inbox", async () => {
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({
+      decisions: {
+        items: [
+          analyticsDecision({
+            id: "stale_overdue_rent:y7XM6BFXIzWW0fV3mu1L",
+            decisionType: "review_overdue_rent",
+            actionLabel: "Review Overdue Rent",
+            recommendedAction: "Review Overdue Rent",
+            destination: "/leases/y7XM6BFXIzWW0fV3mu1L/ledger",
+            executionMapping: { resourceType: "lease", resourceId: "y7XM6BFXIzWW0fV3mu1L" },
+          }),
+        ],
+      },
+    });
+    derivePaymentConsistentDecisionInbox.mockResolvedValue({
+      items: [
+        {
+          id: "decision:review_overdue_rent:delinquency:overdue:y7XM6BFXIzWW0fV3mu1L",
+          title: "Review payment allocation",
+          description:
+            "Lease has an aggregate credit balance of -$8,769.00, but $2,000.00 remains outstanding on specific obligations. Review payment allocation before taking overdue-rent action.",
+          severity: "critical",
+          status: "open",
+          type: "billing",
+          source: "lease_ledger",
+          relatedEntity: { kind: "lease", id: "y7XM6BFXIzWW0fV3mu1L", label: "Lease y7XM6BFXIzWW0fV3mu1L" },
+          destination: "/leases/y7XM6BFXIzWW0fV3mu1L/ledger",
+          automationEligible: false,
+          dueAt: "2026-05-31T00:00:00.000Z",
+          createdAt: "2026-06-18T12:00:00.000Z",
+          updatedAt: "2026-06-19T12:00:00.000Z",
+          workflow: {
+            queue: "delinquency_review",
+            workflowState: "new",
+            ownershipType: "landlord",
+            reviewPriority: "critical",
+            escalationLevel: "critical",
+            manualOnly: true,
+          },
+        },
+      ],
+      filters: { severity: [], status: [], type: [], queue: [], workflowState: [], escalationLevel: [] },
+      summary: { total: 1, critical: 1, high: 0, open: 1, blocked: 0 },
+      workflowSummary: { new: 1, underReview: 0, escalated: 0, critical: 1 },
+      automationSummary: { total: 0, pending: 0, derived: 0, blocked: 0, completed: 0, escalationFlagged: 0, reviewRequired: 0 },
+      agentActionSummary: { total: 0, suggested: 0, blocked: 0, unavailable: 0, acknowledged: 0, reviewRequired: 0, escalationSuggested: 0 },
+    });
+    getUnifiedInbox.mockResolvedValue({
+      ok: true,
+      role: "landlord",
+      items: [],
+      records: [],
+      total: 0,
+      limit: 100,
+      offset: 0,
+    });
+    const router = (await import("../landlordDecisionQueueRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-queue?status=open_state&limit=6" });
+
+    expect(res.status).toBe(200);
+    expect(derivePaymentConsistentDecisionInbox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        landlordId: "landlord-1",
+        analyticsDecisions: expect.arrayContaining([
+          expect.objectContaining({
+            id: "stale_overdue_rent:y7XM6BFXIzWW0fV3mu1L",
+            actionLabel: "Review Overdue Rent",
+          }),
+        ]),
+      })
+    );
+    expect(res.body.items).toEqual([
+      expect.objectContaining({
+        title: "Review payment allocation",
+        workspace: "payments",
+        recommendedActionHref: "/leases/y7XM6BFXIzWW0fV3mu1L/ledger",
+        dueAt: "2026-05-31T00:00:00.000Z",
+        description: expect.stringContaining("aggregate credit balance of -$8,769.00"),
+      }),
+    ]);
+    expect(JSON.stringify(res.body)).not.toContain("Review Overdue Rent");
+    expect(JSON.stringify(res.body)).not.toContain("tenant owes");
+    expect(JSON.stringify(res.body)).not.toContain("Record payment or contact the tenant");
+  });
+
   it("does not show overpaid up-to-date leases as dashboard missing-payment decisions after inbox suppression", async () => {
     loadLandlordAnalyticsSnapshot.mockResolvedValue({
       decisions: {

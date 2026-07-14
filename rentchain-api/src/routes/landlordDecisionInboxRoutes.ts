@@ -221,19 +221,93 @@ function isActivePaymentDecisionItem(item: DecisionInboxItem): boolean {
 }
 
 type LeasePaymentObligationState = "settled" | "unsettled" | "unknown";
+type LeasePaymentObligationReview = {
+  state: LeasePaymentObligationState;
+  aggregateBalanceCents: number | null;
+  outstandingAmountCents: number | null;
+  allocationReviewRequired: boolean;
+};
 
-async function getLeasePaymentObligationState(leaseId: string, landlordId: string): Promise<LeasePaymentObligationState> {
+function signedLedgerEntryAmountCents(entry: any): number {
+  const amount = Number(entry?.amountCents || 0);
+  if (!Number.isFinite(amount)) return 0;
+  const entryType = asString(entry?.entryType, 80);
+  if (entryType === "payment") return -Math.abs(Math.round(amount));
+  if (entryType === "adjustment") return Math.round(amount);
+  return Math.abs(Math.round(amount));
+}
+
+async function loadLeaseAggregateLedgerBalanceCents(leaseId: string, landlordId: string): Promise<number | null> {
+  const snap = await db.collection("ledgerEntries").where("leaseId", "==", leaseId).get().catch(() => null);
+  if (!snap) return null;
+  const entries = (snap.docs || [])
+    .map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }))
+    .filter((entry: any) => asString(entry?.landlordId, 240) === landlordId);
+  if (entries.length === 0) return null;
+  return entries.reduce((sum: number, entry: any) => sum + signedLedgerEntryAmountCents(entry), 0);
+}
+
+function formatSignedCurrencyCents(value: number | null | undefined): string {
+  const cents = Number(value);
+  if (!Number.isFinite(cents)) return "not available";
+  const prefix = cents < 0 ? "-" : "";
+  return `${prefix}$${(Math.abs(Math.round(cents)) / 100).toLocaleString("en-CA", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function allocationReviewDecisionItem(item: DecisionInboxItem, review: LeasePaymentObligationReview): DecisionInboxItem {
+  const credit = formatSignedCurrencyCents(review.aggregateBalanceCents);
+  const outstanding = formatSignedCurrencyCents(review.outstandingAmountCents);
+  return {
+    ...item,
+    title: "Review payment allocation",
+    description:
+      `Lease has an aggregate credit balance of ${credit}, but ${outstanding} remains outstanding on specific obligations. ` +
+      "Review payment allocation before taking overdue-rent action.",
+  };
+}
+
+async function getLeasePaymentObligationReview(leaseId: string, landlordId: string): Promise<LeasePaymentObligationReview> {
   const lease = await loadLeaseForLandlord(leaseId, landlordId);
-  if (!lease) return "unknown";
+  if (!lease) {
+    return {
+      state: "unknown",
+      aggregateBalanceCents: null,
+      outstandingAmountCents: null,
+      allocationReviewRequired: false,
+    };
+  }
   const obligationRows = await buildLeaseObligationRowsForDecisionInbox(lease, landlordId);
-  if (obligationRows.length === 0) return "unknown";
+  if (obligationRows.length === 0) {
+    return {
+      state: "unknown",
+      aggregateBalanceCents: null,
+      outstandingAmountCents: null,
+      allocationReviewRequired: false,
+    };
+  }
   const summary = summarizePaymentObligationLedger(obligationRows);
-  if (summary.outstandingAmountCents > 0) return "unsettled";
-  return deriveDelinquencySignals(obligationRows).length === 0 ? "settled" : "unsettled";
+  const aggregateBalanceCents = await loadLeaseAggregateLedgerBalanceCents(leaseId, landlordId);
+  if (summary.outstandingAmountCents > 0) {
+    return {
+      state: "unsettled",
+      aggregateBalanceCents,
+      outstandingAmountCents: summary.outstandingAmountCents,
+      allocationReviewRequired: aggregateBalanceCents != null && aggregateBalanceCents < 0,
+    };
+  }
+  return {
+    state: deriveDelinquencySignals(obligationRows).length === 0 ? "settled" : "unsettled",
+    aggregateBalanceCents,
+    outstandingAmountCents: summary.outstandingAmountCents,
+    allocationReviewRequired: false,
+  };
 }
 
 async function suppressSettledPaymentDecisionItems(landlordId: string, items: DecisionInboxItem[]) {
-  const obligationStateByLeaseId = new Map<string, LeasePaymentObligationState>();
+  const obligationStateByLeaseId = new Map<string, LeasePaymentObligationReview>();
   const result: DecisionInboxItem[] = [];
   for (const item of items) {
     if (!isActivePaymentDecisionItem(item)) {
@@ -243,17 +317,19 @@ async function suppressSettledPaymentDecisionItems(landlordId: string, items: De
     const leaseIds = leaseIdsFromDecisionItem(item);
     let settled = false;
     let unsettled = false;
+    let allocationReview: LeasePaymentObligationReview | null = null;
     for (const leaseId of leaseIds) {
       if (!obligationStateByLeaseId.has(leaseId)) {
-        obligationStateByLeaseId.set(leaseId, await getLeasePaymentObligationState(leaseId, landlordId));
+        obligationStateByLeaseId.set(leaseId, await getLeasePaymentObligationReview(leaseId, landlordId));
       }
-      const state = obligationStateByLeaseId.get(leaseId);
-      settled = settled || state === "settled";
-      unsettled = unsettled || state === "unsettled";
+      const review = obligationStateByLeaseId.get(leaseId);
+      settled = settled || review?.state === "settled";
+      unsettled = unsettled || review?.state === "unsettled";
+      if (review?.allocationReviewRequired) allocationReview = review;
     }
     if (settled) continue;
     if (item.source === "analytics" && !unsettled) continue;
-    result.push(item);
+    result.push(allocationReview ? allocationReviewDecisionItem(item, allocationReview) : item);
   }
   return result;
 }
