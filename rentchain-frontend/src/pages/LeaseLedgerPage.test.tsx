@@ -615,8 +615,16 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getByText(/aggregate credit balance of -\$8,769.00/i)).toBeInTheDocument();
     expect(screen.getByText(/but \$2,000.00 remains outstanding on specific obligations/i)).toBeInTheDocument();
     expect(screen.getByText("Review the obligation rows before resolving overdue decisions.")).toBeInTheDocument();
+    expect(screen.getByText("Review payment allocation")).toBeInTheDocument();
+    expect(screen.getAllByText("Allocation review").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Payments exceed charges in aggregate, but one or more obligations remain unmatched.").length).toBeGreaterThan(0);
+    expect(screen.getByText("Review and allocate unmatched payments before taking any overdue-rent action.")).toBeInTheDocument();
+    expect(screen.getAllByText("Payments exceed charges in aggregate, but this obligation remains unmatched.").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Reviewed").length).toBeGreaterThan(0);
     expect(screen.getByText(/reviewed or resolved status does not mark rent paid/i)).toBeInTheDocument();
+    expect(screen.queryByText("Overdue Rent")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rent obligation is overdue.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Record payment or contact the tenant, then resolve once the ledger is updated.")).not.toBeInTheDocument();
   });
 
   it("keeps the payment CSV import collapsed until the landlord opens it", async () => {
