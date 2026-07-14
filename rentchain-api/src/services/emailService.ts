@@ -17,6 +17,7 @@ export type EmailMessage = {
   subject: string;
   text?: string;
   html?: string;
+  metadata?: Record<string, string | number | boolean | null | undefined>;
 };
 
 let lastEmailPreview: any = null;
@@ -40,6 +41,10 @@ function maskEmail(value: string): string {
 
 function getCorrelationId(): string {
   return `em_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function safeMailgunVariableKey(value: string): string {
+  return safeStr(value).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
 }
 
 export function parseMailgunMessageId(responseText: string): string | null {
@@ -84,6 +89,12 @@ async function sendViaMailgun(message: EmailMessage): Promise<EmailSendResult> {
   const bcc = toCsvRecipients(message.bcc);
   if (bcc) params.set("bcc", bcc);
   if (replyTo) params.set("h:Reply-To", replyTo);
+  for (const [rawKey, rawValue] of Object.entries(message.metadata || {})) {
+    const key = safeMailgunVariableKey(rawKey);
+    const value = safeStr(rawValue);
+    if (!key || !value) continue;
+    params.set(`v:${key}`, value.slice(0, 500));
+  }
 
   const auth = Buffer.from(`api:${apiKey}`).toString("base64");
   const url = `https://api.mailgun.net/v3/${domain}/messages`;

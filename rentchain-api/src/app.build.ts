@@ -98,6 +98,7 @@ import stripeScreeningOrdersWebhookRoutes, {
   stripeWebhookHandler,
 } from "./routes/stripeScreeningOrdersWebhookRoutes";
 import { transunionWebhookHandler } from "./routes/transunionWebhookRoutes";
+import { mailgunEventsWebhookHandler } from "./routes/mailgunWebhookRoutes";
 import { signingWebhookBrowserReturnHandler, signingWebhookHandler } from "./routes/webhooks/signingWebhookRoutes";
 import { requireAuth } from "./middleware/requireAuth";
 import { requirePermission } from "./middleware/requireAuthz";
@@ -241,6 +242,12 @@ app.post(
   express.raw({ type: "application/json" }),
   routeSource("transunionWebhookRoutes.ts"),
   transunionWebhookHandler
+);
+app.post(
+  "/api/webhooks/mailgun/events",
+  express.json({ type: "application/json", limit: "1mb" }),
+  routeSource("mailgunWebhookRoutes.ts"),
+  mailgunEventsWebhookHandler
 );
 app.post(
   "/webhooks/signing/:providerId?",

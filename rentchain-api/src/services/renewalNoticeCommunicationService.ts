@@ -7,7 +7,7 @@ import { LANDLORD_DECISION_QUEUE_ITEMS_COLLECTION } from "./landlordDecisionQueu
 
 export const RENEWAL_NOTICE_COMMUNICATIONS_COLLECTION = "renewalNoticeCommunications";
 
-type RenewalNoticeDeliveryStatus =
+export type RenewalNoticeDeliveryStatus =
   | "delivery_status_unknown"
   | "not_tracked"
   | "accepted_for_sending"
@@ -23,7 +23,7 @@ type RenewalNoticeDeliveryStatus =
   | "clicked"
   | "unknown";
 
-type RenewalNoticeDeliveryStatusSource =
+export type RenewalNoticeDeliveryStatusSource =
   | "not_tracked"
   | "send_response"
   | "mailgun_webhook"
@@ -50,7 +50,7 @@ type SendRenewalNoticeCommunicationParams = {
   input: SendRenewalNoticeCommunicationInput;
 };
 
-type RenewalNoticeCommunicationRecord = {
+export type RenewalNoticeCommunicationRecord = {
   communicationId: string;
   leaseId: string;
   landlordId: string;
@@ -515,6 +515,10 @@ export async function sendRenewalNoticeCommunication(
       subject,
       text: body,
       html: htmlFromText(body),
+      metadata: {
+        communicationId,
+        workflow: "renewal_notice_communication",
+      },
     })) as EmailSendResult | undefined;
     const sentAt = new Date().toISOString();
     const sentRecord: RenewalNoticeCommunicationRecord = {
