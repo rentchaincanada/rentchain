@@ -599,6 +599,60 @@ describe("landlordDecisionInboxRoutes", () => {
     expect(JSON.stringify(res.body)).not.toContain("tenant owes");
   });
 
+  it("suppresses active overdue decisions when an active credit allocation fully covers the rent charge", async () => {
+    seedLease({
+      id: "y7XM6BFXIzWW0fV3mu1L",
+      monthlyRent: 2000,
+      dueDate: "2026-04-01",
+      startDate: "2026-04-01",
+      endDate: "2027-03-31",
+    });
+    seedDoc("ledgerEntries", "ledger-credit-adjustment", {
+      leaseId: "y7XM6BFXIzWW0fV3mu1L",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "adjustment",
+      amountCents: -876900,
+      effectiveDate: "2026-05-31",
+      source: "manual_credit_adjustment",
+    });
+    seedDoc("leaseCreditAllocationRecords", "lease_credit_allocation:bailey", {
+      allocationId: "lease_credit_allocation:bailey",
+      landlordId: "landlord-1",
+      leaseId: "y7XM6BFXIzWW0fV3mu1L",
+      obligationRowId: "lease_lifecycle:y7xm6bfxizww0fv3mu1l",
+      obligationKey: "legacy-test-key",
+      allocationAmountCents: 200000,
+      status: "active",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({
+      decisions: {
+        items: [
+          analyticsDecision({
+            id: "stale_overdue_rent:y7XM6BFXIzWW0fV3mu1L",
+            decisionType: "review_overdue_rent",
+            recommendedAction: "Review Overdue Rent",
+            actionLabel: "Review Overdue Rent",
+            destination: "/leases/y7XM6BFXIzWW0fV3mu1L/ledger",
+            executionMapping: { resourceType: "lease", resourceId: "y7XM6BFXIzWW0fV3mu1L" },
+          }),
+        ],
+      },
+    });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+    expect(JSON.stringify(res.body)).not.toContain("Review Overdue Rent");
+    expect(JSON.stringify(res.body)).not.toContain("Review Missing Payment");
+    expect(JSON.stringify(res.body)).not.toContain("tenant owes");
+  });
+
   it("does not emit overdue payment actions for neutral settled ledger balances", async () => {
     seedLease({
       id: "lease-neutral",

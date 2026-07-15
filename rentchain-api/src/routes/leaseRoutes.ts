@@ -51,6 +51,7 @@ import {
   deriveDelinquencySignals,
   summarizeDelinquencySignals,
 } from "../lib/payments/delinquencySignals";
+import { listLeaseCreditAllocationRecords } from "../services/leaseCreditAllocationService";
 import { deriveDecisions } from "../lib/decisions/decisionEngine";
 import {
   applyDecisionActions,
@@ -3841,6 +3842,7 @@ router.get("/:leaseId/ledger", requireLandlord, async (req: any, res: Response) 
     const obligationRentPayments = await loadLeaseRentPaymentsForObligationLedger(leaseId, landlordId);
     const obligationPaymentIntents = await loadLeasePaymentIntentsForObligationLedger(leaseId, landlordId);
     const obligationCanonicalPayments = await loadLeaseCanonicalPaymentsForObligationLedger(leaseId, landlordId);
+    const creditAllocationRecords = await listLeaseCreditAllocationRecords({ landlordId, leaseId });
     const obligationLedgerPaymentEvidence = buildCanonicalPaymentEvidenceFromLedgerEntries(entries, obligationCanonicalPayments);
     const obligationReconciliationRecords = await loadLeaseReconciliationRecordsForObligationLedger({
       leaseId,
@@ -3860,6 +3862,7 @@ router.get("/:leaseId/ledger", requireLandlord, async (req: any, res: Response) 
       rentPayments: obligationRentPayments,
       canonicalPayments: [...obligationCanonicalPayments, ...obligationLedgerPaymentEvidence],
       reconciliationRecords: obligationReconciliationRecords,
+      creditAllocationRecords,
     });
     const delinquencySignals = deriveDelinquencySignals(obligationRows);
     const decisionActions = await loadLeaseDecisionActions(leaseId);
@@ -3937,7 +3940,7 @@ router.get("/:leaseId/ledger", requireLandlord, async (req: any, res: Response) 
       },
       monthlyTotals,
       obligationRows,
-      obligationSummary: summarizePaymentObligationLedger(obligationRows),
+      obligationSummary: summarizePaymentObligationLedger(obligationRows, { aggregateBalanceCents: runningBalanceCents }),
       delinquencySignals,
       delinquencySummary: summarizeDelinquencySignals(delinquencySignals),
       decisions,

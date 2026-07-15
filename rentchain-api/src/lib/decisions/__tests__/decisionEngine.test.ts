@@ -115,10 +115,20 @@ describe("decisionEngine", () => {
           severity: "warning",
           paidAmountCents: 100000,
           outstandingAmountCents: 80000,
-          reasons: ["obligation_partially_paid"],
+          reasons: ["obligation_partially_paid", "credit_allocation_applied_to_obligation"],
         }),
       ],
-      obligationRows: [row({ obligationStatus: "underpaid", paidAmountCents: 100000 })],
+      obligationRows: [
+        row({
+          obligationStatus: "underpaid",
+          paidAmountCents: 100000,
+          allocatedFromCreditCents: 50000,
+          outstandingAfterAllocationCents: 80000,
+          allocationStatus: "partially_allocated",
+          activeAllocationIds: ["lease_credit_allocation:partial"],
+          allocationAdjustedFinancialSignal: "allocation_review",
+        }),
+      ],
       today: "2026-04-15T00:00:00.000Z",
     });
 
@@ -128,6 +138,15 @@ describe("decisionEngine", () => {
         decisionType: "review_underpaid_rent",
         severity: "warning",
         reason: "Rent obligation is partially paid.",
+      })
+    );
+    expect(decisions[0].metadata).toEqual(
+      expect.objectContaining({
+        allocatedFromCreditCents: 50000,
+        outstandingAfterAllocationCents: 80000,
+        allocationStatus: "partially_allocated",
+        activeAllocationIds: ["lease_credit_allocation:partial"],
+        allocationAdjustedFinancialSignal: "allocation_review",
       })
     );
   });

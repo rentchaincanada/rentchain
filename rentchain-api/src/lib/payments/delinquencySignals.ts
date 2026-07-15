@@ -136,7 +136,7 @@ function makeSignal(
 ): DelinquencySignal {
   const expectedAmountCents = normalizeAmountCents(row.expectedAmountCents);
   const paidAmountCents = normalizeAmountCents(row.paidAmountCents);
-  const outstandingAmountCents = Math.max(0, expectedAmountCents - paidAmountCents);
+  const outstandingAmountCents = effectiveOutstandingAmountCents(row);
   return {
     signalId: buildSignalId(row, signalType),
     leaseId: asString(row.leaseId, 240) || "unknown",
@@ -158,18 +158,31 @@ function makeSignal(
   };
 }
 
+function effectiveOutstandingAmountCents(row: PaymentObligationLedgerRow): number {
+  const rawOutstandingAmountCents = Math.max(
+    0,
+    normalizeAmountCents(row.expectedAmountCents) - normalizeAmountCents(row.paidAmountCents)
+  );
+  if (row.outstandingAfterAllocationCents === undefined || row.outstandingAfterAllocationCents === null) {
+    return rawOutstandingAmountCents;
+  }
+  return Math.max(0, normalizeAmountCents(row.outstandingAfterAllocationCents));
+}
+
 function deriveSignalTypes(
   row: PaymentObligationLedgerRow,
   today: unknown
 ): Array<{ signalType: DelinquencySignalType; reasons: string[] }> {
   const status = String(row.obligationStatus || "unknown").trim() as PaymentObligationStatus;
-  const expectedAmountCents = normalizeAmountCents(row.expectedAmountCents);
-  const paidAmountCents = normalizeAmountCents(row.paidAmountCents);
-  const outstandingAmountCents = Math.max(0, expectedAmountCents - paidAmountCents);
+  const outstandingAmountCents = effectiveOutstandingAmountCents(row);
   const pastDue = isPastDue(row.dueDate, today);
   const dueTodayOrFuture = isDueTodayOrFuture(row.dueDate, today);
   const hasRentPayment = Boolean(asString(row.rentPaymentId, 240));
   const signals: Array<{ signalType: DelinquencySignalType; reasons: string[] }> = [];
+
+  if (row.allocationStatus === "fully_allocated" || (normalizeAmountCents(row.allocatedFromCreditCents) > 0 && outstandingAmountCents === 0)) {
+    return [];
+  }
 
   if (status === "manual_review_required" || status === "unknown") {
     return [
@@ -185,22 +198,27 @@ function deriveSignalTypes(
   }
 
   if (status === "underpaid") {
-    return [{ signalType: "partially_paid", reasons: ["obligation_partially_paid"] }];
+    return [{ signalType: "partially_paid", reasons: allocationReasons(row, ["obligation_partially_paid"]) }];
   }
 
   if ((status === "missing" || status === "pending") && pastDue && outstandingAmountCents > 0) {
-    signals.push({ signalType: "overdue", reasons: [`obligation_${status}_after_due_date`] });
+    signals.push({ signalType: "overdue", reasons: allocationReasons(row, [`obligation_${status}_after_due_date`]) });
   }
 
   if (!hasRentPayment && pastDue && outstandingAmountCents > 0) {
-    signals.push({ signalType: "missing_payment", reasons: ["missing_rent_payment_after_due_date"] });
+    signals.push({ signalType: "missing_payment", reasons: allocationReasons(row, ["missing_rent_payment_after_due_date"]) });
   }
 
   if ((status === "expected" || status === "pending") && dueTodayOrFuture) {
-    signals.push({ signalType: "rent_due", reasons: [`obligation_${status}_not_past_due`] });
+    signals.push({ signalType: "rent_due", reasons: allocationReasons(row, [`obligation_${status}_not_past_due`]) });
   }
 
   return signals;
+}
+
+function allocationReasons(row: PaymentObligationLedgerRow, reasons: string[]): string[] {
+  if (normalizeAmountCents(row.allocatedFromCreditCents) <= 0) return reasons;
+  return Array.from(new Set([...reasons, "credit_allocation_applied_to_obligation"]));
 }
 
 export function deriveDelinquencySignals(

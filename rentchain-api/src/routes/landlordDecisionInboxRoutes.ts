@@ -15,6 +15,7 @@ import { deriveLeaseLifecycleState } from "../lib/leases/leaseLifecycle";
 import { buildPaymentObligationLedgerRows, summarizePaymentObligationLedger } from "../lib/payments/paymentObligationLedger";
 import { loadLeaseCanonicalPaymentEvidenceForObligationLedger } from "../lib/payments/leasePaymentObligationEvidence";
 import { deriveDelinquencySignals } from "../lib/payments/delinquencySignals";
+import { listLeaseCreditAllocationRecords } from "../services/leaseCreditAllocationService";
 import type { RentPaymentRecord } from "../services/rentPayments/rentPaymentService";
 
 const router = Router();
@@ -142,10 +143,11 @@ async function loadLeaseForLandlord(leaseId: string, landlordId: string) {
 async function buildLeaseObligationRowsForDecisionInbox(lease: any, landlordId: string) {
   const leaseId = asString(lease?.leaseId || lease?.id, 240);
   if (!leaseId) return [];
-  const [rentPayments, paymentIntents, canonicalPaymentEvidence] = await Promise.all([
+  const [rentPayments, paymentIntents, canonicalPaymentEvidence, creditAllocationRecords] = await Promise.all([
     loadLeaseRentPayments(leaseId, landlordId),
     loadLeasePaymentIntents(leaseId, landlordId),
     loadLeaseCanonicalPaymentEvidenceForObligationLedger(leaseId, landlordId),
+    listLeaseCreditAllocationRecords({ landlordId, leaseId }),
   ]);
   const reconciliationRecords = await loadLeaseReconciliationRecords({
     leaseId,
@@ -166,6 +168,7 @@ async function buildLeaseObligationRowsForDecisionInbox(lease: any, landlordId: 
     rentPayments,
     canonicalPayments: canonicalPaymentEvidence,
     reconciliationRecords,
+    creditAllocationRecords,
   });
 }
 
@@ -288,20 +291,22 @@ async function getLeasePaymentObligationReview(leaseId: string, landlordId: stri
       allocationReviewRequired: false,
     };
   }
-  const summary = summarizePaymentObligationLedger(obligationRows);
   const aggregateBalanceCents = await loadLeaseAggregateLedgerBalanceCents(leaseId, landlordId);
-  if (summary.outstandingAmountCents > 0) {
+  const summary = summarizePaymentObligationLedger(obligationRows, { aggregateBalanceCents });
+  const adjustedOutstandingAmountCents =
+    summary.totalOutstandingAfterAllocationCents ?? summary.allocationAdjustedOutstandingCents ?? summary.outstandingAmountCents;
+  if (adjustedOutstandingAmountCents > 0) {
     return {
       state: "unsettled",
       aggregateBalanceCents,
-      outstandingAmountCents: summary.outstandingAmountCents,
+      outstandingAmountCents: adjustedOutstandingAmountCents,
       allocationReviewRequired: aggregateBalanceCents != null && aggregateBalanceCents < 0,
     };
   }
   return {
     state: deriveDelinquencySignals(obligationRows).length === 0 ? "settled" : "unsettled",
     aggregateBalanceCents,
-    outstandingAmountCents: summary.outstandingAmountCents,
+    outstandingAmountCents: adjustedOutstandingAmountCents,
     allocationReviewRequired: false,
   };
 }
