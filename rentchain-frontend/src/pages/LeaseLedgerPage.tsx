@@ -666,12 +666,35 @@ function DelinquencyIndicators({
   row,
   signals,
   allocationReviewRequired = false,
+  allocationAdjustment,
 }: {
   row: LeaseObligationLedgerRow;
   signals: LeaseDelinquencySignal[];
   allocationReviewRequired?: boolean;
+  allocationAdjustment?: ObligationAllocationAdjustment | null;
 }) {
   const matchingSignals = signals.filter((signal) => signalMatchesRow(signal, row));
+  if (allocationAdjustment) {
+    if (allocationAdjustment.outstandingAfterAllocationCents === 0) {
+      return (
+        <div style={{ display: "grid", gap: 4 }}>
+          <span style={{ color: "#166534", fontWeight: 800 }}>Credit allocation recorded</span>
+          <span style={{ color: "#475569", fontSize: 12 }}>
+            Existing lease credit covers this obligation. Historical payment records were not edited.
+          </span>
+        </div>
+      );
+    }
+    return (
+      <div style={{ display: "grid", gap: 4 }}>
+        <span style={{ color: "#854d0e", fontWeight: 800 }}>Allocation review</span>
+        <span style={{ color: "#475569", fontSize: 12 }}>
+          Existing lease credit allocation reduced this obligation. Remaining outstanding after allocation:{" "}
+          {formatCurrencyCents(allocationAdjustment.outstandingAfterAllocationCents)}.
+        </span>
+      </div>
+    );
+  }
   if (allocationReviewRequired && matchingSignals.length > 0) {
     return (
       <div style={{ display: "grid", gap: 4 }}>
@@ -712,10 +735,12 @@ function ObligationMobileCard({
   row,
   signals,
   allocationReviewRequired,
+  allocationAdjustment,
 }: {
   row: LeaseObligationLedgerRow;
   signals: LeaseDelinquencySignal[];
   allocationReviewRequired: boolean;
+  allocationAdjustment?: ObligationAllocationAdjustment | null;
 }) {
   return (
     <article className="lease-ledger-obligation-card">
@@ -741,12 +766,29 @@ function ObligationMobileCard({
         </div>
         <div>
           <span>Outstanding</span>
-          <strong>{formatCurrencyCents(obligationOutstandingCents(row))}</strong>
+          {allocationAdjustment ? (
+            <strong>
+              {formatCurrencyCents(allocationAdjustment.outstandingAfterAllocationCents)} after allocation
+            </strong>
+          ) : (
+            <strong>{formatCurrencyCents(obligationOutstandingCents(row))}</strong>
+          )}
         </div>
       </div>
+      {allocationAdjustment ? (
+        <div className="lease-ledger-obligation-card-section">
+          <span>Allocated from credit</span>
+          <strong>{formatCurrencyCents(allocationAdjustment.allocatedCents)}</strong>
+        </div>
+      ) : null}
       <div className="lease-ledger-obligation-card-section">
         <span>Financial signal</span>
-        <DelinquencyIndicators row={row} signals={signals} allocationReviewRequired={allocationReviewRequired} />
+        <DelinquencyIndicators
+          row={row}
+          signals={signals}
+          allocationReviewRequired={allocationReviewRequired}
+          allocationAdjustment={allocationAdjustment}
+        />
       </div>
       <div className="lease-ledger-obligation-card-section">
         <span>Evidence</span>
@@ -816,9 +858,18 @@ function leasePropertyUnitLabel(lease: LandlordActiveLease | null): string {
 function printFinancialSignalText(
   row: LeaseObligationLedgerRow,
   signals: LeaseDelinquencySignal[],
-  allocationReviewRequired: boolean
+  allocationReviewRequired: boolean,
+  allocationAdjustment?: ObligationAllocationAdjustment | null
 ): string {
   const matchingSignals = signals.filter((signal) => signalMatchesRow(signal, row));
+  if (allocationAdjustment) {
+    if (allocationAdjustment.outstandingAfterAllocationCents === 0) {
+      return "Credit allocation recorded — Existing lease credit covers this obligation. Historical payment records were not edited.";
+    }
+    return `Allocation review — Existing lease credit allocation reduced this obligation. Remaining outstanding after allocation: ${formatCurrencyCents(
+      allocationAdjustment.outstandingAfterAllocationCents
+    )}.`;
+  }
   if (allocationReviewRequired && matchingSignals.length > 0) {
     return "Allocation review — Payments exceed charges in aggregate, but this obligation remains unmatched.";
   }
@@ -865,6 +916,7 @@ function LeaseLedgerPrintExport({
   obligationSummary,
   outstandingObligationCents,
   hasUnallocatedCreditNotice,
+  creditAllocationPreview,
   delinquencySignals,
   delinquencySummary,
   decisions,
@@ -879,6 +931,7 @@ function LeaseLedgerPrintExport({
   obligationSummary: LeaseObligationLedgerSummary | null;
   outstandingObligationCents: number;
   hasUnallocatedCreditNotice: boolean;
+  creditAllocationPreview: LeaseCreditAllocationPreview | null;
   delinquencySignals: LeaseDelinquencySignal[];
   delinquencySummary: LeaseDelinquencySummary | null;
   decisions: DecisionItem[];
@@ -889,6 +942,11 @@ function LeaseLedgerPrintExport({
   const propertyUnitLabel = leasePropertyUnitLabel(lease);
   const tenantLabel = lease?.tenantName || "Tenant not linked";
   const singleObligationRow = obligationRows.length === 1 ? obligationRows[0] : null;
+  const singleObligationAllocationAdjustment = singleObligationRow
+    ? allocationAdjustmentForObligation(singleObligationRow, creditAllocationPreview)
+    : null;
+  const creditAllocationPresentation = buildCreditAllocationPresentation(creditAllocationPreview, totals, outstandingObligationCents);
+  const creditAllocationNotice = creditAllocationNoticeCopy(creditAllocationPresentation, totals.balanceCents);
   return (
     <div className="lease-ledger-print-export">
       <div className="lease-ledger-print-page lease-ledger-print-page-summary">
@@ -946,14 +1004,23 @@ function LeaseLedgerPrintExport({
               <strong>{delinquencySummary?.manualReviewCount || 0}</strong>
             </div>
           </div>
-          {hasUnallocatedCreditNotice ? (
+          {hasUnallocatedCreditNotice || creditAllocationPresentation.hasActiveAllocations ? (
             <div className="lease-ledger-print-warning">
-              <strong>Credit balance needs allocation review</strong>
-              <span>
-                This lease has an aggregate credit balance of {formatCurrencyCents(totals.balanceCents)}, but{" "}
-                {formatCurrencyCents(outstandingObligationCents)} remains outstanding on specific obligations because payments have not been matched or allocated.
-              </span>
-              <span>Review and allocate unmatched payments before taking any overdue-rent action.</span>
+              <strong>{creditAllocationNotice.title}</strong>
+              {creditAllocationPresentation.hasActiveAllocations ? (
+                <>
+                  <span>{creditAllocationNotice.body}</span>
+                  <span>{creditAllocationNotice.detail}</span>
+                </>
+              ) : (
+                <>
+                  <span>
+                    This lease has an aggregate credit balance of {formatCurrencyCents(totals.balanceCents)}, but{" "}
+                    {formatCurrencyCents(outstandingObligationCents)} remains outstanding on specific obligations because payments have not been matched or allocated.
+                  </span>
+                  <span>Review and allocate unmatched payments before taking any overdue-rent action.</span>
+                </>
+              )}
             </div>
           ) : null}
         </section>
@@ -1097,7 +1164,13 @@ function LeaseLedgerPrintExport({
               </div>
               <div>
                 <span>Outstanding</span>
-                <strong>{formatCurrencyCents(obligationOutstandingCents(singleObligationRow))}</strong>
+                {singleObligationAllocationAdjustment ? (
+                  <strong>
+                    {formatCurrencyCents(singleObligationAllocationAdjustment.outstandingAfterAllocationCents)} after allocation
+                  </strong>
+                ) : (
+                  <strong>{formatCurrencyCents(obligationOutstandingCents(singleObligationRow))}</strong>
+                )}
               </div>
               <div>
                 <span>Status</span>
@@ -1105,7 +1178,14 @@ function LeaseLedgerPrintExport({
               </div>
               <div className="lease-ledger-print-obligation-card-wide">
                 <span>Financial signal</span>
-                <strong>{printFinancialSignalText(singleObligationRow, delinquencySignals, hasUnallocatedCreditNotice)}</strong>
+                <strong>
+                  {printFinancialSignalText(
+                    singleObligationRow,
+                    delinquencySignals,
+                    hasUnallocatedCreditNotice,
+                    singleObligationAllocationAdjustment
+                  )}
+                </strong>
               </div>
               <div className="lease-ledger-print-obligation-card-wide">
                 <span>Evidence</span>
@@ -1128,18 +1208,25 @@ function LeaseLedgerPrintExport({
                   </tr>
                 </thead>
                 <tbody>
-                  {obligationRows.map((row) => (
-                    <tr key={row.rowId}>
-                      <td>{formatPeriod(row)}</td>
-                      <td>{formatDate(row.dueDate)}</td>
-                      <td>{formatCurrencyCents(row.expectedAmountCents)}</td>
-                      <td>{formatCurrencyCents(row.paidAmountCents)}</td>
-                      <td>{formatCurrencyCents(obligationOutstandingCents(row))}</td>
-                      <td>{obligationStatusCopy[row.obligationStatus || "unknown"]?.label || obligationStatusCopy.unknown.label}</td>
-                      <td>{printFinancialSignalText(row, delinquencySignals, hasUnallocatedCreditNotice)}</td>
-                      <td>{printEvidenceText(row, delinquencySignals)}</td>
-                    </tr>
-                  ))}
+                  {obligationRows.map((row) => {
+                    const allocationAdjustment = allocationAdjustmentForObligation(row, creditAllocationPreview);
+                    return (
+                      <tr key={row.rowId}>
+                        <td>{formatPeriod(row)}</td>
+                        <td>{formatDate(row.dueDate)}</td>
+                        <td>{formatCurrencyCents(row.expectedAmountCents)}</td>
+                        <td>{formatCurrencyCents(row.paidAmountCents)}</td>
+                        <td>
+                          {allocationAdjustment
+                            ? `${formatCurrencyCents(allocationAdjustment.outstandingAfterAllocationCents)} after allocation`
+                            : formatCurrencyCents(obligationOutstandingCents(row))}
+                        </td>
+                        <td>{obligationStatusCopy[row.obligationStatus || "unknown"]?.label || obligationStatusCopy.unknown.label}</td>
+                        <td>{printFinancialSignalText(row, delinquencySignals, hasUnallocatedCreditNotice, allocationAdjustment)}</td>
+                        <td>{printEvidenceText(row, delinquencySignals)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1280,6 +1367,103 @@ function createAllocationIdempotencyKey(leaseId: string, obligationRowId: string
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return `lease-credit-allocation:${leaseId}:${obligationRowId}:${random}`;
+}
+
+type CreditAllocationPresentation = {
+  hasActiveAllocations: boolean;
+  activeAllocatedCents: number;
+  remainingCreditCents: number;
+  adjustedOutstandingCents: number;
+};
+
+type ObligationAllocationAdjustment = {
+  allocationIds: string[];
+  allocatedCents: number;
+  outstandingAfterAllocationCents: number;
+};
+
+function sumAllocationAmountCents(allocations: LeaseCreditAllocationSummary[]): number {
+  return allocations.reduce((total, allocation) => total + Math.max(0, Number(allocation.allocationAmountCents || 0)), 0);
+}
+
+function buildCreditAllocationPresentation(
+  preview: LeaseCreditAllocationPreview | null,
+  totals: { balanceCents: number },
+  outstandingObligationCents: number
+): CreditAllocationPresentation {
+  const activeAllocations = preview?.existingActiveAllocations || [];
+  const activeAllocatedCents =
+    Number(preview?.activeAllocationAmountCents || 0) || sumAllocationAmountCents(activeAllocations);
+  const grossCreditCents = Math.max(0, Number(preview?.grossAvailableCreditCents ?? Math.abs(Math.min(0, totals.balanceCents))));
+  const remainingCreditCents = Math.max(
+    0,
+    Number(preview?.availableCreditCents ?? preview?.remainingAvailableCreditCents ?? grossCreditCents - activeAllocatedCents)
+  );
+  const adjustedOutstandingCents = Math.max(
+    0,
+    Number(preview?.totalOutstandingAmountCents ?? outstandingObligationCents - activeAllocatedCents)
+  );
+  return {
+    hasActiveAllocations: activeAllocations.length > 0 || activeAllocatedCents > 0,
+    activeAllocatedCents,
+    remainingCreditCents,
+    adjustedOutstandingCents,
+  };
+}
+
+function allocationAdjustmentForObligation(
+  row: LeaseObligationLedgerRow,
+  preview: LeaseCreditAllocationPreview | null
+): ObligationAllocationAdjustment | null {
+  const matchingAllocations = (preview?.existingActiveAllocations || []).filter(
+    (allocation) => allocation.obligationRowId === row.rowId
+  );
+  if (matchingAllocations.length === 0) return null;
+  const allocatedCents = sumAllocationAmountCents(matchingAllocations);
+  const latestAllocation = [...matchingAllocations].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))[0];
+  const outstandingAfterAllocationCents = Math.max(
+    0,
+    Number(latestAllocation?.afterOutstandingAmountCents ?? obligationOutstandingCents(row) - allocatedCents)
+  );
+  return {
+    allocationIds: matchingAllocations.map((allocation) => allocation.allocationId),
+    allocatedCents,
+    outstandingAfterAllocationCents,
+  };
+}
+
+function creditAllocationNoticeCopy(
+  presentation: CreditAllocationPresentation,
+  aggregateBalanceCents: number
+): { title: string; body: string; detail: string } {
+  if (!presentation.hasActiveAllocations) {
+    return {
+      title: "Credit balance needs allocation review",
+      body: "",
+      detail: "",
+    };
+  }
+  if (presentation.remainingCreditCents > 0) {
+    return {
+      title: "Remaining lease credit available",
+      body: `This lease has ${formatCurrencyCents(
+        presentation.remainingCreditCents
+      )} of unallocated credit remaining after applying ${formatCurrencyCents(
+        presentation.activeAllocatedCents
+      )} to the unmatched obligation.`,
+      detail: `The aggregate ledger balance remains ${formatCurrencyCents(
+        aggregateBalanceCents
+      )} because historical payment records were not edited. Obligation outstanding after allocation: ${formatCurrencyCents(
+        presentation.adjustedOutstandingCents
+      )}.`,
+    };
+  }
+  return {
+    title: "Credit allocation recorded",
+    body:
+      "Existing lease credit has been allocated to the previously unmatched obligation. The aggregate ledger balance remains a credit because historical payment records were not edited.",
+    detail: `Obligation outstanding after allocation: ${formatCurrencyCents(presentation.adjustedOutstandingCents)}.`,
+  };
 }
 
 function CreditAllocationMetric({ label, value }: { label: string; value: string }) {
@@ -1528,7 +1712,13 @@ export default function LeaseLedgerPage() {
     () => totalOutstandingObligationCents(obligationRows, obligationSummary),
     [obligationRows, obligationSummary]
   );
+  const hasLeaseCreditBalance = totals.balanceCents < 0;
   const hasUnallocatedCreditNotice = hasCreditBalanceAllocationReview(totals.balanceCents, outstandingObligationCents);
+  const creditAllocationPresentation = useMemo(
+    () => buildCreditAllocationPresentation(creditAllocationPreview, totals, outstandingObligationCents),
+    [creditAllocationPreview, totals, outstandingObligationCents]
+  );
+  const creditAllocationNotice = creditAllocationNoticeCopy(creditAllocationPresentation, totals.balanceCents);
 
   const monthlyRows = useMemo(() => {
     return Object.entries(monthlyTotals).sort((a, b) => (a[0] < b[0] ? 1 : -1));
@@ -1616,7 +1806,7 @@ export default function LeaseLedgerPage() {
   }, [leaseId]);
 
   useEffect(() => {
-    if (!leaseId || !hasUnallocatedCreditNotice) {
+    if (!leaseId || !hasLeaseCreditBalance) {
       setCreditAllocationPreview(null);
       setCreditAllocationError(null);
       setCreditAllocationReviewed(false);
@@ -1626,7 +1816,7 @@ export default function LeaseLedgerPage() {
     }
     void loadCreditAllocationPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leaseId, hasUnallocatedCreditNotice, totals.balanceCents, outstandingObligationCents]);
+  }, [leaseId, hasLeaseCreditBalance, totals.balanceCents, outstandingObligationCents]);
 
   async function submitCreditAllocation(obligation: LeaseCreditAllocationPreviewObligation) {
     if (!leaseId || !creditAllocationPreview) return;
@@ -1857,6 +2047,7 @@ export default function LeaseLedgerPage() {
             obligationSummary={obligationSummary}
             outstandingObligationCents={outstandingObligationCents}
             hasUnallocatedCreditNotice={hasUnallocatedCreditNotice}
+            creditAllocationPreview={creditAllocationPreview}
             delinquencySignals={delinquencySignals}
             delinquencySummary={delinquencySummary}
             decisions={decisions}
@@ -1928,19 +2119,28 @@ export default function LeaseLedgerPage() {
           <strong>{formatCurrencyCents(totals.balanceCents)}</strong>
         </div>
       </div>
-      {hasUnallocatedCreditNotice ? (
+      {hasUnallocatedCreditNotice || creditAllocationPresentation.hasActiveAllocations ? (
         <div style={{ border: "1px solid #fde68a", borderRadius: 12, padding: 12, background: "#fffbeb", color: "#713f12", display: "grid", gap: 4 }}>
-          <strong>Credit balance needs allocation review</strong>
-          <span>
-            This lease has an aggregate credit balance of {formatCurrencyCents(totals.balanceCents)}, but{" "}
-            {formatCurrencyCents(outstandingObligationCents)} remains outstanding on specific obligations because payments have not been
-            matched or allocated to those obligations.
-          </span>
-          <span>Review the obligation rows before resolving overdue decisions.</span>
+          <strong>{creditAllocationNotice.title}</strong>
+          {creditAllocationPresentation.hasActiveAllocations ? (
+            <>
+              <span>{creditAllocationNotice.body}</span>
+              <span>{creditAllocationNotice.detail}</span>
+            </>
+          ) : (
+            <>
+              <span>
+                This lease has an aggregate credit balance of {formatCurrencyCents(totals.balanceCents)}, but{" "}
+                {formatCurrencyCents(outstandingObligationCents)} remains outstanding on specific obligations because payments have not been
+                matched or allocated to those obligations.
+              </span>
+              <span>Review the obligation rows before resolving overdue decisions.</span>
+            </>
+          )}
         </div>
       ) : null}
 
-      {hasUnallocatedCreditNotice ? (
+      {hasLeaseCreditBalance ? (
         <LeaseCreditAllocationPanel
           preview={creditAllocationPreview}
           loading={creditAllocationLoading}
@@ -2121,22 +2321,40 @@ export default function LeaseLedgerPage() {
                 </tr>
               </thead>
               <tbody>
-                {obligationRows.map((row) => (
-                  <tr key={row.rowId}>
-                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatPeriod(row)}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatDate(row.dueDate)}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatCurrencyCents(row.expectedAmountCents)}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatCurrencyCents(row.paidAmountCents)}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatCurrencyCents(obligationOutstandingCents(row))}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>
-                      <ObligationStatusBadge status={row.obligationStatus || "unknown"} />
-                    </td>
-                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)", minWidth: 220 }}>
-                      <DelinquencyIndicators row={row} signals={delinquencySignals} allocationReviewRequired={hasUnallocatedCreditNotice} />
-                    </td>
-                    <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)", color: "#3f382f" }}>{prettyEvidenceStatus(row)}</td>
-                  </tr>
-                ))}
+                {obligationRows.map((row) => {
+                  const allocationAdjustment = allocationAdjustmentForObligation(row, creditAllocationPreview);
+                  return (
+                    <tr key={row.rowId}>
+                      <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatPeriod(row)}</td>
+                      <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatDate(row.dueDate)}</td>
+                      <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatCurrencyCents(row.expectedAmountCents)}</td>
+                      <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>{formatCurrencyCents(row.paidAmountCents)}</td>
+                      <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>
+                        {allocationAdjustment ? (
+                          <div className="lease-ledger-obligation-allocation-cell">
+                            <strong>{formatCurrencyCents(allocationAdjustment.outstandingAfterAllocationCents)} after allocation</strong>
+                            <span>Allocated from credit: {formatCurrencyCents(allocationAdjustment.allocatedCents)}</span>
+                            <span>Original outstanding: {formatCurrencyCents(obligationOutstandingCents(row))}</span>
+                          </div>
+                        ) : (
+                          formatCurrencyCents(obligationOutstandingCents(row))
+                        )}
+                      </td>
+                      <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)" }}>
+                        <ObligationStatusBadge status={row.obligationStatus || "unknown"} />
+                      </td>
+                      <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)", minWidth: 220 }}>
+                        <DelinquencyIndicators
+                          row={row}
+                          signals={delinquencySignals}
+                          allocationReviewRequired={hasUnallocatedCreditNotice}
+                          allocationAdjustment={allocationAdjustment}
+                        />
+                      </td>
+                      <td style={{ padding: 10, borderBottom: "1px solid rgba(91,70,48,0.12)", color: "#3f382f" }}>{prettyEvidenceStatus(row)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -2147,6 +2365,7 @@ export default function LeaseLedgerPage() {
                 row={row}
                 signals={delinquencySignals}
                 allocationReviewRequired={hasUnallocatedCreditNotice}
+                allocationAdjustment={allocationAdjustmentForObligation(row, creditAllocationPreview)}
               />
             ))}
           </div>

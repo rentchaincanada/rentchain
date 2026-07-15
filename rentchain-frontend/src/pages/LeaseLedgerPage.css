@@ -269,6 +269,22 @@
   display: none;
 }
 
+.lease-ledger-obligation-allocation-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 150px;
+}
+
+.lease-ledger-obligation-allocation-cell strong {
+  color: #166534;
+}
+
+.lease-ledger-obligation-allocation-cell span {
+  display: block;
+  color: #475569;
+  font-size: 12px;
+}
+
 .lease-ledger-obligations-table,
 .lease-ledger-entries-table {
   max-width: 100%;

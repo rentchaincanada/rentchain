@@ -157,6 +157,49 @@ function buildCreditAllocationPreviewResponse(overrides: Record<string, any> = {
   };
 }
 
+function buildActiveCreditAllocationPreviewResponse(overrides: Record<string, any> = {}) {
+  return buildCreditAllocationPreviewResponse({
+    activeAllocationAmountCents: 200000,
+    availableCreditCents: 676900,
+    eligibleObligations: [],
+    obligations: [],
+    suggestedAllocations: [],
+    totalOutstandingAmountCents: 0,
+    totalSuggestedAllocationAmountCents: 0,
+    remainingAvailableCreditCents: 676900,
+    allowed: false,
+    blockedReasons: ["no_outstanding_obligations"],
+    existingActiveAllocations: [
+      {
+        allocationId: "allocation-1",
+        landlordId: "landlord-1",
+        leaseId: "lease-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        tenantId: "tenant-1",
+        obligationRowId: "obligation-pending-credit",
+        obligationKey: "lease-1:2026-06-01:200000",
+        allocationAmountCents: 200000,
+        currency: "cad",
+        status: "active",
+        createdAt: "2026-07-15T00:00:00.000Z",
+        createdBy: "landlord-1",
+        createdByEmail: "landlord@example.com",
+        reason: "operator_credit_allocation",
+        note: null,
+        beforeAvailableCreditCents: 876900,
+        beforeOutstandingAmountCents: 200000,
+        afterAvailableCreditCents: 676900,
+        afterOutstandingAmountCents: 0,
+        previewFingerprint: "preview-fingerprint-1",
+        idempotencyKey: "idempotency-1",
+        sourceType: "lease_credit_allocation",
+      },
+    ],
+    ...overrides,
+  });
+}
+
 const mocks = vi.hoisted(() => ({
   fetchLeaseLedger: vi.fn(),
   fetchCreditAllocationPreview: vi.fn(),
@@ -806,6 +849,33 @@ describe("LeaseLedgerPage", () => {
     expect(screen.queryByText(/legal compliance/i)).not.toBeInTheDocument();
   });
 
+  it("uses active allocation records to avoid stale outstanding warning copy after reload", async () => {
+    const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
+    mocks.fetchLeaseLedger.mockClear();
+    mocks.fetchLeaseLedger.mockResolvedValueOnce(buildCreditAllocationLedgerResponse(baseLedgerResponse, "reviewed"));
+    mocks.fetchCreditAllocationPreview.mockResolvedValueOnce(buildActiveCreditAllocationPreviewResponse());
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Remaining lease credit available")).toBeInTheDocument();
+    expect(screen.getByText(/unallocated credit remaining after applying \$2,000.00 to the unmatched obligation/i)).toBeInTheDocument();
+    expect(screen.getByText(/aggregate ledger balance remains -\$8,769.00/i)).toBeInTheDocument();
+    expect(screen.getByText(/Obligation outstanding after allocation: \$0.00/i)).toBeInTheDocument();
+    expect(screen.queryByText(/but \$2,000.00 remains outstanding on specific obligations/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Active allocation history")).toBeInTheDocument();
+    expect(screen.getAllByText("$0.00 after allocation").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Allocated from credit: $2,000.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Original outstanding: $2,000.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Credit allocation recorded").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Existing lease credit covers this obligation/i).length).toBeGreaterThan(0);
+  });
+
   it("keeps apply disabled until confirmation and sends the current preview fingerprint", async () => {
     const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
     mocks.fetchLeaseLedger.mockClear();
@@ -854,7 +924,7 @@ describe("LeaseLedgerPage", () => {
     fireEvent.click(await screen.findByLabelText("I have reviewed the credit balance and obligation details."));
     fireEvent.click(screen.getByRole("button", { name: "Apply credit allocation" }));
 
-    expect(await screen.findByText("Credit allocation recorded")).toBeInTheDocument();
+    expect((await screen.findAllByText("Credit allocation recorded")).length).toBeGreaterThan(0);
     expect(screen.getByText("Existing lease credit was applied to this obligation.")).toBeInTheDocument();
     expect(screen.getByText("Historical payment records were not edited.")).toBeInTheDocument();
     expect(screen.getAllByText("allocation-1").length).toBeGreaterThan(0);
