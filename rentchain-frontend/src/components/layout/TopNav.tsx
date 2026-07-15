@@ -1,6 +1,7 @@
 // rentchain-frontend/src/components/layout/TopNav.tsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { CalendarDays } from "lucide-react";
 import { useAuth } from "../../context/useAuth";
 import { WorkspaceDrawer } from "./WorkspaceDrawer";
 import { Button } from "../ui/Ui";
@@ -18,6 +19,39 @@ function roleLabel(raw: string): string {
   return "Landlord";
 }
 
+function cleanName(value: unknown): string {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function initialsFromName(value: string): string {
+  const parts = cleanName(value).split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return `${parts[0].slice(0, 1)}${parts[parts.length - 1].slice(0, 1)}`.toUpperCase();
+}
+
+function initialsFromEmail(value: string): string {
+  const localPart = cleanName(value).split("@")[0] || "";
+  const parts = localPart.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0].slice(0, 1)}${parts[parts.length - 1].slice(0, 1)}`.toUpperCase();
+  return localPart.slice(0, 1).toUpperCase();
+}
+
+function userDisplayName(user: ReturnType<typeof useAuth>["user"]): string {
+  return (
+    cleanName(user?.verifiedName) ||
+    cleanName(user?.displayName) ||
+    cleanName(user?.fullName) ||
+    cleanName([user?.firstName, user?.lastName].filter(Boolean).join(" ")) ||
+    cleanName(user?.name)
+  );
+}
+
+function userInitials(user: ReturnType<typeof useAuth>["user"]): string {
+  const name = userDisplayName(user);
+  return initialsFromName(name) || initialsFromEmail(user?.email || "") || "U";
+}
+
 const TopNav: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout, ready, isLoading, authStatus } = useAuth();
@@ -33,7 +67,10 @@ const TopNav: React.FC = () => {
     return actorRole || role || "landlord";
   }, [authResolved, user?.actorRole, user?.role]);
   const roleBadge = authResolved ? roleLabel(effectiveRole) : "Loading...";
-  const accountPath = effectiveRole === "contractor" ? "/contractor/profile" : "/account";
+  const accountName = userDisplayName(user);
+  const accountInitials = userInitials(user);
+  const accountButtonLabel = accountName ? `Account menu for ${accountName}` : "Account menu";
+  const canShowSchedulingShortcut = authResolved && (effectiveRole === "landlord" || effectiveRole === "admin");
   const canShowMessagesShortcut =
     authResolved &&
     (effectiveRole === "landlord" || effectiveRole === "admin") &&
@@ -141,34 +178,48 @@ const TopNav: React.FC = () => {
                 ) : null}
               </Button>
             ) : null}
+            {canShowSchedulingShortcut ? (
+              <Button
+                className="rc-top-nav-optional-action"
+                variant="secondary"
+                onClick={() => navigate("/scheduling")}
+                style={{
+                  borderRadius: radius.pill,
+                  border: `1px solid ${colors.accent}`,
+                  background: "rgba(37,99,235,0.12)",
+                  color: text.primary,
+                  boxShadow: shadows.sm,
+                  fontWeight: 700,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <CalendarDays size={16} aria-hidden="true" />
+                Scheduling
+              </Button>
+            ) : null}
             <Button
-              className="rc-top-nav-optional-action"
+              className="rc-top-nav-workspace-button rc-top-nav-account-button"
               variant="secondary"
-              onClick={() => navigate(accountPath)}
-              style={{
-                borderRadius: radius.pill,
-                border: `1px solid ${colors.accent}`,
-                background: "rgba(37,99,235,0.12)",
-                color: text.primary,
-                boxShadow: shadows.sm,
-                fontWeight: 700,
-              }}
-            >
-              My Account
-            </Button>
-            <Button
-              className="rc-top-nav-workspace-button"
-              variant="secondary"
+              aria-label={accountButtonLabel}
+              title={accountButtonLabel}
               onClick={() => setDrawerOpen(true)}
               style={{
-                borderRadius: radius.pill,
+                width: 42,
+                height: 42,
+                minWidth: 42,
+                padding: 0,
+                borderRadius: "50%",
                 border: `1px solid ${colors.border}`,
                 background: colors.panel,
                 color: text.primary,
                 boxShadow: shadows.sm,
+                fontWeight: 850,
+                letterSpacing: 0,
               }}
             >
-              Workspace
+              {accountInitials}
             </Button>
           </div>
         </div>

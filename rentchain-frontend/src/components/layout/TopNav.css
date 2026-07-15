@@ -15,6 +15,14 @@
   max-width: 100%;
 }
 
+.rc-top-nav-account-button {
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  overflow: hidden;
+  text-transform: uppercase;
+}
+
 @media (max-width: 820px) {
   .rc-top-nav-inner {
     width: 100%;
@@ -48,5 +56,12 @@
     min-width: 0;
     padding: 9px 11px !important;
     white-space: nowrap;
+  }
+
+  .rc-top-nav-account-button {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    padding: 0 !important;
   }
 }
