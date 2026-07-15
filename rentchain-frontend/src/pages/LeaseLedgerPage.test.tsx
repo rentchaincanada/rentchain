@@ -785,7 +785,7 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getAllByText(new Date(2026, 4, 5).toLocaleDateString()).length).toBeGreaterThan(0);
   });
 
-  it("explains aggregate credit balances when specific obligations remain outstanding", async () => {
+  it("explains available credit when a rent charge still needs review", async () => {
     const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
     mocks.fetchLeaseLedger.mockClear();
     mocks.fetchLeaseLedger.mockResolvedValueOnce(buildCreditAllocationLedgerResponse(baseLedgerResponse, "reviewed"));
@@ -799,20 +799,19 @@ describe("LeaseLedgerPage", () => {
     );
 
     expect(await screen.findByText("Credit balance needs allocation review")).toBeInTheDocument();
-    expect(screen.getByText(/aggregate credit balance of -\$8,769.00/i)).toBeInTheDocument();
-    expect(screen.getByText(/but \$2,000.00 remains outstanding on specific obligations/i)).toBeInTheDocument();
-    expect(screen.getByText("Review the obligation rows before resolving overdue decisions.")).toBeInTheDocument();
+    expect(screen.getByText(/a \$2,000.00 rent charge was not yet matched to/i)).toBeInTheDocument();
+    expect(screen.getByText("Review and apply available credit to the rent charge.")).toBeInTheDocument();
     expect(screen.getByText("Review payment allocation")).toBeInTheDocument();
     expect(screen.getAllByText("Allocation review").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Payments exceed charges in aggregate, but one or more obligations remain unmatched.").length).toBeGreaterThan(0);
-    expect(screen.getByText("Review and allocate unmatched payments before taking any overdue-rent action.")).toBeInTheDocument();
+    expect(screen.getAllByText("A rent charge was not yet matched to the tenant's available credit.").length).toBeGreaterThan(0);
+    expect(screen.getByText("Review and apply available credit to the rent charge before resolving this item.")).toBeInTheDocument();
     expect(screen.getByText("Recommended next action")).toBeInTheDocument();
     expect(screen.queryByText("Resolved outcome")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Resolve" })).toBeInTheDocument();
     expect(screen.queryByText("Review / resolve")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Mark reviewed:/ })).not.toBeInTheDocument();
-    expect(screen.getAllByText("Payments exceed charges in aggregate, but this obligation remains unmatched.").length).toBeGreaterThan(0);
-    expect(screen.getByText("Obligation remains unmatched after due date")).toBeInTheDocument();
+    expect(screen.getAllByText("A rent charge was not yet matched to the tenant's available credit.").length).toBeGreaterThan(0);
+    expect(screen.getByText("Rent charge was not yet matched to available credit")).toBeInTheDocument();
     expect(screen.queryByText("obligation_pending_after_due_date")).not.toBeInTheDocument();
     expect(screen.getAllByText("Reviewed").length).toBeGreaterThan(0);
     expect(screen.getByText(/reviewed or resolved status does not mark rent paid/i)).toBeInTheDocument();
@@ -836,13 +835,13 @@ describe("LeaseLedgerPage", () => {
 
     await screen.findByRole("heading", { name: "Allocate available lease credit" });
     await waitFor(() => expect(mocks.fetchCreditAllocationPreview).toHaveBeenCalledWith("lease-1"));
-    expect(screen.getByText("This lease has available credit, but one or more obligations remain unmatched. Review the suggested allocation before applying credit to the obligation.")).toBeInTheDocument();
+    expect(screen.getByText("This lease has available credit, but a rent charge was not yet matched to that credit. Review and apply available credit to the rent charge.")).toBeInTheDocument();
     expect(screen.getByText("Available credit")).toBeInTheDocument();
     expect(screen.getAllByText("$8,769.00").length).toBeGreaterThan(0);
-    expect(screen.getByText("Outstanding obligation")).toBeInTheDocument();
+    expect(screen.getAllByText("Rent charge outstanding").length).toBeGreaterThan(0);
     expect(screen.getAllByText("$2,000.00").length).toBeGreaterThan(0);
-    expect(screen.getByText("Suggested allocation")).toBeInTheDocument();
-    expect(screen.getByText("Remaining credit after allocation")).toBeInTheDocument();
+    expect(screen.getByText("Suggested credit to apply")).toBeInTheDocument();
+    expect(screen.getByText("Available credit after allocation")).toBeInTheDocument();
     expect(screen.getByText("$6,769.00")).toBeInTheDocument();
     expect(screen.getByText("Existing lease credit available for operator-reviewed allocation")).toBeInTheDocument();
     expect(screen.queryByText(/collection resolved/i)).not.toBeInTheDocument();
@@ -864,16 +863,19 @@ describe("LeaseLedgerPage", () => {
     );
 
     expect(await screen.findByText("Remaining lease credit available")).toBeInTheDocument();
-    expect(screen.getByText(/unallocated credit remaining after applying \$2,000.00 to the unmatched obligation/i)).toBeInTheDocument();
-    expect(screen.getByText(/aggregate ledger balance remains -\$8,769.00/i)).toBeInTheDocument();
-    expect(screen.getByText(/Obligation outstanding after allocation: \$0.00/i)).toBeInTheDocument();
+    expect(screen.getByText(/available credit remaining after \$2,000.00 was applied to the rent charge/i)).toBeInTheDocument();
+    expect(screen.getByText(/ledger balance remains -\$8,769.00/i)).toBeInTheDocument();
+    expect(screen.getByText(/Rent charge outstanding after allocation: \$0.00/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Ledger balance").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Credit applied").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Available credit after allocation").length).toBeGreaterThan(0);
     expect(screen.queryByText(/but \$2,000.00 remains outstanding on specific obligations/i)).not.toBeInTheDocument();
     expect(screen.getByText("Active allocation history")).toBeInTheDocument();
     expect(screen.getAllByText("$0.00 after allocation").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Allocated from credit: $2,000.00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Original outstanding: $2,000.00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Credit allocation recorded").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Existing lease credit covers this obligation/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Existing lease credit covers this rent charge/i).length).toBeGreaterThan(0);
   });
 
   it("keeps apply disabled until confirmation and sends the current preview fingerprint", async () => {
@@ -892,7 +894,7 @@ describe("LeaseLedgerPage", () => {
     const applyButton = await screen.findByRole("button", { name: "Apply credit allocation" });
     expect(applyButton).toBeDisabled();
 
-    fireEvent.click(screen.getByLabelText("I have reviewed the credit balance and obligation details."));
+    fireEvent.click(screen.getByLabelText("I have reviewed the credit balance and rent charge details."));
     expect(applyButton).not.toBeDisabled();
     fireEvent.click(applyButton);
 
@@ -921,16 +923,16 @@ describe("LeaseLedgerPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByLabelText("I have reviewed the credit balance and obligation details."));
+    fireEvent.click(await screen.findByLabelText("I have reviewed the credit balance and rent charge details."));
     fireEvent.click(screen.getByRole("button", { name: "Apply credit allocation" }));
 
     expect((await screen.findAllByText("Credit allocation recorded")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Existing lease credit was applied to this obligation.")).toBeInTheDocument();
+    expect(screen.getByText("Credit was applied to the rent charge.")).toBeInTheDocument();
     expect(screen.getByText("Historical payment records were not edited.")).toBeInTheDocument();
     expect(screen.getAllByText("allocation-1").length).toBeGreaterThan(0);
     expect(screen.getAllByText("$6,769.00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("$0.00").length).toBeGreaterThan(0);
-    expect(screen.getByText("This allocation records how existing lease credit was applied to an obligation. It does not edit historical payment records.")).toBeInTheDocument();
+    expect(screen.getByText("This allocation records how existing lease credit was applied to a rent charge. It does not edit historical payment records.")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchLeaseLedger).toHaveBeenCalledTimes(2));
   });
 
@@ -948,7 +950,7 @@ describe("LeaseLedgerPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByLabelText("I have reviewed the credit balance and obligation details."));
+    fireEvent.click(await screen.findByLabelText("I have reviewed the credit balance and rent charge details."));
     fireEvent.click(screen.getByRole("button", { name: "Apply credit allocation" }));
 
     expect(await screen.findByText("Ledger changed since this preview was generated. Refresh the allocation preview and try again.")).toBeInTheDocument();
@@ -969,7 +971,7 @@ describe("LeaseLedgerPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByLabelText("I have reviewed the credit balance and obligation details."));
+    fireEvent.click(await screen.findByLabelText("I have reviewed the credit balance and rent charge details."));
     fireEvent.click(screen.getByRole("button", { name: "Apply credit allocation" }));
 
     expect(await screen.findByText("Credit allocation could not be recorded. No ledger records were changed.")).toBeInTheDocument();
@@ -1020,9 +1022,9 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getByText("Review payment allocation")).toBeInTheDocument();
     expect(screen.getAllByText("Allocation review").length).toBeGreaterThan(0);
     expect(screen.getByText("Resolved outcome")).toBeInTheDocument();
-    expect(screen.getByText("Marked resolved as an allocation-review item. No rent-collection action should be taken until unmatched payments are reviewed.")).toBeInTheDocument();
+    expect(screen.getByText("Marked resolved as an allocation-review item. Review available credit before taking further action.")).toBeInTheDocument();
     expect(screen.queryByText("Recommended next action")).not.toBeInTheDocument();
-    expect(screen.queryByText("Review and allocate unmatched payments before taking any overdue-rent action.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Review and apply available credit to the rent charge before resolving this item.")).not.toBeInTheDocument();
     expect(screen.getAllByText("Already resolved").length).toBeGreaterThan(0);
     expect(screen.getByText("Last action: Resolved")).toBeInTheDocument();
     expect(screen.queryByText("Review / resolve")).not.toBeInTheDocument();
@@ -1310,15 +1312,15 @@ describe("LeaseLedgerPage", () => {
       const printDecisionText = printRoot?.querySelector(".lease-ledger-print-decision")?.textContent || "";
       expect(printText).toContain("Review payment allocation");
       expect(printText).toContain("Allocation review");
-      expect(printText).toContain("Payments exceed charges in aggregate, but one or more obligations remain unmatched.");
+      expect(printText).toContain("A rent charge was not yet matched to the tenant's available credit.");
       expect(printText).not.toContain("Allocate available lease credit");
       expect(printText).not.toContain("Apply credit allocation");
-      expect(printText).not.toContain("I have reviewed the credit balance and obligation details.");
+      expect(printText).not.toContain("I have reviewed the credit balance and rent charge details.");
       expect(printDecisionText).toContain("Resolved outcome");
-      expect(printDecisionText).toContain("Marked resolved as an allocation-review item. No rent-collection action should be taken until unmatched payments are reviewed.");
+      expect(printDecisionText).toContain("Marked resolved as an allocation-review item. Review available credit before taking further action.");
       expect(printDecisionText).not.toContain("Recommended next action");
-      expect(printDecisionText).not.toContain("Review and allocate unmatched payments before taking any overdue-rent action.");
-      expect(printText).toContain("Signal reason: Obligation remains unmatched after due date");
+      expect(printDecisionText).not.toContain("Review and apply available credit to the rent charge before resolving this item.");
+      expect(printText).toContain("Signal reason: Rent charge was not yet matched to available credit");
       expect(printText).not.toContain("obligation_pending_after_due_date");
       window.dispatchEvent(new Event("afterprint"));
     });

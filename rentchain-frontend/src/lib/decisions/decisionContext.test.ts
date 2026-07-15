@@ -121,7 +121,7 @@ describe("decisionContext", () => {
     });
 
     expect(items).toEqual(
-      expect.arrayContaining([{ label: "Signal reason", value: "Obligation remains unmatched after due date" }])
+      expect.arrayContaining([{ label: "Signal reason", value: "Rent charge was not yet matched to available credit" }])
     );
     expect(items.map((item) => item.value)).not.toContain("obligation_pending_after_due_date");
   });

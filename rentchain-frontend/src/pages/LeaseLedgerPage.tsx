@@ -429,7 +429,7 @@ function recommendedDecisionAction(decision: DecisionItem): { label: string; cta
 
 function allocationReviewRecommendedAction(): { label: string; cta: "resolve"; helper: string } {
   return {
-    label: "Review and allocate unmatched payments before taking any overdue-rent action.",
+    label: "Review and apply available credit to the rent charge before resolving this item.",
     cta: "resolve",
     helper: "Marks the operational review item resolved only after allocation review is complete.",
   };
@@ -443,7 +443,7 @@ function decisionActionDisplay(
     return {
       heading: "Resolved outcome",
       label:
-        "Marked resolved as an allocation-review item. No rent-collection action should be taken until unmatched payments are reviewed.",
+        "Marked resolved as an allocation-review item. Review available credit before taking further action.",
       cta: action.cta,
       helper: action.helper,
     };
@@ -457,7 +457,7 @@ function decisionActionDisplay(
 function allocationReviewDecision(decision: DecisionItem): DecisionItem {
   return {
     ...decision,
-    reason: "Payments exceed charges in aggregate, but one or more obligations remain unmatched.",
+    reason: "A rent charge was not yet matched to the tenant's available credit.",
     metadata: {
       ...(decision.metadata || {}),
       signalType: "allocation_review",
@@ -680,7 +680,7 @@ function DelinquencyIndicators({
         <div style={{ display: "grid", gap: 4 }}>
           <span style={{ color: "#166534", fontWeight: 800 }}>Credit allocation recorded</span>
           <span style={{ color: "#475569", fontSize: 12 }}>
-            Existing lease credit covers this obligation. Historical payment records were not edited.
+            Existing lease credit covers this rent charge. Historical payment records were not edited.
           </span>
         </div>
       );
@@ -689,7 +689,7 @@ function DelinquencyIndicators({
       <div style={{ display: "grid", gap: 4 }}>
         <span style={{ color: "#854d0e", fontWeight: 800 }}>Allocation review</span>
         <span style={{ color: "#475569", fontSize: 12 }}>
-          Existing lease credit allocation reduced this obligation. Remaining outstanding after allocation:{" "}
+          Existing lease credit allocation reduced this rent charge. Rent charge outstanding after allocation:{" "}
           {formatCurrencyCents(allocationAdjustment.outstandingAfterAllocationCents)}.
         </span>
       </div>
@@ -700,7 +700,7 @@ function DelinquencyIndicators({
       <div style={{ display: "grid", gap: 4 }}>
         <span style={{ color: "#854d0e", fontWeight: 800 }}>Allocation review</span>
         <span style={{ color: "#475569", fontSize: 12 }}>
-          Payments exceed charges in aggregate, but this obligation remains unmatched.
+          A rent charge was not yet matched to the tenant's available credit.
         </span>
       </div>
     );
@@ -864,14 +864,14 @@ function printFinancialSignalText(
   const matchingSignals = signals.filter((signal) => signalMatchesRow(signal, row));
   if (allocationAdjustment) {
     if (allocationAdjustment.outstandingAfterAllocationCents === 0) {
-      return "Credit allocation recorded — Existing lease credit covers this obligation. Historical payment records were not edited.";
+      return "Credit allocation recorded — Existing lease credit covers this rent charge. Historical payment records were not edited.";
     }
-    return `Allocation review — Existing lease credit allocation reduced this obligation. Remaining outstanding after allocation: ${formatCurrencyCents(
+    return `Allocation review — Existing lease credit allocation reduced this rent charge. Rent charge outstanding after allocation: ${formatCurrencyCents(
       allocationAdjustment.outstandingAfterAllocationCents
     )}.`;
   }
   if (allocationReviewRequired && matchingSignals.length > 0) {
-    return "Allocation review — Payments exceed charges in aggregate, but this obligation remains unmatched.";
+    return "Allocation review — A rent charge was not yet matched to the tenant's available credit.";
   }
   if (matchingSignals.length === 0) {
     const status = row.obligationStatus || "unknown";
@@ -988,11 +988,23 @@ function LeaseLedgerPrintExport({
               <strong>{formatCurrencyCents(totals.paymentsCents)}</strong>
             </div>
             <div>
-              <span>Balance</span>
+              <span>Ledger balance</span>
               <strong>{formatCurrencyCents(totals.balanceCents)}</strong>
             </div>
+            {creditAllocationPresentation.hasActiveAllocations ? (
+              <>
+                <div>
+                  <span>Credit applied</span>
+                  <strong>{formatCurrencyCents(creditAllocationPresentation.activeAllocatedCents)}</strong>
+                </div>
+                <div>
+                  <span>Available credit after allocation</span>
+                  <strong>{formatCurrencyCents(creditAllocationPresentation.remainingCreditCents)}</strong>
+                </div>
+              </>
+            ) : null}
             <div>
-              <span>Outstanding obligations</span>
+              <span>{creditAllocationPresentation.hasActiveAllocations ? "Rent charges before allocation" : "Outstanding rent charges"}</span>
               <strong>{formatCurrencyCents(outstandingObligationCents)}</strong>
             </div>
             <div>
@@ -1015,10 +1027,10 @@ function LeaseLedgerPrintExport({
               ) : (
                 <>
                   <span>
-                    This lease has an aggregate credit balance of {formatCurrencyCents(totals.balanceCents)}, but{" "}
-                    {formatCurrencyCents(outstandingObligationCents)} remains outstanding on specific obligations because payments have not been matched or allocated.
+                    This lease has available credit, but a {formatCurrencyCents(outstandingObligationCents)} rent charge was not yet matched
+                    to the tenant's available credit.
                   </span>
-                  <span>Review and allocate unmatched payments before taking any overdue-rent action.</span>
+                  <span>Review and apply available credit to the rent charge.</span>
                 </>
               )}
             </div>
@@ -1448,12 +1460,12 @@ function creditAllocationNoticeCopy(
       title: "Remaining lease credit available",
       body: `This lease has ${formatCurrencyCents(
         presentation.remainingCreditCents
-      )} of unallocated credit remaining after applying ${formatCurrencyCents(
+      )} of available credit remaining after ${formatCurrencyCents(
         presentation.activeAllocatedCents
-      )} to the unmatched obligation.`,
-      detail: `The aggregate ledger balance remains ${formatCurrencyCents(
+      )} was applied to the rent charge.`,
+      detail: `The ledger balance remains ${formatCurrencyCents(
         aggregateBalanceCents
-      )} because historical payment records were not edited. Obligation outstanding after allocation: ${formatCurrencyCents(
+      )} because historical payment records were not edited. Rent charge outstanding after allocation: ${formatCurrencyCents(
         presentation.adjustedOutstandingCents
       )}.`,
     };
@@ -1461,8 +1473,8 @@ function creditAllocationNoticeCopy(
   return {
     title: "Credit allocation recorded",
     body:
-      "Existing lease credit has been allocated to the previously unmatched obligation. The aggregate ledger balance remains a credit because historical payment records were not edited.",
-    detail: `Obligation outstanding after allocation: ${formatCurrencyCents(presentation.adjustedOutstandingCents)}.`,
+      "Existing lease credit was applied to the rent charge. The ledger balance remains a credit because historical payment records were not edited.",
+    detail: `Rent charge outstanding after allocation: ${formatCurrencyCents(presentation.adjustedOutstandingCents)}.`,
   };
 }
 
@@ -1483,15 +1495,15 @@ function ActiveAllocationSummary({ allocation }: { allocation: LeaseCreditAlloca
         <strong>{allocation.allocationId}</strong>
       </div>
       <div>
-        <span>Amount allocated</span>
+        <span>Credit applied</span>
         <strong>{formatCurrencyCents(allocation.allocationAmountCents)}</strong>
       </div>
       <div>
-        <span>Remaining credit after allocation</span>
+        <span>Available credit after allocation</span>
         <strong>{formatCurrencyCents(allocation.afterAvailableCreditCents)}</strong>
       </div>
       <div>
-        <span>Obligation outstanding after allocation</span>
+        <span>Rent charge outstanding after allocation</span>
         <strong>{formatCurrencyCents(allocation.afterOutstandingAmountCents)}</strong>
       </div>
     </article>
@@ -1550,8 +1562,8 @@ function LeaseCreditAllocationPanel({
         <div>
           <h2>Allocate available lease credit</h2>
           <p>
-            This lease has available credit, but one or more obligations remain unmatched. Review the suggested allocation before applying
-            credit to the obligation.
+            This lease has available credit, but a rent charge was not yet matched to that credit. Review and apply available credit to the
+            rent charge.
           </p>
         </div>
         <button type="button" onClick={onRefresh} disabled={loading || submitting}>
@@ -1562,21 +1574,21 @@ function LeaseCreditAllocationPanel({
       {success ? (
         <div className="lease-credit-allocation-success" role="status">
           <strong>Credit allocation recorded</strong>
-          <span>Existing lease credit was applied to this obligation.</span>
+          <span>Credit was applied to the rent charge.</span>
           <span>Historical payment records were not edited.</span>
           <div className="lease-credit-allocation-metrics">
             <CreditAllocationMetric label="Allocation ID" value={success.allocation.allocationId} />
-            <CreditAllocationMetric label="Amount allocated" value={formatCurrencyCents(success.allocation.allocationAmountCents)} />
-            <CreditAllocationMetric label="Obligation period" value={formatAllocationPeriod({
+            <CreditAllocationMetric label="Credit applied" value={formatCurrencyCents(success.allocation.allocationAmountCents)} />
+            <CreditAllocationMetric label="Rent charge period" value={formatAllocationPeriod({
               periodStart: successObligation?.periodStart || obligation?.periodStart || null,
               periodEnd: successObligation?.periodEnd || obligation?.periodEnd || null,
             })} />
-            <CreditAllocationMetric label="Obligation due date" value={formatDate(successObligation?.dueDate || obligation?.dueDate || null)} />
-            <CreditAllocationMetric label="Remaining credit after allocation" value={formatCurrencyCents(success.allocation.afterAvailableCreditCents)} />
-            <CreditAllocationMetric label="Obligation outstanding after allocation" value={formatCurrencyCents(success.allocation.afterOutstandingAmountCents)} />
+            <CreditAllocationMetric label="Rent charge due date" value={formatDate(successObligation?.dueDate || obligation?.dueDate || null)} />
+            <CreditAllocationMetric label="Available credit after allocation" value={formatCurrencyCents(success.allocation.afterAvailableCreditCents)} />
+            <CreditAllocationMetric label="Rent charge outstanding after allocation" value={formatCurrencyCents(success.allocation.afterOutstandingAmountCents)} />
           </div>
           <p className="lease-credit-allocation-note">
-            This allocation records how existing lease credit was applied to an obligation. It does not edit historical payment records.
+            This allocation records how existing lease credit was applied to a rent charge. It does not edit historical payment records.
           </p>
         </div>
       ) : null}
@@ -1585,9 +1597,9 @@ function LeaseCreditAllocationPanel({
         <>
           <div className="lease-credit-allocation-metrics">
             <CreditAllocationMetric label="Available credit" value={formatCurrencyCents(preview.availableCreditCents)} />
-            <CreditAllocationMetric label="Outstanding obligation" value={formatCurrencyCents(obligation.outstandingAmountCents)} />
-            <CreditAllocationMetric label="Suggested allocation" value={formatCurrencyCents(allocationAmountCents)} />
-            <CreditAllocationMetric label="Remaining credit after allocation" value={formatCurrencyCents(remainingCreditCents)} />
+            <CreditAllocationMetric label="Rent charge outstanding" value={formatCurrencyCents(obligation.outstandingAmountCents)} />
+            <CreditAllocationMetric label="Suggested credit to apply" value={formatCurrencyCents(allocationAmountCents)} />
+            <CreditAllocationMetric label="Available credit after allocation" value={formatCurrencyCents(remainingCreditCents)} />
           </div>
 
           <div className="lease-credit-allocation-obligation">
@@ -1608,7 +1620,7 @@ function LeaseCreditAllocationPanel({
               <strong>{formatCurrencyCents(obligation.paidAmountCents)}</strong>
             </div>
             <div>
-              <span>Outstanding</span>
+              <span>Rent charge outstanding</span>
               <strong>{formatCurrencyCents(obligation.outstandingAmountCents)}</strong>
             </div>
             <div>
@@ -1620,7 +1632,7 @@ function LeaseCreditAllocationPanel({
               <strong>Existing lease credit available for operator-reviewed allocation</strong>
             </div>
             <div>
-              <span>Obligation outstanding after allocation</span>
+              <span>Rent charge outstanding after allocation</span>
               <strong>{formatCurrencyCents(outstandingAfterCents)}</strong>
             </div>
           </div>
@@ -1632,7 +1644,7 @@ function LeaseCreditAllocationPanel({
               onChange={(event) => onReviewedChange(event.target.checked)}
               disabled={submitting}
             />
-            <span>I have reviewed the credit balance and obligation details.</span>
+            <span>I have reviewed the credit balance and rent charge details.</span>
           </label>
           <p className="lease-credit-allocation-note">
             This records an allocation review and does not edit historical payment records.
@@ -2115,9 +2127,21 @@ export default function LeaseLedgerPage() {
           <strong>{formatCurrencyCents(totals.paymentsCents)}</strong>
         </div>
         <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 10, padding: 10, background: "#fff6e8", boxShadow: "0 10px 24px rgba(59,44,28,0.08)" }}>
-          <div style={{ fontSize: 12, color: "#63594d" }}>Balance</div>
+          <div style={{ fontSize: 12, color: "#63594d" }}>Ledger balance</div>
           <strong>{formatCurrencyCents(totals.balanceCents)}</strong>
         </div>
+        {creditAllocationPresentation.hasActiveAllocations ? (
+          <>
+            <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 10, padding: 10, background: "#fff6e8", boxShadow: "0 10px 24px rgba(59,44,28,0.08)" }}>
+              <div style={{ fontSize: 12, color: "#63594d" }}>Credit applied</div>
+              <strong>{formatCurrencyCents(creditAllocationPresentation.activeAllocatedCents)}</strong>
+            </div>
+            <div style={{ border: "1px solid rgba(91,70,48,0.16)", borderRadius: 10, padding: 10, background: "#fff6e8", boxShadow: "0 10px 24px rgba(59,44,28,0.08)" }}>
+              <div style={{ fontSize: 12, color: "#63594d" }}>Available credit after allocation</div>
+              <strong>{formatCurrencyCents(creditAllocationPresentation.remainingCreditCents)}</strong>
+            </div>
+          </>
+        ) : null}
       </div>
       {hasUnallocatedCreditNotice || creditAllocationPresentation.hasActiveAllocations ? (
         <div style={{ border: "1px solid #fde68a", borderRadius: 12, padding: 12, background: "#fffbeb", color: "#713f12", display: "grid", gap: 4 }}>
@@ -2130,11 +2154,10 @@ export default function LeaseLedgerPage() {
           ) : (
             <>
               <span>
-                This lease has an aggregate credit balance of {formatCurrencyCents(totals.balanceCents)}, but{" "}
-                {formatCurrencyCents(outstandingObligationCents)} remains outstanding on specific obligations because payments have not been
-                matched or allocated to those obligations.
+                This lease has available credit, but a {formatCurrencyCents(outstandingObligationCents)} rent charge was not yet matched to
+                the tenant's available credit.
               </span>
-              <span>Review the obligation rows before resolving overdue decisions.</span>
+              <span>Review and apply available credit to the rent charge.</span>
             </>
           )}
         </div>
