@@ -3,7 +3,13 @@ import { Link, useParams } from "react-router-dom";
 import {
   addLeaseCharge,
   addLeasePayment,
+  applyCreditAllocation,
+  fetchCreditAllocationPreview,
+  type ApplyCreditAllocationResponse,
   fetchLeaseLedger,
+  type LeaseCreditAllocationPreview,
+  type LeaseCreditAllocationPreviewObligation,
+  type LeaseCreditAllocationSummary,
   type DelinquencySignalType,
   type LeaseObligationLedgerRow,
   type LeaseObligationLedgerSummary,
@@ -52,6 +58,27 @@ type PaymentMethod = "cash" | "etransfer" | "cheque" | "bank" | "card" | "other"
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
   return fallback;
+}
+
+function creditAllocationErrorMessage(error: unknown): string {
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: unknown }).code || "")
+      : error instanceof Error
+        ? error.message
+        : "";
+  switch (code) {
+    case "CREDIT_ALLOCATION_STATE_STALE":
+      return "Ledger changed since this preview was generated. Refresh the allocation preview and try again.";
+    case "CREDIT_ALLOCATION_AMOUNT_EXCEEDS_CREDIT":
+      return "The allocation amount exceeds the available credit.";
+    case "CREDIT_ALLOCATION_AMOUNT_EXCEEDS_OUTSTANDING":
+      return "The allocation amount exceeds the obligation outstanding amount.";
+    case "CREDIT_ALLOCATION_IDEMPOTENCY_CONFLICT":
+      return "This allocation request conflicts with a previous submission. Refresh and try again.";
+    default:
+      return "Credit allocation could not be recorded. No ledger records were changed.";
+  }
 }
 
 function centsFromInput(input: string): number | null {
@@ -105,6 +132,14 @@ function prettyLeaseStatus(value: string | null | undefined) {
 }
 
 function formatPeriod(row: LeaseObligationLedgerRow): string {
+  const start = formatDate(row.periodStart);
+  const end = formatDate(row.periodEnd);
+  if (start === "—" && end === "—") return "—";
+  if (start !== "—" && end !== "—") return `${start} - ${end}`;
+  return start !== "—" ? start : end;
+}
+
+function formatAllocationPeriod(row: Pick<LeaseCreditAllocationPreviewObligation, "periodStart" | "periodEnd">): string {
   const start = formatDate(row.periodStart);
   const end = formatDate(row.periodEnd);
   if (start === "—" && end === "—") return "—";
@@ -1239,6 +1274,209 @@ const modalCard: React.CSSProperties = {
   padding: 18,
 };
 
+function createAllocationIdempotencyKey(leaseId: string, obligationRowId: string): string {
+  const random =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `lease-credit-allocation:${leaseId}:${obligationRowId}:${random}`;
+}
+
+function CreditAllocationMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="lease-credit-allocation-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ActiveAllocationSummary({ allocation }: { allocation: LeaseCreditAllocationSummary }) {
+  return (
+    <article className="lease-credit-allocation-history-item">
+      <div>
+        <span>Allocation ID</span>
+        <strong>{allocation.allocationId}</strong>
+      </div>
+      <div>
+        <span>Amount allocated</span>
+        <strong>{formatCurrencyCents(allocation.allocationAmountCents)}</strong>
+      </div>
+      <div>
+        <span>Remaining credit after allocation</span>
+        <strong>{formatCurrencyCents(allocation.afterAvailableCreditCents)}</strong>
+      </div>
+      <div>
+        <span>Obligation outstanding after allocation</span>
+        <strong>{formatCurrencyCents(allocation.afterOutstandingAmountCents)}</strong>
+      </div>
+    </article>
+  );
+}
+
+function LeaseCreditAllocationPanel({
+  preview,
+  loading,
+  error,
+  reviewed,
+  submitting,
+  success,
+  successObligation,
+  onReviewedChange,
+  onApply,
+  onRefresh,
+}: {
+  preview: LeaseCreditAllocationPreview | null;
+  loading: boolean;
+  error: string | null;
+  reviewed: boolean;
+  submitting: boolean;
+  success: ApplyCreditAllocationResponse | null;
+  successObligation: LeaseCreditAllocationPreviewObligation | null;
+  onReviewedChange: (checked: boolean) => void;
+  onApply: (obligation: LeaseCreditAllocationPreviewObligation) => void;
+  onRefresh: () => void;
+}) {
+  if (loading && !preview) {
+    return (
+      <section className="lease-credit-allocation-panel lease-ledger-no-print" aria-label="Credit allocation review">
+        <h2>Allocate available lease credit</h2>
+        <p>Loading allocation preview…</p>
+      </section>
+    );
+  }
+
+  const suggestion = preview?.suggestedAllocations?.[0] || null;
+  const obligation = suggestion
+    ? preview?.eligibleObligations?.find((item) => item.obligationRowId === suggestion.obligationRowId) || preview?.eligibleObligations?.[0] || null
+    : preview?.eligibleObligations?.[0] || null;
+  const activeAllocations = preview?.existingActiveAllocations || [];
+  const shouldRender = Boolean(success || (preview?.allowed && suggestion && obligation) || activeAllocations.length > 0);
+  if (!shouldRender) return null;
+
+  const allocationAmountCents = suggestion?.allocationAmountCents || obligation?.suggestedAllocationAmountCents || 0;
+  const remainingCreditCents = suggestion?.afterAvailableCreditCents ?? obligation?.afterAvailableCreditCents ?? preview?.remainingAvailableCreditCents ?? 0;
+  const outstandingAfterCents =
+    suggestion?.afterOutstandingAmountCents ?? obligation?.obligationOutstandingAfterCents ?? Math.max(0, Number(obligation?.outstandingAmountCents || 0) - allocationAmountCents);
+  const applyDisabled = !reviewed || submitting || !preview?.previewFingerprint || !obligation || allocationAmountCents <= 0;
+
+  return (
+    <section className="lease-credit-allocation-panel lease-ledger-no-print" aria-label="Credit allocation review">
+      <div className="lease-credit-allocation-header">
+        <div>
+          <h2>Allocate available lease credit</h2>
+          <p>
+            This lease has available credit, but one or more obligations remain unmatched. Review the suggested allocation before applying
+            credit to the obligation.
+          </p>
+        </div>
+        <button type="button" onClick={onRefresh} disabled={loading || submitting}>
+          {loading ? "Refreshing…" : "Refresh preview"}
+        </button>
+      </div>
+
+      {success ? (
+        <div className="lease-credit-allocation-success" role="status">
+          <strong>Credit allocation recorded</strong>
+          <span>Existing lease credit was applied to this obligation.</span>
+          <span>Historical payment records were not edited.</span>
+          <div className="lease-credit-allocation-metrics">
+            <CreditAllocationMetric label="Allocation ID" value={success.allocation.allocationId} />
+            <CreditAllocationMetric label="Amount allocated" value={formatCurrencyCents(success.allocation.allocationAmountCents)} />
+            <CreditAllocationMetric label="Obligation period" value={formatAllocationPeriod({
+              periodStart: successObligation?.periodStart || obligation?.periodStart || null,
+              periodEnd: successObligation?.periodEnd || obligation?.periodEnd || null,
+            })} />
+            <CreditAllocationMetric label="Obligation due date" value={formatDate(successObligation?.dueDate || obligation?.dueDate || null)} />
+            <CreditAllocationMetric label="Remaining credit after allocation" value={formatCurrencyCents(success.allocation.afterAvailableCreditCents)} />
+            <CreditAllocationMetric label="Obligation outstanding after allocation" value={formatCurrencyCents(success.allocation.afterOutstandingAmountCents)} />
+          </div>
+          <p className="lease-credit-allocation-note">
+            This allocation records how existing lease credit was applied to an obligation. It does not edit historical payment records.
+          </p>
+        </div>
+      ) : null}
+
+      {preview && obligation && suggestion ? (
+        <>
+          <div className="lease-credit-allocation-metrics">
+            <CreditAllocationMetric label="Available credit" value={formatCurrencyCents(preview.availableCreditCents)} />
+            <CreditAllocationMetric label="Outstanding obligation" value={formatCurrencyCents(obligation.outstandingAmountCents)} />
+            <CreditAllocationMetric label="Suggested allocation" value={formatCurrencyCents(allocationAmountCents)} />
+            <CreditAllocationMetric label="Remaining credit after allocation" value={formatCurrencyCents(remainingCreditCents)} />
+          </div>
+
+          <div className="lease-credit-allocation-obligation">
+            <div>
+              <span>Period</span>
+              <strong>{formatAllocationPeriod(obligation)}</strong>
+            </div>
+            <div>
+              <span>Due date</span>
+              <strong>{formatDate(obligation.dueDate)}</strong>
+            </div>
+            <div>
+              <span>Expected</span>
+              <strong>{formatCurrencyCents(obligation.expectedAmountCents)}</strong>
+            </div>
+            <div>
+              <span>Paid</span>
+              <strong>{formatCurrencyCents(obligation.paidAmountCents)}</strong>
+            </div>
+            <div>
+              <span>Outstanding</span>
+              <strong>{formatCurrencyCents(obligation.outstandingAmountCents)}</strong>
+            </div>
+            <div>
+              <span>Status</span>
+              <strong>Allocation review</strong>
+            </div>
+            <div>
+              <span>Evidence</span>
+              <strong>Existing lease credit available for operator-reviewed allocation</strong>
+            </div>
+            <div>
+              <span>Obligation outstanding after allocation</span>
+              <strong>{formatCurrencyCents(outstandingAfterCents)}</strong>
+            </div>
+          </div>
+
+          <label className="lease-credit-allocation-confirmation">
+            <input
+              type="checkbox"
+              checked={reviewed}
+              onChange={(event) => onReviewedChange(event.target.checked)}
+              disabled={submitting}
+            />
+            <span>I have reviewed the credit balance and obligation details.</span>
+          </label>
+          <p className="lease-credit-allocation-note">
+            This records an allocation review and does not edit historical payment records.
+          </p>
+
+          {error ? <div className="lease-credit-allocation-error" role="alert">{error}</div> : null}
+
+          <div className="lease-credit-allocation-actions">
+            <button type="button" onClick={() => onApply(obligation)} disabled={applyDisabled}>
+              {submitting ? "Recording allocation…" : "Apply credit allocation"}
+            </button>
+          </div>
+        </>
+      ) : null}
+
+      {activeAllocations.length > 0 ? (
+        <div className="lease-credit-allocation-history">
+          <h3>Active allocation history</h3>
+          <p>These records show operator-reviewed allocations. Reversal controls are deferred to a follow-up workflow.</p>
+          {activeAllocations.map((allocation) => (
+            <ActiveAllocationSummary key={allocation.allocationId} allocation={allocation} />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function LeaseLedgerPage() {
   const { leaseId = "" } = useParams();
   const printSourceRef = React.useRef<HTMLDivElement | null>(null);
@@ -1265,6 +1503,14 @@ export default function LeaseLedgerPage() {
   const [noteText, setNoteText] = useState("");
   const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
   const [isPrintExportMounted, setIsPrintExportMounted] = useState(false);
+  const [creditAllocationPreview, setCreditAllocationPreview] = useState<LeaseCreditAllocationPreview | null>(null);
+  const [creditAllocationLoading, setCreditAllocationLoading] = useState(false);
+  const [creditAllocationError, setCreditAllocationError] = useState<string | null>(null);
+  const [creditAllocationReviewed, setCreditAllocationReviewed] = useState(false);
+  const [creditAllocationSubmitting, setCreditAllocationSubmitting] = useState(false);
+  const [creditAllocationSuccess, setCreditAllocationSuccess] = useState<ApplyCreditAllocationResponse | null>(null);
+  const [creditAllocationSuccessObligation, setCreditAllocationSuccessObligation] =
+    useState<LeaseCreditAllocationPreviewObligation | null>(null);
 
   const [chargeDate, setChargeDate] = useState(todayIso());
   const [chargeType, setChargeType] = useState<ChargeType>("rent");
@@ -1310,6 +1556,22 @@ export default function LeaseLedgerPage() {
     }
   };
 
+  const loadCreditAllocationPreview = async () => {
+    if (!leaseId) return;
+    setCreditAllocationLoading(true);
+    setCreditAllocationError(null);
+    try {
+      const preview = await fetchCreditAllocationPreview(leaseId);
+      setCreditAllocationPreview(preview);
+      setCreditAllocationReviewed(false);
+    } catch (err: unknown) {
+      setCreditAllocationPreview(null);
+      setCreditAllocationError(creditAllocationErrorMessage(err));
+    } finally {
+      setCreditAllocationLoading(false);
+    }
+  };
+
   const handleDecisionAction = async (decision: DecisionItem, actionType: DecisionActionType) => {
     if (!leaseId) return;
     if (!decisionActionChangesStatus(decision, actionType)) return;
@@ -1352,6 +1614,49 @@ export default function LeaseLedgerPage() {
     void loadLeaseMeta();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leaseId]);
+
+  useEffect(() => {
+    if (!leaseId || !hasUnallocatedCreditNotice) {
+      setCreditAllocationPreview(null);
+      setCreditAllocationError(null);
+      setCreditAllocationReviewed(false);
+      setCreditAllocationSuccess(null);
+      setCreditAllocationSuccessObligation(null);
+      return;
+    }
+    void loadCreditAllocationPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leaseId, hasUnallocatedCreditNotice, totals.balanceCents, outstandingObligationCents]);
+
+  async function submitCreditAllocation(obligation: LeaseCreditAllocationPreviewObligation) {
+    if (!leaseId || !creditAllocationPreview) return;
+    const suggestion = creditAllocationPreview.suggestedAllocations.find((item) => item.obligationRowId === obligation.obligationRowId);
+    const allocationAmountCents = suggestion?.allocationAmountCents || obligation.suggestedAllocationAmountCents;
+    if (!creditAllocationReviewed || !creditAllocationPreview.previewFingerprint || !allocationAmountCents) return;
+    setCreditAllocationSubmitting(true);
+    setCreditAllocationError(null);
+    try {
+      const result = await applyCreditAllocation(leaseId, {
+        obligationRowId: obligation.obligationRowId,
+        allocationAmountCents,
+        previewFingerprint: creditAllocationPreview.previewFingerprint,
+        idempotencyKey: createAllocationIdempotencyKey(leaseId, obligation.obligationRowId),
+      });
+      setCreditAllocationSuccess(result);
+      setCreditAllocationSuccessObligation(obligation);
+      setCreditAllocationPreview(result.preview);
+      setCreditAllocationReviewed(false);
+      await loadLedger({ showLoading: false });
+    } catch (err: unknown) {
+      setCreditAllocationError(creditAllocationErrorMessage(err));
+      if (typeof err === "object" && err && "preview" in err) {
+        const preview = (err as { preview?: LeaseCreditAllocationPreview }).preview;
+        if (preview) setCreditAllocationPreview(preview);
+      }
+    } finally {
+      setCreditAllocationSubmitting(false);
+    }
+  }
 
   async function submitNote() {
     const note = noteText.trim();
@@ -1633,6 +1938,21 @@ export default function LeaseLedgerPage() {
           </span>
           <span>Review the obligation rows before resolving overdue decisions.</span>
         </div>
+      ) : null}
+
+      {hasUnallocatedCreditNotice ? (
+        <LeaseCreditAllocationPanel
+          preview={creditAllocationPreview}
+          loading={creditAllocationLoading}
+          error={creditAllocationError}
+          reviewed={creditAllocationReviewed}
+          submitting={creditAllocationSubmitting}
+          success={creditAllocationSuccess}
+          successObligation={creditAllocationSuccessObligation}
+          onReviewedChange={setCreditAllocationReviewed}
+          onApply={(obligation) => void submitCreditAllocation(obligation)}
+          onRefresh={() => void loadCreditAllocationPreview()}
+        />
       ) : null}
 
       <section className="lease-ledger-csv-card">

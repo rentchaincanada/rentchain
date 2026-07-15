@@ -98,8 +98,70 @@ function buildCreditAllocationLedgerResponse(baseLedgerResponse: any, status: "r
   };
 }
 
+function buildCreditAllocationPreviewResponse(overrides: Record<string, any> = {}) {
+  const obligation = {
+    obligationKey: "lease-1:2026-06-01:200000",
+    obligationRowId: "obligation-pending-credit",
+    leaseId: "lease-1",
+    propertyId: "prop-1",
+    unitId: "unit-1",
+    tenantId: "tenant-1",
+    paymentIntentId: null,
+    rentPaymentId: null,
+    paymentDocumentId: null,
+    dueDate: "2026-06-01T00:00:00.000Z",
+    periodStart: "2026-06-01",
+    periodEnd: "2026-06-30",
+    expectedAmountCents: 200000,
+    paidAmountCents: 0,
+    existingActiveAllocationAmountCents: 0,
+    outstandingAmountCents: 200000,
+    currency: "cad",
+    suggestedAllocationAmountCents: 200000,
+    afterAvailableCreditCents: 676900,
+    obligationOutstandingAfterCents: 0,
+  };
+  return {
+    ok: true,
+    leaseId: "lease-1",
+    landlordId: "landlord-1",
+    sourceType: "lease_credit_allocation",
+    aggregateBalanceCents: -876900,
+    sourceBalanceBeforeCents: -876900,
+    grossAvailableCreditCents: 876900,
+    activeAllocationAmountCents: 0,
+    availableCreditCents: 876900,
+    eligibleObligations: [obligation],
+    obligations: [obligation],
+    suggestedAllocations: [
+      {
+        obligationRowId: "obligation-pending-credit",
+        obligationKey: "lease-1:2026-06-01:200000",
+        allocationAmountCents: 200000,
+        beforeAvailableCreditCents: 876900,
+        beforeOutstandingAmountCents: 200000,
+        afterAvailableCreditCents: 676900,
+        afterOutstandingAmountCents: 0,
+      },
+    ],
+    totalOutstandingAmountCents: 200000,
+    totalSuggestedAllocationAmountCents: 200000,
+    remainingAvailableCreditCents: 676900,
+    previewFingerprint: "preview-fingerprint-1",
+    blockedReasons: [],
+    allowed: true,
+    existingActiveAllocations: [],
+    reversedAllocations: [],
+    noLegalOrLifecycleEffect: true,
+    ...overrides,
+  };
+}
+
 const mocks = vi.hoisted(() => ({
   fetchLeaseLedger: vi.fn(),
+  fetchCreditAllocationPreview: vi.fn(),
+  applyCreditAllocation: vi.fn(),
+  reverseCreditAllocation: vi.fn(),
   addLeaseCharge: vi.fn(),
   addLeasePayment: vi.fn(),
   leaseLedgerExportUrl: vi.fn((_leaseId: string, _from?: string, _to?: string, format: "csv" | "pdf" = "csv") => `https://example.com/export.${format}`),
@@ -113,6 +175,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../api/leaseLedgerApi", () => ({
   fetchLeaseLedger: mocks.fetchLeaseLedger,
+  fetchCreditAllocationPreview: mocks.fetchCreditAllocationPreview,
+  applyCreditAllocation: mocks.applyCreditAllocation,
+  reverseCreditAllocation: mocks.reverseCreditAllocation,
   addLeaseCharge: mocks.addLeaseCharge,
   addLeasePayment: mocks.addLeasePayment,
   leaseLedgerExportUrl: mocks.leaseLedgerExportUrl,
@@ -142,6 +207,9 @@ describe("LeaseLedgerPage", () => {
   beforeEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    mocks.fetchCreditAllocationPreview.mockReset();
+    mocks.applyCreditAllocation.mockReset();
+    mocks.reverseCreditAllocation.mockReset();
     mocks.leaseLedgerExportUrl.mockImplementation(
       (_leaseId: string, _from?: string, _to?: string, format: "csv" | "pdf" = "csv") => `https://example.com/export.${format}`
     );
@@ -155,6 +223,78 @@ describe("LeaseLedgerPage", () => {
         get: () => null,
       },
     })) as unknown as typeof fetch;
+    mocks.fetchCreditAllocationPreview.mockResolvedValue(buildCreditAllocationPreviewResponse());
+    mocks.applyCreditAllocation.mockResolvedValue({
+      ok: true,
+      allocation: {
+        allocationId: "allocation-1",
+        landlordId: "landlord-1",
+        leaseId: "lease-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        tenantId: "tenant-1",
+        obligationRowId: "obligation-pending-credit",
+        obligationKey: "lease-1:2026-06-01:200000",
+        allocationAmountCents: 200000,
+        currency: "cad",
+        status: "active",
+        createdAt: "2026-07-15T00:00:00.000Z",
+        createdBy: "landlord-1",
+        createdByEmail: "landlord@example.com",
+        reason: "operator_credit_allocation",
+        note: null,
+        beforeAvailableCreditCents: 876900,
+        beforeOutstandingAmountCents: 200000,
+        afterAvailableCreditCents: 676900,
+        afterOutstandingAmountCents: 0,
+        previewFingerprint: "preview-fingerprint-1",
+        idempotencyKey: "idempotency-1",
+        sourceType: "lease_credit_allocation",
+      },
+      idempotentReplay: false,
+      beforePreview: buildCreditAllocationPreviewResponse(),
+      preview: buildCreditAllocationPreviewResponse({
+        availableCreditCents: 676900,
+        activeAllocationAmountCents: 200000,
+        eligibleObligations: [],
+        obligations: [],
+        suggestedAllocations: [],
+        totalOutstandingAmountCents: 0,
+        totalSuggestedAllocationAmountCents: 0,
+        remainingAvailableCreditCents: 676900,
+        allowed: false,
+        blockedReasons: ["no_outstanding_obligations"],
+        existingActiveAllocations: [
+          {
+            allocationId: "allocation-1",
+            landlordId: "landlord-1",
+            leaseId: "lease-1",
+            propertyId: "prop-1",
+            unitId: "unit-1",
+            tenantId: "tenant-1",
+            obligationRowId: "obligation-pending-credit",
+            obligationKey: "lease-1:2026-06-01:200000",
+            allocationAmountCents: 200000,
+            currency: "cad",
+            status: "active",
+            createdAt: "2026-07-15T00:00:00.000Z",
+            createdBy: "landlord-1",
+            createdByEmail: "landlord@example.com",
+            reason: "operator_credit_allocation",
+            note: null,
+            beforeAvailableCreditCents: 876900,
+            beforeOutstandingAmountCents: 200000,
+            afterAvailableCreditCents: 676900,
+            afterOutstandingAmountCents: 0,
+            previewFingerprint: "preview-fingerprint-1",
+            idempotencyKey: "idempotency-1",
+            sourceType: "lease_credit_allocation",
+          },
+        ],
+      }),
+      noLegalOrLifecycleEffect: true,
+    });
+    mocks.reverseCreditAllocation.mockResolvedValue({ ok: true });
     mocks.fetchLeaseLedger.mockResolvedValue({
       ok: true,
       leaseId: "lease-1",
@@ -638,6 +778,161 @@ describe("LeaseLedgerPage", () => {
     expect(screen.queryByText("Record payment or contact the tenant, then resolve once the ledger is updated.")).not.toBeInTheDocument();
   });
 
+  it("shows an operator-confirmed credit allocation panel when preview is available", async () => {
+    const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
+    mocks.fetchLeaseLedger.mockClear();
+    mocks.fetchLeaseLedger.mockResolvedValueOnce(buildCreditAllocationLedgerResponse(baseLedgerResponse, "reviewed"));
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByRole("heading", { name: "Allocate available lease credit" });
+    await waitFor(() => expect(mocks.fetchCreditAllocationPreview).toHaveBeenCalledWith("lease-1"));
+    expect(screen.getByText("This lease has available credit, but one or more obligations remain unmatched. Review the suggested allocation before applying credit to the obligation.")).toBeInTheDocument();
+    expect(screen.getByText("Available credit")).toBeInTheDocument();
+    expect(screen.getAllByText("$8,769.00").length).toBeGreaterThan(0);
+    expect(screen.getByText("Outstanding obligation")).toBeInTheDocument();
+    expect(screen.getAllByText("$2,000.00").length).toBeGreaterThan(0);
+    expect(screen.getByText("Suggested allocation")).toBeInTheDocument();
+    expect(screen.getByText("Remaining credit after allocation")).toBeInTheDocument();
+    expect(screen.getByText("$6,769.00")).toBeInTheDocument();
+    expect(screen.getByText("Existing lease credit available for operator-reviewed allocation")).toBeInTheDocument();
+    expect(screen.queryByText(/collection resolved/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/legal compliance/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps apply disabled until confirmation and sends the current preview fingerprint", async () => {
+    const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
+    mocks.fetchLeaseLedger.mockClear();
+    mocks.fetchLeaseLedger.mockResolvedValue(buildCreditAllocationLedgerResponse(baseLedgerResponse, "reviewed"));
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const applyButton = await screen.findByRole("button", { name: "Apply credit allocation" });
+    expect(applyButton).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText("I have reviewed the credit balance and obligation details."));
+    expect(applyButton).not.toBeDisabled();
+    fireEvent.click(applyButton);
+
+    await waitFor(() => expect(mocks.applyCreditAllocation).toHaveBeenCalledWith(
+      "lease-1",
+      expect.objectContaining({
+        obligationRowId: "obligation-pending-credit",
+        allocationAmountCents: 200000,
+        previewFingerprint: "preview-fingerprint-1",
+        idempotencyKey: expect.stringContaining("lease-credit-allocation:lease-1:obligation-pending-credit:"),
+      })
+    ));
+    expect(mocks.applyCreditAllocation.mock.calls[0][1]).not.toHaveProperty("obligationKey");
+  });
+
+  it("renders allocation success details after apply", async () => {
+    const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
+    mocks.fetchLeaseLedger.mockClear();
+    mocks.fetchLeaseLedger.mockResolvedValue(buildCreditAllocationLedgerResponse(baseLedgerResponse, "reviewed"));
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByLabelText("I have reviewed the credit balance and obligation details."));
+    fireEvent.click(screen.getByRole("button", { name: "Apply credit allocation" }));
+
+    expect(await screen.findByText("Credit allocation recorded")).toBeInTheDocument();
+    expect(screen.getByText("Existing lease credit was applied to this obligation.")).toBeInTheDocument();
+    expect(screen.getByText("Historical payment records were not edited.")).toBeInTheDocument();
+    expect(screen.getAllByText("allocation-1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$6,769.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$0.00").length).toBeGreaterThan(0);
+    expect(screen.getByText("This allocation records how existing lease credit was applied to an obligation. It does not edit historical payment records.")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.fetchLeaseLedger).toHaveBeenCalledTimes(2));
+  });
+
+  it("renders stale preview errors with refresh-safe copy", async () => {
+    const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
+    mocks.fetchLeaseLedger.mockClear();
+    mocks.fetchLeaseLedger.mockResolvedValue(buildCreditAllocationLedgerResponse(baseLedgerResponse, "reviewed"));
+    mocks.applyCreditAllocation.mockRejectedValueOnce({ code: "CREDIT_ALLOCATION_STATE_STALE" });
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByLabelText("I have reviewed the credit balance and obligation details."));
+    fireEvent.click(screen.getByRole("button", { name: "Apply credit allocation" }));
+
+    expect(await screen.findByText("Ledger changed since this preview was generated. Refresh the allocation preview and try again.")).toBeInTheDocument();
+    expect(screen.queryByText("Credit allocation recorded")).not.toBeInTheDocument();
+  });
+
+  it("renders generic allocation failures with ledger-safe copy", async () => {
+    const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
+    mocks.fetchLeaseLedger.mockClear();
+    mocks.fetchLeaseLedger.mockResolvedValue(buildCreditAllocationLedgerResponse(baseLedgerResponse, "reviewed"));
+    mocks.applyCreditAllocation.mockRejectedValueOnce(new Error("network failed"));
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByLabelText("I have reviewed the credit balance and obligation details."));
+    fireEvent.click(screen.getByRole("button", { name: "Apply credit allocation" }));
+
+    expect(await screen.findByText("Credit allocation could not be recorded. No ledger records were changed.")).toBeInTheDocument();
+  });
+
+  it("does not show the allocation panel when the preview is blocked with no eligible obligations", async () => {
+    const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
+    mocks.fetchLeaseLedger.mockClear();
+    mocks.fetchLeaseLedger.mockResolvedValueOnce(buildCreditAllocationLedgerResponse(baseLedgerResponse, "reviewed"));
+    mocks.fetchCreditAllocationPreview.mockResolvedValueOnce(buildCreditAllocationPreviewResponse({
+      allowed: false,
+      eligibleObligations: [],
+      obligations: [],
+      suggestedAllocations: [],
+      blockedReasons: ["no_outstanding_obligations"],
+      totalOutstandingAmountCents: 0,
+      totalSuggestedAllocationAmountCents: 0,
+    }));
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Credit balance needs allocation review")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.fetchCreditAllocationPreview).toHaveBeenCalledWith("lease-1"));
+    await waitFor(() => expect(screen.queryByText("Allocate available lease credit")).not.toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Apply credit allocation" })).not.toBeInTheDocument();
+  });
+
   it("renders resolved allocation-review decisions as passive workflow state", async () => {
     const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
     mocks.fetchLeaseLedger.mockClear();
@@ -946,6 +1241,9 @@ describe("LeaseLedgerPage", () => {
       expect(printText).toContain("Review payment allocation");
       expect(printText).toContain("Allocation review");
       expect(printText).toContain("Payments exceed charges in aggregate, but one or more obligations remain unmatched.");
+      expect(printText).not.toContain("Allocate available lease credit");
+      expect(printText).not.toContain("Apply credit allocation");
+      expect(printText).not.toContain("I have reviewed the credit balance and obligation details.");
       expect(printDecisionText).toContain("Resolved outcome");
       expect(printDecisionText).toContain("Marked resolved as an allocation-review item. No rent-collection action should be taken until unmatched payments are reviewed.");
       expect(printDecisionText).not.toContain("Recommended next action");
@@ -964,6 +1262,7 @@ describe("LeaseLedgerPage", () => {
     );
 
     await screen.findByText("Review payment allocation");
+    await screen.findByText("Allocate available lease credit");
     fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
 
     await waitFor(() => expect(printSpy).toHaveBeenCalled());

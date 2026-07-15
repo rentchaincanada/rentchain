@@ -101,6 +101,121 @@
   padding: 12px;
 }
 
+.lease-credit-allocation-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid rgba(36, 88, 66, 0.22);
+  border-radius: 12px;
+  background: #f7fbf8;
+  box-shadow: 0 10px 24px rgba(36, 88, 66, 0.08);
+  color: #1f3529;
+  padding: 12px;
+}
+
+.lease-credit-allocation-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lease-credit-allocation-header h2,
+.lease-credit-allocation-history h3 {
+  margin: 0;
+  color: #1f3529;
+  font-size: 1rem;
+}
+
+.lease-credit-allocation-header p,
+.lease-credit-allocation-history p,
+.lease-credit-allocation-note {
+  margin: 3px 0 0;
+  color: #3f5f4d;
+  font-size: 13px;
+}
+
+.lease-credit-allocation-metrics,
+.lease-credit-allocation-obligation,
+.lease-credit-allocation-history-item {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  gap: 8px;
+}
+
+.lease-credit-allocation-metric,
+.lease-credit-allocation-obligation > div,
+.lease-credit-allocation-history-item > div {
+  min-width: 0;
+  border: 1px solid rgba(36, 88, 66, 0.16);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.lease-credit-allocation-metric span,
+.lease-credit-allocation-obligation span,
+.lease-credit-allocation-history-item span {
+  display: block;
+  color: #3f5f4d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.lease-credit-allocation-metric strong,
+.lease-credit-allocation-obligation strong,
+.lease-credit-allocation-history-item strong {
+  display: block;
+  color: #1f3529;
+  overflow-wrap: anywhere;
+}
+
+.lease-credit-allocation-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  color: #1f3529;
+  font-weight: 800;
+}
+
+.lease-credit-allocation-confirmation input {
+  margin-top: 2px;
+}
+
+.lease-credit-allocation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lease-credit-allocation-success {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  background: #f0fdf4;
+  color: #166534;
+  padding: 12px;
+}
+
+.lease-credit-allocation-error {
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #991b1b;
+  padding: 10px;
+}
+
+.lease-credit-allocation-history {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid rgba(36, 88, 66, 0.16);
+  padding-top: 10px;
+}
+
 .lease-ledger-decision-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
@@ -210,6 +325,8 @@
   .lease-ledger-actions > a,
   .lease-ledger-actions > button,
   .lease-ledger-csv-card-header > button,
+  .lease-credit-allocation-header > button,
+  .lease-credit-allocation-actions > button,
   .lease-ledger-next-action > button {
     flex: 1 1 140px;
     min-width: 0;
@@ -509,6 +626,7 @@
 
   .lease-ledger-print-root .lease-ledger-actions,
   .lease-ledger-print-root .lease-ledger-csv-card,
+  .lease-ledger-print-root .lease-ledger-no-print,
   .lease-ledger-print-root input,
   .lease-ledger-print-root select,
   .lease-ledger-print-root textarea,
