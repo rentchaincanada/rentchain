@@ -1,11 +1,22 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import SchedulingWorkspacePage from "./SchedulingWorkspacePage";
+
+vi.mock("../context/useAuth", () => ({
+  useAuth: () => ({
+    user: {
+      id: "user-1",
+      email: "landlord@example.com",
+      landlordId: "landlord-1",
+    },
+  }),
+}));
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
 });
 
 function renderPage() {
@@ -64,6 +75,22 @@ describe("SchedulingWorkspacePage", () => {
     expect(within(selectedDay).getByText("1 note")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("Call tenant at noon")).not.toBeInTheDocument();
     expect(screen.getByDisplayValue("Confirm maintenance access")).toBeInTheDocument();
+  });
+
+  it("persists selected-day notes after the scheduling page remounts", () => {
+    const { unmount } = renderPage();
+
+    const noteInput = screen.getByLabelText("New schedule note");
+    fireEvent.change(noteInput, { target: { value: "Confirm elevator booking" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
+
+    expect(screen.getByDisplayValue("Confirm elevator booking")).toBeInTheDocument();
+
+    unmount();
+    renderPage();
+
+    expect(screen.getByDisplayValue("Confirm elevator booking")).toBeInTheDocument();
+    expect(screen.getByText(/Notes are saved in this browser for your account/i)).toBeInTheDocument();
   });
 
   it("keeps scheduling review recommendations read-only", () => {

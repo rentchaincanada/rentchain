@@ -11,6 +11,14 @@ import {
   Wrench,
 } from "lucide-react";
 import { Button, Card, Input } from "../components/ui/Ui";
+import { useAuth } from "../context/useAuth";
+import {
+  dateKeyFromLocalDate,
+  readSchedulingDayNotes,
+  writeSchedulingDayNotes,
+  type SchedulingDayNote,
+  type SchedulingDayNotesByDate,
+} from "../lib/schedulingDayNotes";
 import { radius, spacing, text } from "../styles/tokens";
 
 type CalendarView = "month" | "week";
@@ -20,11 +28,6 @@ type WorkspaceItem = {
   detail: string;
   status: string;
   to: string;
-};
-
-type ScheduleNote = {
-  id: string;
-  text: string;
 };
 
 const viewings: WorkspaceItem[] = [
@@ -70,12 +73,8 @@ const reviewItems = [
   "Suggested scheduling windows will appear as calendar data becomes available.",
 ];
 
-function pad(value: number) {
-  return String(value).padStart(2, "0");
-}
-
 function dayKey(date: Date) {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return dateKeyFromLocalDate(date);
 }
 
 function formatDay(date: Date) {
@@ -173,16 +172,41 @@ function WorkspaceList({
 }
 
 export default function SchedulingWorkspacePage() {
+  const { user } = useAuth();
   const today = React.useMemo(() => new Date(), []);
+  const notesScope = React.useMemo(
+    () => ({
+      actorLandlordId: user?.actorLandlordId,
+      landlordId: user?.landlordId,
+      userId: user?.id,
+      email: user?.email,
+    }),
+    [user?.actorLandlordId, user?.landlordId, user?.id, user?.email]
+  );
   const [calendarView, setCalendarView] = React.useState<CalendarView>("month");
   const [activeMonth, setActiveMonth] = React.useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = React.useState(() => new Date(today.getFullYear(), today.getMonth(), today.getDate()));
-  const [notesByDate, setNotesByDate] = React.useState<Record<string, ScheduleNote[]>>({});
+  const [notesByDate, setNotesByDate] = React.useState<SchedulingDayNotesByDate>(() => readSchedulingDayNotes(notesScope));
   const [noteDraft, setNoteDraft] = React.useState("");
 
   const selectedKey = dayKey(selectedDate);
   const selectedNotes = notesByDate[selectedKey] || [];
   const days = calendarView === "month" ? buildMonthDays(activeMonth) : buildWeekDays(selectedDate);
+
+  React.useEffect(() => {
+    setNotesByDate(readSchedulingDayNotes(notesScope));
+  }, [notesScope]);
+
+  const updateStoredNotes = React.useCallback(
+    (updater: (current: SchedulingDayNotesByDate) => SchedulingDayNotesByDate) => {
+      setNotesByDate((current) => {
+        const next = updater(current);
+        writeSchedulingDayNotes(notesScope, next);
+        return next;
+      });
+    },
+    [notesScope]
+  );
 
   const selectDate = (date: Date) => {
     const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -192,11 +216,15 @@ export default function SchedulingWorkspacePage() {
   };
 
   const addNote = () => {
-    const note: ScheduleNote = {
+    const text = noteDraft.trim();
+    if (!text) {
+      return;
+    }
+    const note: SchedulingDayNote = {
       id: `note-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      text: noteDraft.trim(),
+      text,
     };
-    setNotesByDate((current) => {
+    updateStoredNotes((current) => {
       const currentNotes = current[selectedKey] || [];
       return { ...current, [selectedKey]: [...currentNotes, note] };
     });
@@ -204,7 +232,7 @@ export default function SchedulingWorkspacePage() {
   };
 
   const updateNote = (noteId: string, value: string) => {
-    setNotesByDate((current) => {
+    updateStoredNotes((current) => {
       const nextNotes = (current[selectedKey] || []).map((note) =>
         note.id === noteId ? { ...note, text: value } : note
       );
@@ -213,7 +241,7 @@ export default function SchedulingWorkspacePage() {
   };
 
   const deleteNote = (noteId: string) => {
-    setNotesByDate((current) => {
+    updateStoredNotes((current) => {
       const nextNotes = (current[selectedKey] || []).filter((note) => note.id !== noteId);
       const next = { ...current };
       if (nextNotes.length) {
@@ -606,7 +634,9 @@ export default function SchedulingWorkspacePage() {
             <SectionHeader icon={FileText} title="Notes" />
             <div style={{ display: "grid", gap: spacing.sm }}>
               <strong>{formatDay(selectedDate)}</strong>
-              <div className="scheduling-local-note">Notes are local to this Phase 1 scheduling preview.</div>
+              <div className="scheduling-local-note">
+                Notes are saved in this browser for your account. Team-shared scheduling notes need backend persistence.
+              </div>
               {selectedNotes.length ? (
                 <div className="scheduling-note-list" aria-label="Saved schedule notes">
                   {selectedNotes.map((note, index) => (
@@ -627,13 +657,13 @@ export default function SchedulingWorkspacePage() {
                   ))}
                 </div>
               ) : (
-                <div className="scheduling-local-note">No notes for this day.</div>
+                <div className="scheduling-local-note">No saved notes for this day.</div>
               )}
               <Input
                 aria-label="New schedule note"
                 value={noteDraft}
                 onChange={(event) => setNoteDraft(event.target.value)}
-                placeholder="Add another note for this day"
+                placeholder="Add a browser-saved note for this day"
               />
               <div className="scheduling-note-actions">
                 <Button type="button" className="scheduling-primary-action" onClick={addNote} aria-label="Add note">

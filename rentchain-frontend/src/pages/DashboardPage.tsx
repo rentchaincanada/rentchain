@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { MacShell } from "../components/layout/MacShell";
 import { Card, SkeletonBlock } from "../components/ui/Ui";
+import { useAuth } from "../context/useAuth";
+import { dateKeyFromLocalDate, getSchedulingDayNotes } from "../lib/schedulingDayNotes";
 import { colors, layout, spacing, text } from "../styles/tokens";
 import {
   fetchLandlordDecisionQueue,
@@ -835,6 +837,7 @@ function UpcomingActions({ queue }: { queue: LandlordDecisionQueueResponse | nul
 }
 
 function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse | null }) {
+  const { user } = useAuth();
   const [view, setView] = React.useState<"week" | "month">("week");
   const today = React.useMemo(() => startOfDay(new Date()), []);
   const [selectedDay, setSelectedDay] = React.useState<Date>(today);
@@ -864,6 +867,19 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
   const selectedDayLabel = formatFullDate(selectedDay);
   const visibleItemSummary = pluralize(visibleItems.length, "dated item");
   const selectedItemSummary = pluralize(selectedDayItems.length, "item");
+  const notesScope = React.useMemo(
+    () => ({
+      actorLandlordId: user?.actorLandlordId,
+      landlordId: user?.landlordId,
+      userId: user?.id,
+      email: user?.email,
+    }),
+    [user?.actorLandlordId, user?.landlordId, user?.id, user?.email]
+  );
+  const selectedDayNotes = React.useMemo(
+    () => getSchedulingDayNotes(notesScope, dateKeyFromLocalDate(selectedDay)),
+    [notesScope, selectedDay]
+  );
 
   return (
     <Card style={sectionCard} data-testid="calendar-preview-section">
@@ -1009,14 +1025,22 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 210px), 1fr))", gap: spacing.sm }}>
           <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
             <div style={{ fontWeight: 850 }}>Day notes</div>
-            <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.45 }}>
-              No notes recorded for this day. Scheduling notes are not yet connected to this dashboard view.
-            </div>
+            {selectedDayNotes.length ? (
+              <ul style={{ margin: 0, paddingLeft: 18, color: text.muted, fontSize: 13, lineHeight: 1.45 }}>
+                {selectedDayNotes.map((note) => (
+                  <li key={note.id}>{note.text}</li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.45 }}>
+                No saved scheduling notes for this day. Browser-saved notes from the Scheduling page will appear here for this account.
+              </div>
+            )}
           </div>
           <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
             <div style={{ fontWeight: 850 }}>Scheduling summary</div>
             <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.45 }}>
-              The full Scheduling page groups viewings, maintenance requests, work orders, screening, and local schedule notes. This dashboard summary uses dated Operations queue items, with {visibleItemSummary} visible in the current {view === "week" ? "7-day" : "month"} view.
+              The full Scheduling page groups viewings, maintenance requests, work orders, screening, and browser-saved notes. This dashboard summary uses dated Operations queue items, with {visibleItemSummary} visible in the current {view === "week" ? "7-day" : "month"} view.
             </div>
           </div>
         </div>
