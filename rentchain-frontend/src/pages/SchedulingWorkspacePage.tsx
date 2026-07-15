@@ -11,12 +11,15 @@ import {
   Wrench,
 } from "lucide-react";
 import { Button, Card, Input } from "../components/ui/Ui";
-import { useAuth } from "../context/useAuth";
+import {
+  createSchedulingDayNote,
+  deleteSchedulingDayNote,
+  fetchSchedulingDayNotesRange,
+  updateSchedulingDayNote,
+} from "../api/schedulingDayNotesApi";
 import {
   dateKeyFromLocalDate,
   parseSchedulingNoteTime,
-  readSchedulingDayNotes,
-  writeSchedulingDayNotes,
   type SchedulingDayNote,
   type SchedulingDayNotesByDate,
 } from "../lib/schedulingDayNotes";
@@ -141,6 +144,19 @@ function buildWeekDays(date: Date) {
   });
 }
 
+function dateKeysInRange(startDate: string, endDate: string) {
+  const start = parseDateKey(startDate);
+  const end = parseDateKey(endDate);
+  if (!start || !end) return [];
+  const keys: string[] = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    keys.push(dayKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return keys;
+}
+
 function SectionHeader({
   icon: Icon,
   title,
@@ -199,30 +215,40 @@ function WorkspaceList({
 }
 
 export default function SchedulingWorkspacePage() {
-  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const today = React.useMemo(() => new Date(), []);
   const requestedDate = React.useMemo(() => parseDateKey(searchParams.get("date")), [searchParams]);
   const initialSelectedDate = requestedDate || new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const notesScope = React.useMemo(
-    () => ({
-      actorLandlordId: user?.actorLandlordId,
-      landlordId: user?.landlordId,
-      userId: user?.id,
-      email: user?.email,
-    }),
-    [user?.actorLandlordId, user?.landlordId, user?.id, user?.email]
-  );
   const [calendarView, setCalendarView] = React.useState<CalendarView>(() => viewFromParam(searchParams.get("view")));
   const [activeMonth, setActiveMonth] = React.useState(() => new Date(initialSelectedDate.getFullYear(), initialSelectedDate.getMonth(), 1));
   const [selectedDate, setSelectedDate] = React.useState(() => initialSelectedDate);
-  const [notesByDate, setNotesByDate] = React.useState<SchedulingDayNotesByDate>(() => readSchedulingDayNotes(notesScope));
+  const [notesByDate, setNotesByDate] = React.useState<SchedulingDayNotesByDate>({});
   const [noteDraft, setNoteDraft] = React.useState("");
+  const [notesLoading, setNotesLoading] = React.useState(false);
+  const [notesError, setNotesError] = React.useState<string | null>(null);
+  const [notesStatus, setNotesStatus] = React.useState<string | null>(null);
+  const [draftSaving, setDraftSaving] = React.useState(false);
+  const [savingNoteIds, setSavingNoteIds] = React.useState<Record<string, boolean>>({});
 
   const selectedKey = dayKey(selectedDate);
   const selectedNotes = notesByDate[selectedKey] || [];
   const weekDays = React.useMemo(() => buildWeekDays(selectedDate), [selectedDate]);
   const monthDays = React.useMemo(() => buildMonthDays(activeMonth), [activeMonth]);
+  const visibleRange = React.useMemo(() => {
+    if (calendarView === "week") {
+      return {
+        startDate: dayKey(weekDays[0]),
+        endDate: dayKey(weekDays[weekDays.length - 1]),
+      };
+    }
+    if (calendarView === "month") {
+      return {
+        startDate: dayKey(monthDays[0]),
+        endDate: dayKey(monthDays[monthDays.length - 1]),
+      };
+    }
+    return { startDate: selectedKey, endDate: selectedKey };
+  }, [calendarView, monthDays, selectedKey, weekDays]);
   const selectedNotesByTime = React.useMemo(() => {
     const grouped = scheduleHours.reduce<Record<number, SchedulingDayNote[]>>((result, hour) => {
       result[hour] = [];
@@ -241,10 +267,6 @@ export default function SchedulingWorkspacePage() {
   }, [selectedNotes]);
 
   React.useEffect(() => {
-    setNotesByDate(readSchedulingDayNotes(notesScope));
-  }, [notesScope]);
-
-  React.useEffect(() => {
     const nextDate = parseDateKey(searchParams.get("date"));
     const nextView = viewFromParam(searchParams.get("view"));
     if (nextDate) {
@@ -261,16 +283,41 @@ export default function SchedulingWorkspacePage() {
     [setSearchParams]
   );
 
-  const updateStoredNotes = React.useCallback(
-    (updater: (current: SchedulingDayNotesByDate) => SchedulingDayNotesByDate) => {
-      setNotesByDate((current) => {
-        const next = updater(current);
-        writeSchedulingDayNotes(notesScope, next);
-        return next;
+  React.useEffect(() => {
+    let active = true;
+    setNotesLoading(true);
+    setNotesError(null);
+    fetchSchedulingDayNotesRange(visibleRange)
+      .then((nextNotes) => {
+        if (!active) return;
+        setNotesByDate((current) => {
+          const next = { ...current };
+          dateKeysInRange(visibleRange.startDate, visibleRange.endDate).forEach((dateKey) => {
+            delete next[dateKey];
+          });
+          return { ...next, ...nextNotes };
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setNotesError("Scheduling notes could not be loaded. Try refreshing this view.");
+      })
+      .finally(() => {
+        if (active) setNotesLoading(false);
       });
-    },
-    [notesScope]
-  );
+    return () => {
+      active = false;
+    };
+  }, [visibleRange]);
+
+  const replaceNotesForDate = React.useCallback((dateKey: string, notes: SchedulingDayNote[]) => {
+    setNotesByDate((current) => {
+      const next = { ...current };
+      if (notes.length) next[dateKey] = notes;
+      else delete next[dateKey];
+      return next;
+    });
+  }, []);
 
   const selectDate = (date: Date, nextView: CalendarView = "day") => {
     const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -286,42 +333,72 @@ export default function SchedulingWorkspacePage() {
     syncRoute(nextView, selectedDate);
   };
 
-  const addNote = () => {
+  const addNote = async () => {
     const text = noteDraft.trim();
     if (!text) {
       return;
     }
-    const note: SchedulingDayNote = {
-      id: `note-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      text,
-    };
-    updateStoredNotes((current) => {
-      const currentNotes = current[selectedKey] || [];
-      return { ...current, [selectedKey]: [...currentNotes, note] };
-    });
-    setNoteDraft("");
+    setDraftSaving(true);
+    setNotesError(null);
+    setNotesStatus(null);
+    try {
+      const note = await createSchedulingDayNote(selectedKey, { noteText: text, source: "scheduling" });
+      replaceNotesForDate(selectedKey, [...selectedNotes, note]);
+      setNoteDraft("");
+      setNotesStatus("Workspace note saved.");
+    } catch {
+      setNotesError("Scheduling note could not be saved. No notification or calendar event was created.");
+    } finally {
+      setDraftSaving(false);
+    }
   };
 
   const updateNote = (noteId: string, value: string) => {
-    updateStoredNotes((current) => {
-      const nextNotes = (current[selectedKey] || []).map((note) =>
-        note.id === noteId ? { ...note, text: value } : note
-      );
-      return { ...current, [selectedKey]: nextNotes };
-    });
+    replaceNotesForDate(
+      selectedKey,
+      selectedNotes.map((note) => (note.id === noteId ? { ...note, text: value } : note))
+    );
   };
 
-  const deleteNote = (noteId: string) => {
-    updateStoredNotes((current) => {
-      const nextNotes = (current[selectedKey] || []).filter((note) => note.id !== noteId);
-      const next = { ...current };
-      if (nextNotes.length) {
-        next[selectedKey] = nextNotes;
-      } else {
-        delete next[selectedKey];
-      }
-      return next;
-    });
+  const saveNote = async (note: SchedulingDayNote) => {
+    const text = note.text.trim();
+    if (!text) {
+      setNotesError("Scheduling note text is required. Delete the note if it is no longer needed.");
+      return;
+    }
+    setSavingNoteIds((current) => ({ ...current, [note.id]: true }));
+    setNotesError(null);
+    setNotesStatus(null);
+    try {
+      const saved = await updateSchedulingDayNote(selectedKey, note.id, { noteText: text, source: "scheduling" });
+      replaceNotesForDate(
+        selectedKey,
+        selectedNotes.map((current) => (current.id === saved.id ? saved : current))
+      );
+      setNotesStatus("Workspace note saved.");
+    } catch {
+      setNotesError("Scheduling note could not be saved. Refresh this view and try again.");
+    } finally {
+      setSavingNoteIds((current) => ({ ...current, [note.id]: false }));
+    }
+  };
+
+  const deleteNote = async (noteId: string) => {
+    setSavingNoteIds((current) => ({ ...current, [noteId]: true }));
+    setNotesError(null);
+    setNotesStatus(null);
+    try {
+      await deleteSchedulingDayNote(selectedKey, noteId);
+      replaceNotesForDate(
+        selectedKey,
+        selectedNotes.filter((note) => note.id !== noteId)
+      );
+      setNotesStatus("Workspace note deleted.");
+    } catch {
+      setNotesError("Scheduling note could not be deleted. Refresh this view and try again.");
+    } finally {
+      setSavingNoteIds((current) => ({ ...current, [noteId]: false }));
+    }
   };
 
   const moveMonth = (offset: number) => {
@@ -767,8 +844,9 @@ export default function SchedulingWorkspacePage() {
             {calendarView === "day" ? (
               <div className="scheduling-day-summary" aria-label="Selected day schedule">
                 <div className="scheduling-local-note">
-                  7 AM-10 PM schedule. Notes with clear times are placed into hourly slots; other notes stay unscheduled.
+                  7 AM-10 PM schedule. Workspace notes with clear times are placed into hourly slots; other notes stay unscheduled.
                 </div>
+                {notesLoading ? <div className="scheduling-local-note">Loading saved scheduling notes.</div> : null}
                 {selectedNotes.length === 0 ? (
                   <div className="scheduling-local-note">No saved notes for this day.</div>
                 ) : null}
@@ -866,8 +944,10 @@ export default function SchedulingWorkspacePage() {
             <div style={{ display: "grid", gap: spacing.sm }}>
               <strong>{formatDay(selectedDate)}</strong>
               <div className="scheduling-local-note">
-                Notes are saved in this browser for your account. Team-shared scheduling notes need backend persistence.
+                Notes are saved as workspace notes for this landlord account.
               </div>
+              {notesError ? <div className="scheduling-local-note" role="alert">{notesError}</div> : null}
+              {notesStatus ? <div className="scheduling-local-note">{notesStatus}</div> : null}
               {selectedNotes.length ? (
                 <div className="scheduling-note-list" aria-label="Saved schedule notes">
                   {selectedNotes.map((note, index) => (
@@ -878,11 +958,11 @@ export default function SchedulingWorkspacePage() {
                         onChange={(event) => updateNote(note.id, event.target.value)}
                         placeholder="Note text"
                       />
-                      <Button type="button" variant="secondary" onClick={() => updateNote(note.id, note.text)}>
-                        Save
+                      <Button type="button" variant="secondary" onClick={() => saveNote(note)} disabled={Boolean(savingNoteIds[note.id])}>
+                        {savingNoteIds[note.id] ? "Saving" : "Save"}
                       </Button>
-                      <Button type="button" variant="ghost" onClick={() => deleteNote(note.id)}>
-                        Delete
+                      <Button type="button" variant="ghost" onClick={() => deleteNote(note.id)} disabled={Boolean(savingNoteIds[note.id])}>
+                        {savingNoteIds[note.id] ? "Deleting" : "Delete"}
                       </Button>
                     </div>
                   ))}
@@ -894,16 +974,16 @@ export default function SchedulingWorkspacePage() {
                 aria-label="New schedule note"
                 value={noteDraft}
                 onChange={(event) => setNoteDraft(event.target.value)}
-                placeholder="Add a browser-saved note for this day"
+                placeholder="Add a workspace note for this day"
               />
               <div className="scheduling-note-actions">
-                <Button type="button" className="scheduling-primary-action" onClick={addNote} aria-label="Add note">
+                <Button type="button" className="scheduling-primary-action" onClick={addNote} aria-label="Add note" disabled={draftSaving}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                     <Plus size={16} aria-hidden="true" />
-                    Add note
+                    {draftSaving ? "Saving" : "Add note"}
                   </span>
                 </Button>
-                <Button type="button" variant="ghost" onClick={() => setNoteDraft("")} disabled={!noteDraft}>
+                <Button type="button" variant="ghost" onClick={() => setNoteDraft("")} disabled={!noteDraft || draftSaving}>
                   Clear draft
                 </Button>
               </div>
