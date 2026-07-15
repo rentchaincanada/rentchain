@@ -63,9 +63,9 @@ function titleCase(value: unknown): string {
 }
 
 const signalReasonDisplayCopy: Record<string, string> = {
-  aggregate_credit_balance_with_unmatched_obligations: "Aggregate credit balance with unmatched obligations",
+  aggregate_credit_balance_with_unmatched_obligations: "Available credit needs rent charge review",
   manual_review_required: "Manual review required",
-  obligation_pending_after_due_date: "Obligation remains unmatched after due date",
+  obligation_pending_after_due_date: "Rent charge was not yet matched to available credit",
   provider_received: "Provider received payment evidence",
   rent_payment_checkout_created: "Provider checkout was created",
 };
