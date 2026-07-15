@@ -23,11 +23,11 @@ import {
   dateKeyFromLocalDate,
   legacySchedulingDayNoteFingerprint,
   markLegacySchedulingDayNotesMigrated,
-  parseSchedulingNoteTime,
   readLegacySchedulingDayNotes,
   type SchedulingDayNote,
   type SchedulingDayNotesByDate,
 } from "../lib/schedulingDayNotes";
+import { parseSchedulingNote, type SchedulingNoteParseResult } from "../lib/schedulingNoteParser";
 import { radius, spacing, text } from "../styles/tokens";
 
 type CalendarView = "day" | "week" | "month";
@@ -114,10 +114,6 @@ function formatMonth(date: Date) {
 function formatHour(hour: number) {
   const value = hour % 12 || 12;
   return `${value} ${hour >= 12 ? "PM" : "AM"}`;
-}
-
-function formatNoteTime(hour: number, minute: number) {
-  return minute ? `${formatHour(hour).replace(" ", `:${String(minute).padStart(2, "0")} `)}` : formatHour(hour);
 }
 
 function startOfMonthGrid(date: Date) {
@@ -269,22 +265,32 @@ export default function SchedulingWorkspacePage() {
     }
     return { startDate: selectedKey, endDate: selectedKey };
   }, [calendarView, monthDays, selectedKey, weekDays]);
-  const selectedNotesByTime = React.useMemo(() => {
-    const grouped = scheduleHours.reduce<Record<number, SchedulingDayNote[]>>((result, hour) => {
+  const selectedParsedNotes = React.useMemo(
+    () => selectedNotes.map((note) => ({ note, parsed: parseSchedulingNote({ noteId: note.id, text: note.text, date: selectedKey }) })),
+    [selectedKey, selectedNotes]
+  );
+  const selectedNotePlan = React.useMemo(() => {
+    const grouped = scheduleHours.reduce<Record<number, Array<{ note: SchedulingDayNote; parsed: SchedulingNoteParseResult }>>>((result, hour) => {
       result[hour] = [];
       return result;
     }, {});
-    const unscheduled: SchedulingDayNote[] = [];
-    selectedNotes.forEach((note) => {
-      const parsed = parseSchedulingNoteTime(note.text);
-      if (parsed && parsed.hour >= 7 && parsed.hour <= 22) {
-        grouped[parsed.hour].push(note);
+    const suggestions: Array<{ note: SchedulingDayNote; parsed: SchedulingNoteParseResult }> = [];
+    const needsReview: Array<{ note: SchedulingDayNote; parsed: SchedulingNoteParseResult }> = [];
+    const unscheduled: Array<{ note: SchedulingDayNote; parsed: SchedulingNoteParseResult }> = [];
+    selectedParsedNotes.forEach((entry) => {
+      const hour = entry.parsed.timeMinutes === undefined ? null : Math.floor(entry.parsed.timeMinutes / 60);
+      if (entry.parsed.placementType === "exact_time" && hour !== null && hour >= 7 && hour <= 22) {
+        grouped[hour].push(entry);
+      } else if (entry.parsed.placementType === "daypart") {
+        suggestions.push(entry);
+      } else if (entry.parsed.needsReview) {
+        needsReview.push(entry);
       } else {
-        unscheduled.push(note);
+        unscheduled.push(entry);
       }
     });
-    return { grouped, unscheduled };
-  }, [selectedNotes]);
+    return { grouped, suggestions, needsReview, unscheduled };
+  }, [selectedParsedNotes]);
   const legacyNotes = React.useMemo(
     () =>
       Object.entries(legacyNotesByDate).flatMap(([date, notes]) =>
@@ -989,17 +995,16 @@ export default function SchedulingWorkspacePage() {
                 ) : null}
                 <div className="scheduling-hour-list" aria-label="7 AM-10 PM schedule">
                   {scheduleHours.map((hour) => {
-                    const notes = selectedNotesByTime.grouped[hour] || [];
+                    const notes = selectedNotePlan.grouped[hour] || [];
                     return (
                       <div key={hour} className="scheduling-hour-row" aria-label={`Schedule slot ${formatHour(hour)}`}>
                         <div className="scheduling-hour-label">{formatHour(hour)}</div>
                         <div className="scheduling-slot-notes">
                           {notes.length ? (
-                            notes.map((note) => {
-                              const parsed = parseSchedulingNoteTime(note.text);
+                            notes.map(({ note, parsed }) => {
                               return (
                                 <div key={note.id} className="scheduling-slot-note">
-                                  <strong>{parsed ? formatNoteTime(parsed.hour, parsed.minute) : formatHour(hour)}</strong>
+                                  <strong>{parsed.timeLabel || formatHour(hour)}</strong>
                                   <div>{note.text}</div>
                                 </div>
                               );
@@ -1013,10 +1018,45 @@ export default function SchedulingWorkspacePage() {
                   })}
                 </div>
                 <div style={{ display: "grid", gap: spacing.sm }}>
+                  <strong>Suggested day plan</strong>
+                  <div className="scheduling-local-note">
+                    Suggested from note text. AI-assisted scheduling is advisory; no calendar event has been created.
+                  </div>
+                  {selectedNotePlan.suggestions.length ? (
+                    <div className="scheduling-note-list" aria-label="Suggested day plan">
+                      {selectedNotePlan.suggestions.map(({ note, parsed }) => (
+                        <div key={note.id} className="scheduling-slot-note">
+                          <strong>{parsed.timeLabel}</strong>
+                          <div>{note.text}</div>
+                          <small className="scheduling-local-note">Suggested by note parser · {parsed.reason}</small>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="scheduling-local-note">No daypart suggestions for this day.</div>
+                  )}
+                </div>
+                <div style={{ display: "grid", gap: spacing.sm }}>
+                  <strong>Needs review</strong>
+                  {selectedNotePlan.needsReview.length ? (
+                    <div className="scheduling-note-list" aria-label="Notes needing review">
+                      {selectedNotePlan.needsReview.map(({ note, parsed }) => (
+                        <div key={note.id} className="scheduling-slot-note">
+                          {parsed.timeLabel ? <strong>{parsed.timeLabel}</strong> : null}
+                          <div>{note.text}</div>
+                          <small className="scheduling-local-note">Needs review · {parsed.reason}</small>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="scheduling-local-note">No ambiguous timing cues need review.</div>
+                  )}
+                </div>
+                <div style={{ display: "grid", gap: spacing.sm }}>
                   <strong>Unscheduled notes</strong>
-                  {selectedNotesByTime.unscheduled.length ? (
+                  {selectedNotePlan.unscheduled.length ? (
                     <div className="scheduling-note-list" aria-label="Unscheduled notes">
-                      {selectedNotesByTime.unscheduled.map((note) => (
+                      {selectedNotePlan.unscheduled.map(({ note }) => (
                         <div key={note.id} className="scheduling-slot-note">
                           {note.text}
                         </div>

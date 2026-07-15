@@ -20,7 +20,8 @@ import {
 import { MacShell } from "../components/layout/MacShell";
 import { Card, SkeletonBlock } from "../components/ui/Ui";
 import { fetchSchedulingDayNotesRange } from "../api/schedulingDayNotesApi";
-import { dateKeyFromLocalDate, parseSchedulingNoteTime, type SchedulingDayNotesByDate } from "../lib/schedulingDayNotes";
+import { dateKeyFromLocalDate, type SchedulingDayNotesByDate } from "../lib/schedulingDayNotes";
+import { parseSchedulingNote } from "../lib/schedulingNoteParser";
 import { colors, layout, spacing, text } from "../styles/tokens";
 import {
   fetchLandlordDecisionQueue,
@@ -887,24 +888,32 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
   const [notesError, setNotesError] = React.useState<string | null>(null);
   const visibleNoteCount = days.reduce((total, day) => total + (notesByDate[dateKeyFromLocalDate(day)]?.length || 0), 0);
   const selectedDayNotes = notesByDate[dateKeyFromLocalDate(selectedDay)] || [];
+  const selectedParsedNotes = React.useMemo(
+    () =>
+      selectedDayNotes.map((note) => ({
+        note,
+        parsed: parseSchedulingNote({ noteId: note.id, text: note.text, date: dateKeyFromLocalDate(selectedDay) }),
+      })),
+    [selectedDay, selectedDayNotes]
+  );
   const selectedScheduledNotes = React.useMemo(
     () =>
-      selectedDayNotes
-        .map((note) => ({ note, parsedTime: parseSchedulingNoteTime(note.text) }))
-        .filter(
-          (
-            entry
-          ): entry is {
-            note: (typeof selectedDayNotes)[number];
-            parsedTime: Exclude<ReturnType<typeof parseSchedulingNoteTime>, null>;
-          } => entry.parsedTime !== null
-        )
-        .sort((left, right) => left.parsedTime.hour - right.parsedTime.hour || left.parsedTime.minute - right.parsedTime.minute),
-    [selectedDayNotes]
+      selectedParsedNotes
+        .filter((entry) => entry.parsed.placementType === "exact_time" && entry.parsed.timeMinutes !== undefined)
+        .sort((left, right) => (left.parsed.timeMinutes || 0) - (right.parsed.timeMinutes || 0)),
+    [selectedParsedNotes]
+  );
+  const selectedSuggestedNotes = React.useMemo(
+    () => selectedParsedNotes.filter((entry) => entry.parsed.placementType === "daypart"),
+    [selectedParsedNotes]
+  );
+  const selectedReviewNotes = React.useMemo(
+    () => selectedParsedNotes.filter((entry) => entry.parsed.needsReview),
+    [selectedParsedNotes]
   );
   const selectedUnscheduledNotes = React.useMemo(
-    () => selectedDayNotes.filter((note) => !parseSchedulingNoteTime(note.text)),
-    [selectedDayNotes]
+    () => selectedParsedNotes.filter((entry) => entry.parsed.placementType === "unscheduled" && !entry.parsed.needsReview),
+    [selectedParsedNotes]
   );
   const selectedTotalItemCount = selectedDayItems.length + selectedDayNotes.length;
   const selectedDayLabel = formatFullDate(selectedDay);
@@ -1105,9 +1114,9 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
                     <li key={note.id}>{note.text}</li>
                   ))}
                 </ul>
-                {selectedUnscheduledNotes.length ? (
+                {selectedUnscheduledNotes.length || selectedReviewNotes.length ? (
                   <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.45 }}>
-                    Unscheduled notes stay here until a clear time is added.
+                    Notes without exact times stay under Day notes or the advisory Suggested plan until reviewed.
                   </div>
                 ) : null}
               </div>
@@ -1128,6 +1137,39 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
         </div>
 
         <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
+          <div style={{ fontWeight: 850 }}>Suggested plan</div>
+          <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.45 }}>
+            Suggested from note text. AI-assisted scheduling is advisory; no calendar event has been created.
+          </div>
+          {selectedSuggestedNotes.length || selectedReviewNotes.length ? (
+            <div style={{ display: "grid", gap: 8 }}>
+              {[...selectedSuggestedNotes, ...selectedReviewNotes].map(({ note, parsed }) => (
+                <div
+                  key={note.id}
+                  style={{
+                    display: "grid",
+                    gap: 5,
+                    padding: 12,
+                    borderRadius: 8,
+                    border: `1px solid ${dashboardTheme.border}`,
+                    background: dashboardTheme.card,
+                    color: dashboardTheme.text,
+                  }}
+                >
+                  <div style={{ fontWeight: 850 }}>{parsed.timeLabel || "Needs review"}</div>
+                  <div style={{ overflowWrap: "anywhere" }}>{note.text}</div>
+                  <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.4 }}>
+                    {parsed.needsReview ? "Needs review" : "Suggested by note parser"} · Workspace scheduling note
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ color: text.muted, fontSize: 13 }}>No advisory note placements for this day.</div>
+          )}
+        </div>
+
+        <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
           <div style={{ fontWeight: 850 }}>Scheduled items</div>
           <Link to={`/scheduling?view=day&date=${dateKeyFromLocalDate(selectedDay)}`} style={{ ...compactButton, width: "fit-content" }}>
             View full day schedule <ArrowRight size={16} />
@@ -1138,8 +1180,9 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
             </div>
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
-              {selectedScheduledNotes.map(({ note, parsedTime }) => {
+              {selectedScheduledNotes.map(({ note, parsed }) => {
                 const noteDetail = noteTextWithoutTime(note.text) || note.text;
+                const timeMinutes = parsed.timeMinutes || 0;
                 return (
                   <div
                     key={note.id}
@@ -1155,7 +1198,7 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
                     }}
                   >
                     <div style={{ fontWeight: 850, overflowWrap: "anywhere" }}>
-                      {formatHourMinute(parsedTime.hour, parsedTime.minute)} - {noteDetail}
+                      {formatHourMinute(Math.floor(timeMinutes / 60), timeMinutes % 60)} - {noteDetail}
                     </div>
                     <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.4, overflowWrap: "anywhere" }}>
                       Workspace scheduling note
@@ -1191,9 +1234,9 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
                   </div>
                 </Link>
               ))}
-              {selectedScheduledNotes.length === 0 && selectedDayItems.length === 0 && selectedUnscheduledNotes.length > 0 ? (
+              {selectedScheduledNotes.length === 0 && selectedDayItems.length === 0 && selectedDayNotes.length > 0 ? (
                 <div style={{ border: `1px solid ${colors.border}`, borderRadius: 8, padding: 12, color: text.muted }}>
-                  Saved notes for this day do not include clear times. They are listed under Day notes.
+                  Saved notes for this day do not include confirmed exact times. Review Day notes and the advisory Suggested plan.
                 </div>
               ) : null}
             </div>

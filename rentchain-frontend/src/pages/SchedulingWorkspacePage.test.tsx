@@ -206,7 +206,7 @@ describe("SchedulingWorkspacePage", () => {
     expect(screen.getByDisplayValue("Confirm maintenance access")).toBeInTheDocument();
   });
 
-  it("places notes with clear times into day schedule slots and keeps vague notes unscheduled", async () => {
+  it("places exact notes into slots and keeps ambiguous notes in needs review without duplication", async () => {
     renderPage();
 
     const noteInput = screen.getByLabelText("New schedule note");
@@ -222,7 +222,34 @@ describe("SchedulingWorkspacePage", () => {
 
     expect(within(screen.getByLabelText("Schedule slot 9 AM")).getByText("9am inspection")).toBeInTheDocument();
     expect(within(screen.getByLabelText("Schedule slot 2 PM")).getByText("14:00 contractor")).toBeInTheDocument();
-    expect(within(screen.getByLabelText("Unscheduled notes")).getByText("Call tenant tomorrow")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Notes needing review")).getByText("Call tenant tomorrow")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("7 AM-10 PM schedule")).queryByText("Call tenant tomorrow")).not.toBeInTheDocument();
+  });
+
+  it("shows daypart suggestions and deadline cues as advisory rather than confirmed scheduled notes", async () => {
+    mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({
+      "2026-07-22": [
+        { id: "note-morning", text: "Follow up with contractor in the morning" },
+        { id: "note-lunch", text: "Call tenant after lunch" },
+        { id: "note-deadline", text: "Check Unit 3 leak before 5" },
+        { id: "note-plain", text: "Confirm access details" },
+      ],
+    });
+    renderPage(["/scheduling?view=day&date=2026-07-22"]);
+
+    const suggestions = await screen.findByLabelText("Suggested day plan");
+    expect(within(suggestions).getByText("Follow up with contractor in the morning")).toBeInTheDocument();
+    expect(within(suggestions).getByText("Call tenant after lunch")).toBeInTheDocument();
+    expect(within(suggestions).getByText("Morning")).toBeInTheDocument();
+    expect(within(suggestions).getByText("After lunch")).toBeInTheDocument();
+    expect(screen.getByText(/AI-assisted scheduling is advisory; no calendar event has been created/i)).toBeInTheDocument();
+
+    const review = screen.getByLabelText("Notes needing review");
+    expect(within(review).getByText("Check Unit 3 leak before 5")).toBeInTheDocument();
+    expect(within(review).getByText("Deadline cue: 5 PM")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Unscheduled notes")).getByText("Confirm access details")).toBeInTheDocument();
+    expect(screen.getAllByText("Call tenant after lunch")).toHaveLength(1);
+    expect(screen.getByDisplayValue("Call tenant after lunch")).toBeInTheDocument();
   });
 
   it("opens a requested day from scheduling query params", () => {
