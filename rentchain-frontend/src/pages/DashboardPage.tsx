@@ -1047,6 +1047,9 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
 
         <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
           <div style={{ fontWeight: 850 }}>Scheduled items</div>
+          <Link to={`/scheduling?view=day&date=${dateKeyFromLocalDate(selectedDay)}`} style={{ ...compactButton, width: "fit-content" }}>
+            View full day schedule <ArrowRight size={16} />
+          </Link>
           {selectedDayItems.length === 0 ? (
             <div style={{ border: `1px solid ${colors.border}`, borderRadius: 8, padding: 12, color: text.muted }}>
               No scheduled notes or actions for this day.

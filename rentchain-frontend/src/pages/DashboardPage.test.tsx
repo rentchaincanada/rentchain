@@ -386,6 +386,10 @@ describe("DashboardPage", () => {
     expect(within(detail).getByText("Scheduling summary")).toBeInTheDocument();
     expect(within(detail).getByText(/full Scheduling page groups viewings, maintenance requests, work orders, screening, and browser-saved notes/i)).toBeInTheDocument();
     expect(within(detail).getByText("Scheduled items")).toBeInTheDocument();
+    expect(within(detail).getByRole("link", { name: /View full day schedule/i })).toHaveAttribute(
+      "href",
+      `/scheduling?view=day&date=${dateKeyFromLocalDate(selectedDate)}`
+    );
     expect(within(detail).getByRole("link", { name: /Resolve lease renewal/i })).toHaveAttribute("href", "/leases");
     expect(within(detail).getByText(`Lease · Open lease workspace · ${selectedShortDateLabel}`)).toBeInTheDocument();
     expect(within(detail).getByText("A lease needs a renewal decision before the notice window closes.")).toBeInTheDocument();
@@ -422,6 +426,10 @@ describe("DashboardPage", () => {
     const detail = screen.getByTestId("selected-day-detail-panel");
     expect(within(detail).getByText("Day notes")).toBeInTheDocument();
     expect(within(detail).getByText("Confirm inspection window")).toBeInTheDocument();
+    expect(within(detail).getByRole("link", { name: /View full day schedule/i })).toHaveAttribute(
+      "href",
+      `/scheduling?view=day&date=${dateKeyFromLocalDate(selectedDate)}`
+    );
     expect(within(detail).queryByText(/No saved scheduling notes for this day/i)).not.toBeInTheDocument();
   });
 

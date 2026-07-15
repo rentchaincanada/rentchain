@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   CalendarDays,
   ClipboardList,
@@ -14,6 +14,7 @@ import { Button, Card, Input } from "../components/ui/Ui";
 import { useAuth } from "../context/useAuth";
 import {
   dateKeyFromLocalDate,
+  parseSchedulingNoteTime,
   readSchedulingDayNotes,
   writeSchedulingDayNotes,
   type SchedulingDayNote,
@@ -21,7 +22,7 @@ import {
 } from "../lib/schedulingDayNotes";
 import { radius, spacing, text } from "../styles/tokens";
 
-type CalendarView = "month" | "week";
+type CalendarView = "day" | "week" | "month";
 
 type WorkspaceItem = {
   title: string;
@@ -73,8 +74,25 @@ const reviewItems = [
   "Suggested scheduling windows will appear as calendar data becomes available.",
 ];
 
+const scheduleHours = Array.from({ length: 16 }, (_, index) => index + 7);
+
 function dayKey(date: Date) {
   return dateKeyFromLocalDate(date);
+}
+
+function parseDateKey(value: string | null): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
+}
+
+function viewFromParam(value: string | null): CalendarView {
+  if (value === "week" || value === "7-day") return "week";
+  if (value === "month" || value === "30-day") return "month";
+  return "day";
 }
 
 function formatDay(date: Date) {
@@ -83,6 +101,15 @@ function formatDay(date: Date) {
 
 function formatMonth(date: Date) {
   return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+function formatHour(hour: number) {
+  const value = hour % 12 || 12;
+  return `${value} ${hour >= 12 ? "PM" : "AM"}`;
+}
+
+function formatNoteTime(hour: number, minute: number) {
+  return minute ? `${formatHour(hour).replace(" ", `:${String(minute).padStart(2, "0")} `)}` : formatHour(hour);
 }
 
 function startOfMonthGrid(date: Date) {
@@ -173,7 +200,10 @@ function WorkspaceList({
 
 export default function SchedulingWorkspacePage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const today = React.useMemo(() => new Date(), []);
+  const requestedDate = React.useMemo(() => parseDateKey(searchParams.get("date")), [searchParams]);
+  const initialSelectedDate = requestedDate || new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const notesScope = React.useMemo(
     () => ({
       actorLandlordId: user?.actorLandlordId,
@@ -183,19 +213,53 @@ export default function SchedulingWorkspacePage() {
     }),
     [user?.actorLandlordId, user?.landlordId, user?.id, user?.email]
   );
-  const [calendarView, setCalendarView] = React.useState<CalendarView>("month");
-  const [activeMonth, setActiveMonth] = React.useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
-  const [selectedDate, setSelectedDate] = React.useState(() => new Date(today.getFullYear(), today.getMonth(), today.getDate()));
+  const [calendarView, setCalendarView] = React.useState<CalendarView>(() => viewFromParam(searchParams.get("view")));
+  const [activeMonth, setActiveMonth] = React.useState(() => new Date(initialSelectedDate.getFullYear(), initialSelectedDate.getMonth(), 1));
+  const [selectedDate, setSelectedDate] = React.useState(() => initialSelectedDate);
   const [notesByDate, setNotesByDate] = React.useState<SchedulingDayNotesByDate>(() => readSchedulingDayNotes(notesScope));
   const [noteDraft, setNoteDraft] = React.useState("");
 
   const selectedKey = dayKey(selectedDate);
   const selectedNotes = notesByDate[selectedKey] || [];
-  const days = calendarView === "month" ? buildMonthDays(activeMonth) : buildWeekDays(selectedDate);
+  const weekDays = React.useMemo(() => buildWeekDays(selectedDate), [selectedDate]);
+  const monthDays = React.useMemo(() => buildMonthDays(activeMonth), [activeMonth]);
+  const selectedNotesByTime = React.useMemo(() => {
+    const grouped = scheduleHours.reduce<Record<number, SchedulingDayNote[]>>((result, hour) => {
+      result[hour] = [];
+      return result;
+    }, {});
+    const unscheduled: SchedulingDayNote[] = [];
+    selectedNotes.forEach((note) => {
+      const parsed = parseSchedulingNoteTime(note.text);
+      if (parsed && parsed.hour >= 7 && parsed.hour <= 22) {
+        grouped[parsed.hour].push(note);
+      } else {
+        unscheduled.push(note);
+      }
+    });
+    return { grouped, unscheduled };
+  }, [selectedNotes]);
 
   React.useEffect(() => {
     setNotesByDate(readSchedulingDayNotes(notesScope));
   }, [notesScope]);
+
+  React.useEffect(() => {
+    const nextDate = parseDateKey(searchParams.get("date"));
+    const nextView = viewFromParam(searchParams.get("view"));
+    if (nextDate) {
+      setSelectedDate(nextDate);
+      setActiveMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+    }
+    setCalendarView(nextView);
+  }, [searchParams]);
+
+  const syncRoute = React.useCallback(
+    (nextView: CalendarView, nextDate: Date) => {
+      setSearchParams({ view: nextView, date: dayKey(nextDate) }, { replace: true });
+    },
+    [setSearchParams]
+  );
 
   const updateStoredNotes = React.useCallback(
     (updater: (current: SchedulingDayNotesByDate) => SchedulingDayNotesByDate) => {
@@ -208,11 +272,18 @@ export default function SchedulingWorkspacePage() {
     [notesScope]
   );
 
-  const selectDate = (date: Date) => {
+  const selectDate = (date: Date, nextView: CalendarView = "day") => {
     const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     setSelectedDate(next);
     setActiveMonth(new Date(next.getFullYear(), next.getMonth(), 1));
+    setCalendarView(nextView);
+    syncRoute(nextView, next);
     setNoteDraft("");
+  };
+
+  const selectView = (nextView: CalendarView) => {
+    setCalendarView(nextView);
+    syncRoute(nextView, selectedDate);
   };
 
   const addNote = () => {
@@ -255,6 +326,12 @@ export default function SchedulingWorkspacePage() {
 
   const moveMonth = (offset: number) => {
     setActiveMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+  };
+
+  const moveDay = (offset: number) => {
+    const next = new Date(selectedDate);
+    next.setDate(selectedDate.getDate() + offset);
+    selectDate(next, "day");
   };
 
   return (
@@ -416,6 +493,65 @@ export default function SchedulingWorkspacePage() {
           border-radius: ${radius.pill};
           padding: 3px 6px;
         }
+        .scheduling-day-summary {
+          display: grid;
+          gap: ${spacing.sm};
+        }
+        .scheduling-hour-list {
+          display: grid;
+          gap: 8px;
+        }
+        .scheduling-hour-row {
+          display: grid;
+          grid-template-columns: 74px minmax(0, 1fr);
+          gap: ${spacing.sm};
+          align-items: start;
+          border: 1px solid var(--schedule-border);
+          border-radius: ${radius.md};
+          padding: 10px;
+          background: var(--schedule-muted-panel);
+        }
+        .scheduling-hour-label {
+          color: var(--schedule-pine);
+          font-weight: 900;
+          font-size: 0.82rem;
+          white-space: nowrap;
+        }
+        .scheduling-slot-notes {
+          display: grid;
+          gap: 6px;
+          min-width: 0;
+        }
+        .scheduling-slot-note {
+          border: 1px solid var(--schedule-border);
+          border-radius: ${radius.md};
+          padding: 8px 10px;
+          background: var(--schedule-card);
+          color: var(--schedule-text);
+          line-height: 1.4;
+          overflow-wrap: anywhere;
+        }
+        .scheduling-agenda-list {
+          display: grid;
+          gap: ${spacing.sm};
+        }
+        .scheduling-agenda-day {
+          display: grid;
+          grid-template-columns: minmax(110px, 0.42fr) minmax(0, 1fr);
+          gap: ${spacing.sm};
+          text-align: left;
+          border: 1px solid var(--schedule-border);
+          border-radius: ${radius.md};
+          padding: 11px 12px;
+          background: var(--schedule-muted-panel);
+          color: var(--schedule-text);
+          cursor: pointer;
+        }
+        .scheduling-agenda-day strong,
+        .scheduling-agenda-day span {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
         .scheduling-section-title {
           display: inline-flex;
           align-items: center;
@@ -532,6 +668,10 @@ export default function SchedulingWorkspacePage() {
           .scheduling-day span {
             display: none;
           }
+          .scheduling-hour-row,
+          .scheduling-agenda-day {
+            grid-template-columns: 1fr;
+          }
           .scheduling-calendar-grid {
             gap: 5px;
           }
@@ -568,66 +708,157 @@ export default function SchedulingWorkspacePage() {
             <div className="scheduling-toolbar">
               <div className="scheduling-month-title">
                 <CalendarDays size={18} strokeWidth={2.2} aria-hidden="true" />
-                <span>{calendarView === "month" ? formatMonth(activeMonth) : `Week of ${formatDay(startOfWeek(selectedDate))}`}</span>
+                <span>
+                  {calendarView === "day"
+                    ? `${formatDay(selectedDate)} schedule`
+                    : calendarView === "week"
+                      ? `7 days from ${formatDay(startOfWeek(selectedDate))}`
+                      : `${formatMonth(activeMonth)} overview`}
+                </span>
               </div>
               <div className="scheduling-view-toggle" aria-label="Calendar view">
                 <button
                   type="button"
-                  className={calendarView === "month" ? "is-active" : ""}
-                  onClick={() => setCalendarView("month")}
+                  className={calendarView === "day" ? "is-active" : ""}
+                  onClick={() => selectView("day")}
                 >
-                  Month
+                  Day
                 </button>
                 <button
                   type="button"
                   className={calendarView === "week" ? "is-active" : ""}
-                  onClick={() => setCalendarView("week")}
+                  onClick={() => selectView("week")}
                 >
-                  7-day
+                  7 days
+                </button>
+                <button
+                  type="button"
+                  className={calendarView === "month" ? "is-active" : ""}
+                  onClick={() => selectView("month")}
+                >
+                  30 days
                 </button>
               </div>
             </div>
 
             <div className="scheduling-toolbar">
-              <div className="scheduling-month-controls">
-                <button type="button" onClick={() => moveMonth(-1)} aria-label="Previous month">
-                  Prev
-                </button>
-                <button type="button" onClick={() => moveMonth(1)} aria-label="Next month">
-                  Next
-                </button>
-              </div>
+              {calendarView === "month" ? (
+                <div className="scheduling-month-controls">
+                  <button type="button" onClick={() => moveMonth(-1)} aria-label="Previous month">
+                    Prev
+                  </button>
+                  <button type="button" onClick={() => moveMonth(1)} aria-label="Next month">
+                    Next
+                  </button>
+                </div>
+              ) : (
+                <div className="scheduling-month-controls">
+                  <button type="button" onClick={() => moveDay(-1)} aria-label="Previous day">
+                    Prev
+                  </button>
+                  <button type="button" onClick={() => moveDay(1)} aria-label="Next day">
+                    Next
+                  </button>
+                </div>
+              )}
               <strong style={{ color: text.muted, fontSize: "0.9rem" }}>{formatDay(selectedDate)}</strong>
             </div>
 
-            <div className="scheduling-calendar-grid" aria-label="Scheduling calendar">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                <div key={day} className="scheduling-weekday">
-                  {day}
+            {calendarView === "day" ? (
+              <div className="scheduling-day-summary" aria-label="Selected day schedule">
+                <div className="scheduling-local-note">
+                  7 AM-10 PM schedule. Notes with clear times are placed into hourly slots; other notes stay unscheduled.
                 </div>
-              ))}
-              {days.map((day) => {
-                const key = dayKey(day);
-                const isSelected = key === selectedKey;
-                const isMuted = day.getMonth() !== activeMonth.getMonth() && calendarView === "month";
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    className={[
-                      "scheduling-day",
-                      isSelected ? "is-selected" : "",
-                      isMuted ? "is-muted" : "",
-                    ].filter(Boolean).join(" ")}
-                    onClick={() => selectDate(day)}
-                    aria-pressed={isSelected}
-                  >
-                    <strong>{day.getDate()}</strong>
-                    {notesByDate[key]?.length ? <span>{notesByDate[key].length} note{notesByDate[key].length === 1 ? "" : "s"}</span> : null}
-                  </button>
-                );
-              })}
-            </div>
+                {selectedNotes.length === 0 ? (
+                  <div className="scheduling-local-note">No saved notes for this day.</div>
+                ) : null}
+                <div className="scheduling-hour-list" aria-label="7 AM-10 PM schedule">
+                  {scheduleHours.map((hour) => {
+                    const notes = selectedNotesByTime.grouped[hour] || [];
+                    return (
+                      <div key={hour} className="scheduling-hour-row" aria-label={`Schedule slot ${formatHour(hour)}`}>
+                        <div className="scheduling-hour-label">{formatHour(hour)}</div>
+                        <div className="scheduling-slot-notes">
+                          {notes.length ? (
+                            notes.map((note) => {
+                              const parsed = parseSchedulingNoteTime(note.text);
+                              return (
+                                <div key={note.id} className="scheduling-slot-note">
+                                  <strong>{parsed ? formatNoteTime(parsed.hour, parsed.minute) : formatHour(hour)}</strong>
+                                  <div>{note.text}</div>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <span className="scheduling-local-note">No scheduled notes</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display: "grid", gap: spacing.sm }}>
+                  <strong>Unscheduled notes</strong>
+                  {selectedNotesByTime.unscheduled.length ? (
+                    <div className="scheduling-note-list" aria-label="Unscheduled notes">
+                      {selectedNotesByTime.unscheduled.map((note) => (
+                        <div key={note.id} className="scheduling-slot-note">
+                          {note.text}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="scheduling-local-note">No unscheduled notes for this day.</div>
+                  )}
+                </div>
+              </div>
+            ) : calendarView === "week" ? (
+              <div className="scheduling-agenda-list" aria-label="7-day agenda summary">
+                {weekDays.map((day) => {
+                  const key = dayKey(day);
+                  const notes = notesByDate[key] || [];
+                  return (
+                    <button key={key} type="button" className="scheduling-agenda-day" onClick={() => selectDate(day, "day")}>
+                      <strong>{formatDay(day)}</strong>
+                      <span>
+                        {notes.length
+                          ? `${notes.length} saved ${notes.length === 1 ? "note" : "notes"} - ${notes.slice(0, 2).map((note) => note.text).join("; ")}`
+                          : "No saved notes"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="scheduling-calendar-grid" aria-label="30-day scheduling overview">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                  <div key={day} className="scheduling-weekday">
+                    {day}
+                  </div>
+                ))}
+                {monthDays.map((day) => {
+                  const key = dayKey(day);
+                  const isSelected = key === selectedKey;
+                  const isMuted = day.getMonth() !== activeMonth.getMonth();
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className={[
+                        "scheduling-day",
+                        isSelected ? "is-selected" : "",
+                        isMuted ? "is-muted" : "",
+                      ].filter(Boolean).join(" ")}
+                      onClick={() => selectDate(day, "day")}
+                      aria-pressed={isSelected}
+                    >
+                      <strong>{day.getDate()}</strong>
+                      {notesByDate[key]?.length ? <span>{notesByDate[key].length} note{notesByDate[key].length === 1 ? "" : "s"}</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </Card>
 
           <Card className="scheduling-card" style={{ display: "grid", gap: spacing.md }}>
