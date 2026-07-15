@@ -866,6 +866,58 @@ describe("landlordDecisionQueueRoutes", () => {
     expect(JSON.stringify(res.body)).not.toContain("Record payment or contact the tenant");
   });
 
+  it("does not show dashboard overdue actions after the settled-payment-aware inbox suppresses a fully allocated lease", async () => {
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({
+      decisions: {
+        items: [
+          analyticsDecision({
+            id: "stale_overdue_rent:y7XM6BFXIzWW0fV3mu1L",
+            decisionType: "review_overdue_rent",
+            actionLabel: "Review Overdue Rent",
+            recommendedAction: "Review Overdue Rent",
+            destination: "/leases/y7XM6BFXIzWW0fV3mu1L/ledger",
+            executionMapping: { resourceType: "lease", resourceId: "y7XM6BFXIzWW0fV3mu1L" },
+          }),
+        ],
+      },
+    });
+    derivePaymentConsistentDecisionInbox.mockResolvedValue({
+      items: [],
+      filters: { severity: [], status: [], type: [], queue: [], workflowState: [], escalationLevel: [] },
+      summary: { total: 0, critical: 0, high: 0, open: 0, blocked: 0 },
+      workflowSummary: { new: 0, underReview: 0, escalated: 0, critical: 0 },
+      automationSummary: { total: 0, pending: 0, derived: 0, blocked: 0, completed: 0, escalationFlagged: 0, reviewRequired: 0 },
+      agentActionSummary: { total: 0, suggested: 0, blocked: 0, unavailable: 0, acknowledged: 0, reviewRequired: 0, escalationSuggested: 0 },
+    });
+    getUnifiedInbox.mockResolvedValue({
+      ok: true,
+      role: "landlord",
+      items: [],
+      records: [],
+      total: 0,
+      limit: 100,
+      offset: 0,
+    });
+    const router = (await import("../landlordDecisionQueueRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-queue?status=open_state&limit=6" });
+
+    expect(res.status).toBe(200);
+    expect(derivePaymentConsistentDecisionInbox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        landlordId: "landlord-1",
+        analyticsDecisions: expect.arrayContaining([
+          expect.objectContaining({ id: "stale_overdue_rent:y7XM6BFXIzWW0fV3mu1L" }),
+        ]),
+      })
+    );
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+    expect(JSON.stringify(res.body)).not.toContain("Review Overdue Rent");
+    expect(JSON.stringify(res.body)).not.toContain("Review Missing Payment");
+    expect(JSON.stringify(res.body)).not.toContain("tenant owes");
+  });
+
   it("does not show overpaid up-to-date leases as dashboard missing-payment decisions after inbox suppression", async () => {
     loadLandlordAnalyticsSnapshot.mockResolvedValue({
       decisions: {

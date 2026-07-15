@@ -1,6 +1,9 @@
 import crypto from "crypto";
 import { db } from "../firebase";
-import type { PaymentObligationLedgerRow } from "../lib/payments/paymentObligationLedger";
+import {
+  buildPaymentObligationCreditAllocationKey,
+  type PaymentObligationLedgerRow,
+} from "../lib/payments/paymentObligationLedger";
 
 export const LEASE_CREDIT_ALLOCATION_RECORDS_COLLECTION = "leaseCreditAllocationRecords";
 export const CREDIT_ALLOCATION_STATE_STALE = "CREDIT_ALLOCATION_STATE_STALE";
@@ -201,14 +204,6 @@ function normalizeCurrency(value: unknown): string {
   return cleanString(value, 16)?.toLowerCase() || "cad";
 }
 
-function normalizeDateToken(value: unknown): string {
-  const raw = cleanString(value, 120);
-  if (!raw) return "none";
-  const parsed = Date.parse(raw);
-  if (!Number.isFinite(parsed)) return cleanIdPart(raw) || "none";
-  return new Date(parsed).toISOString().slice(0, 10);
-}
-
 function nowIso(value?: string | null): string {
   const raw = cleanString(value, 120);
   if (!raw) return new Date().toISOString();
@@ -236,23 +231,7 @@ function activeRecords(records: LeaseCreditAllocationRecord[] | null | undefined
 }
 
 export function buildLeaseCreditAllocationObligationKey(row: PaymentObligationLedgerRow): string {
-  const leaseId = cleanIdPart(row.leaseId) || "lease_unknown";
-  const expectedAmountCents = normalizeAmountCents(row.expectedAmountCents);
-  const paymentIntentId = cleanIdPart(row.paymentIntentId);
-  if (paymentIntentId) return `lease_credit_obligation:${leaseId}:payment_intent:${paymentIntentId}`;
-  const rentPaymentId = cleanIdPart(row.rentPaymentId);
-  if (rentPaymentId) return `lease_credit_obligation:${leaseId}:rent_payment:${rentPaymentId}`;
-  const paymentDocumentId = cleanIdPart(row.paymentDocumentId);
-  if (paymentDocumentId) return `lease_credit_obligation:${leaseId}:payment_document:${paymentDocumentId}`;
-  return [
-    "lease_credit_obligation",
-    leaseId,
-    "derived",
-    normalizeDateToken(row.dueDate),
-    normalizeDateToken(row.periodStart),
-    normalizeDateToken(row.periodEnd),
-    String(expectedAmountCents),
-  ].join(":");
+  return buildPaymentObligationCreditAllocationKey(row);
 }
 
 export function buildLeaseCreditAllocationPreview(input: {

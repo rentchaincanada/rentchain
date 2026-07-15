@@ -43,6 +43,12 @@ export type PaymentObligationLedgerRow = {
   evidenceStatus?: "none" | "provider_received" | "reconciled" | "manual_review_required" | "failed" | "pending";
   source: PaymentObligationLedgerSource;
   reasons: string[];
+  allocatedFromCreditCents?: number;
+  outstandingAfterAllocationCents?: number;
+  allocationStatus?: "none" | "partially_allocated" | "fully_allocated";
+  activeAllocationIds?: string[];
+  allocationAdjustedFinancialSignal?: "credit_allocation_recorded" | "allocation_review" | null;
+  allocationDisplayReason?: string | null;
 };
 
 export type PaymentObligationLedgerSummary = {
@@ -50,6 +56,10 @@ export type PaymentObligationLedgerSummary = {
   expectedAmountCents: number;
   paidAmountCents: number;
   outstandingAmountCents: number;
+  totalAllocatedCreditCents?: number;
+  totalOutstandingAfterAllocationCents?: number;
+  allocationAdjustedOutstandingCents?: number;
+  availableCreditAfterAllocationCents?: number | null;
   statusCounts: Record<PaymentObligationStatus, number>;
   manualReviewCount: number;
 };
@@ -119,6 +129,21 @@ export type BuildPaymentObligationLedgerRowsInput = {
   rentPayments?: RentPaymentRecord[];
   canonicalPayments?: PaymentObligationCanonicalPaymentInput[];
   reconciliationRecords?: PaymentObligationReconciliationInput[];
+  creditAllocationRecords?: PaymentObligationCreditAllocationInput[];
+};
+
+export type PaymentObligationCreditAllocationInput = {
+  allocationId?: string | null;
+  landlordId?: string | null;
+  leaseId?: string | null;
+  obligationRowId?: string | null;
+  obligationKey?: string | null;
+  allocationAmountCents?: number | null;
+  status?: "active" | "reversed" | string | null;
+};
+
+export type SummarizePaymentObligationLedgerOptions = {
+  aggregateBalanceCents?: number | null;
 };
 
 type StatusInput = {
@@ -185,6 +210,117 @@ function cleanIdPart(value: unknown): string {
 
 function rowIdFor(parts: unknown[]): string {
   return cleanIdPart(parts.filter((part) => asString(part, 240)).join(":")) || "obligation:unknown";
+}
+
+function normalizeDateToken(value: unknown): string {
+  const raw = asString(value, 120);
+  if (!raw) return "none";
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed)) return cleanIdPart(raw) || "none";
+  return new Date(parsed).toISOString().slice(0, 10);
+}
+
+export function buildPaymentObligationCreditAllocationKey(row: PaymentObligationLedgerRow): string {
+  const leaseId = cleanIdPart(row.leaseId) || "lease_unknown";
+  const expectedAmountCents = normalizeAmountCents(row.expectedAmountCents);
+  const paymentIntentId = cleanIdPart(row.paymentIntentId);
+  if (paymentIntentId) return `lease_credit_obligation:${leaseId}:payment_intent:${paymentIntentId}`;
+  const rentPaymentId = cleanIdPart(row.rentPaymentId);
+  if (rentPaymentId) return `lease_credit_obligation:${leaseId}:rent_payment:${rentPaymentId}`;
+  const paymentDocumentId = cleanIdPart(row.paymentDocumentId);
+  if (paymentDocumentId) return `lease_credit_obligation:${leaseId}:payment_document:${paymentDocumentId}`;
+  return [
+    "lease_credit_obligation",
+    leaseId,
+    "derived",
+    normalizeDateToken(row.dueDate),
+    normalizeDateToken(row.periodStart),
+    normalizeDateToken(row.periodEnd),
+    String(expectedAmountCents),
+  ].join(":");
+}
+
+function rowRawOutstandingAmountCents(row: PaymentObligationLedgerRow): number {
+  return Math.max(0, normalizeAmountCents(row.expectedAmountCents) - normalizeAmountCents(row.paidAmountCents));
+}
+
+export function applyCreditAllocationsToPaymentObligationRows(
+  rows: PaymentObligationLedgerRow[],
+  allocationRecords?: PaymentObligationCreditAllocationInput[] | null
+): PaymentObligationLedgerRow[] {
+  const activeRecords = (allocationRecords || []).filter((record) => {
+    return String(record?.status || "").trim() === "active" && normalizeAmountCents(record?.allocationAmountCents) > 0;
+  });
+  if (activeRecords.length === 0) {
+    return rows.map((row) => {
+      const outstandingAmountCents = rowRawOutstandingAmountCents(row);
+      return {
+        ...row,
+        allocatedFromCreditCents: 0,
+        outstandingAfterAllocationCents: outstandingAmountCents,
+        allocationStatus: "none",
+        activeAllocationIds: [],
+        allocationAdjustedFinancialSignal: null,
+        allocationDisplayReason: null,
+      };
+    });
+  }
+
+  const recordsByObligationKey = new Map<string, PaymentObligationCreditAllocationInput[]>();
+  const recordsByObligationRowId = new Map<string, PaymentObligationCreditAllocationInput[]>();
+  for (const record of activeRecords) {
+    const obligationKey = asString(record.obligationKey, 500);
+    if (obligationKey) {
+      const group = recordsByObligationKey.get(obligationKey) || [];
+      group.push(record);
+      recordsByObligationKey.set(obligationKey, group);
+    }
+    const obligationRowId = asString(record.obligationRowId, 240);
+    if (obligationRowId) {
+      const group = recordsByObligationRowId.get(obligationRowId) || [];
+      group.push(record);
+      recordsByObligationRowId.set(obligationRowId, group);
+    }
+  }
+
+  return rows.map((row) => {
+    const obligationKey = buildPaymentObligationCreditAllocationKey(row);
+    const matchingRecords = recordsByObligationKey.get(obligationKey) || recordsByObligationRowId.get(row.rowId) || [];
+    const rawOutstandingAmountCents = rowRawOutstandingAmountCents(row);
+    const activeAllocationAmountCents = matchingRecords.reduce(
+      (sum, record) => sum + normalizeAmountCents(record.allocationAmountCents),
+      0
+    );
+    const allocatedFromCreditCents = Math.min(rawOutstandingAmountCents, activeAllocationAmountCents);
+    const outstandingAfterAllocationCents = Math.max(0, rawOutstandingAmountCents - allocatedFromCreditCents);
+    const allocationStatus =
+      allocatedFromCreditCents <= 0
+        ? "none"
+        : outstandingAfterAllocationCents === 0
+        ? "fully_allocated"
+        : "partially_allocated";
+    return {
+      ...row,
+      allocatedFromCreditCents,
+      outstandingAfterAllocationCents,
+      allocationStatus,
+      activeAllocationIds: matchingRecords.map((record) => asString(record.allocationId, 240)).filter(Boolean) as string[],
+      allocationAdjustedFinancialSignal:
+        allocationStatus === "none"
+          ? null
+          : allocationStatus === "fully_allocated"
+          ? "credit_allocation_recorded"
+          : "allocation_review",
+      allocationDisplayReason:
+        allocationStatus === "none"
+          ? null
+          : "Existing lease credit covers this rent charge. Historical payment records were not edited.",
+      reasons:
+        allocationStatus === "none"
+          ? row.reasons
+          : Array.from(new Set([...row.reasons, `credit_${allocationStatus}`])),
+    };
+  });
 }
 
 function leaseIdOf(lease: PaymentObligationLeaseInput | null | undefined): string | null {
@@ -608,14 +744,19 @@ export function buildPaymentObligationLedgerRows(
     });
   }
 
-  return rows.sort((a, b) => {
+  const sortedRows = rows.sort((a, b) => {
     const dueDiff = String(a.dueDate || a.periodStart || "").localeCompare(String(b.dueDate || b.periodStart || ""));
     if (dueDiff !== 0) return dueDiff;
     return a.rowId.localeCompare(b.rowId);
   });
+
+  return applyCreditAllocationsToPaymentObligationRows(sortedRows, input.creditAllocationRecords);
 }
 
-export function summarizePaymentObligationLedger(rows: PaymentObligationLedgerRow[]): PaymentObligationLedgerSummary {
+export function summarizePaymentObligationLedger(
+  rows: PaymentObligationLedgerRow[],
+  options: SummarizePaymentObligationLedgerOptions = {}
+): PaymentObligationLedgerSummary {
   const statusCounts = {
     expected: 0,
     pending: 0,
@@ -630,17 +771,29 @@ export function summarizePaymentObligationLedger(rows: PaymentObligationLedgerRo
 
   let expectedAmountCents = 0;
   let paidAmountCents = 0;
+  let totalAllocatedCreditCents = 0;
+  let totalOutstandingAfterAllocationCents = 0;
   for (const row of rows || []) {
     statusCounts[row.obligationStatus] += 1;
     expectedAmountCents += normalizeAmountCents(row.expectedAmountCents);
     paidAmountCents += normalizeAmountCents(row.paidAmountCents);
+    totalAllocatedCreditCents += normalizeAmountCents(row.allocatedFromCreditCents);
+    totalOutstandingAfterAllocationCents += Math.max(0, normalizeAmountCents(row.outstandingAfterAllocationCents ?? rowRawOutstandingAmountCents(row)));
   }
+  const aggregateBalance = Number(options.aggregateBalanceCents);
+  const availableCreditAfterAllocationCents = Number.isFinite(aggregateBalance)
+    ? Math.max(0, Math.max(0, -Math.round(aggregateBalance)) - totalAllocatedCreditCents)
+    : null;
 
   return {
     totalRows: rows.length,
     expectedAmountCents,
     paidAmountCents,
     outstandingAmountCents: Math.max(0, expectedAmountCents - paidAmountCents),
+    totalAllocatedCreditCents,
+    totalOutstandingAfterAllocationCents,
+    allocationAdjustedOutstandingCents: totalOutstandingAfterAllocationCents,
+    availableCreditAfterAllocationCents,
     statusCounts,
     manualReviewCount: statusCounts.manual_review_required,
   };

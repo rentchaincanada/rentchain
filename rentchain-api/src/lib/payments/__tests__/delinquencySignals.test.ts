@@ -77,6 +77,83 @@ describe("delinquencySignals", () => {
     );
   });
 
+  it("does not derive active overdue signals when credit allocation fully covers the obligation", () => {
+    const signals = deriveDelinquencySignals(
+      [
+        row({
+          obligationStatus: "missing",
+          rentPaymentId: null,
+          paymentIntentId: null,
+          dueDate: "2026-04-01",
+          allocatedFromCreditCents: 180000,
+          outstandingAfterAllocationCents: 0,
+          allocationStatus: "fully_allocated",
+          allocationAdjustedFinancialSignal: "credit_allocation_recorded",
+        }),
+      ],
+      "2026-04-15T00:00:00.000Z"
+    );
+
+    expect(signals).toEqual([]);
+  });
+
+  it("uses remaining outstanding after partial credit allocation for delinquency exposure", () => {
+    const signals = deriveDelinquencySignals(
+      [
+        row({
+          obligationStatus: "missing",
+          rentPaymentId: null,
+          paymentIntentId: null,
+          dueDate: "2026-04-01",
+          allocatedFromCreditCents: 75000,
+          outstandingAfterAllocationCents: 105000,
+          allocationStatus: "partially_allocated",
+          allocationAdjustedFinancialSignal: "allocation_review",
+        }),
+      ],
+      "2026-04-15T00:00:00.000Z"
+    );
+
+    expect(signals).toEqual([
+      expect.objectContaining({
+        signalType: "overdue",
+        outstandingAmountCents: 105000,
+        reasons: expect.arrayContaining(["credit_allocation_applied_to_obligation"]),
+      }),
+      expect.objectContaining({
+        signalType: "missing_payment",
+        outstandingAmountCents: 105000,
+        reasons: expect.arrayContaining(["credit_allocation_applied_to_obligation"]),
+      }),
+    ]);
+  });
+
+  it("summarizes delinquency exposure after allocation-adjusted outstanding", () => {
+    const signals = deriveDelinquencySignals(
+      [
+        row({
+          rowId: "partial",
+          paymentIntentId: null,
+          rentPaymentId: null,
+          obligationStatus: "missing",
+          dueDate: "2026-04-01",
+          allocatedFromCreditCents: 100000,
+          outstandingAfterAllocationCents: 80000,
+          allocationStatus: "partially_allocated",
+        }),
+      ],
+      "2026-04-15T00:00:00.000Z"
+    );
+
+    expect(summarizeDelinquencySignals(signals)).toEqual(
+      expect.objectContaining({
+        overdueCount: 1,
+        missingCount: 1,
+        totalOutstandingCents: 80000,
+      })
+    );
+  });
+
   it("derives partially_paid for underpaid obligations and calculates outstanding amount", () => {
     const signals = deriveDelinquencySignals(
       [

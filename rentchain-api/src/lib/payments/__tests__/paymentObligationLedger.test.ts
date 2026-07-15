@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPaymentObligationCreditAllocationKey,
   buildPaymentObligationLedgerRows,
   derivePaymentObligationStatus,
   summarizePaymentObligationLedger,
@@ -84,6 +85,9 @@ describe("paymentObligationLedger", () => {
         obligationStatus: "missing",
         source: "lease_lifecycle",
         reasons: ["expected_payment_missing"],
+        allocatedFromCreditCents: 0,
+        outstandingAfterAllocationCents: 180000,
+        allocationStatus: "none",
       }),
     ]);
   });
@@ -519,5 +523,163 @@ describe("paymentObligationLedger", () => {
     );
     expect(summary.statusCounts.paid).toBe(1);
     expect(summary.statusCounts.missing).toBe(1);
+  });
+
+  it("applies active credit allocations as an overlay without changing raw paid or outstanding fields", () => {
+    const baseRows = buildPaymentObligationLedgerRows({ leases: [lease] });
+    const obligationKey = buildPaymentObligationCreditAllocationKey(baseRows[0]);
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [lease],
+      creditAllocationRecords: [
+        {
+          allocationId: "lease_credit_allocation:full",
+          landlordId: "landlord-1",
+          leaseId: "lease-1",
+          obligationRowId: baseRows[0].rowId,
+          obligationKey,
+          allocationAmountCents: 180000,
+          status: "active",
+        },
+      ],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        expectedAmountCents: 180000,
+        paidAmountCents: 0,
+        obligationStatus: "missing",
+        allocatedFromCreditCents: 180000,
+        outstandingAfterAllocationCents: 0,
+        allocationStatus: "fully_allocated",
+        activeAllocationIds: ["lease_credit_allocation:full"],
+        allocationAdjustedFinancialSignal: "credit_allocation_recorded",
+        allocationDisplayReason: "Existing lease credit covers this rent charge. Historical payment records were not edited.",
+      })
+    );
+    expect(summarizePaymentObligationLedger(rows, { aggregateBalanceCents: -876900 })).toEqual(
+      expect.objectContaining({
+        outstandingAmountCents: 180000,
+        totalAllocatedCreditCents: 180000,
+        totalOutstandingAfterAllocationCents: 0,
+        allocationAdjustedOutstandingCents: 0,
+        availableCreditAfterAllocationCents: 696900,
+      })
+    );
+  });
+
+  it("derives partial credit allocation exposure from the uncovered amount only", () => {
+    const baseRows = buildPaymentObligationLedgerRows({ leases: [lease] });
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [lease],
+      creditAllocationRecords: [
+        {
+          allocationId: "lease_credit_allocation:partial",
+          leaseId: "lease-1",
+          obligationRowId: baseRows[0].rowId,
+          obligationKey: buildPaymentObligationCreditAllocationKey(baseRows[0]),
+          allocationAmountCents: 75000,
+          status: "active",
+        },
+      ],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        allocatedFromCreditCents: 75000,
+        outstandingAfterAllocationCents: 105000,
+        allocationStatus: "partially_allocated",
+        allocationAdjustedFinancialSignal: "allocation_review",
+      })
+    );
+    expect(summarizePaymentObligationLedger(rows)).toEqual(
+      expect.objectContaining({
+        outstandingAmountCents: 180000,
+        totalAllocatedCreditCents: 75000,
+        totalOutstandingAfterAllocationCents: 105000,
+      })
+    );
+  });
+
+  it("ignores reversed credit allocations in obligation exposure", () => {
+    const baseRows = buildPaymentObligationLedgerRows({ leases: [lease] });
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [lease],
+      creditAllocationRecords: [
+        {
+          allocationId: "lease_credit_allocation:reversed",
+          leaseId: "lease-1",
+          obligationRowId: baseRows[0].rowId,
+          obligationKey: buildPaymentObligationCreditAllocationKey(baseRows[0]),
+          allocationAmountCents: 180000,
+          status: "reversed",
+        },
+      ],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        allocatedFromCreditCents: 0,
+        outstandingAfterAllocationCents: 180000,
+        allocationStatus: "none",
+        activeAllocationIds: [],
+      })
+    );
+  });
+
+  it("allocates active credit records across multiple obligations independently", () => {
+    const leaseTwo: PaymentObligationLeaseInput = {
+      ...lease,
+      id: "lease-2",
+      leaseId: "lease-2",
+      propertyId: "prop-2",
+      unitId: "unit-2",
+      tenantId: "tenant-2",
+      monthlyRent: 210000,
+    };
+    const baseRows = buildPaymentObligationLedgerRows({ leases: [lease, leaseTwo] });
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [lease, leaseTwo],
+      creditAllocationRecords: [
+        {
+          allocationId: "allocation-lease-1",
+          leaseId: "lease-1",
+          obligationRowId: baseRows.find((row) => row.leaseId === "lease-1")?.rowId,
+          obligationKey: buildPaymentObligationCreditAllocationKey(baseRows.find((row) => row.leaseId === "lease-1")!),
+          allocationAmountCents: 180000,
+          status: "active",
+        },
+        {
+          allocationId: "allocation-lease-2",
+          leaseId: "lease-2",
+          obligationRowId: baseRows.find((row) => row.leaseId === "lease-2")?.rowId,
+          obligationKey: buildPaymentObligationCreditAllocationKey(baseRows.find((row) => row.leaseId === "lease-2")!),
+          allocationAmountCents: 50000,
+          status: "active",
+        },
+      ],
+    });
+
+    expect(rows.find((row) => row.leaseId === "lease-1")).toEqual(
+      expect.objectContaining({
+        allocatedFromCreditCents: 180000,
+        outstandingAfterAllocationCents: 0,
+        allocationStatus: "fully_allocated",
+      })
+    );
+    expect(rows.find((row) => row.leaseId === "lease-2")).toEqual(
+      expect.objectContaining({
+        allocatedFromCreditCents: 50000,
+        outstandingAfterAllocationCents: 160000,
+        allocationStatus: "partially_allocated",
+      })
+    );
+    expect(summarizePaymentObligationLedger(rows, { aggregateBalanceCents: -300000 })).toEqual(
+      expect.objectContaining({
+        outstandingAmountCents: 390000,
+        totalAllocatedCreditCents: 230000,
+        totalOutstandingAfterAllocationCents: 160000,
+        availableCreditAfterAllocationCents: 70000,
+      })
+    );
   });
 });

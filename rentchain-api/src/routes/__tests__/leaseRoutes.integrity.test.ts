@@ -409,6 +409,82 @@ describe("leaseRoutes integrity repairs", () => {
     );
   });
 
+  it("includes allocation-adjusted obligation fields without changing the historical ledger balance", async () => {
+    seedDoc("leases", "y7XM6BFXIzWW0fV3mu1L", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 2000,
+      startDate: "2026-04-01",
+      endDate: "2027-03-31",
+      dueDate: "2026-04-01",
+      status: "active",
+    });
+    seedDoc("ledgerEntries", "ledger-credit-adjustment", {
+      landlordId: "landlord-1",
+      leaseId: "y7XM6BFXIzWW0fV3mu1L",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "adjustment",
+      amountCents: -876900,
+      effectiveDate: "2026-05-31",
+      source: "manual_credit_adjustment",
+      createdAt: 10,
+    });
+    seedDoc("leaseCreditAllocationRecords", "lease_credit_allocation:bailey", {
+      allocationId: "lease_credit_allocation:bailey",
+      landlordId: "landlord-1",
+      leaseId: "y7XM6BFXIzWW0fV3mu1L",
+      obligationRowId: "lease_lifecycle:y7xm6bfxizww0fv3mu1l",
+      obligationKey: "legacy-test-key",
+      allocationAmountCents: 200000,
+      status: "active",
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/y7XM6BFXIzWW0fV3mu1L/ledger");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.entries).toHaveLength(1);
+    expect(res.body?.totals).toEqual(
+      expect.objectContaining({
+        balanceCents: -876900,
+      })
+    );
+    expect(res.body?.obligationRows).toEqual([
+      expect.objectContaining({
+        expectedAmountCents: 200000,
+        paidAmountCents: 0,
+        obligationStatus: "missing",
+        allocatedFromCreditCents: 200000,
+        outstandingAfterAllocationCents: 0,
+        allocationStatus: "fully_allocated",
+        activeAllocationIds: ["lease_credit_allocation:bailey"],
+        allocationAdjustedFinancialSignal: "credit_allocation_recorded",
+      }),
+    ]);
+    expect(res.body?.obligationSummary).toEqual(
+      expect.objectContaining({
+        outstandingAmountCents: 200000,
+        totalAllocatedCreditCents: 200000,
+        availableCreditAfterAllocationCents: 676900,
+        totalOutstandingAfterAllocationCents: 0,
+        allocationAdjustedOutstandingCents: 0,
+      })
+    );
+    expect(res.body?.delinquencySignals).toEqual([]);
+    expect(res.body?.delinquencySummary).toEqual(
+      expect.objectContaining({
+        totalSignals: 0,
+        totalOutstandingCents: 0,
+      })
+    );
+    expect(res.body?.decisions).toEqual([]);
+  });
+
   it("includes canonical imported payments in read-only obligation reconciliation", async () => {
     seedDoc("leases", "lease-1", {
       landlordId: "landlord-1",
