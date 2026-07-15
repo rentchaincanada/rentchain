@@ -384,7 +384,7 @@ describe("DashboardPage", () => {
     expect(within(detail).getByText("Day notes")).toBeInTheDocument();
     expect(within(detail).getByText("No saved scheduling notes for this day. Browser-saved notes from the Scheduling page will appear here for this account.")).toBeInTheDocument();
     expect(within(detail).getByText("Scheduling summary")).toBeInTheDocument();
-    expect(within(detail).getByText(/full Scheduling page groups viewings, maintenance requests, work orders, screening, and browser-saved notes/i)).toBeInTheDocument();
+    expect(within(detail).getByText(/combines dated Operations queue items with browser-saved notes for this account/i)).toBeInTheDocument();
     expect(within(detail).getByText("Scheduled items")).toBeInTheDocument();
     expect(within(detail).getByRole("link", { name: /View full day schedule/i })).toHaveAttribute(
       "href",
@@ -393,10 +393,10 @@ describe("DashboardPage", () => {
     expect(within(detail).getByRole("link", { name: /Resolve lease renewal/i })).toHaveAttribute("href", "/leases");
     expect(within(detail).getByText(`Lease · Open lease workspace · ${selectedShortDateLabel}`)).toBeInTheDocument();
     expect(within(detail).getByText("A lease needs a renewal decision before the notice window closes.")).toBeInTheDocument();
-    expect(within(detail).getByText("1 item from the Operations queue is scheduled for this day.")).toBeInTheDocument();
+    expect(within(detail).getByText("1 Operations item from the Operations queue is scheduled for this day.")).toBeInTheDocument();
   });
 
-  it("shows browser-saved scheduling notes in the selected-day dashboard detail", async () => {
+  it("counts browser-saved notes and shows timed notes in selected-day scheduled items", async () => {
     const selectedDate = new Date();
     selectedDate.setDate(selectedDate.getDate() + 1);
     selectedDate.setHours(12, 0, 0, 0);
@@ -414,7 +414,11 @@ describe("DashboardPage", () => {
         email: "landlord@example.com",
       },
       {
-        [dateKeyFromLocalDate(selectedDate)]: [{ id: "note-dashboard", text: "Confirm inspection window" }],
+        [dateKeyFromLocalDate(selectedDate)]: [
+          { id: "note-viewing", text: "1pm viewing" },
+          { id: "note-plumber", text: "3pm plumber" },
+          { id: "note-untimed", text: "Confirm inspection window" },
+        ],
       }
     );
 
@@ -424,8 +428,16 @@ describe("DashboardPage", () => {
     fireEvent.click(screen.getByRole("button", { name: `Select ${selectedDateLabel}, 0 scheduled items` }));
 
     const detail = screen.getByTestId("selected-day-detail-panel");
+    expect(within(detail).getByText("3 items")).toBeInTheDocument();
     expect(within(detail).getByText("Day notes")).toBeInTheDocument();
+    expect(within(detail).getByText("1pm viewing")).toBeInTheDocument();
+    expect(within(detail).getByText("3pm plumber")).toBeInTheDocument();
     expect(within(detail).getByText("Confirm inspection window")).toBeInTheDocument();
+    expect(within(detail).getByText("Unscheduled notes stay here until a clear time is added.")).toBeInTheDocument();
+    expect(within(detail).getByText("1 PM - viewing")).toBeInTheDocument();
+    expect(within(detail).getByText("3 PM - plumber")).toBeInTheDocument();
+    expect(within(detail).queryByText("No scheduled notes or actions for this day.")).not.toBeInTheDocument();
+    expect(within(detail).getByText("No Operations queue reminders are scheduled for this day.")).toBeInTheDocument();
     expect(within(detail).getByRole("link", { name: /View full day schedule/i })).toHaveAttribute(
       "href",
       `/scheduling?view=day&date=${dateKeyFromLocalDate(selectedDate)}`

@@ -20,7 +20,7 @@ import {
 import { MacShell } from "../components/layout/MacShell";
 import { Card, SkeletonBlock } from "../components/ui/Ui";
 import { useAuth } from "../context/useAuth";
-import { dateKeyFromLocalDate, getSchedulingDayNotes } from "../lib/schedulingDayNotes";
+import { dateKeyFromLocalDate, getSchedulingDayNotes, parseSchedulingNoteTime } from "../lib/schedulingDayNotes";
 import { colors, layout, spacing, text } from "../styles/tokens";
 import {
   fetchLandlordDecisionQueue,
@@ -319,6 +319,21 @@ function formatShortWeekday(value: Date): string {
 
 function formatShortMonthDay(value: Date): string {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(value);
+}
+
+function formatHourMinute(hour: number, minute: number): string {
+  const displayHour = hour % 12 || 12;
+  const displayMinute = minute ? `:${String(minute).padStart(2, "0")}` : "";
+  return `${displayHour}${displayMinute} ${hour >= 12 ? "PM" : "AM"}`;
+}
+
+function noteTextWithoutTime(textValue: string): string {
+  return textValue
+    .replace(/\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?)\b/i, "")
+    .replace(/\b([01]?\d|2[0-3]):([0-5]\d)\b/, "")
+    .replace(/^[\s:,-]+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function formatFullDate(value: Date): string {
@@ -864,9 +879,6 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
       : isSameCalendarMonth(date, today)
   );
   const selectedDayItems = datedItems.filter(({ date }) => isSameCalendarDay(date, selectedDay));
-  const selectedDayLabel = formatFullDate(selectedDay);
-  const visibleItemSummary = pluralize(visibleItems.length, "dated item");
-  const selectedItemSummary = pluralize(selectedDayItems.length, "item");
   const notesScope = React.useMemo(
     () => ({
       actorLandlordId: user?.actorLandlordId,
@@ -880,6 +892,29 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
     () => getSchedulingDayNotes(notesScope, dateKeyFromLocalDate(selectedDay)),
     [notesScope, selectedDay]
   );
+  const selectedScheduledNotes = React.useMemo(
+    () =>
+      selectedDayNotes
+        .map((note) => ({ note, parsedTime: parseSchedulingNoteTime(note.text) }))
+        .filter(
+          (
+            entry
+          ): entry is {
+            note: (typeof selectedDayNotes)[number];
+            parsedTime: Exclude<ReturnType<typeof parseSchedulingNoteTime>, null>;
+          } => entry.parsedTime !== null
+        )
+        .sort((left, right) => left.parsedTime.hour - right.parsedTime.hour || left.parsedTime.minute - right.parsedTime.minute),
+    [selectedDayNotes]
+  );
+  const selectedUnscheduledNotes = React.useMemo(
+    () => selectedDayNotes.filter((note) => !parseSchedulingNoteTime(note.text)),
+    [selectedDayNotes]
+  );
+  const selectedTotalItemCount = selectedDayItems.length + selectedDayNotes.length;
+  const selectedDayLabel = formatFullDate(selectedDay);
+  const selectedItemSummary = pluralize(selectedTotalItemCount, "item");
+  const selectedOperationsSummary = pluralize(selectedDayItems.length, "Operations item");
 
   return (
     <Card style={sectionCard} data-testid="calendar-preview-section">
@@ -1010,7 +1045,7 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
           </div>
           <span
             style={{
-              ...stateStyle(selectedDayItems.length ? "trusted" : "unavailable"),
+              ...stateStyle(selectedTotalItemCount ? "trusted" : "unavailable"),
               borderRadius: 8,
               padding: "4px 8px",
               fontSize: 12,
@@ -1026,11 +1061,18 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
           <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
             <div style={{ fontWeight: 850 }}>Day notes</div>
             {selectedDayNotes.length ? (
-              <ul style={{ margin: 0, paddingLeft: 18, color: text.muted, fontSize: 13, lineHeight: 1.45 }}>
-                {selectedDayNotes.map((note) => (
-                  <li key={note.id}>{note.text}</li>
-                ))}
-              </ul>
+              <div style={{ display: "grid", gap: 6 }}>
+                <ul style={{ margin: 0, paddingLeft: 18, color: text.muted, fontSize: 13, lineHeight: 1.45 }}>
+                  {selectedDayNotes.map((note) => (
+                    <li key={note.id}>{note.text}</li>
+                  ))}
+                </ul>
+                {selectedUnscheduledNotes.length ? (
+                  <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.45 }}>
+                    Unscheduled notes stay here until a clear time is added.
+                  </div>
+                ) : null}
+              </div>
             ) : (
               <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.45 }}>
                 No saved scheduling notes for this day. Browser-saved notes from the Scheduling page will appear here for this account.
@@ -1040,7 +1082,7 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
           <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
             <div style={{ fontWeight: 850 }}>Scheduling summary</div>
             <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.45 }}>
-              The full Scheduling page groups viewings, maintenance requests, work orders, screening, and browser-saved notes. This dashboard summary uses dated Operations queue items, with {visibleItemSummary} visible in the current {view === "week" ? "7-day" : "month"} view.
+              This dashboard summary combines dated Operations queue items with browser-saved notes for this account. Team-shared scheduling notes are not enabled yet.
             </div>
           </div>
         </div>
@@ -1050,12 +1092,37 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
           <Link to={`/scheduling?view=day&date=${dateKeyFromLocalDate(selectedDay)}`} style={{ ...compactButton, width: "fit-content" }}>
             View full day schedule <ArrowRight size={16} />
           </Link>
-          {selectedDayItems.length === 0 ? (
+          {selectedTotalItemCount === 0 ? (
             <div style={{ border: `1px solid ${colors.border}`, borderRadius: 8, padding: 12, color: text.muted }}>
               No scheduled notes or actions for this day.
             </div>
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
+              {selectedScheduledNotes.map(({ note, parsedTime }) => {
+                const noteDetail = noteTextWithoutTime(note.text) || note.text;
+                return (
+                  <div
+                    key={note.id}
+                    style={{
+                      display: "grid",
+                      gap: 5,
+                      padding: 12,
+                      borderRadius: 8,
+                      border: `1px solid ${dashboardTheme.border}`,
+                      background: dashboardTheme.card,
+                      color: dashboardTheme.text,
+                      minWidth: 0,
+                    }}
+                  >
+                    <div style={{ fontWeight: 850, overflowWrap: "anywhere" }}>
+                      {formatHourMinute(parsedTime.hour, parsedTime.minute)} - {noteDetail}
+                    </div>
+                    <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.4, overflowWrap: "anywhere" }}>
+                      Browser-saved scheduling note
+                    </div>
+                  </div>
+                );
+              })}
               {selectedDayItems.map(({ item }) => (
                 <Link
                   key={item.id}
@@ -1084,6 +1151,11 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
                   </div>
                 </Link>
               ))}
+              {selectedScheduledNotes.length === 0 && selectedDayItems.length === 0 && selectedUnscheduledNotes.length > 0 ? (
+                <div style={{ border: `1px solid ${colors.border}`, borderRadius: 8, padding: 12, color: text.muted }}>
+                  Saved notes for this day do not include clear times. They are listed under Day notes.
+                </div>
+              ) : null}
             </div>
           )}
         </div>
@@ -1092,7 +1164,7 @@ function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse 
           <div style={{ fontWeight: 850 }}>Operations / reminders</div>
           <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.45 }}>
             {selectedDayItems.length
-              ? `${selectedItemSummary} from the Operations queue ${selectedDayItems.length === 1 ? "is" : "are"} scheduled for this day.`
+              ? `${selectedOperationsSummary} from the Operations queue ${selectedDayItems.length === 1 ? "is" : "are"} scheduled for this day.`
               : "No Operations queue reminders are scheduled for this day."}
           </div>
         </div>
