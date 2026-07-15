@@ -181,6 +181,15 @@ function routeErrorFromValidation(error: LeaseCreditAllocationValidationError): 
   return { status: 400, code: "CREDIT_ALLOCATION_AMOUNT_INVALID", message: error.message };
 }
 
+function routeValidationError(res: Response, code: string, preview?: ReturnType<typeof previewResponse>) {
+  return res.status(400).json({
+    ok: false,
+    error: code,
+    code,
+    ...(preview ? { preview } : {}),
+  });
+}
+
 async function loadLeaseForLandlord(leaseId: string, landlordId: string) {
   const snap = await db.collection("leases").doc(leaseId).get();
   if (!snap.exists) return { ok: false as const, status: 404, code: "LEASE_NOT_FOUND" };
@@ -427,13 +436,31 @@ router.post("/leases/:leaseId/credit-allocations", requireAuth, requireLandlord,
     if (isAllocationContextError(context)) {
       return res.status(context.status).json({ ok: false, error: context.code, code: context.code });
     }
-    const obligationRef = cleanString(req.body?.obligationRowId || req.body?.obligationKey, 500);
+    const currentPreview = previewResponse(context.preview, context.allocationRecords);
+    const obligationRef = cleanString(req.body?.obligationRowId, 500);
+    if (!obligationRef) {
+      return routeValidationError(res, "CREDIT_ALLOCATION_OBLIGATION_NOT_ELIGIBLE", currentPreview);
+    }
+    if (!Object.prototype.hasOwnProperty.call(req.body || {}, "allocationAmountCents")) {
+      return routeValidationError(res, "CREDIT_ALLOCATION_AMOUNT_INVALID", currentPreview);
+    }
+    if (!cleanString(req.body?.previewFingerprint, 240)) {
+      return res.status(409).json({
+        ok: false,
+        error: "CREDIT_ALLOCATION_STATE_STALE",
+        code: "CREDIT_ALLOCATION_STATE_STALE",
+        preview: currentPreview,
+      });
+    }
     const idempotencyKey = cleanString(req.body?.idempotencyKey, 500);
+    if (!idempotencyKey) {
+      return routeValidationError(res, "CREDIT_ALLOCATION_IDEMPOTENCY_KEY_REQUIRED", currentPreview);
+    }
     const existingForIdempotency = idempotencyKey
       ? context.allocationRecords.find((record: LeaseCreditAllocationRecord) => record.idempotencyKey === idempotencyKey)
       : null;
     const selectedObligation = context.preview.obligations.find(
-      (obligation) => obligation.obligationRowId === obligationRef || obligation.obligationKey === obligationRef
+      (obligation) => obligation.obligationRowId === obligationRef
     );
     const obligationKey = selectedObligation?.obligationKey || existingForIdempotency?.obligationKey;
     if (!obligationKey) {

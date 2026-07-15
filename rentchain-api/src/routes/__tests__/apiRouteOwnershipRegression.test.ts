@@ -424,6 +424,9 @@ describe("API route ownership regression", () => {
       'app.use("/api/landlord/leases", routeSource("leaseNoticeLandlordRoutes.ts"), leaseNoticeLandlordRoutes)'
     );
     const landlordInboxMount = source.indexOf('app.use("/api/landlord", routeSource("landlordInboxRoutes.ts"), landlordInboxRoutes)');
+    const landlordCreditAllocationMount = source.indexOf(
+      'app.use("/api/landlord", routeSource("landlordLeaseCreditAllocationRoutes.ts"), landlordLeaseCreditAllocationRoutes)'
+    );
     const delegatedAccessLandlordMount = source.indexOf(
       'app.use("/api/landlord", routeSource("delegatedAccessInvitationRoutes.ts"), delegatedAccessInvitationRoutes)'
     );
@@ -454,6 +457,7 @@ describe("API route ownership regression", () => {
     expect(evidencePackageMount).toBeGreaterThan(-1);
     expect(leaseNoticeLandlordMount).toBeGreaterThan(-1);
     expect(landlordInboxMount).toBeGreaterThan(-1);
+    expect(landlordCreditAllocationMount).toBeGreaterThan(-1);
     expect(delegatedAccessLandlordMount).toBeGreaterThan(-1);
     expect(landlordActivationMount).toBeGreaterThan(-1);
     expect(statusMount).toBeGreaterThan(-1);
@@ -488,6 +492,9 @@ describe("API route ownership regression", () => {
     expect(leaseNoticeLandlordMount).toBeLessThan(landlordActivationMount);
     expect(leaseNoticeLandlordMount).toBeLessThan(screeningJobsMount);
     expect(leaseNoticeLandlordMount).toBeLessThan(apiCatchall);
+    expect(landlordCreditAllocationMount).toBeLessThan(delegatedAccessLandlordMount);
+    expect(landlordCreditAllocationMount).toBeLessThan(screeningJobsMount);
+    expect(landlordCreditAllocationMount).toBeLessThan(apiCatchall);
     expect(buildProbeRoute).toBeLessThan(riskAgentMount);
     expect(tenantPortalMount).toBeLessThan(referralsMount);
     expect(tenantPortalMount).toBeLessThan(screeningJobsMount);

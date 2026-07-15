@@ -303,11 +303,71 @@ describe("landlordLeaseCreditAllocationRoutes", () => {
         obligationRowId: obligation.obligationRowId,
         allocationAmountCents: 200000,
         previewFingerprint: "stale",
+        idempotencyKey: "stale-fingerprint",
       },
     });
 
     expect(res.status).toBe(409);
     expect(res.body.error).toBe("CREDIT_ALLOCATION_STATE_STALE");
+  });
+
+  it("requires obligationRowId for apply requests", async () => {
+    seedBaileyCredit();
+    const router = (await import("../landlordLeaseCreditAllocationRoutes")).default;
+    const preview = await loadPreview(router);
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/leases/lease-1/credit-allocations",
+      body: {
+        allocationAmountCents: 200000,
+        previewFingerprint: preview.body.previewFingerprint,
+        idempotencyKey: "missing-obligation",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("CREDIT_ALLOCATION_OBLIGATION_NOT_ELIGIBLE");
+  });
+
+  it("requires allocationAmountCents for apply requests", async () => {
+    seedBaileyCredit();
+    const router = (await import("../landlordLeaseCreditAllocationRoutes")).default;
+    const preview = await loadPreview(router);
+    const obligation = preview.body.eligibleObligations[0];
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/leases/lease-1/credit-allocations",
+      body: {
+        obligationRowId: obligation.obligationRowId,
+        previewFingerprint: preview.body.previewFingerprint,
+        idempotencyKey: "missing-amount",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("CREDIT_ALLOCATION_AMOUNT_INVALID");
+  });
+
+  it("requires idempotencyKey for apply requests", async () => {
+    seedBaileyCredit();
+    const router = (await import("../landlordLeaseCreditAllocationRoutes")).default;
+    const preview = await loadPreview(router);
+    const obligation = preview.body.eligibleObligations[0];
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/leases/lease-1/credit-allocations",
+      body: {
+        obligationRowId: obligation.obligationRowId,
+        allocationAmountCents: 200000,
+        previewFingerprint: preview.body.previewFingerprint,
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("CREDIT_ALLOCATION_IDEMPOTENCY_KEY_REQUIRED");
   });
 
   it("rejects amounts exceeding available credit", async () => {
@@ -323,6 +383,7 @@ describe("landlordLeaseCreditAllocationRoutes", () => {
         obligationRowId: obligation.obligationRowId,
         allocationAmountCents: 150000,
         previewFingerprint: preview.body.previewFingerprint,
+        idempotencyKey: "exceeds-credit",
       },
     });
 
@@ -343,6 +404,7 @@ describe("landlordLeaseCreditAllocationRoutes", () => {
         obligationRowId: obligation.obligationRowId,
         allocationAmountCents: 200001,
         previewFingerprint: preview.body.previewFingerprint,
+        idempotencyKey: "exceeds-outstanding",
       },
     });
 
@@ -362,6 +424,7 @@ describe("landlordLeaseCreditAllocationRoutes", () => {
         obligationRowId: "not-this-lease",
         allocationAmountCents: 200000,
         previewFingerprint: preview.body.previewFingerprint,
+        idempotencyKey: "invalid-obligation",
       },
     });
 
