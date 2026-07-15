@@ -229,6 +229,27 @@ describe("landlordSchedulingDayNotesRoutes", () => {
     });
   });
 
+  it("supports multiple active notes on the same date", async () => {
+    const router = (await import("../landlordSchedulingDayNotesRoutes")).default;
+
+    await invokeRouter(router, {
+      method: "POST",
+      url: "/scheduling/day-notes/2026-07-15",
+      body: { noteText: "1pm viewing" },
+    });
+    await invokeRouter(router, {
+      method: "POST",
+      url: "/scheduling/day-notes/2026-07-15",
+      body: { noteText: "3pm plumber" },
+    });
+
+    const single = await invokeRouter(router, { method: "GET", url: "/scheduling/day-notes/2026-07-15" });
+
+    expect(single.status).toBe(200);
+    expect(single.body.notes).toHaveLength(2);
+    expect(single.body.notes.map((note: any) => note.noteText)).toEqual(["1pm viewing", "3pm plumber"]);
+  });
+
   it("soft-deletes notes and excludes them from future reads", async () => {
     const router = (await import("../landlordSchedulingDayNotesRoutes")).default;
     const create = await invokeRouter(router, {
