@@ -11,6 +11,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { Button, Card, Input } from "../components/ui/Ui";
+import { useAuth } from "../context/useAuth";
 import {
   createSchedulingDayNote,
   deleteSchedulingDayNote,
@@ -18,8 +19,12 @@ import {
   updateSchedulingDayNote,
 } from "../api/schedulingDayNotesApi";
 import {
+  clearMigratedLegacySchedulingDayNotes,
   dateKeyFromLocalDate,
+  legacySchedulingDayNoteFingerprint,
+  markLegacySchedulingDayNotesMigrated,
   parseSchedulingNoteTime,
+  readLegacySchedulingDayNotes,
   type SchedulingDayNote,
   type SchedulingDayNotesByDate,
 } from "../lib/schedulingDayNotes";
@@ -215,6 +220,7 @@ function WorkspaceList({
 }
 
 export default function SchedulingWorkspacePage() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const today = React.useMemo(() => new Date(), []);
   const requestedDate = React.useMemo(() => parseDateKey(searchParams.get("date")), [searchParams]);
@@ -229,6 +235,20 @@ export default function SchedulingWorkspacePage() {
   const [notesStatus, setNotesStatus] = React.useState<string | null>(null);
   const [draftSaving, setDraftSaving] = React.useState(false);
   const [savingNoteIds, setSavingNoteIds] = React.useState<Record<string, boolean>>({});
+  const legacyNotesScope = React.useMemo(
+    () => ({
+      actorLandlordId: user?.actorLandlordId,
+      landlordId: user?.landlordId,
+      userId: user?.id,
+      email: user?.email,
+    }),
+    [user?.actorLandlordId, user?.email, user?.id, user?.landlordId]
+  );
+  const [legacyNotesByDate, setLegacyNotesByDate] = React.useState<SchedulingDayNotesByDate>({});
+  const [legacyReviewOpen, setLegacyReviewOpen] = React.useState(false);
+  const [legacyNoticeDismissed, setLegacyNoticeDismissed] = React.useState(false);
+  const [legacyMigrationRunning, setLegacyMigrationRunning] = React.useState(false);
+  const [legacyMigrationError, setLegacyMigrationError] = React.useState<string | null>(null);
 
   const selectedKey = dayKey(selectedDate);
   const selectedNotes = notesByDate[selectedKey] || [];
@@ -265,6 +285,19 @@ export default function SchedulingWorkspacePage() {
     });
     return { grouped, unscheduled };
   }, [selectedNotes]);
+  const legacyNotes = React.useMemo(
+    () =>
+      Object.entries(legacyNotesByDate).flatMap(([date, notes]) =>
+        notes.map((note) => ({ date, note, fingerprint: legacySchedulingDayNoteFingerprint(date, note) }))
+      ),
+    [legacyNotesByDate]
+  );
+
+  React.useEffect(() => {
+    setLegacyNotesByDate(readLegacySchedulingDayNotes(legacyNotesScope));
+    setLegacyNoticeDismissed(false);
+    setLegacyMigrationError(null);
+  }, [legacyNotesScope]);
 
   React.useEffect(() => {
     const nextDate = parseDateKey(searchParams.get("date"));
@@ -401,6 +434,40 @@ export default function SchedulingWorkspacePage() {
     }
   };
 
+  const migrateLegacyNotes = async () => {
+    setLegacyMigrationRunning(true);
+    setLegacyMigrationError(null);
+    const createdByDate: SchedulingDayNotesByDate = {};
+    try {
+      for (const legacy of legacyNotes) {
+        const created = await createSchedulingDayNote(legacy.date, {
+          noteText: legacy.note.text,
+          source: "scheduling",
+        });
+        markLegacySchedulingDayNotesMigrated(legacyNotesScope, [legacy.fingerprint]);
+        createdByDate[legacy.date] = [...(createdByDate[legacy.date] || []), created];
+      }
+      clearMigratedLegacySchedulingDayNotes(legacyNotesScope);
+      setLegacyNotesByDate({});
+      setLegacyReviewOpen(false);
+      setNotesByDate((current) => {
+        const next = { ...current };
+        Object.entries(createdByDate).forEach(([date, notes]) => {
+          next[date] = [...(next[date] || []), ...notes];
+        });
+        return next;
+      });
+      setNotesStatus(`${legacyNotes.length} browser-saved ${legacyNotes.length === 1 ? "note" : "notes"} moved to workspace notes.`);
+    } catch {
+      setLegacyNotesByDate(readLegacySchedulingDayNotes(legacyNotesScope));
+      setLegacyMigrationError(
+        "Some browser-saved notes could not be moved. Your original browser data was kept; retry to move the remaining notes."
+      );
+    } finally {
+      setLegacyMigrationRunning(false);
+    }
+  };
+
   const moveMonth = (offset: number) => {
     setActiveMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
   };
@@ -435,6 +502,37 @@ export default function SchedulingWorkspacePage() {
           background: var(--schedule-card) !important;
           border-color: var(--schedule-border) !important;
           box-shadow: var(--schedule-shadow) !important;
+        }
+        .scheduling-migration-card {
+          display: grid;
+          gap: ${spacing.sm};
+          border-color: rgba(36, 88, 66, 0.38) !important;
+          background: var(--schedule-panel) !important;
+        }
+        .scheduling-migration-card h2,
+        .scheduling-migration-card p {
+          margin: 0;
+        }
+        .scheduling-migration-card p,
+        .scheduling-migration-list small {
+          color: var(--schedule-muted);
+          line-height: 1.5;
+        }
+        .scheduling-migration-list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        .scheduling-migration-list li {
+          display: grid;
+          gap: 3px;
+          padding: 10px 12px;
+          border: 1px solid var(--schedule-border);
+          border-radius: ${radius.md};
+          background: var(--schedule-card);
+          overflow-wrap: anywhere;
         }
         .scheduling-workspace input {
           background: var(--schedule-card) !important;
@@ -778,6 +876,45 @@ export default function SchedulingWorkspacePage() {
           Back to Dashboard
         </Link>
       </Card>
+
+      {legacyNotes.length && !legacyNoticeDismissed ? (
+        <Card className="scheduling-card scheduling-migration-card" aria-label="Browser-saved notes migration">
+          <h2>Browser-saved notes found</h2>
+          <p>
+            These {legacyNotes.length} {legacyNotes.length === 1 ? "note was" : "notes were"} saved on this browser before
+            workspace notes were enabled. You can move {legacyNotes.length === 1 ? "it" : "them"} into workspace notes so
+            {legacyNotes.length === 1 ? " it is" : " they are"} available across devices for this landlord account.
+          </p>
+          {legacyReviewOpen ? (
+            <ul className="scheduling-migration-list" aria-label="Browser-saved notes review">
+              {legacyNotes.map(({ date, note, fingerprint }) => (
+                <li key={fingerprint}>
+                  <strong>{date}</strong>
+                  <span>{note.text}</span>
+                  <small>A new workspace note will be created. Existing workspace notes for this date will not be changed.</small>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {legacyMigrationError ? <div role="alert">{legacyMigrationError}</div> : null}
+          <div className="scheduling-note-actions">
+            <Button type="button" onClick={() => setLegacyReviewOpen((open) => !open)} disabled={legacyMigrationRunning}>
+              {legacyReviewOpen ? "Hide review" : "Review notes"}
+            </Button>
+            <Button
+              type="button"
+              className="scheduling-primary-action"
+              onClick={migrateLegacyNotes}
+              disabled={legacyMigrationRunning}
+            >
+              {legacyMigrationRunning ? "Moving notes..." : "Move to workspace notes"}
+            </Button>
+            <Button type="button" onClick={() => setLegacyNoticeDismissed(true)} disabled={legacyMigrationRunning}>
+              Not now
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       <div className="scheduling-layout">
         <div className="scheduling-left">

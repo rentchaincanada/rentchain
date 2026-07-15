@@ -30,6 +30,7 @@ vi.mock("../api/schedulingDayNotesApi", () => ({
 }));
 
 beforeEach(() => {
+  window.localStorage.clear();
   mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({});
   mocks.createSchedulingDayNoteMock.mockImplementation(async (_date: string, payload: { noteText: string }) => ({
     id: `note-${payload.noteText.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
@@ -56,6 +57,91 @@ function renderPage(initialEntries: string[] = ["/scheduling"]) {
 }
 
 describe("SchedulingWorkspacePage", () => {
+  const legacyStorageKey = "rentchain.schedulingDayNotes.v1:landlord-1:user-1";
+
+  it("does not show a migration notice or upload automatically when no browser-saved notes exist", () => {
+    renderPage();
+
+    expect(screen.queryByText("Browser-saved notes found")).not.toBeInTheDocument();
+    expect(mocks.createSchedulingDayNoteMock).not.toHaveBeenCalled();
+  });
+
+  it("lets the landlord review browser-saved notes before explicitly moving them without overwriting workspace notes", async () => {
+    window.localStorage.setItem(
+      legacyStorageKey,
+      JSON.stringify({ "2026-07-14": [{ id: "legacy-1", text: "9am legacy inspection" }] })
+    );
+    mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({
+      "2026-07-14": [{ id: "workspace-1", text: "Existing workspace note" }],
+    });
+    renderPage(["/scheduling?view=day&date=2026-07-14"]);
+
+    expect(await screen.findByText("Browser-saved notes found")).toBeInTheDocument();
+    expect(mocks.createSchedulingDayNoteMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Review notes" }));
+    const review = screen.getByLabelText("Browser-saved notes review");
+    expect(within(review).getByText("9am legacy inspection")).toBeInTheDocument();
+    expect(within(review).getByText(/Existing workspace notes for this date will not be changed/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Move to workspace notes" }));
+
+    await waitFor(() =>
+      expect(mocks.createSchedulingDayNoteMock).toHaveBeenCalledWith("2026-07-14", {
+        noteText: "9am legacy inspection",
+        source: "scheduling",
+      })
+    );
+    expect(mocks.updateSchedulingDayNoteMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(window.localStorage.getItem(legacyStorageKey)).toBeNull());
+    expect(screen.queryByText("Browser-saved notes found")).not.toBeInTheDocument();
+    expect(await screen.findByDisplayValue("9am legacy inspection")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Existing workspace note")).toBeInTheDocument();
+  });
+
+  it("keeps the legacy payload on failure and does not duplicate notes already created on retry", async () => {
+    window.localStorage.setItem(
+      legacyStorageKey,
+      JSON.stringify({
+        "2026-07-14": [
+          { id: "legacy-1", text: "First legacy note" },
+          { id: "legacy-2", text: "Second legacy note" },
+        ],
+      })
+    );
+    mocks.createSchedulingDayNoteMock
+      .mockResolvedValueOnce({ id: "created-1", text: "First legacy note" })
+      .mockRejectedValueOnce(new Error("request failed"))
+      .mockResolvedValueOnce({ id: "created-2", text: "Second legacy note" });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Move to workspace notes" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/original browser data was kept/i);
+    expect(window.localStorage.getItem(legacyStorageKey)).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Move to workspace notes" }));
+    await waitFor(() => expect(mocks.createSchedulingDayNoteMock).toHaveBeenCalledTimes(3));
+    expect(mocks.createSchedulingDayNoteMock.mock.calls.map((call) => call[1].noteText)).toEqual([
+      "First legacy note",
+      "Second legacy note",
+      "Second legacy note",
+    ]);
+    await waitFor(() => expect(window.localStorage.getItem(legacyStorageKey)).toBeNull());
+  });
+
+  it("dismisses the migration notice without uploading or deleting browser-saved notes", async () => {
+    window.localStorage.setItem(
+      legacyStorageKey,
+      JSON.stringify({ "2026-07-14": [{ id: "legacy-1", text: "Legacy note" }] })
+    );
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Not now" }));
+
+    expect(screen.queryByText("Browser-saved notes found")).not.toBeInTheDocument();
+    expect(mocks.createSchedulingDayNoteMock).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(legacyStorageKey)).not.toBeNull();
+  });
+
   it("renders a calendar-centric scheduling workspace with operational sections", () => {
     renderPage();
 
