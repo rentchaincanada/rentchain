@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TopNav from "./TopNav";
 
 const mocks = vi.hoisted(() => ({
@@ -31,7 +31,14 @@ vi.mock("../../api/messagesApi", () => ({
 }));
 
 vi.mock("./WorkspaceDrawer", () => ({
-  WorkspaceDrawer: () => null,
+  WorkspaceDrawer: ({ open, userEmail, userRole }: { open: boolean; userEmail?: string; userRole?: string | null }) =>
+    open ? (
+      <div role="dialog" aria-label="Workspace navigation">
+        <button type="button">Account</button>
+        <span>{userRole}</span>
+        <span>{userEmail}</span>
+      </div>
+    ) : null,
 }));
 
 vi.mock("../brand/RentChainLogo", () => ({
@@ -39,6 +46,10 @@ vi.mock("../brand/RentChainLogo", () => ({
 }));
 
 describe("TopNav", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     mocks.navigateMock.mockReset();
     mocks.logoutMock.mockReset();
@@ -63,6 +74,62 @@ describe("TopNav", () => {
     fireEvent.click(messagesButton);
 
     expect(mocks.navigateMock).toHaveBeenCalledWith("/landlord/inbox");
+  });
+
+  it("replaces the prominent account text action with a scheduling shortcut", async () => {
+    render(<TopNav />);
+
+    const scheduleButton = await screen.findByRole("button", { name: /Scheduling/i });
+    fireEvent.click(scheduleButton);
+
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/scheduling");
+    expect(screen.queryByText("My Account")).not.toBeInTheDocument();
+  });
+
+  it("renders account access as verified-name initials and opens the workspace drawer", async () => {
+    mocks.useAuthMock.mockReturnValue({
+      user: {
+        id: "landlord-1",
+        role: "landlord",
+        actorRole: "landlord",
+        email: "paul@example.com",
+        verifiedName: "Paul Chater",
+      },
+      logout: mocks.logoutMock,
+      ready: true,
+      isLoading: false,
+      authStatus: "authed",
+    });
+
+    render(<TopNav />);
+
+    const accountButton = await screen.findByRole("button", { name: "Account menu for Paul Chater" });
+    expect(accountButton).toHaveTextContent("PC");
+
+    fireEvent.click(accountButton);
+
+    expect(screen.getByRole("dialog", { name: "Workspace navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Account" })).toBeInTheDocument();
+  });
+
+  it("falls back to email-derived initials when a display name is unavailable", async () => {
+    mocks.useAuthMock.mockReturnValue({
+      user: {
+        id: "landlord-1",
+        role: "landlord",
+        actorRole: "landlord",
+        email: "property.manager@example.com",
+      },
+      logout: mocks.logoutMock,
+      ready: true,
+      isLoading: false,
+      authStatus: "authed",
+    });
+
+    render(<TopNav />);
+
+    expect(await screen.findByRole("button", { name: "Account menu" })).toHaveTextContent("PM");
+    expect(screen.queryByText("My Account")).not.toBeInTheDocument();
   });
 
   it("shows unread indicator from existing conversation unread data", async () => {

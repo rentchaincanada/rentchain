@@ -1,10 +1,11 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import DashboardPage from "./DashboardPage";
 import type { LandlordDecisionQueueResponse } from "@/api/landlordDecisionQueueApi";
 import type { LandlordPortfolioStatusFinancialResponse } from "@/api/landlordPortfolioStatusFinancialApi";
+import { dateKeyFromLocalDate, writeSchedulingDayNotes } from "../lib/schedulingDayNotes";
 
 const mocks = vi.hoisted(() => ({
   fetchLandlordDecisionQueueMock: vi.fn(),
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   fetchUnifiedInboxMock: vi.fn(),
   listWorkOrdersMock: vi.fn(),
   listLandlordMaintenanceMock: vi.fn(),
+  useAuthMock: vi.fn(),
 }));
 
 vi.mock("@/api/landlordDecisionQueueApi", () => ({
@@ -42,6 +44,10 @@ vi.mock("@/api/workOrdersApi", () => ({
 
 vi.mock("@/api/maintenanceWorkflowApi", () => ({
   listLandlordMaintenance: mocks.listLandlordMaintenanceMock,
+}));
+
+vi.mock("../context/useAuth", () => ({
+  useAuth: mocks.useAuthMock,
 }));
 
 const macShellProps = vi.hoisted(() => ({
@@ -230,6 +236,7 @@ function renderDashboard() {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
 
 describe("DashboardPage", () => {
@@ -250,6 +257,14 @@ describe("DashboardPage", () => {
       ],
     });
     mocks.fetchUnifiedInboxMock.mockResolvedValue({ ok: true, role: "landlord", items: [], records: [], total: 4, limit: 50, offset: 0 });
+    mocks.useAuthMock.mockReturnValue({
+      user: {
+        id: "user-1",
+        email: "landlord@example.com",
+        landlordId: "landlord-1",
+      },
+    });
+    window.localStorage.clear();
   });
 
   it("renders Dashboard 2.0 sections from the portfolio and decision queue contracts", async () => {
@@ -284,6 +299,9 @@ describe("DashboardPage", () => {
     expect(screen.getByRole("link", { name: /Open Operations/i })).toHaveAttribute("href", "/operations");
     expect(screen.getByTestId("calendar-preview-section")).toHaveTextContent("Calendar Preview");
     expect(screen.getByTestId("calendar-preview-section")).toHaveTextContent("Resolve lease renewal");
+    expect(screen.getByTestId("selected-day-detail-panel")).toHaveTextContent("Selected day");
+    expect(screen.getByTestId("selected-day-detail-panel")).toHaveTextContent("No saved scheduling notes for this day.");
+    expect(screen.getByTestId("selected-day-detail-panel")).toHaveTextContent("Scheduling summary");
     expect(screen.getByRole("link", { name: /Open Full Schedule/i })).toHaveAttribute("href", "/scheduling");
     fireEvent.click(screen.getByRole("button", { name: "Month view" }));
     expect(screen.getByRole("button", { name: "7-day view" })).toBeInTheDocument();
@@ -305,6 +323,126 @@ describe("DashboardPage", () => {
     expect(mocks.fetchUnifiedInboxMock).toHaveBeenCalledWith("landlord");
     expect(screen.queryByText("lease-1")).not.toBeInTheDocument();
     expect(screen.queryByText("payment-1")).not.toBeInTheDocument();
+  });
+
+  it("shows selected-day details for dated dashboard schedule items", async () => {
+    const selectedDate = new Date();
+    selectedDate.setDate(selectedDate.getDate() + 2);
+    selectedDate.setHours(12, 0, 0, 0);
+    const selectedDateLabel = new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(selectedDate);
+    const selectedShortDateLabel = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(selectedDate);
+    mocks.fetchLandlordDecisionQueueMock.mockResolvedValue(
+      queueResponse({
+        total: 1,
+        summary: {
+          total: 1,
+          critical: 0,
+          warning: 0,
+          needsReview: 1,
+          upcoming: 0,
+          informational: 0,
+          open: 1,
+          blocked: 0,
+        },
+        items: [
+          {
+            id: "decision-renewal-scheduled",
+            sourceType: "lease",
+            sourceId: "lease-source",
+            workspace: "lease",
+            severity: "needs_review",
+            title: "Resolve lease renewal",
+            description: "A lease needs a renewal decision before the notice window closes.",
+            recommendedActionLabel: "Open lease workspace",
+            recommendedActionHref: "/leases",
+            dueAt: selectedDate.toISOString(),
+            createdAt: "2026-07-14T12:00:00.000Z",
+            updatedAt: "2026-07-15T12:00:00.000Z",
+            status: "open",
+            dedupeKey: "lease-renewal",
+            sortKey: "1",
+            priorityRank: 10,
+          },
+        ],
+      })
+    );
+
+    renderDashboard();
+
+    expect(await screen.findByTestId("calendar-preview-section")).toHaveTextContent("Calendar Preview");
+    expect(screen.getByTestId("selected-day-detail-panel")).toHaveTextContent("No scheduled notes or actions for this day.");
+
+    fireEvent.click(screen.getByRole("button", { name: `Select ${selectedDateLabel}, 1 scheduled item` }));
+
+    const detail = screen.getByTestId("selected-day-detail-panel");
+    expect(within(detail).getByRole("heading", { name: selectedDateLabel })).toBeInTheDocument();
+    expect(within(detail).getByText("Day notes")).toBeInTheDocument();
+    expect(within(detail).getByText("No saved scheduling notes for this day. Browser-saved notes from the Scheduling page will appear here for this account.")).toBeInTheDocument();
+    expect(within(detail).getByText("Scheduling summary")).toBeInTheDocument();
+    expect(within(detail).getByText(/combines dated Operations queue items with browser-saved notes for this account/i)).toBeInTheDocument();
+    expect(within(detail).getByText("Scheduled items")).toBeInTheDocument();
+    expect(within(detail).getByRole("link", { name: /View full day schedule/i })).toHaveAttribute(
+      "href",
+      `/scheduling?view=day&date=${dateKeyFromLocalDate(selectedDate)}`
+    );
+    expect(within(detail).getByRole("link", { name: /Resolve lease renewal/i })).toHaveAttribute("href", "/leases");
+    expect(within(detail).getByText(`Lease · Open lease workspace · ${selectedShortDateLabel}`)).toBeInTheDocument();
+    expect(within(detail).getByText("A lease needs a renewal decision before the notice window closes.")).toBeInTheDocument();
+    expect(within(detail).getByText("1 Operations item from the Operations queue is scheduled for this day.")).toBeInTheDocument();
+  });
+
+  it("counts browser-saved notes and shows timed notes in selected-day scheduled items", async () => {
+    const selectedDate = new Date();
+    selectedDate.setDate(selectedDate.getDate() + 1);
+    selectedDate.setHours(12, 0, 0, 0);
+    const selectedDateLabel = new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(selectedDate);
+
+    writeSchedulingDayNotes(
+      {
+        landlordId: "landlord-1",
+        userId: "user-1",
+        email: "landlord@example.com",
+      },
+      {
+        [dateKeyFromLocalDate(selectedDate)]: [
+          { id: "note-viewing", text: "1pm viewing" },
+          { id: "note-plumber", text: "3pm plumber" },
+          { id: "note-untimed", text: "Confirm inspection window" },
+        ],
+      }
+    );
+
+    renderDashboard();
+
+    await screen.findByTestId("calendar-preview-section");
+    fireEvent.click(screen.getByRole("button", { name: `Select ${selectedDateLabel}, 0 scheduled items` }));
+
+    const detail = screen.getByTestId("selected-day-detail-panel");
+    expect(within(detail).getByText("3 items")).toBeInTheDocument();
+    expect(within(detail).getByText("Day notes")).toBeInTheDocument();
+    expect(within(detail).getByText("1pm viewing")).toBeInTheDocument();
+    expect(within(detail).getByText("3pm plumber")).toBeInTheDocument();
+    expect(within(detail).getByText("Confirm inspection window")).toBeInTheDocument();
+    expect(within(detail).getByText("Unscheduled notes stay here until a clear time is added.")).toBeInTheDocument();
+    expect(within(detail).getByText("1 PM - viewing")).toBeInTheDocument();
+    expect(within(detail).getByText("3 PM - plumber")).toBeInTheDocument();
+    expect(within(detail).queryByText("No scheduled notes or actions for this day.")).not.toBeInTheDocument();
+    expect(within(detail).getByText("No Operations queue reminders are scheduled for this day.")).toBeInTheDocument();
+    expect(within(detail).getByRole("link", { name: /View full day schedule/i })).toHaveAttribute(
+      "href",
+      `/scheduling?view=day&date=${dateKeyFromLocalDate(selectedDate)}`
+    );
+    expect(within(detail).queryByText(/No saved scheduling notes for this day/i)).not.toBeInTheDocument();
   });
 
   it("uses specific Dashboard decision destination labels for common RC1 cards", async () => {
@@ -594,6 +732,8 @@ describe("DashboardPage", () => {
     expect(await screen.findByText("No open decisions. New operational decisions will appear here before routing to their owning workspace.")).toBeInTheDocument();
     expect(screen.getByText("No upcoming dated actions are due right now. Reviewable work may still appear in Decision Queue Preview or the Operations review queue.")).toBeInTheDocument();
     expect(screen.getByText("No dated schedule items are visible for this week. Upcoming dated decisions will appear here.")).toBeInTheDocument();
+    expect(screen.getByTestId("selected-day-detail-panel")).toHaveTextContent("No scheduled notes or actions for this day.");
+    expect(screen.getByTestId("selected-day-detail-panel")).toHaveTextContent("No saved scheduling notes for this day.");
   });
 
   it("stacks the decision and upcoming-actions grid on reduced desktop widths", async () => {

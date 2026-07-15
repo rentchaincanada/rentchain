@@ -1,16 +1,27 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import SchedulingWorkspacePage from "./SchedulingWorkspacePage";
+
+vi.mock("../context/useAuth", () => ({
+  useAuth: () => ({
+    user: {
+      id: "user-1",
+      email: "landlord@example.com",
+      landlordId: "landlord-1",
+    },
+  }),
+}));
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
 });
 
-function renderPage() {
+function renderPage(initialEntries: string[] = ["/scheduling"]) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <SchedulingWorkspacePage />
     </MemoryRouter>
   );
@@ -21,8 +32,12 @@ describe("SchedulingWorkspacePage", () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "Scheduling" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Month" })).toHaveClass("is-active");
-    expect(screen.getByRole("button", { name: "7-day" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Day" })).toHaveClass("is-active");
+    expect(screen.getByRole("button", { name: "7 days" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "30 days" })).toBeInTheDocument();
+    expect(screen.getByLabelText("7 AM-10 PM schedule")).toBeInTheDocument();
+    expect(screen.getByLabelText("Schedule slot 7 AM")).toBeInTheDocument();
+    expect(screen.getByLabelText("Schedule slot 10 PM")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Notes" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Viewings" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Maintenance Requests" })).toBeInTheDocument();
@@ -32,13 +47,18 @@ describe("SchedulingWorkspacePage", () => {
     expect(screen.getByRole("link", { name: "Screen Manually" })).toHaveAttribute("href", "/screening/manual");
   });
 
-  it("switches between month and 7-day calendar views", () => {
+  it("switches between day, 7-day, and 30-day scheduling views", () => {
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "7-day" }));
+    fireEvent.click(screen.getByRole("button", { name: "7 days" }));
 
-    expect(screen.getByRole("button", { name: "7-day" })).toHaveClass("is-active");
-    expect(screen.getByText(/Week of/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "7 days" })).toHaveClass("is-active");
+    expect(screen.getByLabelText("7-day agenda summary")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "30 days" }));
+
+    expect(screen.getByRole("button", { name: "30 days" })).toHaveClass("is-active");
+    expect(screen.getByLabelText("30-day scheduling overview")).toBeInTheDocument();
   });
 
   it("lets landlords add, edit, and delete multiple selected-day notes", () => {
@@ -50,6 +70,7 @@ describe("SchedulingWorkspacePage", () => {
     fireEvent.change(noteInput, { target: { value: "Confirm maintenance access" } });
     fireEvent.click(screen.getByRole("button", { name: "Add note" }));
 
+    fireEvent.click(screen.getByRole("button", { name: "30 days" }));
     const selectedDay = screen.getByRole("button", { pressed: true });
     expect(within(selectedDay).getByText("2 notes")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Call tenant before viewing")).toBeInTheDocument();
@@ -64,6 +85,46 @@ describe("SchedulingWorkspacePage", () => {
     expect(within(selectedDay).getByText("1 note")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("Call tenant at noon")).not.toBeInTheDocument();
     expect(screen.getByDisplayValue("Confirm maintenance access")).toBeInTheDocument();
+  });
+
+  it("places notes with clear times into day schedule slots and keeps vague notes unscheduled", () => {
+    renderPage();
+
+    const noteInput = screen.getByLabelText("New schedule note");
+    fireEvent.change(noteInput, { target: { value: "9am inspection" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
+    fireEvent.change(noteInput, { target: { value: "14:00 contractor" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
+    fireEvent.change(noteInput, { target: { value: "Call tenant tomorrow" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
+
+    expect(within(screen.getByLabelText("Schedule slot 9 AM")).getByText("9am inspection")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Schedule slot 2 PM")).getByText("14:00 contractor")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Unscheduled notes")).getByText("Call tenant tomorrow")).toBeInTheDocument();
+  });
+
+  it("opens a requested day from scheduling query params", () => {
+    renderPage(["/scheduling?view=day&date=2026-07-15"]);
+
+    expect(screen.getByRole("button", { name: "Day" })).toHaveClass("is-active");
+    expect(screen.getAllByText(/Wed, Jul 15/i).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("7 AM-10 PM schedule")).toBeInTheDocument();
+  });
+
+  it("persists selected-day notes after the scheduling page remounts", () => {
+    const { unmount } = renderPage();
+
+    const noteInput = screen.getByLabelText("New schedule note");
+    fireEvent.change(noteInput, { target: { value: "Confirm elevator booking" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
+
+    expect(screen.getByDisplayValue("Confirm elevator booking")).toBeInTheDocument();
+
+    unmount();
+    renderPage();
+
+    expect(screen.getByDisplayValue("Confirm elevator booking")).toBeInTheDocument();
+    expect(screen.getByText(/Notes are saved in this browser for your account/i)).toBeInTheDocument();
   });
 
   it("keeps scheduling review recommendations read-only", () => {
