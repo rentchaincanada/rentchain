@@ -45,11 +45,22 @@ describe("schedulingNoteParser", () => {
     ["review application by noon", 12 * 60, "Deadline cue: 12 PM"],
     ["send update before 5pm", 17 * 60, "Deadline cue: 5 PM"],
     ["send update by end of day", 17 * 60, "Deadline cue: end of day"],
+    ["finish inspection before close", 17 * 60, "Deadline cue: before close"],
   ])("treats %s as a deadline rather than a confirmed appointment", (text, timeMinutes, timeLabel) => {
     expect(parse(text)).toMatchObject({ placementType: "deadline", timeMinutes, timeLabel, needsReview: true });
   });
 
-  it.each(["Unit 3 leak", "$300 repair estimate", "24 hours notice", "7 days remaining", "30 day notice"])(
+  it.each([
+    "Unit 3 leak",
+    "$300 repair estimate",
+    "24 hours notice",
+    "7 days remaining",
+    "30 day notice",
+    "Call 902-555-0134",
+    "Visit 123 Main Street",
+    "Review lease 7842",
+    "Confirm 3 tenants",
+  ])(
     "does not treat %s as an exact time",
     (text) => {
       const result = parse(text);

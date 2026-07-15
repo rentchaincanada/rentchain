@@ -139,6 +139,20 @@ export function parseSchedulingNote(input: SchedulingNoteParserInput): Schedulin
     };
   }
 
+  if (/\bbefore close\b/i.test(originalText)) {
+    return {
+      ...base,
+      placementType: "deadline",
+      timeMinutes: 17 * 60,
+      timeLabel: "Deadline cue: before close",
+      daypart: "afternoon",
+      confidence: "medium",
+      reason: "The note contains a before-close deadline cue, not a confirmed appointment time.",
+      parserMode: "ai_suggested_ready",
+      needsReview: true,
+    };
+  }
+
   const deadlineMatch = originalText.match(DEADLINE_PATTERN);
   if (deadlineMatch) {
     const timeMinutes = deadlineMinutes(deadlineMatch);
