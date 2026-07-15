@@ -161,6 +161,7 @@ import landlordInboxRoutes from "./routes/landlordInboxRoutes";
 import landlordDecisionInboxRoutes from "./routes/landlordDecisionInboxRoutes";
 import landlordDecisionQueueRoutes from "./routes/landlordDecisionQueueRoutes";
 import landlordLeaseCreditAllocationRoutes from "./routes/landlordLeaseCreditAllocationRoutes";
+import landlordSchedulingDayNotesRoutes from "./routes/landlordSchedulingDayNotesRoutes";
 import delegatedAccessInvitationRoutes, { delegatedAccessSelfRoutes } from "./routes/delegatedAccessInvitationRoutes";
 import propertyManagerCompanyRelationshipRoutes, {
   propertyManagerCompanyRoutes,
@@ -531,6 +532,8 @@ app.use("/api/landlord", routeSource("landlordDecisionQueueRoutes.ts"), landlord
 console.log("[route-mount] landlordDecisionQueueRoutes mounted at /api/landlord");
 app.use("/api/landlord", routeSource("landlordLeaseCreditAllocationRoutes.ts"), landlordLeaseCreditAllocationRoutes);
 console.log("[route-mount] landlordLeaseCreditAllocationRoutes mounted at /api/landlord");
+app.use("/api/landlord", routeSource("landlordSchedulingDayNotesRoutes.ts"), landlordSchedulingDayNotesRoutes);
+console.log("[route-mount] landlordSchedulingDayNotesRoutes mounted at /api/landlord");
 app.use("/api/delegated-access", routeSource("delegatedAccessInvitationRoutes.ts:self"), delegatedAccessSelfRoutes);
 console.log("[route-mount] delegatedAccessSelfRoutes mounted at /api/delegated-access");
 app.use("/api/landlord", routeSource("delegatedAccessInvitationRoutes.ts"), delegatedAccessInvitationRoutes);
