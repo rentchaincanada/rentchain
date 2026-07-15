@@ -1549,6 +1549,13 @@ function LeaseCreditAllocationPanel({
   const activeAllocations = preview?.existingActiveAllocations || [];
   const shouldRender = Boolean(success || (preview?.allowed && suggestion && obligation) || activeAllocations.length > 0);
   if (!shouldRender) return null;
+  const hasCompletedActiveAllocation = activeAllocations.some(
+    (allocation) => Number(allocation.afterOutstandingAmountCents || 0) === 0
+  );
+  const panelTitle = hasCompletedActiveAllocation ? "Lease credit allocation recorded" : "Allocate available lease credit";
+  const panelCopy = hasCompletedActiveAllocation
+    ? "Available credit has been applied to this rent charge. These records show operator-reviewed allocations and do not edit historical payment records."
+    : "This lease has available credit, but a rent charge was not yet matched to that credit. Review and apply available credit to the rent charge.";
 
   const allocationAmountCents = suggestion?.allocationAmountCents || obligation?.suggestedAllocationAmountCents || 0;
   const remainingCreditCents = suggestion?.afterAvailableCreditCents ?? obligation?.afterAvailableCreditCents ?? preview?.remainingAvailableCreditCents ?? 0;
@@ -1560,11 +1567,8 @@ function LeaseCreditAllocationPanel({
     <section className="lease-credit-allocation-panel lease-ledger-no-print" aria-label="Credit allocation review">
       <div className="lease-credit-allocation-header">
         <div>
-          <h2>Allocate available lease credit</h2>
-          <p>
-            This lease has available credit, but a rent charge was not yet matched to that credit. Review and apply available credit to the
-            rent charge.
-          </p>
+          <h2>{panelTitle}</h2>
+          <p>{panelCopy}</p>
         </div>
         <button type="button" onClick={onRefresh} disabled={loading || submitting}>
           {loading ? "Refreshing…" : "Refresh preview"}

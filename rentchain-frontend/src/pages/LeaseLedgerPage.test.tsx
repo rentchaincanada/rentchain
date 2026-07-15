@@ -863,6 +863,10 @@ describe("LeaseLedgerPage", () => {
     );
 
     expect(await screen.findByText("Remaining lease credit available")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Lease credit allocation recorded" })).toBeInTheDocument();
+    expect(screen.getByText("Available credit has been applied to this rent charge. These records show operator-reviewed allocations and do not edit historical payment records.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Allocate available lease credit" })).not.toBeInTheDocument();
+    expect(screen.queryByText("This lease has available credit, but a rent charge was not yet matched to that credit. Review and apply available credit to the rent charge.")).not.toBeInTheDocument();
     expect(screen.getByText(/available credit remaining after \$2,000.00 was applied to the rent charge/i)).toBeInTheDocument();
     expect(screen.getByText(/ledger balance remains -\$8,769.00/i)).toBeInTheDocument();
     expect(screen.getByText(/Rent charge outstanding after allocation: \$0.00/i)).toBeInTheDocument();
@@ -1299,6 +1303,41 @@ describe("LeaseLedgerPage", () => {
     );
     expect(document.querySelector('[data-print-root="true"].lease-ledger-print-root')).not.toBeInTheDocument();
     expect(document.body.hasAttribute("data-print-root-active")).toBe(false);
+    printSpy.mockRestore();
+  });
+
+  it("prints active allocation state with recorded-credit copy", async () => {
+    const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
+    mocks.fetchLeaseLedger.mockClear();
+    mocks.fetchLeaseLedger.mockResolvedValueOnce(buildCreditAllocationLedgerResponse(baseLedgerResponse, "reviewed"));
+    mocks.fetchCreditAllocationPreview.mockResolvedValueOnce(buildActiveCreditAllocationPreviewResponse());
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => {
+      const printRoot = document.querySelector('[data-print-root="true"].lease-ledger-print-root');
+      const printText = printRoot?.textContent || "";
+      expect(printText).toContain("Remaining lease credit available");
+      expect(printText).toContain("This lease has $6,769.00 of available credit remaining after $2,000.00 was applied to the rent charge.");
+      expect(printText).toContain("The ledger balance remains -$8,769.00 because historical payment records were not edited.");
+      expect(printText).toContain("Rent charge outstanding after allocation: $0.00.");
+      expect(printText).toContain("Ledger balance");
+      expect(printText).toContain("Credit applied");
+      expect(printText).toContain("Available credit after allocation");
+      expect(printText).not.toContain("This lease has available credit, but a rent charge was not yet matched to that credit.");
+      expect(printText).not.toContain("Apply credit allocation");
+      window.dispatchEvent(new Event("afterprint"));
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByRole("heading", { name: "Lease credit allocation recorded" });
+    fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
+
+    await waitFor(() => expect(printSpy).toHaveBeenCalled());
     printSpy.mockRestore();
   });
 
