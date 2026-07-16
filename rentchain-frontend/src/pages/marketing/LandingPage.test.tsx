@@ -64,13 +64,13 @@ describe("Marketing LandingPage", () => {
     cleanup();
   });
 
-  it("renders at the root route with the handoff hero headline", () => {
+  it("renders the premium infrastructure hero and connected operating record", () => {
     renderLanding("/");
 
     expect(
-      screen.getByRole("heading", { level: 1, name: /Housing operations\. Connected\./i })
+      screen.getByRole("heading", { level: 1, name: /Connected housing operations\./i })
     ).toBeInTheDocument();
-    expect(screen.getByText(/The operating system for housing/i)).toBeInTheDocument();
+    expect(screen.getByText(/Housing Operations Infrastructure/i, { selector: ".rc-hero .rc-kicker" })).toBeInTheDocument();
     expect(document.body).toHaveAttribute("data-marketing-print-active", "true");
     expect(screen.getByLabelText("Sample connected operating record")).toHaveTextContent("Lease terms approved");
     expect(screen.getByText("One shared record", { selector: ".rc-trust-mobile-connector strong" })).toBeInTheDocument();
@@ -88,7 +88,7 @@ describe("Marketing LandingPage", () => {
     renderLanding("/site");
 
     expect(
-      screen.getByRole("heading", { level: 1, name: /Housing operations\. Connected\./i })
+      screen.getByRole("heading", { level: 1, name: /Connected housing operations\./i })
     ).toBeInTheDocument();
   });
 
@@ -138,16 +138,33 @@ describe("Marketing LandingPage", () => {
     fireEvent.click(loginButton);
 
     expect(loginButton).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("menuitem", { name: /Landlord login/i })).toHaveAttribute(
+    expect(screen.getByRole("menuitem", { name: /Landlord Portal/i })).toHaveAttribute(
       "href",
       "/login?role=landlord"
     );
-    expect(screen.getByRole("menuitem", { name: /Property manager login/i })).toHaveAttribute(
+    expect(screen.getByRole("menuitem", { name: /Property Manager Portal/i })).toHaveAttribute(
       "href",
       "/login?role=manager"
     );
-    expect(screen.getByRole("menuitem", { name: /Tenant login/i })).toHaveAttribute("href", "/tenant");
-    expect(screen.getByRole("menuitem", { name: /Contractor login/i })).toHaveAttribute("href", "/contractor");
+    expect(screen.getByRole("menuitem", { name: /Tenant Portal/i })).toHaveAttribute("href", "/tenant");
+    expect(screen.getByRole("menuitem", { name: /Contractor Portal/i })).toHaveAttribute("href", "/contractor");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "Choose a login portal" })).not.toBeInTheDocument();
+    expect(loginButton).toHaveFocus();
+  });
+
+  it("exposes the same portal and CTA hierarchy in the mobile menu", () => {
+    const { container } = renderLanding("/");
+
+    const menuButton = screen.getByRole("button", { name: "Menu" });
+    fireEvent.click(menuButton);
+
+    expect(menuButton).toHaveAttribute("aria-expanded", "true");
+    const mobileMenu = container.querySelector("#rc-mobile-menu");
+    expect(mobileMenu?.querySelector('a[href="/login?role=landlord"]')).toHaveTextContent("Landlord Portal");
+    expect(mobileMenu?.querySelector('a[href="/contractor"]')).toHaveTextContent("Contractor Portal");
+    expect(mobileMenu?.querySelector("button.rc-button--accent")).toHaveTextContent("Start free");
   });
 
   it("keeps the book-demo action on the request access route", () => {
@@ -165,7 +182,7 @@ describe("Marketing LandingPage", () => {
     expect(
       screen.getByRole("heading", {
         level: 2,
-        name: /Start free\. Grow when the workflow needs more support\./i,
+        name: /Start with one property\. Build the operating record as you grow\./i,
       })
     ).toBeInTheDocument();
     expect(screen.getByText("First property setup")).toBeInTheDocument();
@@ -201,11 +218,24 @@ describe("Marketing LandingPage", () => {
     expect(screen.getByText(/Illustrative sample interface data, not company performance claims/i)).toBeInTheDocument();
   });
 
+  it("renders the approved narrative in semantic section order without observer-hidden content", () => {
+    const { container } = renderLanding("/");
+    const headings = Array.from(container.querySelectorAll("main h2")).map((heading) => heading.textContent?.trim());
+
+    expect(headings.slice(0, 4)).toEqual([
+      "Housing operations are fragmented",
+      "Most platforms manage properties. RentChain manages operations.",
+      "Every housing workflow contributes to one operating history",
+      "Every role, working from the same record",
+    ]);
+    expect(container.querySelectorAll(".rc-reveal:not(.is-visible)")).toHaveLength(0);
+  });
+
   it("does not ship placeholder footer links", () => {
     const { container } = renderLanding("/");
 
     const footerLinks = Array.from(container.querySelectorAll("footer a"));
-    const footerPricingLink = screen.getByRole("link", { name: "Pricing" });
+    const footerPricingLink = container.querySelector('footer a[href="/site/pricing#plan-fit"]');
     expect(footerLinks.length).toBeGreaterThan(0);
     expect(footerPricingLink).toHaveAttribute("href", "/site/pricing#plan-fit");
     expect(footerLinks.every((link) => link.getAttribute("href") && !link.getAttribute("href")?.startsWith("#"))).toBe(

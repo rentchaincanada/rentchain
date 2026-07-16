@@ -6,6 +6,7 @@ import { track } from "../../lib/analytics";
 import {
   AboutVisionSection,
   AudienceSection,
+  CommandCenterSection,
   FeatureShowcaseSection,
   FinalCtaSection,
   HeroSection,
@@ -13,6 +14,7 @@ import {
   MarketingFooter,
   MarketingHeader,
   OperationalTrustSection,
+  ProblemSection,
   PricingStartSection,
   TrustFlowSection,
   WhyRentChainSection,
@@ -96,11 +98,13 @@ const LandingPage: React.FC = () => {
       <MarketingHeader onPrimaryCta={handlePrimaryCta} />
       <main>
         <HeroSection onPrimaryCta={handlePrimaryCta} />
-        <TrustFlowSection />
+        <ProblemSection />
         <WhyRentChainSection />
-        <AudienceSection />
         <LifecycleSection />
+        <TrustFlowSection />
+        <AudienceSection />
         <FeatureShowcaseSection />
+        <CommandCenterSection />
         <OperationalTrustSection />
         <PricingStartSection onPrimaryCta={handlePrimaryCta} />
         <AboutVisionSection />

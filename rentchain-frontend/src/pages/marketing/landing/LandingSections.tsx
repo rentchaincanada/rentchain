@@ -44,33 +44,8 @@ function supportsReducedMotion() {
 }
 
 export function RevealOnScroll({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [visible, setVisible] = useState(() => supportsReducedMotion());
-
-  useEffect(() => {
-    const node = ref.current;
-    if (!node || visible) return;
-    if (!("IntersectionObserver" in window)) {
-      setVisible(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "0px 0px -80px" }
-    );
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [visible]);
-
   return (
-    <div ref={ref} className={`rc-reveal ${visible ? "is-visible" : ""} ${className}`}>
+    <div className={`rc-reveal is-visible ${className}`}>
       {children}
     </div>
   );
@@ -225,12 +200,39 @@ export function HeroSection({ onPrimaryCta }: LandingActionProps) {
         </div>
 
         <div className="rc-hero-visual" aria-label="Sample connected operating record">
+          <div className="rc-record-header">
+            <div>
+              <span>Operating record</span>
+              <strong>Property · Lease · Unit</strong>
+            </div>
+            <span className="rc-system-live"><i /> System active</span>
+          </div>
           <div className="rc-ledger">
             <LedgerRow code="LL" title="Lease terms approved" meta="Landlord workspace" status="Ready" />
             <LedgerRow code="TN" title="Tenant request linked" meta="Portal message" status="Open" />
             <LedgerRow code="CO" title="Evidence uploaded" meta="Work order record" status="Verified" />
             <LedgerRow code="PM" title="Renewal review queued" meta="Portfolio operation" status="Next" />
           </div>
+          <div className="rc-record-footer">
+            <span>4 roles connected</span>
+            <span>Governed history</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function ProblemSection() {
+  return (
+    <section className="rc-section rc-problem" aria-labelledby="problem-title">
+      <div className="rc-container rc-problem-grid">
+        <div>
+          <p className="rc-kicker">{aboutVision.kicker}</p>
+          <h2 className="rc-section-title" id="problem-title">{aboutVision.title}</h2>
+        </div>
+        <div className="rc-problem-copy">
+          {aboutVision.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
         </div>
       </div>
     </section>
@@ -468,10 +470,26 @@ export function FeatureShowcaseSection() {
             </RevealOnScroll>
           ))}
         </div>
-        <RevealOnScroll className="rc-panel rc-command-panel">
+      </div>
+    </section>
+  );
+}
+
+export function CommandCenterSection() {
+  return (
+    <section className="rc-section rc-command-section" aria-labelledby="command-center-title">
+      <div className="rc-container rc-command-layout">
+        <div className="rc-command-copy">
           <p className="rc-kicker">{features.commandCenter.kicker}</p>
-          <h3>{features.commandCenter.title}</h3>
+          <h2 className="rc-section-title" id="command-center-title">{features.commandCenter.title}</h2>
           <p>{features.commandCenter.body}</p>
+          <p className="rc-microcopy">{features.commandCenter.sampleStatsNote}</p>
+        </div>
+        <div className="rc-panel rc-command-panel">
+          <div className="rc-command-panel__top">
+            <span>Operational review</span>
+            <strong>Current workspace</strong>
+          </div>
           <div className="rc-command-list" aria-label="Sample command-center signals">
             <div>
               <span>Attention queue</span>
@@ -486,8 +504,7 @@ export function FeatureShowcaseSection() {
               <strong>Governed units</strong>
             </div>
           </div>
-          <p className="rc-microcopy">{features.commandCenter.sampleStatsNote}</p>
-        </RevealOnScroll>
+        </div>
       </div>
     </section>
   );
@@ -564,15 +581,11 @@ export function AboutVisionSection() {
     <section className="rc-section" id="vision" aria-labelledby="vision-title">
       <div className="rc-container rc-about-grid">
         <div>
-          <p className="rc-kicker">{aboutVision.kicker}</p>
+          <p className="rc-kicker">Long-term vision</p>
           <h2 className="rc-section-title" id="vision-title">
-            {aboutVision.title}
+            Infrastructure for housing operations at every scale
           </h2>
-          {aboutVision.body.map((paragraph) => (
-            <p key={paragraph} className="rc-section-subtitle">
-              {paragraph}
-            </p>
-          ))}
+          <p className="rc-section-subtitle">A durable operating record gives housing teams a clearer way to coordinate today and a stronger foundation for institutional readiness tomorrow.</p>
         </div>
         <aside className="rc-panel" aria-label={aboutVision.visionTitle}>
           <h3>{aboutVision.visionTitle}</h3>
