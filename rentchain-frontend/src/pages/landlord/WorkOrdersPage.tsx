@@ -1,6 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button, Card } from "../../components/ui/Ui";
+import { colors } from "../../styles/tokens";
 import { AddExpenseModal } from "../../components/expenses/AddExpenseModal";
 import ContractorAssignmentPanel from "../../components/marketplace/ContractorAssignmentPanel";
 import { useEntitlements } from "@/hooks/useEntitlements";
@@ -997,8 +998,8 @@ export default function WorkOrdersPage() {
       {workOrderEntryContext ? (
         <Card
           style={{
-            borderColor: "#bae6fd",
-            background: "#f0f9ff",
+            borderColor: colors.borderStrong,
+            background: colors.paper,
             color: "#0f172a",
             display: "grid",
             gap: 4,

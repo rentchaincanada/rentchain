@@ -2467,8 +2467,8 @@ const ApplicationsPage: React.FC = () => {
               marginTop: 12,
               padding: "10px 12px",
               borderRadius: 12,
-              border: "1px solid rgba(14,165,233,0.28)",
-              background: "rgba(14,165,233,0.08)",
+              border: `1px solid ${colors.pineSoft}`,
+              background: colors.pineSoft,
               color: text.primary,
               fontSize: 13,
               display: "grid",
@@ -2654,8 +2654,8 @@ const ApplicationsPage: React.FC = () => {
           <Card
             style={{
               marginBottom: spacing.md,
-              border: "1px solid rgba(14,165,233,0.26)",
-              background: "rgba(240,249,255,0.94)",
+              border: `1px solid ${colors.borderStrong}`,
+              background: colors.paper,
               display: "grid",
               gap: spacing.sm,
             }}
@@ -2803,8 +2803,8 @@ const ApplicationsPage: React.FC = () => {
                   {isTransUnionConnected && !detail ? (
                     <Card
                       style={{
-                        border: `1px solid ${colors.accent}`,
-                        background: colors.accentSoft,
+                        border: `1px solid ${colors.pine}`,
+                        background: colors.pineSoft,
                         display: "grid",
                         gap: spacing.xs,
                       }}
@@ -2846,11 +2846,11 @@ const ApplicationsPage: React.FC = () => {
                         }}
                         style={{
                           textAlign: "left",
-                          border: `1px solid ${app.id === selectedId ? colors.accent : colors.border}`,
+                          border: `1px solid ${app.id === selectedId ? colors.pine : colors.border}`,
                           background: isPartial
                             ? "rgba(148,163,184,0.08)"
                             : app.id === selectedId
-                            ? "rgba(37,99,235,0.08)"
+                            ? colors.pineSoft
                             : colors.card,
                           borderRadius: radius.md,
                           padding: "12px 12px",
@@ -2951,7 +2951,7 @@ const ApplicationsPage: React.FC = () => {
                                         padding: "6px 10px",
                                         borderRadius: 999,
                                         border: `1px solid ${colors.border}`,
-                                        background: colors.accentSoft,
+                                        background: colors.pineSoft,
                                         color: text.primary,
                                         fontSize: 12,
                                         fontWeight: 700,
@@ -2988,7 +2988,7 @@ const ApplicationsPage: React.FC = () => {
                                     padding: "6px 10px",
                                     borderRadius: 999,
                                     border: `1px solid ${colors.border}`,
-                                    background: colors.accentSoft,
+                                    background: colors.pineSoft,
                                     color: text.primary,
                                     fontSize: 12,
                                     fontWeight: 700,
@@ -3013,7 +3013,7 @@ const ApplicationsPage: React.FC = () => {
                                 padding: "6px 10px",
                                 borderRadius: 999,
                                 border: `1px solid ${colors.border}`,
-                                background: colors.accentSoft,
+                                background: colors.pineSoft,
                                 color: text.primary,
                                 fontSize: 12,
                                 fontWeight: 700,
@@ -3123,7 +3123,7 @@ const ApplicationsPage: React.FC = () => {
 	                    role="region"
 	                    aria-label="Request more information"
 	                    style={{
-	                      border: `1px solid ${colors.accent}`,
+	                      border: `1px solid ${colors.pine}`,
 	                      background: "rgba(239,246,255,0.98)",
 	                      display: "grid",
 	                      gap: spacing.md,

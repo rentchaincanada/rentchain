@@ -580,8 +580,8 @@ export default function ContractorJobsPage() {
                       gap: 4,
                       padding: "10px 12px",
                       borderRadius: radius.md,
-                      border: `1px solid ${selected?.id === item.id ? colors.accent : colors.border}`,
-                      background: selected?.id === item.id ? "rgba(37,99,235,0.08)" : colors.card,
+                      border: `1px solid ${selected?.id === item.id ? colors.pine : colors.border}`,
+                      background: selected?.id === item.id ? colors.pineSoft : colors.card,
                       cursor: "pointer",
                     }}
                   >

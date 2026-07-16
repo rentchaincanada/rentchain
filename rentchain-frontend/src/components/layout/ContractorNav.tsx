@@ -12,7 +12,7 @@ export const ContractorNav: React.FC<Props> = ({ children }) => {
   const nav = useNavigate();
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
+    <div style={{ minHeight: "100vh", background: "#f4efe6" }}>
       <header
         style={{
           position: "sticky",
