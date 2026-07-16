@@ -15,6 +15,11 @@ describe("schedulingNoteParser", () => {
     ["230pm contractor", 14 * 60 + 30, "2:30 PM", "contractor"],
     ["0230pm contractor", 14 * 60 + 30, "2:30 PM", "contractor"],
     ["1030am inspection", 10 * 60 + 30, "10:30 AM", "inspection"],
+    ["630pm meeting", 18 * 60 + 30, "6:30 PM", "meeting"],
+    ["0630pm meeting", 18 * 60 + 30, "6:30 PM", "meeting"],
+    ["6:30pm meeting", 18 * 60 + 30, "6:30 PM", "meeting"],
+    ["1230pm meeting", 12 * 60 + 30, "12:30 PM", "meeting"],
+    ["1205pm meeting", 12 * 60 + 5, "12:05 PM", "meeting"],
   ])("parses exact time in %s", (text, timeMinutes, timeLabel, cleanedTitle) => {
     expect(parse(text)).toMatchObject({
       placementType: "exact_time",
@@ -67,6 +72,9 @@ describe("schedulingNoteParser", () => {
     "$230 repair estimate",
     "230 dollars",
     "230 days",
+    "Unit 630",
+    "$630 repair estimate",
+    "630 days",
   ])(
     "does not treat %s as an exact time",
     (text) => {
