@@ -46,6 +46,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1024 });
 });
 
 function renderPage(initialEntries: string[] = ["/scheduling"]) {
@@ -199,11 +200,110 @@ describe("SchedulingWorkspacePage", () => {
     await waitFor(() => expect(mocks.updateSchedulingDayNoteMock).toHaveBeenCalled());
 
     fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    const confirmation = screen.getByRole("alertdialog", { name: "Delete note?" });
+    expect(within(confirmation).getByText("This will remove this workspace scheduling note from the selected day.")).toBeInTheDocument();
+    expect(mocks.deleteSchedulingDayNoteMock).not.toHaveBeenCalled();
+    const confirmButton = within(confirmation).getByRole("button", { name: "Delete note" });
+    await waitFor(() => expect(confirmButton).toBeEnabled());
+    fireEvent.click(confirmButton);
 
     await waitFor(() => expect(mocks.deleteSchedulingDayNoteMock).toHaveBeenCalled());
     expect(within(selectedDay).getByText("1 note")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("Call tenant at noon")).not.toBeInTheDocument();
     expect(screen.getByDisplayValue("Confirm maintenance access")).toBeInTheDocument();
+    expect(screen.getByText("Workspace note deleted.")).toBeInTheDocument();
+  });
+
+  it("cancels scheduling note deletion without calling the API", async () => {
+    mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({
+      "2026-07-15": [{ id: "note-cancel", text: "Keep this note" }],
+    });
+    renderPage(["/scheduling?view=day&date=2026-07-15"]);
+
+    await screen.findByDisplayValue("Keep this note");
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const confirmation = screen.getByRole("alertdialog", { name: "Delete note?" });
+    await waitFor(() => expect(within(confirmation).getByRole("button", { name: "Delete note" })).toHaveFocus());
+
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("alertdialog", { name: "Delete note?" })).not.toBeInTheDocument();
+    expect(mocks.deleteSchedulingDayNoteMock).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue("Keep this note")).toBeInTheDocument();
+  });
+
+  it("closes scheduling note deletion confirmation with Escape", async () => {
+    mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({
+      "2026-07-15": [{ id: "note-escape", text: "Keep this note too" }],
+    });
+    renderPage(["/scheduling?view=day&date=2026-07-15"]);
+
+    await screen.findByDisplayValue("Keep this note too");
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.keyDown(screen.getByRole("alertdialog", { name: "Delete note?" }), { key: "Escape" });
+
+    expect(screen.queryByRole("alertdialog", { name: "Delete note?" })).not.toBeInTheDocument();
+    expect(mocks.deleteSchedulingDayNoteMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps a scheduling note visible when confirmed deletion fails", async () => {
+    mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({
+      "2026-07-15": [{ id: "note-failure", text: "Do not lose this note" }],
+    });
+    mocks.deleteSchedulingDayNoteMock.mockRejectedValueOnce(new Error("delete failed"));
+    renderPage(["/scheduling?view=day&date=2026-07-15"]);
+
+    await screen.findByDisplayValue("Do not lose this note");
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const confirmButton = screen.getByRole("button", { name: "Delete note" });
+    await waitFor(() => expect(confirmButton).toBeEnabled());
+    fireEvent.click(confirmButton);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Scheduling note could not be deleted. Refresh this view and try again."
+    );
+    expect(mocks.deleteSchedulingDayNoteMock).toHaveBeenCalledWith("2026-07-15", "note-failure");
+    expect(screen.getByDisplayValue("Do not lose this note")).toBeInTheDocument();
+  });
+
+  it("routes exact-time and unscheduled mobile delete controls through confirmation", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    fireEvent(window, new Event("resize"));
+    mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({
+      "2026-07-15": [
+        { id: "note-mobile-timed", text: "9am mobile inspection" },
+        { id: "note-mobile-unscheduled", text: "Mobile follow-up" },
+      ],
+    });
+    renderPage(["/scheduling?view=day&date=2026-07-15"]);
+
+    const timedInput = await screen.findByDisplayValue("9am mobile inspection");
+    const timedRow = timedInput.closest(".scheduling-note-row");
+    expect(timedRow).not.toBeNull();
+    fireEvent.click(within(timedRow as HTMLElement).getByRole("button", { name: "Delete" }));
+
+    const timedConfirmation = screen.getByRole("alertdialog", { name: "Delete note?" });
+    expect(mocks.deleteSchedulingDayNoteMock).not.toHaveBeenCalled();
+    fireEvent.click(within(timedConfirmation).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByDisplayValue("9am mobile inspection")).toBeInTheDocument();
+    expect(mocks.deleteSchedulingDayNoteMock).not.toHaveBeenCalled();
+
+    const unscheduledInput = screen.getByDisplayValue("Mobile follow-up");
+    const unscheduledRow = unscheduledInput.closest(".scheduling-note-row");
+    expect(unscheduledRow).not.toBeNull();
+    fireEvent.click(within(unscheduledRow as HTMLElement).getByRole("button", { name: "Delete" }));
+
+    const unscheduledConfirmation = screen.getByRole("alertdialog", { name: "Delete note?" });
+    expect(mocks.deleteSchedulingDayNoteMock).not.toHaveBeenCalled();
+    const confirmButton = within(unscheduledConfirmation).getByRole("button", { name: "Delete note" });
+    await waitFor(() => expect(confirmButton).toBeEnabled());
+    fireEvent.click(confirmButton);
+
+    await waitFor(() =>
+      expect(mocks.deleteSchedulingDayNoteMock).toHaveBeenCalledWith("2026-07-15", "note-mobile-unscheduled")
+    );
+    expect(screen.getByDisplayValue("9am mobile inspection")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Mobile follow-up")).not.toBeInTheDocument();
   });
 
   it("places notes with clear times into day schedule slots and keeps vague notes unscheduled", async () => {
