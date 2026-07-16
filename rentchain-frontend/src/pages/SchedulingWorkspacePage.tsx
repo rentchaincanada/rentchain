@@ -76,10 +76,9 @@ const screeningActivities: WorkspaceItem[] = [
 ];
 
 const reviewItems = [
-  "No upcoming viewing conflicts detected.",
-  "No maintenance windows are scheduled for the selected day.",
-  "Work order sequencing is ready for review from the Work Orders workspace.",
-  "Suggested scheduling windows will appear as calendar data becomes available.",
+  "Review same-time notes, viewing appointments, maintenance windows, and work orders before confirming the day plan.",
+  "Parser suggestions are advisory. No calendar event or reminder has been created.",
+  "Connected conflict detection is not enabled yet.",
 ];
 
 const scheduleHours = Array.from({ length: 16 }, (_, index) => index + 7);
@@ -376,6 +375,14 @@ export default function SchedulingWorkspacePage() {
       }
     });
     return { grouped, suggestions, needsReview, unscheduled };
+  }, [selectedParsedNotes]);
+  const hasSameTimeWorkspaceNotes = React.useMemo(() => {
+    const noteCountByTime = new Map<number, number>();
+    selectedParsedNotes.forEach(({ parsed }) => {
+      if (parsed.placementType !== "exact_time" || parsed.timeMinutes === undefined) return;
+      noteCountByTime.set(parsed.timeMinutes, (noteCountByTime.get(parsed.timeMinutes) || 0) + 1);
+    });
+    return [...noteCountByTime.values()].some((count) => count > 1);
   }, [selectedParsedNotes]);
   const legacyNotes = React.useMemo(
     () =>
@@ -1314,6 +1321,9 @@ export default function SchedulingWorkspacePage() {
           <Card className="scheduling-card" style={{ display: "grid", gap: spacing.md }}>
             <SectionHeader icon={ListChecks} title="Scheduling Review" />
             <ul className="scheduling-review-list" aria-label="Read-only scheduling recommendations">
+              {hasSameTimeWorkspaceNotes ? (
+                <li>Multiple workspace notes share the same time. Review before confirming the schedule.</li>
+              ) : null}
               {reviewItems.map((item) => (
                 <li key={item}>{item}</li>
               ))}
