@@ -183,7 +183,7 @@ function TrustContextBlock({ decision }: { decision: LandlordAgentDecision }) {
         padding: 12,
         borderRadius: 12,
         border: "1px solid #e2e8f0",
-        background: "#f8fafc",
+        background: "#fffaf1",
       }}
     >
       <div style={{ display: "grid", gap: 4 }}>
@@ -424,7 +424,7 @@ function ActionDecisionCard(props: {
           padding: 12,
           borderRadius: 12,
           border: "1px solid #e2e8f0",
-          background: "#f8fafc",
+          background: "#fffaf1",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -595,7 +595,7 @@ function ActionDecisionCard(props: {
             style={{
               border: "1px solid #cbd5e1",
               borderRadius: 999,
-              background: "#f8fafc",
+              background: "#fffaf1",
               color: "#0f172a",
               fontWeight: 700,
               padding: "6px 12px",

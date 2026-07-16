@@ -47,7 +47,7 @@ export function PortfolioBenchmarkingPanel({ benchmarking }: Props) {
                       flexWrap: "wrap",
                       padding: "10px 12px",
                       borderRadius: 12,
-                      background: "#f8fafc",
+                      background: "#fffaf1",
                       border: "1px solid #e2e8f0",
                     }}
                   >

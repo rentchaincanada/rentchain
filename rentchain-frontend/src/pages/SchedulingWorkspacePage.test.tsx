@@ -399,19 +399,30 @@ describe("SchedulingWorkspacePage", () => {
     expect(screen.getByLabelText("7 AM-10 PM schedule")).toBeInTheDocument();
   });
 
-  it("uses the isolated print area and exposes Print / Save PDF without changing schedule data", () => {
+  it("clones scheduling content into the isolated body print root without changing schedule data", async () => {
     const printSpy = vi.spyOn(window, "print").mockImplementation(() => undefined);
-    const { container } = renderPage();
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+    renderPage();
 
-    expect(container.querySelector(".scheduling-workspace")).toHaveClass("rc-print-area");
     expect(screen.getByLabelText("New schedule note")).toHaveClass("scheduling-note-draft-input");
 
     fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
 
-    expect(printSpy).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(printSpy).toHaveBeenCalledTimes(1));
+    const printRoot = document.body.querySelector('[data-print-root="true"]');
+    expect(printRoot).toHaveTextContent("Scheduling");
+    expect(printRoot).toHaveTextContent("Notes");
+    expect(printRoot).not.toHaveTextContent("Print / Save PDF");
+    expect(document.body).toHaveAttribute("data-print-root-active", "true");
     expect(mocks.createSchedulingDayNoteMock).not.toHaveBeenCalled();
     expect(mocks.updateSchedulingDayNoteMock).not.toHaveBeenCalled();
     expect(mocks.deleteSchedulingDayNoteMock).not.toHaveBeenCalled();
+    window.dispatchEvent(new Event("afterprint"));
+    expect(document.body.querySelector('[data-print-root="true"]')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveAttribute("data-print-root-active");
   });
 
   it("loads selected-day notes from backend after the scheduling page remounts", async () => {

@@ -722,6 +722,10 @@ export const landingPageCss = `
 }
 
 @media (max-width: 980px) {
+  .rc-hero::before {
+    background: none;
+  }
+
   .rc-header-nav,
   .rc-header-actions {
     display: none;

@@ -25,7 +25,7 @@ export const ContractorNav: React.FC<Props> = ({ children }) => {
       >
         <div
           style={{
-            maxWidth: 1120,
+            maxWidth: 960,
             margin: "0 auto",
             padding: "12px 16px",
             display: "flex",
@@ -36,20 +36,20 @@ export const ContractorNav: React.FC<Props> = ({ children }) => {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-            <RentChainLogo href="/contractor" size="sm" />
+            <RentChainLogo href="/contractor" variant="lockup" size="md" />
             <span style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap" }}>Contractor</span>
           </div>
-          <nav style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <NavLink to="/contractor" style={{ color: "#334155", textDecoration: "none" }}>
+          <nav style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <NavLink to="/contractor" end style={contractorLinkStyle}>
               Dashboard
             </NavLink>
-            <NavLink to="/contractor/inbox" style={{ color: "#334155", textDecoration: "none" }}>
+            <NavLink to="/contractor/inbox" style={contractorLinkStyle}>
               Inbox
             </NavLink>
-            <NavLink to="/contractor/jobs" style={{ color: "#334155", textDecoration: "none" }}>
+            <NavLink to="/contractor/jobs" style={contractorLinkStyle}>
               Jobs
             </NavLink>
-            <NavLink to="/contractor/profile" style={{ color: "#334155", textDecoration: "none" }}>
+            <NavLink to="/contractor/profile" style={contractorLinkStyle}>
               Profile
             </NavLink>
             <button
@@ -70,7 +70,17 @@ export const ContractorNav: React.FC<Props> = ({ children }) => {
           </nav>
         </div>
       </header>
-      <main style={{ maxWidth: 1120, margin: "0 auto", padding: 16 }}>{children}</main>
+      <main data-testid="contractor-content" style={{ width: "100%", maxWidth: 960, margin: "0 auto", padding: 16, boxSizing: "border-box" }}>{children}</main>
     </div>
   );
 };
+
+const contractorLinkStyle = ({ isActive }: { isActive: boolean }): React.CSSProperties => ({
+  color: isActive ? "#1e5f4e" : "#334155",
+  background: isActive ? "rgba(30,95,78,0.12)" : "transparent",
+  border: isActive ? "1px solid rgba(30,95,78,0.28)" : "1px solid transparent",
+  borderRadius: 999,
+  padding: "7px 10px",
+  fontWeight: 700,
+  textDecoration: "none",
+});

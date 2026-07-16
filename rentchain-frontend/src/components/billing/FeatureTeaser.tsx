@@ -22,15 +22,15 @@ export function FeatureTeaser({ featureKey, eyebrow, title, description, ctaLabe
     <section
       style={{
         borderRadius: radius.xl,
-        border: "1px dashed rgba(37,99,235,0.32)",
-        background: "rgba(239,246,255,0.68)",
+        border: "1px dashed rgba(30,95,78,0.32)",
+        background: "rgba(30,95,78,0.08)",
         padding: spacing.lg,
         display: "grid",
         gap: spacing.sm,
       }}
     >
       {eyebrow ? (
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "#1d4ed8" }}>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "#1e5f4e" }}>
           {eyebrow}
         </div>
       ) : null}

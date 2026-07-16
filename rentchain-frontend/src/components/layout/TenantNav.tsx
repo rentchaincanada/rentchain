@@ -177,9 +177,9 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
   const linkStyle = useMemo(
     () =>
       ({ isActive }: { isActive: boolean }) => ({
-        color: isActive ? "#1d4ed8" : "#334155",
-        background: isActive ? "#dbeafe" : "transparent",
-        border: isActive ? "1px solid #bfdbfe" : "1px solid transparent",
+        color: isActive ? "#1e5f4e" : "#334155",
+        background: isActive ? "rgba(30,95,78,0.12)" : "transparent",
+        border: isActive ? "1px solid rgba(30,95,78,0.28)" : "1px solid transparent",
         textDecoration: "none",
         fontWeight: 600,
         borderRadius: 10,
@@ -253,7 +253,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
                         minWidth: 18,
                         height: 18,
                         borderRadius: 999,
-                        background: "#1d4ed8",
+                        background: "#1e5f4e",
                         color: "#fff",
                         fontSize: 11,
                         fontWeight: 700,

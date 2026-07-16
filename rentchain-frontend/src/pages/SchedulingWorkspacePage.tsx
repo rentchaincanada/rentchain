@@ -29,6 +29,11 @@ import {
   type SchedulingDayNotesByDate,
 } from "../lib/schedulingDayNotes";
 import { parseSchedulingNote, type SchedulingNoteParseResult } from "../lib/schedulingNoteParser";
+import {
+  createPrintRoot,
+  nextRenderFrame,
+  PRINT_ROOT_ACTIVE_ATTRIBUTE,
+} from "../lib/documentRendering";
 import { radius, spacing, text } from "../styles/tokens";
 
 type CalendarView = "day" | "week" | "month";
@@ -301,6 +306,7 @@ function DeleteNoteDialog({
 }
 
 export default function SchedulingWorkspacePage() {
+  const printSourceRef = React.useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const today = React.useMemo(() => new Date(), []);
@@ -585,8 +591,38 @@ export default function SchedulingWorkspacePage() {
     selectDate(next, "day");
   };
 
+  const printSchedule = async () => {
+    const source = printSourceRef.current;
+    if (!source || typeof window === "undefined" || typeof document === "undefined") return;
+
+    const body = document.body;
+    const printableRoot = createPrintRoot(document);
+    const printableContent = source.cloneNode(true) as HTMLElement;
+    printableContent.querySelectorAll(".no-print").forEach((element) => element.remove());
+    printableRoot.appendChild(printableContent);
+    let cleanedUp = false;
+
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      window.removeEventListener("afterprint", cleanup);
+      printableRoot.remove();
+      body.removeAttribute(PRINT_ROOT_ACTIVE_ATTRIBUTE);
+    };
+
+    try {
+      body.setAttribute(PRINT_ROOT_ACTIVE_ATTRIBUTE, "true");
+      body.appendChild(printableRoot);
+      window.addEventListener("afterprint", cleanup, { once: true });
+      await nextRenderFrame(window);
+      window.print();
+    } finally {
+      window.setTimeout(cleanup, 250);
+    }
+  };
+
   return (
-    <div className="scheduling-workspace rc-print-area">
+    <div ref={printSourceRef} className="scheduling-workspace">
       <style>{`
         .scheduling-workspace {
           --schedule-card: #fffaf1;
@@ -1006,7 +1042,7 @@ export default function SchedulingWorkspacePage() {
           <p>Calendar view for viewings, maintenance, work orders, screening, and notes.</p>
         </div>
         <div className="scheduling-note-actions no-print">
-          <Button type="button" variant="secondary" onClick={() => window.print()}>
+          <Button type="button" variant="secondary" onClick={() => void printSchedule()}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
               <Printer size={16} aria-hidden="true" />
               Print / Save PDF

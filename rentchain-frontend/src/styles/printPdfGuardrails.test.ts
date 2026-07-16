@@ -50,7 +50,8 @@ describe("print PDF guardrails", () => {
       "utf8"
     );
 
-    expect(schedulingSource).toContain('className="scheduling-workspace rc-print-area"');
+    expect(schedulingSource).toMatch(/createPrintRoot\(document\)/);
+    expect(schedulingSource).toMatch(/body\.setAttribute\(PRINT_ROOT_ACTIVE_ATTRIBUTE, "true"\)/);
     expect(schedulingSource).toContain("Print / Save PDF");
     expect(schedulingSource).toMatch(/@media print[\s\S]*\.scheduling-workspace \.no-print/);
   });

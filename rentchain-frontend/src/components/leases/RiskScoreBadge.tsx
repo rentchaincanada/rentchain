@@ -6,7 +6,7 @@ function toneFromGrade(grade: RiskGrade | null | undefined) {
     case "A":
       return { bg: "rgba(220,252,231,0.95)", border: "rgba(34,197,94,0.35)", text: "#166534" };
     case "B":
-      return { bg: "rgba(219,234,254,0.96)", border: "rgba(59,130,246,0.35)", text: "#1d4ed8" };
+      return { bg: "rgba(30,95,78,0.12)", border: "rgba(30,95,78,0.3)", text: "#1e5f4e" };
     case "C":
       return { bg: "rgba(254,249,195,0.96)", border: "rgba(234,179,8,0.38)", text: "#a16207" };
     case "D":
