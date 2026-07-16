@@ -386,9 +386,9 @@ export const LandlordDecisionPanel: React.FC<LandlordDecisionPanelProps> = ({
                   disabled={!onDecision || submittingDecision}
                   style={{
                     borderRadius: radius.pill,
-                    border: "1px solid rgba(59,130,246,0.24)",
-                    background: "rgba(239,246,255,0.96)",
-                    color: "#1d4ed8",
+                    border: "1px solid rgba(30,95,78,0.28)",
+                    background: "rgba(30,95,78,0.12)",
+                    color: "#1e5f4e",
                     fontSize: 13,
                     fontWeight: 800,
                     padding: "9px 14px",

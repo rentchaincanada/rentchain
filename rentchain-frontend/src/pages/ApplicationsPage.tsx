@@ -3124,7 +3124,7 @@ const ApplicationsPage: React.FC = () => {
 	                    aria-label="Request more information"
 	                    style={{
 	                      border: `1px solid ${colors.pine}`,
-	                      background: "rgba(239,246,255,0.98)",
+	                      background: colors.paper,
 	                      display: "grid",
 	                      gap: spacing.md,
 	                    }}

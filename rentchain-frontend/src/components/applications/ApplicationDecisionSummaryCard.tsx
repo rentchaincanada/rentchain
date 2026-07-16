@@ -37,7 +37,7 @@ function priorityTone(priority?: string | null) {
     case "medium":
       return { background: "rgba(255,247,237,0.95)", border: "rgba(249,115,22,0.18)", color: "#c2410c" };
     default:
-      return { background: "rgba(239,246,255,0.95)", border: "rgba(59,130,246,0.16)", color: "#1d4ed8" };
+      return { background: colors.pineSoft, border: "rgba(30,95,78,0.22)", color: colors.pine };
   }
 }
 
