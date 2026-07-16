@@ -219,7 +219,7 @@ async function loadOwnedNote(params: {
     throw new SchedulingDayNotesValidationError("SCHEDULING_DAY_NOTE_ID_REQUIRED", "noteId is required");
   }
   const snap = await db.collection(SCHEDULING_DAY_NOTES_COLLECTION).doc(noteId).get();
-  const note = snap.exists ? serializeNote({ id: snap.id, data: snap.data }) : null;
+  const note = snap.exists ? serializeNote(snap) : null;
   if (!note || note.landlordId !== landlordId || note.date !== date || note.status !== "active") {
     throw new SchedulingDayNotesValidationError("SCHEDULING_DAY_NOTE_NOT_FOUND", "Scheduling day note not found", 404);
   }
