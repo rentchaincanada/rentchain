@@ -1,5 +1,5 @@
 @media print {
-  body * {
+  body:not([data-marketing-print-active="true"]) * {
     visibility: hidden !important;
   }
 

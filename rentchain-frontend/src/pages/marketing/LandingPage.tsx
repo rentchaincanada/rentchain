@@ -58,6 +58,10 @@ const LandingPage: React.FC = () => {
   useEffect(() => {
     document.title = "RentChain - Housing operations. Connected.";
     ensureMarketingFonts();
+    document.body.dataset.marketingPrintActive = "true";
+    return () => {
+      delete document.body.dataset.marketingPrintActive;
+    };
   }, []);
 
   const handlePrimaryCta = () => {

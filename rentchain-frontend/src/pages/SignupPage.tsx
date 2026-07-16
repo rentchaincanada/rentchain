@@ -17,7 +17,7 @@ import {
   authMutedLinkStyle,
   authPalette,
   authPrimaryButtonStyle,
-  authShellStyle,
+  signupAuthShellStyle,
 } from "../components/auth/authPageStyles";
 
 function maskEmail(value: string): string {
@@ -199,17 +199,37 @@ const SignupPage: React.FC = () => {
   };
 
   return (
-    <div style={authShellStyle}>
+    <div style={signupAuthShellStyle}>
       <Card elevated style={authCardStyle("min(520px, 94vw)")}>
         <div style={authEyebrowStyle}>
           RentChain
         </div>
         <h1 style={authHeadingStyle}>
-          Create your RentChain account
+          Create your housing operations workspace
         </h1>
         <p style={authBodyStyle}>
-          Create an account to access your RentChain workspace.
+          Start free with your first property. Build a connected record for leases, payments, maintenance, tenants, documents, and operations.
         </p>
+        <section
+          aria-labelledby="signup-next-steps-title"
+          style={{
+            marginBottom: spacing.md,
+            padding: "14px 16px",
+            border: `1px solid ${authPalette.fieldBorder}`,
+            borderRadius: 12,
+            background: authPalette.beigeSoft,
+          }}
+        >
+          <h2 id="signup-next-steps-title" style={{ margin: "0 0 8px", fontSize: "1rem", color: authPalette.ink }}>
+            What happens next
+          </h2>
+          <ol style={{ margin: 0, paddingLeft: 20, color: authPalette.muted, lineHeight: 1.55 }}>
+            <li>Create your account.</li>
+            <li>Add your first property.</li>
+            <li>Organize units, tenants, leases, and records.</li>
+            <li>Upgrade only when your workflow needs more support.</li>
+          </ol>
+        </section>
         {inviteBanner ? (
           <div style={authBannerStyle("info")}>
             <div style={{ fontWeight: 700, marginBottom: 4 }}>{inviteBanner.title}</div>

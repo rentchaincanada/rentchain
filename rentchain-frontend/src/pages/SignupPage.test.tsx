@@ -28,6 +28,22 @@ describe("SignupPage", () => {
     mocks.trackAuthEvent.mockReset();
   });
 
+  it("sets conversion-focused workspace expectations without changing the properties destination", () => {
+    render(
+      <MemoryRouter initialEntries={["/signup?next=/properties&intent=registry_readiness"]}>
+        <SignupPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("heading", { level: 1, name: "Create your housing operations workspace" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "What happens next" })).toBeInTheDocument();
+    expect(screen.getByText("Add your first property.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to login" })).toHaveAttribute(
+      "href",
+      "/login?next=%2Fproperties"
+    );
+  });
+
   it("preserves delegated access invite context during account creation", async () => {
     render(
       <MemoryRouter initialEntries={["/signup?next=/delegated-access/accept%3Ftoken%3Dsafe-token"]}>

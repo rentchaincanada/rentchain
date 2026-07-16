@@ -29,6 +29,21 @@ describe("print PDF guardrails", () => {
     expect(samplePdfPage).toMatch(/PdfPreviewBoundary/);
   });
 
+  it("allows only the mounted marketing page to bypass report print isolation", () => {
+    const indexCss = readFileSync(resolve(srcRoot, "index.css"), "utf8");
+    const printCss = readFileSync(resolve(srcRoot, "styles/print.css"), "utf8");
+    const landingCss = readFileSync(
+      resolve(srcRoot, "pages/marketing/landing/landingPageCss.ts"),
+      "utf8"
+    );
+
+    expect(indexCss).toMatch(/body:not\(\[data-print-root-active="true"\]\):not\(\[data-marketing-print-active="true"\]\) \*/);
+    expect(printCss).toMatch(/body:not\(\[data-marketing-print-active="true"\]\) \*/);
+    expect(landingCss).toMatch(/@media print/);
+    expect(landingCss).toMatch(/print-color-adjust: exact !important/);
+    expect(landingCss).toMatch(/\.rc-reveal \{[\s\S]*?opacity: 1;/);
+  });
+
   it("keeps application print view from reserving a viewport-height phantom page", () => {
     const source = readFileSync(
       resolve(srcRoot, "components/applications/PrintApplicationView.tsx"),
