@@ -158,6 +158,9 @@ describe("SchedulingWorkspacePage", () => {
     expect(screen.getByRole("heading", { name: "Maintenance Requests" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Work Orders" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Screening Activities" })).toBeInTheDocument();
+    expect(screen.queryByText("No upcoming viewing conflicts detected.")).not.toBeInTheDocument();
+    expect(screen.getByText("Connected conflict detection is not enabled yet.")).toBeInTheDocument();
+    expect(screen.getByText("Parser suggestions are advisory. No calendar event or reminder has been created.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Connect Screening Provider" })).toHaveAttribute("href", "/screening");
     expect(screen.getByRole("link", { name: "Screen Manually" })).toHaveAttribute("href", "/screening/manual");
   });
@@ -306,7 +309,7 @@ describe("SchedulingWorkspacePage", () => {
     expect(screen.queryByDisplayValue("Mobile follow-up")).not.toBeInTheDocument();
   });
 
-  it("places notes with clear times into day schedule slots and keeps vague notes unscheduled", async () => {
+  it("places exact notes into slots and keeps ambiguous notes in needs review without duplication", async () => {
     renderPage();
 
     const noteInput = screen.getByLabelText("New schedule note");
@@ -322,7 +325,70 @@ describe("SchedulingWorkspacePage", () => {
 
     expect(within(screen.getByLabelText("Schedule slot 9 AM")).getByText("9am inspection")).toBeInTheDocument();
     expect(within(screen.getByLabelText("Schedule slot 2 PM")).getByText("14:00 contractor")).toBeInTheDocument();
-    expect(within(screen.getByLabelText("Unscheduled notes")).getByText("Call tenant tomorrow")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Notes needing review")).getByText("Call tenant tomorrow")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("7 AM-10 PM schedule")).queryByText("Call tenant tomorrow")).not.toBeInTheDocument();
+  });
+
+  it("places compact times and warns when an exact note contains multiple time cues", async () => {
+    mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({
+      "2026-07-23": [
+        { id: "note-compact", text: "230pm contractor" },
+        { id: "note-multiple", text: "1pm painter and 4pm landscaper" },
+      ],
+    });
+    renderPage(["/scheduling?view=day&date=2026-07-23"]);
+
+    expect(within(await screen.findByLabelText("Schedule slot 2 PM")).getByText("230pm contractor")).toBeInTheDocument();
+    const firstTimeSlot = screen.getByLabelText("Schedule slot 1 PM");
+    expect(within(firstTimeSlot).getByText("1pm painter and 4pm landscaper")).toBeInTheDocument();
+    expect(within(firstTimeSlot).getByText(/Needs review · Multiple explicit time cues were detected/i)).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Schedule slot 4 PM")).queryByText("1pm painter and 4pm landscaper")).not.toBeInTheDocument();
+  });
+
+  it("flags same-time workspace notes for advisory review without creating duplicates", async () => {
+    mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({
+      "2026-07-23": [
+        { id: "note-same-time-1", text: "630pm meeting" },
+        { id: "note-same-time-2", text: "630pm contractor follow-up" },
+      ],
+    });
+    renderPage(["/scheduling?view=day&date=2026-07-23"]);
+
+    const timeSlot = await screen.findByLabelText("Schedule slot 6 PM");
+    expect(within(timeSlot).getByText("630pm meeting")).toBeInTheDocument();
+    expect(within(timeSlot).getByText("630pm contractor follow-up")).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("Read-only scheduling recommendations")).getByText(
+        "Multiple workspace notes share the same time. Review before confirming the schedule."
+      )
+    ).toBeInTheDocument();
+    expect(mocks.createSchedulingDayNoteMock).not.toHaveBeenCalled();
+  });
+
+  it("shows daypart suggestions and deadline cues as advisory rather than confirmed scheduled notes", async () => {
+    mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({
+      "2026-07-22": [
+        { id: "note-morning", text: "Follow up with contractor in the morning" },
+        { id: "note-lunch", text: "Call tenant after lunch" },
+        { id: "note-deadline", text: "Check Unit 3 leak before 5" },
+        { id: "note-plain", text: "Confirm access details" },
+      ],
+    });
+    renderPage(["/scheduling?view=day&date=2026-07-22"]);
+
+    const suggestions = await screen.findByLabelText("Suggested day plan");
+    expect(within(suggestions).getByText("Follow up with contractor in the morning")).toBeInTheDocument();
+    expect(within(suggestions).getByText("Call tenant after lunch")).toBeInTheDocument();
+    expect(within(suggestions).getByText("Morning")).toBeInTheDocument();
+    expect(within(suggestions).getByText("After lunch")).toBeInTheDocument();
+    expect(screen.getByText(/AI-assisted scheduling is advisory; no calendar event has been created/i)).toBeInTheDocument();
+
+    const review = screen.getByLabelText("Notes needing review");
+    expect(within(review).getByText("Check Unit 3 leak before 5")).toBeInTheDocument();
+    expect(within(review).getByText("Deadline cue: 5 PM")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Unscheduled notes")).getByText("Confirm access details")).toBeInTheDocument();
+    expect(screen.getAllByText("Call tenant after lunch")).toHaveLength(1);
+    expect(screen.getByDisplayValue("Call tenant after lunch")).toBeInTheDocument();
   });
 
   it("opens a requested day from scheduling query params", () => {
@@ -363,7 +429,7 @@ describe("SchedulingWorkspacePage", () => {
     renderPage();
 
     const review = screen.getByLabelText("Read-only scheduling recommendations");
-    expect(within(review).getAllByRole("listitem")).toHaveLength(4);
+    expect(within(review).getAllByRole("listitem")).toHaveLength(3);
     expect(within(review).queryByRole("button")).not.toBeInTheDocument();
   });
 });

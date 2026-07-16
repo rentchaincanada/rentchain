@@ -431,7 +431,7 @@ describe("DashboardPage", () => {
     expect(within(detail).getByText("1pm viewing")).toBeInTheDocument();
     expect(within(detail).getByText("3pm plumber")).toBeInTheDocument();
     expect(within(detail).getByText("Confirm inspection window")).toBeInTheDocument();
-    expect(within(detail).getByText("Unscheduled notes stay here until a clear time is added.")).toBeInTheDocument();
+    expect(within(detail).getByText(/Notes without exact times stay under Day notes/i)).toBeInTheDocument();
     expect(within(detail).getByText("1 PM - viewing")).toBeInTheDocument();
     expect(within(detail).getByText("3 PM - plumber")).toBeInTheDocument();
     expect(within(detail).getAllByText("Workspace scheduling note")).toHaveLength(2);
@@ -442,6 +442,38 @@ describe("DashboardPage", () => {
       `/scheduling?view=day&date=${dateKeyFromLocalDate(selectedDate)}`
     );
     expect(within(detail).queryByText(/No saved scheduling notes for this day/i)).not.toBeInTheDocument();
+  });
+
+  it("uses the shared parser for advisory daypart and deadline notes without double-counting", async () => {
+    const selectedDate = new Date();
+    const selectedDateLabel = selectedDate.toLocaleDateString(undefined, {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    const selectedKey = dateKeyFromLocalDate(selectedDate);
+    mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({
+      [selectedKey]: [
+        { id: "note-afternoon", text: "Review application in the afternoon" },
+        { id: "note-deadline", text: "Check Unit 3 leak before 5" },
+        { id: "note-plain", text: "Confirm access details" },
+      ],
+    });
+
+    renderDashboard();
+
+    await screen.findByTestId("calendar-preview-section");
+    fireEvent.click(await screen.findByRole("button", { name: `Select ${selectedDateLabel}, 3 scheduled items` }));
+    const detail = screen.getByTestId("selected-day-detail-panel");
+    expect(within(detail).getByText("3 items")).toBeInTheDocument();
+    expect(within(detail).getByText("Suggested plan")).toBeInTheDocument();
+    expect(within(detail).getByText("Afternoon")).toBeInTheDocument();
+    expect(within(detail).getByText("Deadline cue: 5 PM")).toBeInTheDocument();
+    expect(within(detail).getByText(/AI-assisted scheduling is advisory; no calendar event has been created/i)).toBeInTheDocument();
+    expect(within(detail).getAllByText("Review application in the afternoon")).toHaveLength(2);
+    expect(within(detail).getAllByText("Check Unit 3 leak before 5")).toHaveLength(2);
+    expect(within(detail).queryByText("3 PM - application")).not.toBeInTheDocument();
   });
 
   it("uses specific Dashboard decision destination labels for common RC1 cards", async () => {
