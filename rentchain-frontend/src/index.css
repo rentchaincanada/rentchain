@@ -354,13 +354,13 @@ button,
     display: block !important;
   }
 
-  body:not([data-print-root-active="true"]) * {
+  body:not([data-print-root-active="true"]):not([data-marketing-print-active="true"]) * {
     visibility: hidden !important;
   }
 
-  body:not([data-print-root-active="true"]) .print-only-summary,
-  body:not([data-print-root-active="true"]) .print-only-lease-renewals,
-  body:not([data-print-root-active="true"]) .print-only-application {
+  body:not([data-print-root-active="true"]):not([data-marketing-print-active="true"]) .print-only-summary,
+  body:not([data-print-root-active="true"]):not([data-marketing-print-active="true"]) .print-only-lease-renewals,
+  body:not([data-print-root-active="true"]):not([data-marketing-print-active="true"]) .print-only-application {
     display: block !important;
     visibility: visible !important;
     position: static !important;
@@ -375,9 +375,9 @@ button,
     transform: none !important;
   }
 
-  body:not([data-print-root-active="true"]) .print-only-summary *,
-  body:not([data-print-root-active="true"]) .print-only-lease-renewals *,
-  body:not([data-print-root-active="true"]) .print-only-application * {
+  body:not([data-print-root-active="true"]):not([data-marketing-print-active="true"]) .print-only-summary *,
+  body:not([data-print-root-active="true"]):not([data-marketing-print-active="true"]) .print-only-lease-renewals *,
+  body:not([data-print-root-active="true"]):not([data-marketing-print-active="true"]) .print-only-application * {
     visibility: visible !important;
   }
 

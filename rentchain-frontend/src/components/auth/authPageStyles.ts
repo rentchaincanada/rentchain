@@ -34,6 +34,11 @@ export const authShellStyle: React.CSSProperties = {
   color: authPalette.ink,
 };
 
+export const signupAuthShellStyle: React.CSSProperties = {
+  ...authShellStyle,
+  backgroundImage: "linear-gradient(135deg, #f4efe6 0%, #efe6d7 48%, #f8f3ea 100%)",
+};
+
 export const authCardStyle = (
   width: string = "min(460px, 92vw)"
 ): React.CSSProperties => ({

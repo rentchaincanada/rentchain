@@ -71,6 +71,17 @@ describe("Marketing LandingPage", () => {
       screen.getByRole("heading", { level: 1, name: /Housing operations\. Connected\./i })
     ).toBeInTheDocument();
     expect(screen.getByText(/The operating system for housing/i)).toBeInTheDocument();
+    expect(document.body).toHaveAttribute("data-marketing-print-active", "true");
+    expect(screen.getByLabelText("Sample connected operating record")).toHaveTextContent("Lease terms approved");
+    expect(screen.getByText("One shared record", { selector: ".rc-trust-mobile-connector strong" })).toBeInTheDocument();
+  });
+
+  it("removes the landing-only print marker when the route unmounts", () => {
+    const view = renderLanding("/");
+
+    view.unmount();
+
+    expect(document.body).not.toHaveAttribute("data-marketing-print-active");
   });
 
   it("renders at the /site route", () => {

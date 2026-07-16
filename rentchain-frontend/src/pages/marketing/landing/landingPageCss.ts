@@ -415,6 +415,10 @@ export const landingPageCss = `
   stroke-linejoin: round;
 }
 
+.rc-trust-mobile-connector {
+  display: none;
+}
+
 .rc-trust-node {
   position: relative;
 }
@@ -707,9 +711,9 @@ export const landingPageCss = `
 }
 
 .rc-reveal {
-  opacity: 0;
+  opacity: 1;
   transform: translateY(22px);
-  transition: opacity 600ms ease, transform 600ms ease;
+  transition: transform 600ms ease;
 }
 
 .rc-reveal.is-visible {
@@ -752,6 +756,27 @@ export const landingPageCss = `
     display: none;
   }
 
+  .rc-trust-mobile-connector {
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    padding: 8px 0;
+    color: var(--rc-muted);
+    font-size: 0.82rem;
+    text-align: center;
+  }
+
+  .rc-trust-mobile-connector::after {
+    content: "↓";
+    color: ${colors.pine600};
+    font-size: 1.4rem;
+    line-height: 1;
+  }
+
+  .rc-trust-mobile-connector strong {
+    color: var(--rc-text);
+  }
+
   .rc-trust-role-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -788,7 +813,20 @@ export const landingPageCss = `
   }
 
   .rc-hero-visual {
-    display: none;
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .rc-ledger-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 9px;
+    padding: 11px;
+  }
+
+  .rc-ledger-row > strong:last-child {
+    grid-column: 2;
+    color: ${colors.amber500};
+    font-size: 0.82rem;
   }
 
   .rc-audience-grid,
@@ -826,6 +864,46 @@ export const landingPageCss = `
   .rc-reveal {
     opacity: 1;
     transform: none;
+  }
+}
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  .rc-landing,
+  .rc-landing * {
+    visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .rc-landing {
+    background: var(--rc-paper) !important;
+  }
+
+  .rc-marketing-header {
+    position: static;
+  }
+
+  .rc-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .rc-section,
+  .rc-card,
+  .rc-panel,
+  .rc-ledger-row,
+  .rc-footer-grid > div {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .rc-mobile-toggle,
+  .rc-mobile-menu {
+    display: none !important;
   }
 }
 `;

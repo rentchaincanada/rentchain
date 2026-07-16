@@ -276,6 +276,10 @@ export function TrustFlowSection() {
             <path d="M48 18 V102" />
             <path d="M48 60 H116" />
           </svg>
+          <div className="rc-trust-mobile-connector" aria-hidden="true">
+            <span>Connected roles</span>
+            <strong>One shared record</strong>
+          </div>
           <RevealOnScroll className="rc-panel rc-trust-hub">
             <p className="rc-kicker">{trustFlow.hubKicker}</p>
             <h3>{trustFlow.hubTitle}</h3>
@@ -343,7 +347,9 @@ export function AudienceSection() {
 
 export function LifecycleSection() {
   const [active, setActive] = useState(0);
-  const activeStep = lifecycle.steps[active] ?? lifecycle.steps[0];
+  const [printActive, setPrintActive] = useState(false);
+  const displayedIndex = printActive ? 0 : active;
+  const activeStep = lifecycle.steps[displayedIndex] ?? lifecycle.steps[0];
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   useEffect(() => {
@@ -352,6 +358,20 @@ export function LifecycleSection() {
       setActive((current) => (current + 1) % lifecycle.steps.length);
     }, lifecycle.autoAdvanceMs);
     return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const printMedia = window.matchMedia?.("print");
+    const updatePrintState = () => setPrintActive(Boolean(printMedia?.matches));
+    updatePrintState();
+    printMedia?.addEventListener?.("change", updatePrintState);
+    window.addEventListener("beforeprint", updatePrintState);
+    window.addEventListener("afterprint", updatePrintState);
+    return () => {
+      printMedia?.removeEventListener?.("change", updatePrintState);
+      window.removeEventListener("beforeprint", updatePrintState);
+      window.removeEventListener("afterprint", updatePrintState);
+    };
   }, []);
 
   function focusStep(index: number) {
@@ -400,7 +420,7 @@ export function LifecycleSection() {
                 }}
                 type="button"
                 role="tab"
-                aria-selected={active === index}
+                aria-selected={displayedIndex === index}
                 aria-controls="lifecycle-panel"
                 className="rc-lifecycle-tab"
                 onClick={() => setActive(index)}
