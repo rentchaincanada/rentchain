@@ -91,7 +91,12 @@ canvas {
   --rc-logo-text-size: 24px;
 }
 
-.rc-logo-link-dark {
+.rc-logo-link-lg {
+  --rc-logo-icon-size: 36px;
+  --rc-logo-text-size: 28px;
+}
+
+.rc-logo-link-inverse {
   color: #fff;
 }
 
@@ -109,6 +114,12 @@ canvas {
   letter-spacing: -0.015em;
   color: currentColor;
   line-height: 1;
+}
+
+.rc-auth-logo {
+  justify-content: center;
+  margin: 0 auto 14px;
+  color: #171411;
 }
 
 @media (max-width: 768px) {

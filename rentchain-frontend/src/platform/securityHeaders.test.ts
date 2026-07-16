@@ -118,4 +118,13 @@ describe("frontend Vercel security headers", () => {
       readFileSync(join(process.cwd(), "public", "manifest.webmanifest"), "utf8"),
     ).not.toThrow();
   });
+
+  it("uses the current RentChain mark for favicon and install icons", () => {
+    expect(indexHtml).toContain('href="/icons/rentchain-mark.svg"');
+    expect(indexHtml).toContain('href="/icons/rentchain-mark-192.png"');
+    const manifest = readFileSync(join(process.cwd(), "public", "manifest.webmanifest"), "utf8");
+    expect(manifest).toContain("/icons/rentchain-mark-192.png");
+    expect(manifest).toContain("/icons/rentchain-mark-512.png");
+    expect(manifest).not.toContain("icon-192-light.png");
+  });
 });

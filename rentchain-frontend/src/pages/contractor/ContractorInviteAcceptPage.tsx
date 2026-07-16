@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { Button, Card } from "../../components/ui/Ui";
 import { acceptContractorInvite, getPublicContractorInvite, type PublicContractorInviteStatus } from "../../api/workOrdersApi";
 import { useAuth } from "../../context/useAuth";
+import { RentChainLogo } from "../../components/brand/RentChainLogo";
 import {
   authBodyStyle,
   authCardStyle,
@@ -64,6 +65,7 @@ export default function ContractorInviteAcceptPage() {
   return (
     <div style={authShellStyle}>
       <Card style={{ ...authCardStyle("min(620px, 94vw)"), display: "grid", gap: 10 }}>
+        <RentChainLogo href="/site" size="md" className="rc-auth-logo" />
         <div style={{ fontWeight: 760, fontSize: "1.08rem", color: authPalette.ink }}>Contractor Invite</div>
         {inviteMeta?.landlordName ? (
           <div style={{ color: authPalette.charcoal }}>

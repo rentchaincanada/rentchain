@@ -4,6 +4,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { getTenantWorkspace } from "../../api/tenantPortal";
 import { getTenantCommunicationSummary } from "../../api/tenantCommunicationsApi";
 import { logoutTenant } from "../../lib/logoutTenant";
+import { RentChainLogo } from "../brand/RentChainLogo";
 import "./TenantNav.css";
 
 type Props = {
@@ -218,8 +219,11 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
             flexWrap: "wrap",
           }}
         >
-          <div style={{ display: "grid", gap: 2 }}>
-            <div style={{ fontWeight: 700 }}>RentChain Tenant Space</div>
+          <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+              <RentChainLogo href="/tenant/dashboard" size="sm" />
+              <span style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap" }}>Tenant Space</span>
+            </div>
             <div style={{ fontSize: 12, color: "#64748b" }}>
               {identityLoading ? "Loading your space..." : tenantName || "Your tenant space"}
             </div>

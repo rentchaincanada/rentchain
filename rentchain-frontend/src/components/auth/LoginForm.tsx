@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Button, Card, Input } from "../ui/Ui";
 import { spacing } from "../../styles/tokens";
+import { RentChainLogo } from "../brand/RentChainLogo";
 import {
   authBannerStyle,
   authBodyStyle,
@@ -80,6 +81,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   return (
     <div style={authShellStyle}>
       <Card elevated style={authCardStyle()}>
+        <RentChainLogo href="/site" size="md" className="rc-auth-logo" />
         <div style={authEyebrowStyle}>
           {eyebrow}
         </div>

@@ -1,6 +1,7 @@
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/useAuth";
+import { RentChainLogo } from "../brand/RentChainLogo";
 
 type Props = {
   children: React.ReactNode;
@@ -34,7 +35,10 @@ export const ContractorNav: React.FC<Props> = ({ children }) => {
             flexWrap: "wrap",
           }}
         >
-          <div style={{ fontWeight: 700 }}>RentChain Contractor</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+            <RentChainLogo href="/contractor" size="sm" />
+            <span style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap" }}>Contractor</span>
+          </div>
           <nav style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <NavLink to="/contractor" style={{ color: "#334155", textDecoration: "none" }}>
               Dashboard

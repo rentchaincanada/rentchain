@@ -6,6 +6,7 @@ import {
   verifyPasswordResetCode,
 } from "firebase/auth";
 import { Card, Input, Button } from "@/components/ui/Ui";
+import { RentChainLogo } from "@/components/brand/RentChainLogo";
 import { colors, spacing, text } from "@/styles/tokens";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { resolvePostAuthDestination } from "@/lib/authDestination";
@@ -224,6 +225,7 @@ const AuthActionPage: React.FC = () => {
       }}
     >
       <Card elevated style={{ width: "100%", maxWidth: 520, padding: spacing.lg }}>
+        <RentChainLogo href="/site" size="md" className="rc-auth-logo" />
         <div style={{ marginBottom: spacing.xs, color: text.subtle, fontSize: "0.9rem" }}>
           RentChain Secure Access
         </div>

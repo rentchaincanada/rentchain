@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { Card, Input, Button } from "@/components/ui/Ui";
+import { RentChainLogo } from "@/components/brand/RentChainLogo";
 import { spacing } from "@/styles/tokens";
 import { getFirebaseAuth } from "@/lib/firebase";
 import {
@@ -69,6 +70,7 @@ const ForgotPasswordPage: React.FC = () => {
   return (
     <div style={{ ...authShellStyle, padding: spacing.xl }}>
       <Card elevated style={authCardStyle("min(460px, 100%)")}>
+        <RentChainLogo href="/site" size="md" className="rc-auth-logo" />
         <div style={authEyebrowStyle}>
           RentChain Secure Access
         </div>

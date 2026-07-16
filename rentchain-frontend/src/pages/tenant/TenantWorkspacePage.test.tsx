@@ -1103,7 +1103,8 @@ describe("tenant workspace frontend shell", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/RentChain Tenant Space/i)).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "RentChain home" })).toBeInTheDocument();
+    expect(screen.getByText("Tenant Space")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Dashboard/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Screening Requests/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Access/i })).toBeInTheDocument();
