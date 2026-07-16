@@ -228,6 +228,22 @@ function DeleteNoteDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const dialogRef = React.useRef<HTMLDivElement | null>(null);
+  const [confirmationReady, setConfirmationReady] = React.useState(false);
+
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setConfirmationReady(true);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  React.useEffect(() => {
+    if (confirmationReady) {
+      dialogRef.current?.querySelector<HTMLButtonElement>("[data-confirm-delete-note]")?.focus();
+    }
+  }, [confirmationReady]);
+
   return (
     <div
       role="presentation"
@@ -242,6 +258,7 @@ function DeleteNoteDialog({
       }}
     >
       <div
+        ref={dialogRef}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="delete-scheduling-note-title"
@@ -274,9 +291,9 @@ function DeleteNoteDialog({
           </Button>
           <Button
             type="button"
-            autoFocus
+            data-confirm-delete-note
             onClick={onConfirm}
-            disabled={busy}
+            disabled={busy || !confirmationReady}
             style={{ background: "#b91c1c", color: "#fff" }}
           >
             {busy ? "Deleting" : "Delete note"}
@@ -303,7 +320,7 @@ export default function SchedulingWorkspacePage() {
   const [notesStatus, setNotesStatus] = React.useState<string | null>(null);
   const [draftSaving, setDraftSaving] = React.useState(false);
   const [savingNoteIds, setSavingNoteIds] = React.useState<Record<string, boolean>>({});
-  const [pendingDeleteNoteId, setPendingDeleteNoteId] = React.useState<string | null>(null);
+  const [pendingDeleteNote, setPendingDeleteNote] = React.useState<SchedulingDayNote | null>(null);
   const legacyNotesScope = React.useMemo(
     () => ({
       actorLandlordId: user?.actorLandlordId,
@@ -485,7 +502,9 @@ export default function SchedulingWorkspacePage() {
     }
   };
 
-  const deleteNote = async (noteId: string) => {
+  const confirmDeleteNote = async () => {
+    if (!pendingDeleteNote) return;
+    const noteId = pendingDeleteNote.id;
     setSavingNoteIds((current) => ({ ...current, [noteId]: true }));
     setNotesError(null);
     setNotesStatus(null);
@@ -495,13 +514,17 @@ export default function SchedulingWorkspacePage() {
         selectedKey,
         selectedNotes.filter((note) => note.id !== noteId)
       );
-      setPendingDeleteNoteId(null);
+      setPendingDeleteNote(null);
       setNotesStatus("Workspace note deleted.");
     } catch {
       setNotesError("Scheduling note could not be deleted. Refresh this view and try again.");
     } finally {
       setSavingNoteIds((current) => ({ ...current, [noteId]: false }));
     }
+  };
+
+  const openDeleteConfirmation = (note: SchedulingDayNote) => {
+    setPendingDeleteNote(note);
   };
 
   const migrateLegacyNotes = async () => {
@@ -1171,7 +1194,7 @@ export default function SchedulingWorkspacePage() {
                       <Button
                         type="button"
                         variant="ghost"
-                        onClick={() => setPendingDeleteNoteId(note.id)}
+                        onClick={() => openDeleteConfirmation(note)}
                         disabled={Boolean(savingNoteIds[note.id])}
                       >
                         {savingNoteIds[note.id] ? "Deleting" : "Delete"}
@@ -1255,12 +1278,12 @@ export default function SchedulingWorkspacePage() {
           </Card>
         </div>
       </div>
-      {pendingDeleteNoteId ? (
+      {pendingDeleteNote ? (
         <DeleteNoteDialog
-          busy={Boolean(savingNoteIds[pendingDeleteNoteId])}
-          onCancel={() => setPendingDeleteNoteId(null)}
+          busy={Boolean(savingNoteIds[pendingDeleteNote.id])}
+          onCancel={() => setPendingDeleteNote(null)}
           onConfirm={() => {
-            void deleteNote(pendingDeleteNoteId);
+            void confirmDeleteNote();
           }}
         />
       ) : null}
