@@ -399,6 +399,21 @@ describe("SchedulingWorkspacePage", () => {
     expect(screen.getByLabelText("7 AM-10 PM schedule")).toBeInTheDocument();
   });
 
+  it("uses the isolated print area and exposes Print / Save PDF without changing schedule data", () => {
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => undefined);
+    const { container } = renderPage();
+
+    expect(container.querySelector(".scheduling-workspace")).toHaveClass("rc-print-area");
+    expect(screen.getByLabelText("New schedule note")).toHaveClass("scheduling-note-draft-input");
+
+    fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
+
+    expect(printSpy).toHaveBeenCalledTimes(1);
+    expect(mocks.createSchedulingDayNoteMock).not.toHaveBeenCalled();
+    expect(mocks.updateSchedulingDayNoteMock).not.toHaveBeenCalled();
+    expect(mocks.deleteSchedulingDayNoteMock).not.toHaveBeenCalled();
+  });
+
   it("loads selected-day notes from backend after the scheduling page remounts", async () => {
     const todayKey = dateKeyFromLocalDate(new Date());
     mocks.fetchSchedulingDayNotesRangeMock

@@ -7,6 +7,7 @@ import {
   ListChecks,
   MonitorCheck,
   Plus,
+  Printer,
   ShieldCheck,
   Wrench,
 } from "lucide-react";
@@ -585,7 +586,7 @@ export default function SchedulingWorkspacePage() {
   };
 
   return (
-    <div className="scheduling-workspace">
+    <div className="scheduling-workspace rc-print-area">
       <style>{`
         .scheduling-workspace {
           --schedule-card: #fffaf1;
@@ -641,9 +642,13 @@ export default function SchedulingWorkspacePage() {
           overflow-wrap: anywhere;
         }
         .scheduling-workspace input {
-          background: var(--schedule-card) !important;
-          border-color: var(--schedule-border) !important;
+          background: #fffefb !important;
+          border-color: var(--schedule-border-strong) !important;
           color: var(--schedule-text) !important;
+        }
+        .scheduling-workspace input::placeholder {
+          color: #73685c;
+          opacity: 1;
         }
         .scheduling-workspace input:focus {
           border-color: rgba(36, 88, 66, 0.42) !important;
@@ -971,6 +976,28 @@ export default function SchedulingWorkspacePage() {
             width: 100%;
           }
         }
+        @media print {
+          .scheduling-workspace {
+            max-width: none;
+            gap: 14px;
+            padding: 0 !important;
+          }
+          .scheduling-workspace .no-print {
+            display: none !important;
+          }
+          .scheduling-card,
+          .scheduling-hour-row,
+          .scheduling-note-row,
+          .scheduling-item-row,
+          .scheduling-review-list li {
+            box-shadow: none !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+          .scheduling-layout {
+            grid-template-columns: 1fr;
+          }
+        }
       `}</style>
 
       <Card elevated className="scheduling-hero scheduling-card">
@@ -978,9 +1005,17 @@ export default function SchedulingWorkspacePage() {
           <h1>Scheduling</h1>
           <p>Calendar view for viewings, maintenance, work orders, screening, and notes.</p>
         </div>
-        <Link to="/dashboard" className="scheduling-link-button">
-          Back to Dashboard
-        </Link>
+        <div className="scheduling-note-actions no-print">
+          <Button type="button" variant="secondary" onClick={() => window.print()}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <Printer size={16} aria-hidden="true" />
+              Print / Save PDF
+            </span>
+          </Button>
+          <Link to="/dashboard" className="scheduling-link-button">
+            Back to Dashboard
+          </Link>
+        </div>
       </Card>
 
       {legacyNotes.length && !legacyNoticeDismissed ? (
@@ -1256,6 +1291,7 @@ export default function SchedulingWorkspacePage() {
                 <div className="scheduling-local-note">No saved notes for this day.</div>
               )}
               <Input
+                className="scheduling-note-draft-input"
                 aria-label="New schedule note"
                 value={noteDraft}
                 onChange={(event) => setNoteDraft(event.target.value)}
