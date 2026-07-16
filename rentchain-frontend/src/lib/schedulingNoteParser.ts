@@ -27,7 +27,9 @@ type SchedulingNoteParserInput = {
   date: string;
 };
 
-const EXACT_TIME_TEXT_PATTERN = /\b(?:1[0-2]|0?[1-9])(?::[0-5]\d)?\s*(?:a\.?m\.?|p\.?m\.?)\b|\b(?:[01]?\d|2[0-3]):[0-5]\d\b/i;
+const EXACT_TIME_PATTERN_SOURCE = String.raw`\b(?:1[0-2]|0?[1-9])(?::[0-5]\d)?\s*(?:a\.?m\.?|p\.?m\.?)\b|\b(?:0?[1-9]|1[0-2])[0-5]\d\s*(?:a\.?m\.?|p\.?m\.?)\b|\b(?:[01]?\d|2[0-3]):[0-5]\d\b`;
+const EXACT_TIME_TEXT_PATTERN = new RegExp(EXACT_TIME_PATTERN_SOURCE, "i");
+const COMPACT_MERIDIEM_TIME_PATTERN = /\b(0?[1-9]|1[0-2])([0-5]\d)\s*(a\.?m\.?|p\.?m\.?)\b/i;
 const DEADLINE_PATTERN = /\b(before|by)\s+(noon|midnight|(?:1[0-2]|0?[1-9])(?::([0-5]\d))?\s*(?:a\.?m\.?|p\.?m\.?)?)\b/i;
 const AMBIGUOUS_TEMPORAL_CUE_PATTERN = /\b(tomorrow|later|soon|after|before|by|around|sometime|tonight|today)\b/i;
 
@@ -91,6 +93,25 @@ function formatTimeMinutes(timeMinutes: number): string {
 
 function cleanExactTimeTitle(text: string): string {
   return text.replace(EXACT_TIME_TEXT_PATTERN, "").replace(/^[\s,:;\-]+|[\s,:;\-]+$/g, "").replace(/\s{2,}/g, " ") || text;
+}
+
+function parseCompactMeridiemTime(text: string): { hour: number; minute: number } | null {
+  const match = text.match(COMPACT_MERIDIEM_TIME_PATTERN);
+  if (!match) return null;
+  const hourInput = Number(match[1]);
+  const minute = Number(match[2]);
+  const meridiem = match[3].toLowerCase();
+  const hour =
+    meridiem.startsWith("p") && hourInput !== 12
+      ? hourInput + 12
+      : meridiem.startsWith("a") && hourInput === 12
+        ? 0
+        : hourInput;
+  return { hour, minute };
+}
+
+function explicitTimeCueCount(text: string): number {
+  return text.match(new RegExp(EXACT_TIME_PATTERN_SOURCE, "gi"))?.length || 0;
 }
 
 function deadlineMinutes(match: RegExpMatchArray): number | null {
@@ -171,9 +192,10 @@ export function parseSchedulingNote(input: SchedulingNoteParserInput): Schedulin
     }
   }
 
-  const exactTime = parseSchedulingNoteTime(originalText);
+  const exactTime = parseSchedulingNoteTime(originalText) || parseCompactMeridiemTime(originalText);
   if (exactTime) {
     const timeMinutes = exactTime.hour * 60 + exactTime.minute;
+    const hasMultipleTimeCues = explicitTimeCueCount(originalText) > 1;
     return {
       ...base,
       cleanedTitle: cleanExactTimeTitle(originalText),
@@ -181,9 +203,11 @@ export function parseSchedulingNote(input: SchedulingNoteParserInput): Schedulin
       timeMinutes,
       timeLabel: formatTimeMinutes(timeMinutes),
       confidence: "high",
-      reason: "The note contains an explicit time.",
+      reason: hasMultipleTimeCues
+        ? "Multiple explicit time cues were detected. The first time is shown; review the original note before acting."
+        : "The note contains an explicit time.",
       parserMode: "deterministic",
-      needsReview: false,
+      needsReview: hasMultipleTimeCues,
     };
   }
 

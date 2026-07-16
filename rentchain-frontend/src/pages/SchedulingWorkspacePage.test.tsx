@@ -226,6 +226,22 @@ describe("SchedulingWorkspacePage", () => {
     expect(within(screen.getByLabelText("7 AM-10 PM schedule")).queryByText("Call tenant tomorrow")).not.toBeInTheDocument();
   });
 
+  it("places compact times and warns when an exact note contains multiple time cues", async () => {
+    mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({
+      "2026-07-23": [
+        { id: "note-compact", text: "230pm contractor" },
+        { id: "note-multiple", text: "1pm painter and 4pm landscaper" },
+      ],
+    });
+    renderPage(["/scheduling?view=day&date=2026-07-23"]);
+
+    expect(within(await screen.findByLabelText("Schedule slot 2 PM")).getByText("230pm contractor")).toBeInTheDocument();
+    const firstTimeSlot = screen.getByLabelText("Schedule slot 1 PM");
+    expect(within(firstTimeSlot).getByText("1pm painter and 4pm landscaper")).toBeInTheDocument();
+    expect(within(firstTimeSlot).getByText(/Needs review · Multiple explicit time cues were detected/i)).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Schedule slot 4 PM")).queryByText("1pm painter and 4pm landscaper")).not.toBeInTheDocument();
+  });
+
   it("shows daypart suggestions and deadline cues as advisory rather than confirmed scheduled notes", async () => {
     mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({
       "2026-07-22": [

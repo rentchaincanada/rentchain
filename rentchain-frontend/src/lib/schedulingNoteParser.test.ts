@@ -12,6 +12,9 @@ describe("schedulingNoteParser", () => {
     ["2pm lease review", 14 * 60, "2 PM", "lease review"],
     ["14:00 contractor", 14 * 60, "2 PM", "contractor"],
     ["7 PM follow up", 19 * 60, "7 PM", "follow up"],
+    ["230pm contractor", 14 * 60 + 30, "2:30 PM", "contractor"],
+    ["0230pm contractor", 14 * 60 + 30, "2:30 PM", "contractor"],
+    ["1030am inspection", 10 * 60 + 30, "10:30 AM", "inspection"],
   ])("parses exact time in %s", (text, timeMinutes, timeLabel, cleanedTitle) => {
     expect(parse(text)).toMatchObject({
       placementType: "exact_time",
@@ -60,6 +63,10 @@ describe("schedulingNoteParser", () => {
     "Visit 123 Main Street",
     "Review lease 7842",
     "Confirm 3 tenants",
+    "Unit 230",
+    "$230 repair estimate",
+    "230 dollars",
+    "230 days",
   ])(
     "does not treat %s as an exact time",
     (text) => {
@@ -68,6 +75,16 @@ describe("schedulingNoteParser", () => {
       expect(result).not.toHaveProperty("timeMinutes");
     }
   );
+
+  it("places a note at its first explicit time and flags multiple time cues for review", () => {
+    expect(parse("1pm painter and 4pm landscaper")).toMatchObject({
+      placementType: "exact_time",
+      timeMinutes: 13 * 60,
+      timeLabel: "1 PM",
+      needsReview: true,
+      reason: "Multiple explicit time cues were detected. The first time is shown; review the original note before acting.",
+    });
+  });
 
   it("keeps an ambiguous temporal note in needs review", () => {
     expect(parse("remind me to review application tomorrow")).toMatchObject({

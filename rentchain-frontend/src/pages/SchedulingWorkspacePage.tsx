@@ -1006,6 +1006,9 @@ export default function SchedulingWorkspacePage() {
                                 <div key={note.id} className="scheduling-slot-note">
                                   <strong>{parsed.timeLabel || formatHour(hour)}</strong>
                                   <div>{note.text}</div>
+                                  {parsed.needsReview ? (
+                                    <small className="scheduling-local-note">Needs review · {parsed.reason}</small>
+                                  ) : null}
                                 </div>
                               );
                             })
