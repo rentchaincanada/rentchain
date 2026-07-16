@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { TENANT_DEFAULT_DESTINATION } from "../../lib/authDestination";
+import { RentChainLogo } from "../../components/brand/RentChainLogo";
 import {
   tenantEntryBadgeStyle,
   tenantEntryBodyStyle,
@@ -27,18 +28,7 @@ export default function TenantLandingPage() {
             flexWrap: "wrap",
           }}
         >
-          <Link
-            to="/"
-            style={{
-              color: tenantEntryPalette.ink,
-              textDecoration: "none",
-              fontWeight: 800,
-              letterSpacing: "-0.02em",
-              fontSize: "1.05rem",
-            }}
-          >
-            RentChain
-          </Link>
+          <RentChainLogo href="/site" size="md" />
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <Link to={tenantLoginPath} style={tenantEntrySecondaryLinkStyle}>
               Log in / Continue

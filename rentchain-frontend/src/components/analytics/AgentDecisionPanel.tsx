@@ -25,7 +25,7 @@ import {
 import { decisionNextStepCopy } from "@/lib/analytics/analyticsInsightCopy";
 
 const priorityTone: Record<"low" | "medium" | "high", { bg: string; text: string }> = {
-  low: { bg: "rgba(14, 165, 233, 0.12)", text: "#075985" },
+  low: { bg: "rgba(30, 95, 78, 0.12)", text: "#1e5f4e" },
   medium: { bg: "rgba(245, 158, 11, 0.14)", text: "#92400e" },
   high: { bg: "rgba(239, 68, 68, 0.12)", text: "#991b1b" },
 };
@@ -75,7 +75,7 @@ const executionOutcomeTone: Record<
 
 const reminderTone = {
   due_now: { bg: "rgba(245, 158, 11, 0.14)", text: "#92400e" },
-  due_soon: { bg: "rgba(59, 130, 246, 0.14)", text: "#1d4ed8" },
+  due_soon: { bg: "rgba(232, 163, 61, 0.18)", text: "#7c4a03" },
   scheduled_later: { bg: "rgba(148, 163, 184, 0.16)", text: "#475569" },
   overdue: { bg: "rgba(239, 68, 68, 0.12)", text: "#991b1b" },
   blocked: { bg: "rgba(251, 191, 36, 0.18)", text: "#92400e" },
@@ -183,7 +183,7 @@ function TrustContextBlock({ decision }: { decision: LandlordAgentDecision }) {
         padding: 12,
         borderRadius: 12,
         border: "1px solid #e2e8f0",
-        background: "#f8fafc",
+        background: "#fffaf1",
       }}
     >
       <div style={{ display: "grid", gap: 4 }}>
@@ -424,7 +424,7 @@ function ActionDecisionCard(props: {
           padding: 12,
           borderRadius: 12,
           border: "1px solid #e2e8f0",
-          background: "#f8fafc",
+          background: "#fffaf1",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -595,7 +595,7 @@ function ActionDecisionCard(props: {
             style={{
               border: "1px solid #cbd5e1",
               borderRadius: 999,
-              background: "#f8fafc",
+              background: "#fffaf1",
               color: "#0f172a",
               fontWeight: 700,
               padding: "6px 12px",

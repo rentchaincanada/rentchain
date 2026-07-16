@@ -14,7 +14,7 @@ const shellStyle: React.CSSProperties = {
   placeItems: "center",
   padding: "24px",
   background:
-    "radial-gradient(1200px 700px at 20% -10%, rgba(56,189,248,0.18), transparent 60%), radial-gradient(900px 600px at 85% 110%, rgba(37,99,235,0.2), transparent 55%), linear-gradient(160deg, #020617 0%, #0b1325 45%, #111c38 100%)",
+    "radial-gradient(1200px 700px at 20% -10%, rgba(232,163,61,0.14), transparent 60%), radial-gradient(900px 600px at 85% 110%, rgba(30,95,78,0.24), transparent 55%), linear-gradient(160deg, #101511 0%, #12241f 48%, #0f1f1a 100%)",
   color: "#e2e8f0",
   overflow: "hidden",
 };
@@ -34,9 +34,9 @@ const badgeStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 8,
   borderRadius: 999,
-  border: "1px solid rgba(56,189,248,0.45)",
-  background: "rgba(8,47,73,0.45)",
-  color: "#7dd3fc",
+  border: "1px solid rgba(232,163,61,0.5)",
+  background: "rgba(30,95,78,0.42)",
+  color: "#f6cf92",
   padding: "7px 12px",
   fontWeight: 700,
   fontSize: 12,
@@ -52,8 +52,8 @@ const actionRowStyle: React.CSSProperties = {
 
 const primaryButtonStyle: React.CSSProperties = {
   borderRadius: 12,
-  border: "1px solid rgba(125,211,252,0.55)",
-  background: "linear-gradient(135deg, #0ea5e9, #2563eb)",
+  border: "1px solid rgba(232,163,61,0.7)",
+  background: "#1e5f4e",
   color: "#ffffff",
   padding: "10px 14px",
   fontWeight: 700,
@@ -64,7 +64,7 @@ const secondaryButtonStyle: React.CSSProperties = {
   borderRadius: 12,
   border: "1px solid rgba(148,163,184,0.4)",
   background: "rgba(15,23,42,0.45)",
-  color: "#dbeafe",
+  color: "#f8fafc",
   padding: "10px 14px",
   fontWeight: 700,
   cursor: "pointer",
@@ -134,6 +134,7 @@ const MaintenancePage: React.FC<Props> = ({ showHomeButton = true }) => {
 
         <div style={actionRowStyle}>
           <button
+            className="rc-maintenance-action"
             type="button"
             style={primaryButtonStyle}
             onClick={() => window.location.reload()}
@@ -143,6 +144,7 @@ const MaintenancePage: React.FC<Props> = ({ showHomeButton = true }) => {
           </button>
           {showHomeButton ? (
             <button
+              className="rc-maintenance-action"
               type="button"
               style={secondaryButtonStyle}
               onClick={() => {
@@ -155,6 +157,7 @@ const MaintenancePage: React.FC<Props> = ({ showHomeButton = true }) => {
           ) : null}
           {SUPPORT_EMAIL ? (
             <a
+              className="rc-maintenance-action"
               href={`mailto:${SUPPORT_EMAIL}`}
               style={{ ...secondaryButtonStyle, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
               aria-label="Contact support by email"

@@ -5,7 +5,7 @@ import { analyticsAlertNextStepCopy } from "@/lib/analytics/analyticsInsightCopy
 import { Card } from "../ui/Ui";
 
 const severityColors: Record<AnalyticsAlert["severity"], { bg: string; text: string }> = {
-  low: { bg: "rgba(14, 165, 233, 0.12)", text: "#075985" },
+  low: { bg: "rgba(30, 95, 78, 0.12)", text: "#1e5f4e" },
   medium: { bg: "rgba(245, 158, 11, 0.14)", text: "#92400e" },
   high: { bg: "rgba(239, 68, 68, 0.12)", text: "#991b1b" },
 };
@@ -82,11 +82,11 @@ export function AnalyticsAlertsPanel({ alerts, summary }: Props) {
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     {alert.actions.map((action) =>
                       action.href ? (
-                        <Link key={`${alert.id}-${action.type}`} to={action.href} style={{ color: "#2563eb", fontWeight: 600 }}>
+                        <Link key={`${alert.id}-${action.type}`} to={action.href} style={{ color: "#1e5f4e", fontWeight: 700 }}>
                           {action.label}
                         </Link>
                       ) : (
-                        <span key={`${alert.id}-${action.type}`} style={{ color: "#2563eb", fontWeight: 600 }}>
+                        <span key={`${alert.id}-${action.type}`} style={{ color: "#1e5f4e", fontWeight: 700 }}>
                           {action.label}
                         </span>
                       )

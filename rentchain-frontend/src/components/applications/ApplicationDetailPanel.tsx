@@ -653,7 +653,7 @@ export const ApplicationDetailPanel: React.FC<ApplicationDetailPanelProps> = ({
                     ? "#ef4444"
                     : application.status === "in_review"
                     ? "#eab308"
-                    : "#60a5fa",
+                    : colors.pine,
               }}
             />
             <span>{statusLabel[application.status]}</span>
@@ -1861,8 +1861,8 @@ export const ApplicationDetailPanel: React.FC<ApplicationDetailPanelProps> = ({
                           ? "#ef4444"
                           : entry.status === "in_review"
                           ? "#eab308"
-                          : "#38bdf8",
-                      boxShadow: "0 0 0 3px rgba(37,99,235,0.12)",
+                          : colors.pine,
+                      boxShadow: `0 0 0 3px ${colors.pineSoft}`,
                     }}
                   />
                   <div

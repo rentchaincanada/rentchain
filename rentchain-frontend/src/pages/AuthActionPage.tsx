@@ -6,7 +6,15 @@ import {
   verifyPasswordResetCode,
 } from "firebase/auth";
 import { Card, Input, Button } from "@/components/ui/Ui";
+import { RentChainLogo } from "@/components/brand/RentChainLogo";
 import { colors, spacing, text } from "@/styles/tokens";
+import {
+  authCardStyle,
+  authInputProps,
+  authLinkStyle,
+  authPrimaryButtonStyle,
+  authShellStyle,
+} from "@/components/auth/authPageStyles";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { resolvePostAuthDestination } from "@/lib/authDestination";
 import { trackAuthEvent } from "@/lib/authAnalytics";
@@ -212,18 +220,9 @@ const AuthActionPage: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        backgroundColor: colors.bg,
-        backgroundImage: colors.bgAmbient,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: spacing.xl,
-      }}
-    >
-      <Card elevated style={{ width: "100%", maxWidth: 520, padding: spacing.lg }}>
+    <div style={authShellStyle}>
+      <Card elevated style={authCardStyle("min(520px, 100%)")}>
+        <RentChainLogo href="/site" size="md" className="rc-auth-logo" />
         <div style={{ marginBottom: spacing.xs, color: text.subtle, fontSize: "0.9rem" }}>
           RentChain Secure Access
         </div>
@@ -255,6 +254,7 @@ const AuthActionPage: React.FC = () => {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   autoComplete="new-password"
+                  {...authInputProps()}
                   required
                 />
               </label>
@@ -266,6 +266,7 @@ const AuthActionPage: React.FC = () => {
                   value={confirmNewPassword}
                   onChange={(e) => setConfirmNewPassword(e.target.value)}
                   autoComplete="new-password"
+                  {...authInputProps()}
                   required
                 />
               </label>
@@ -297,6 +298,7 @@ const AuthActionPage: React.FC = () => {
                 type="submit"
                 disabled={submitting}
                 style={{
+                  ...authPrimaryButtonStyle,
                   width: "100%",
                   opacity: submitting ? 0.8 : 1,
                   cursor: submitting ? "not-allowed" : "pointer",
@@ -308,7 +310,7 @@ const AuthActionPage: React.FC = () => {
             </form>
 
             <div style={{ marginTop: spacing.sm }}>
-              <Link to="/login" style={{ color: colors.accent, fontWeight: 600, fontSize: "0.9rem" }}>
+              <Link to="/login" style={{ ...authLinkStyle, fontSize: "0.9rem" }}>
                 Back to login
               </Link>
             </div>
@@ -327,7 +329,7 @@ const AuthActionPage: React.FC = () => {
             <Button
               type="button"
               onClick={goToLogin}
-              style={{ width: "100%", justifyContent: "center" }}
+              style={{ ...authPrimaryButtonStyle, width: "100%", justifyContent: "center" }}
             >
               Back to login
             </Button>
@@ -346,7 +348,7 @@ const AuthActionPage: React.FC = () => {
             <Button
               type="button"
               onClick={goToLogin}
-              style={{ width: "100%", justifyContent: "center" }}
+              style={{ ...authPrimaryButtonStyle, width: "100%", justifyContent: "center" }}
             >
               Continue
             </Button>
@@ -363,10 +365,10 @@ const AuthActionPage: React.FC = () => {
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
-              <Link to="/forgot-password" style={{ color: colors.accent, fontWeight: 600 }}>
+              <Link to="/forgot-password" style={authLinkStyle}>
                 Send a new reset email
               </Link>
-              <Link to="/login" style={{ color: colors.accent, fontWeight: 600 }}>
+              <Link to="/login" style={authLinkStyle}>
                 Back to login
               </Link>
             </div>
@@ -382,7 +384,7 @@ const AuthActionPage: React.FC = () => {
               This action type is not supported by this page.
             </p>
 
-            <Link to="/login" style={{ color: colors.accent, fontWeight: 600 }}>
+            <Link to="/login" style={authLinkStyle}>
               Back to login
             </Link>
           </>

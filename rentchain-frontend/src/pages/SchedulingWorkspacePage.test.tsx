@@ -399,6 +399,52 @@ describe("SchedulingWorkspacePage", () => {
     expect(screen.getByLabelText("7 AM-10 PM schedule")).toBeInTheDocument();
   });
 
+  it("builds a structured isolated schedule export and cleans up repeated print roots without changing data", async () => {
+    const todayKey = dateKeyFromLocalDate(new Date());
+    mocks.fetchSchedulingDayNotesRangeMock.mockResolvedValue({
+      [todayKey]: [
+        { id: "note-inspection", text: "10am suite inspection" },
+        { id: "note-follow-up", text: "Call tenant after lunch" },
+      ],
+    });
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => undefined);
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+    renderPage();
+
+    expect(await screen.findByDisplayValue("10am suite inspection")).toBeInTheDocument();
+    expect(screen.getByLabelText("New schedule note")).toHaveClass("scheduling-note-draft-input");
+
+    fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
+
+    await waitFor(() => expect(printSpy).toHaveBeenCalledTimes(1));
+    const printRoot = document.body.querySelector('[data-print-root="true"]');
+    expect(printRoot).toHaveTextContent("RentChain Scheduling");
+    expect(printRoot).toHaveTextContent("Printed on:");
+    expect(printRoot).toHaveTextContent("Scheduled items");
+    expect(printRoot).toHaveTextContent("10am suite inspection");
+    expect(printRoot).toHaveTextContent("Suggested day plan");
+    expect(printRoot).toHaveTextContent("Call tenant after lunch");
+    expect(printRoot).toHaveTextContent("Review items");
+    expect(printRoot).toHaveTextContent("Workspace notes");
+    expect(printRoot).not.toHaveTextContent("Print / Save PDF");
+    expect(document.body).toHaveAttribute("data-print-root-active", "true");
+    expect(mocks.createSchedulingDayNoteMock).not.toHaveBeenCalled();
+    expect(mocks.updateSchedulingDayNoteMock).not.toHaveBeenCalled();
+    expect(mocks.deleteSchedulingDayNoteMock).not.toHaveBeenCalled();
+    window.dispatchEvent(new Event("afterprint"));
+    expect(document.body.querySelector('[data-print-root="true"]')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveAttribute("data-print-root-active");
+
+    fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
+    await waitFor(() => expect(printSpy).toHaveBeenCalledTimes(2));
+    expect(document.body.querySelectorAll('[data-scheduling-print-root="true"]')).toHaveLength(1);
+    window.dispatchEvent(new Event("afterprint"));
+    expect(document.body.querySelectorAll('[data-scheduling-print-root="true"]')).toHaveLength(0);
+  });
+
   it("loads selected-day notes from backend after the scheduling page remounts", async () => {
     const todayKey = dateKeyFromLocalDate(new Date());
     mocks.fetchSchedulingDayNotesRangeMock

@@ -170,7 +170,9 @@ describe("Marketing LandingPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("First property setup")).toBeInTheDocument();
     expect(screen.getByText("Portfolio-level oversight")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View pricing" })).toHaveAttribute("href", "/site/pricing#plan-fit");
+    const pricingLink = screen.getByRole("link", { name: "View pricing" });
+    expect(pricingLink).toHaveAttribute("href", "/site/pricing#plan-fit");
+    expect(window.getComputedStyle(pricingLink).color).toBe("rgb(255, 255, 255)");
 
     fireEvent.click(screen.getAllByRole("button", { name: "Start free" }).at(-1)!);
 

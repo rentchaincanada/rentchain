@@ -7,7 +7,7 @@ import {
 } from "@/lib/analytics/analyticsInsightCopy";
 
 const riskTone: Record<"low" | "medium" | "high", { bg: string; text: string }> = {
-  low: { bg: "rgba(14, 165, 233, 0.12)", text: "#075985" },
+  low: { bg: "rgba(30, 95, 78, 0.12)", text: "#1e5f4e" },
   medium: { bg: "rgba(245, 158, 11, 0.14)", text: "#92400e" },
   high: { bg: "rgba(239, 68, 68, 0.12)", text: "#991b1b" },
 };

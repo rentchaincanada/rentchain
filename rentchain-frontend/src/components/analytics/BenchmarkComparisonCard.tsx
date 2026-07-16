@@ -88,8 +88,8 @@ export function BenchmarkComparisonCard({ comparison }: Props) {
             style={{
               padding: "5px 10px",
               borderRadius: 999,
-              background: "rgba(37, 99, 235, 0.1)",
-              color: "#1d4ed8",
+              background: "rgba(30, 95, 78, 0.12)",
+              color: "#1e5f4e",
               fontWeight: 700,
               fontSize: "0.78rem",
             }}

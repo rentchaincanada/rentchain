@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import rentchainMark from "../../../assets/rentchain-mark.svg";
+import { RentChainLogo } from "../../../components/brand/RentChainLogo";
 import {
   aboutVision,
   audiences,
@@ -111,10 +111,7 @@ export function MarketingHeader({
   return (
     <header className="rc-marketing-header">
       <div className="rc-container rc-marketing-header__inner">
-        <Link className="rc-brand" to="/site" aria-label="RentChain home">
-          <img src={rentchainMark} alt="" aria-hidden="true" />
-          <span className="rc-brand__text">RentChain</span>
-        </Link>
+        <RentChainLogo href="/site" size="md" className="rc-brand" />
 
         <nav className="rc-header-nav" aria-label="Marketing navigation">
           {navItems.map((item) => (
@@ -623,10 +620,7 @@ export function MarketingFooter() {
       <div className="rc-container">
         <div className="rc-footer-grid">
           <div>
-            <Link className="rc-brand" to="/site" aria-label="RentChain home">
-              <img src={rentchainMark} alt="" aria-hidden="true" />
-              <span className="rc-brand__text">RentChain</span>
-            </Link>
+            <RentChainLogo href="/site" size="md" className="rc-brand" />
             <p>{footer.blurb}</p>
           </div>
           {footer.columns.map((column) => (

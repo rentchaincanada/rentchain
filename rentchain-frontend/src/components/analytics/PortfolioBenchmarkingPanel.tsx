@@ -4,7 +4,7 @@ import { Card } from "../ui/Ui";
 import BenchmarkComparisonCard from "./BenchmarkComparisonCard";
 
 const severityColors: Record<"low" | "medium" | "high", { bg: string; text: string }> = {
-  low: { bg: "rgba(14, 165, 233, 0.12)", text: "#075985" },
+  low: { bg: "rgba(30, 95, 78, 0.12)", text: "#1e5f4e" },
   medium: { bg: "rgba(245, 158, 11, 0.14)", text: "#92400e" },
   high: { bg: "rgba(239, 68, 68, 0.12)", text: "#991b1b" },
 };
@@ -47,7 +47,7 @@ export function PortfolioBenchmarkingPanel({ benchmarking }: Props) {
                       flexWrap: "wrap",
                       padding: "10px 12px",
                       borderRadius: 12,
-                      background: "#f8fafc",
+                      background: "#fffaf1",
                       border: "1px solid #e2e8f0",
                     }}
                   >

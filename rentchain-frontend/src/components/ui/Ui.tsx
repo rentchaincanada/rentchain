@@ -55,6 +55,7 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export const Button: React.FC<ButtonProps> = ({
   children,
+  className,
   style,
   variant = "primary",
   ...rest
@@ -73,7 +74,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   const variants: Record<string, React.CSSProperties> = {
     primary: {
-      background: colors.accent,
+      background: colors.pine,
       color: "#fff",
       boxShadow: shadows.sm,
     },
@@ -83,9 +84,9 @@ export const Button: React.FC<ButtonProps> = ({
       boxShadow: shadows.sm,
     },
     secondary: {
-      background: colors.accentSoft,
+      background: colors.paper,
       color: text.primary,
-      border: `1px solid ${colors.border}`,
+      border: `1px solid ${colors.borderStrong}`,
     },
     ghost: {
       background: "transparent",
@@ -96,6 +97,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <button
+      className={["rc-ui-button", className].filter(Boolean).join(" ")}
       style={{ ...base, ...variants[variant], ...style }}
       onMouseDown={(e) => {
         if (e.currentTarget.disabled) return;

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Card, Input, Button } from "../components/ui/Ui";
+import { RentChainLogo } from "../components/brand/RentChainLogo";
 import { spacing } from "../styles/tokens";
 import { useAuth } from "../context/useAuth";
 import { resolvePostAuthDestination } from "../lib/authDestination";
@@ -201,6 +202,7 @@ const SignupPage: React.FC = () => {
   return (
     <div style={signupAuthShellStyle}>
       <Card elevated style={authCardStyle("min(520px, 94vw)")}>
+        <RentChainLogo href="/site" size="md" className="rc-auth-logo" />
         <div style={authEyebrowStyle}>
           RentChain
         </div>

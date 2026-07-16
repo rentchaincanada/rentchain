@@ -44,6 +44,18 @@ describe("print PDF guardrails", () => {
     expect(landingCss).toMatch(/\.rc-reveal \{[\s\S]*?opacity: 1;/);
   });
 
+  it("keeps scheduling inside the shared isolated print area", () => {
+    const schedulingSource = readFileSync(
+      resolve(srcRoot, "pages/SchedulingWorkspacePage.tsx"),
+      "utf8"
+    );
+
+    expect(schedulingSource).toMatch(/createPrintRoot\(document\)/);
+    expect(schedulingSource).toMatch(/body\.setAttribute\(PRINT_ROOT_ACTIVE_ATTRIBUTE, "true"\)/);
+    expect(schedulingSource).toContain("Print / Save PDF");
+    expect(schedulingSource).toMatch(/@media print[\s\S]*\.scheduling-workspace \.no-print/);
+  });
+
   it("keeps application print view from reserving a viewport-height phantom page", () => {
     const source = readFileSync(
       resolve(srcRoot, "components/applications/PrintApplicationView.tsx"),

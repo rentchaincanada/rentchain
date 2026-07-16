@@ -82,16 +82,21 @@ canvas {
 }
 
 .rc-logo-link-sm {
-  --rc-logo-icon-size: 24px;
-  --rc-logo-text-size: 18px;
+  --rc-logo-icon-size: 26px;
+  --rc-logo-text-size: 19px;
 }
 
 .rc-logo-link-md {
-  --rc-logo-icon-size: 30px;
-  --rc-logo-text-size: 24px;
+  --rc-logo-icon-size: 32px;
+  --rc-logo-text-size: 25px;
 }
 
-.rc-logo-link-dark {
+.rc-logo-link-lg {
+  --rc-logo-icon-size: 38px;
+  --rc-logo-text-size: 29px;
+}
+
+.rc-logo-link-inverse {
   color: #fff;
 }
 
@@ -111,15 +116,27 @@ canvas {
   line-height: 1;
 }
 
+.rc-auth-logo {
+  justify-content: center;
+  margin: 0 auto 14px;
+  color: #171411;
+}
+
+.rc-ui-button:focus-visible,
+.rc-maintenance-action:focus-visible {
+  outline: 3px solid rgba(232, 163, 61, 0.72);
+  outline-offset: 2px;
+}
+
 @media (max-width: 768px) {
   .rc-logo-link-md {
-    --rc-logo-icon-size: 26px;
-    --rc-logo-text-size: 21px;
+    --rc-logo-icon-size: 28px;
+    --rc-logo-text-size: 22px;
   }
 
   .rc-logo-link-sm {
-    --rc-logo-icon-size: 22px;
-    --rc-logo-text-size: 17px;
+    --rc-logo-icon-size: 24px;
+    --rc-logo-text-size: 18px;
   }
 }
 
@@ -459,7 +476,7 @@ button,
   gap: 16px;
   padding: 16px;
   border-radius: 24px;
-  background: #f8fafc;
+  background: #f4efe6;
   width: 100%;
 }
 

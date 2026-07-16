@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Card, Input, Button } from "../components/ui/Ui";
+import { RentChainLogo } from "../components/brand/RentChainLogo";
 import { spacing } from "../styles/tokens";
 import { useAuth } from "../context/useAuth";
 import { apiFetch } from "../api/http";
@@ -94,6 +95,7 @@ const InviteRedeemPage: React.FC = () => {
   return (
     <div style={authShellStyle}>
       <Card elevated style={authCardStyle("min(540px, 94vw)")}>
+        <RentChainLogo href="/site" size="md" className="rc-auth-logo" />
         <div style={authEyebrowStyle}>
           RentChain
         </div>

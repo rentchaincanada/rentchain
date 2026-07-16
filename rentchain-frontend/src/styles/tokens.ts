@@ -44,6 +44,12 @@ export const colors = {
   navy: "#0f1f3d",
   navySoft: "rgba(15,31,61,0.12)",
   danger: "#ef4444",
+  graphite: "#171411",
+  paper: "#fffaf1",
+  paperMuted: "#f4efe6",
+  pine: "#1e5f4e",
+  pineSoft: "rgba(30,95,78,0.12)",
+  amber: "#e8a33d",
 };
 
 export const shadows = {
@@ -52,7 +58,7 @@ export const shadows = {
   lg: "0 16px 40px rgba(15,23,42,0.14)",
   soft: "0 12px 30px rgba(15,23,42,0.12)",
   pop: "0 22px 50px rgba(15,23,42,0.16)",
-  focus: "0 0 0 3px rgba(37,99,235,0.35)",
+  focus: "0 0 0 3px rgba(30,95,78,0.32)",
 };
 
 export const effects = {

@@ -17,7 +17,7 @@
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
-  background: #f8fafc;
+  background: #f4efe6;
 }
 
 .rc-tenant-main {
@@ -78,7 +78,7 @@
 
 .rc-tenant-mobile-tabbar button.active {
   color: #0f172a;
-  background: rgba(29, 78, 216, 0.08);
+  background: rgba(30, 95, 78, 0.1);
 }
 
 .rc-tenant-mobile-tabbar-label {
@@ -156,7 +156,7 @@
   height: 38px;
   border: 0;
   border-radius: 12px;
-  background: #f8fafc;
+  background: #fffaf1;
   color: #0f172a;
 }
 
@@ -173,15 +173,15 @@
   padding: 10px 8px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 12px;
-  background: #f8fafc;
+  background: #fffaf1;
   color: #0f172a;
   font-weight: 700;
   text-align: center;
 }
 
 .rc-tenant-mobile-menu-links button.active {
-  border-color: rgba(29, 78, 216, 0.35);
-  background: rgba(29, 78, 216, 0.08);
+  border-color: rgba(30, 95, 78, 0.35);
+  background: rgba(30, 95, 78, 0.1);
 }
 
 .rc-tenant-mobile-menu-signout {

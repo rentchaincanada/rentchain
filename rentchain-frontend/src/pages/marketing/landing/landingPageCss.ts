@@ -181,8 +181,8 @@ export const landingPageCss = `
   box-shadow: 0 1px 2px rgba(14, 42, 33, 0.25);
 }
 
-.rc-button--primary,
-.rc-link-button--primary {
+.rc-landing .rc-button--primary,
+.rc-landing .rc-link-button--primary {
   background: var(--rc-pine);
   color: ${colors.white};
 }
@@ -722,6 +722,10 @@ export const landingPageCss = `
 }
 
 @media (max-width: 980px) {
+  .rc-hero::before {
+    background: none;
+  }
+
   .rc-header-nav,
   .rc-header-actions {
     display: none;
