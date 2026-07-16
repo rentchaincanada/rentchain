@@ -21,6 +21,12 @@ const mocks = vi.hoisted(() => ({
   useEntitlements: vi.fn(),
 }));
 
+const TEST_NOW = new Date("2026-06-15T12:00:00.000Z");
+
+beforeEach(() => {
+  vi.setSystemTime(TEST_NOW);
+});
+
 vi.mock("@/api/decisionInboxApi", async () => {
   const actual = await vi.importActual<any>("@/api/decisionInboxApi");
   return {
@@ -75,6 +81,7 @@ vi.mock("@/components/billing/LockedFeature", () => ({
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
 
 function decision(overrides: Record<string, any> = {}) {
