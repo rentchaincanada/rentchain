@@ -327,7 +327,7 @@ describe("Routes: /register", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Create your RentChain account/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Create your housing operations workspace/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
