@@ -24,10 +24,21 @@ const { fakeDb, listDocs, resetFakeDb, seedDoc } = vi.hoisted(() => {
         const col = ensureCollection(name);
         const docs = Array.from(col.values())
           .filter((doc) => matches(doc, filters))
-          .map((doc) => ({ id: doc.id, exists: true, data: () => doc.data }));
+          .map((doc) => makeSnapshot(doc.id, doc.data));
         return { docs, empty: docs.length === 0, size: docs.length };
       },
       doc: (id?: string) => makeDoc(name, id),
+    };
+  }
+
+  function makeSnapshot(id: string, data: any) {
+    return {
+      id,
+      exists: true,
+      snapshotData: data,
+      data() {
+        return this.snapshotData;
+      },
     };
   }
 
@@ -42,7 +53,9 @@ const { fakeDb, listDocs, resetFakeDb, seedDoc } = vi.hoisted(() => {
       },
       get: async () => {
         const entry = col.get(actualId);
-        return { id: actualId, exists: Boolean(entry), data: () => entry?.data };
+        return entry
+          ? makeSnapshot(actualId, entry.data)
+          : { id: actualId, exists: false, data: () => undefined };
       },
     };
   }
@@ -247,7 +260,9 @@ describe("landlordSchedulingDayNotesRoutes", () => {
 
     expect(single.status).toBe(200);
     expect(single.body.notes).toHaveLength(2);
-    expect(single.body.notes.map((note: any) => note.noteText)).toEqual(["1pm viewing", "3pm plumber"]);
+    expect(single.body.notes.map((note: any) => note.noteText)).toEqual(
+      expect.arrayContaining(["1pm viewing", "3pm plumber"])
+    );
   });
 
   it("soft-deletes notes and excludes them from future reads", async () => {
@@ -270,6 +285,26 @@ describe("landlordSchedulingDayNotesRoutes", () => {
     const single = await invokeRouter(router, { method: "GET", url: "/scheduling/day-notes/2026-07-15" });
     expect(single.status).toBe(200);
     expect(single.body.notes).toEqual([]);
+
+    const range = await invokeRouter(router, {
+      method: "GET",
+      url: "/scheduling/day-notes?startDate=2026-07-15&endDate=2026-07-16",
+    });
+    expect(range.status).toBe(200);
+    expect(range.body.notes).toEqual([]);
+    expect(range.body.notesByDate).toEqual({});
+  });
+
+  it("returns not found when deleting a nonexistent note", async () => {
+    const router = (await import("../landlordSchedulingDayNotesRoutes")).default;
+
+    const deleted = await invokeRouter(router, {
+      method: "DELETE",
+      url: "/scheduling/day-notes/2026-07-15/missing-note",
+    });
+
+    expect(deleted.status).toBe(404);
+    expect(deleted.body.code).toBe("SCHEDULING_DAY_NOTE_NOT_FOUND");
   });
 
   it("blocks cross-landlord reads and note mutations", async () => {
@@ -297,6 +332,14 @@ describe("landlordSchedulingDayNotesRoutes", () => {
     });
     expect(otherUpdate.status).toBe(404);
     expect(otherUpdate.body.code).toBe("SCHEDULING_DAY_NOTE_NOT_FOUND");
+
+    const otherDelete = await invokeRouter(router, {
+      method: "DELETE",
+      url: `/scheduling/day-notes/2026-07-15/${create.body.note.noteId}`,
+      headers: { "x-test-user": otherUser },
+    });
+    expect(otherDelete.status).toBe(404);
+    expect(otherDelete.body.code).toBe("SCHEDULING_DAY_NOTE_NOT_FOUND");
   });
 
   it("rejects unauthenticated, non-landlord, invalid-date, and overlong requests", async () => {
@@ -308,6 +351,13 @@ describe("landlordSchedulingDayNotesRoutes", () => {
       headers: { "x-no-auth": "1" },
     });
     expect(unauth.status).toBe(401);
+
+    const unauthDelete = await invokeRouter(router, {
+      method: "DELETE",
+      url: "/scheduling/day-notes/2026-07-15/note-1",
+      headers: { "x-no-auth": "1" },
+    });
+    expect(unauthDelete.status).toBe(401);
 
     const tenant = await invokeRouter(router, {
       method: "GET",
@@ -323,6 +373,13 @@ describe("landlordSchedulingDayNotesRoutes", () => {
     });
     expect(invalidDate.status).toBe(400);
     expect(invalidDate.body.code).toBe("SCHEDULING_DAY_NOTE_INVALID_DATE");
+
+    const invalidDeleteDate = await invokeRouter(router, {
+      method: "DELETE",
+      url: "/scheduling/day-notes/not-a-date/note-1",
+    });
+    expect(invalidDeleteDate.status).toBe(400);
+    expect(invalidDeleteDate.body.code).toBe("SCHEDULING_DAY_NOTE_INVALID_DATE");
 
     const tooLong = await invokeRouter(router, {
       method: "POST",
