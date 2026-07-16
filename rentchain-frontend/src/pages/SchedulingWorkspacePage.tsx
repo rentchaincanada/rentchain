@@ -219,6 +219,74 @@ function WorkspaceList({
   );
 }
 
+function DeleteNoteDialog({
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      role="presentation"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        display: "grid",
+        placeItems: "center",
+        padding: spacing.md,
+        background: "rgba(15, 23, 42, 0.42)",
+      }}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-scheduling-note-title"
+        aria-describedby="delete-scheduling-note-description"
+        aria-busy={busy || undefined}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && !busy) onCancel();
+        }}
+        style={{
+          width: "min(100%, 420px)",
+          display: "grid",
+          gap: spacing.md,
+          padding: spacing.lg,
+          borderRadius: radius.lg,
+          background: "#fff",
+          boxShadow: "0 24px 60px rgba(15, 23, 42, 0.28)",
+        }}
+      >
+        <div style={{ display: "grid", gap: spacing.xs }}>
+          <h2 id="delete-scheduling-note-title" style={{ margin: 0, fontSize: "1.2rem" }}>
+            Delete note?
+          </h2>
+          <p id="delete-scheduling-note-description" style={{ margin: 0, color: text.secondary, lineHeight: 1.5 }}>
+            This will remove this workspace scheduling note from the selected day.
+          </p>
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: spacing.sm, flexWrap: "wrap" }}>
+          <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            autoFocus
+            onClick={onConfirm}
+            disabled={busy}
+            style={{ background: "#b91c1c", color: "#fff" }}
+          >
+            {busy ? "Deleting" : "Delete note"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SchedulingWorkspacePage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -235,6 +303,7 @@ export default function SchedulingWorkspacePage() {
   const [notesStatus, setNotesStatus] = React.useState<string | null>(null);
   const [draftSaving, setDraftSaving] = React.useState(false);
   const [savingNoteIds, setSavingNoteIds] = React.useState<Record<string, boolean>>({});
+  const [pendingDeleteNoteId, setPendingDeleteNoteId] = React.useState<string | null>(null);
   const legacyNotesScope = React.useMemo(
     () => ({
       actorLandlordId: user?.actorLandlordId,
@@ -426,6 +495,7 @@ export default function SchedulingWorkspacePage() {
         selectedKey,
         selectedNotes.filter((note) => note.id !== noteId)
       );
+      setPendingDeleteNoteId(null);
       setNotesStatus("Workspace note deleted.");
     } catch {
       setNotesError("Scheduling note could not be deleted. Refresh this view and try again.");
@@ -1098,7 +1168,12 @@ export default function SchedulingWorkspacePage() {
                       <Button type="button" variant="secondary" onClick={() => saveNote(note)} disabled={Boolean(savingNoteIds[note.id])}>
                         {savingNoteIds[note.id] ? "Saving" : "Save"}
                       </Button>
-                      <Button type="button" variant="ghost" onClick={() => deleteNote(note.id)} disabled={Boolean(savingNoteIds[note.id])}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setPendingDeleteNoteId(note.id)}
+                        disabled={Boolean(savingNoteIds[note.id])}
+                      >
                         {savingNoteIds[note.id] ? "Deleting" : "Delete"}
                       </Button>
                     </div>
@@ -1180,6 +1255,15 @@ export default function SchedulingWorkspacePage() {
           </Card>
         </div>
       </div>
+      {pendingDeleteNoteId ? (
+        <DeleteNoteDialog
+          busy={Boolean(savingNoteIds[pendingDeleteNoteId])}
+          onCancel={() => setPendingDeleteNoteId(null)}
+          onConfirm={() => {
+            void deleteNote(pendingDeleteNoteId);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
