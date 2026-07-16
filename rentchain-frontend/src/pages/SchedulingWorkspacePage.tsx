@@ -1,4 +1,5 @@
 import React from "react";
+import { flushSync } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   CalendarDays,
@@ -110,6 +111,10 @@ function viewFromParam(value: string | null): CalendarView {
 
 function formatDay(date: Date) {
   return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function formatExportDate(date: Date) {
+  return date.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 }
 
 function formatMonth(date: Date) {
@@ -305,8 +310,217 @@ function DeleteNoteDialog({
   );
 }
 
+type SchedulingPrintEntry = {
+  note: SchedulingDayNote;
+  parsed: SchedulingNoteParseResult;
+};
+
+const SchedulingPrintExport = React.forwardRef<
+  HTMLDivElement,
+  {
+    selectedDate: Date;
+    printedDate: Date;
+    calendarView: CalendarView;
+    scheduled: SchedulingPrintEntry[];
+    suggestions: SchedulingPrintEntry[];
+    needsReview: SchedulingPrintEntry[];
+    unscheduled: SchedulingPrintEntry[];
+    workspaceNotes: SchedulingDayNote[];
+    hasSameTimeWorkspaceNotes: boolean;
+  }
+>(function SchedulingPrintExport(
+  {
+    selectedDate,
+    printedDate,
+    calendarView,
+    scheduled,
+    suggestions,
+    needsReview,
+    unscheduled,
+    workspaceNotes,
+    hasSameTimeWorkspaceNotes,
+  },
+  ref
+) {
+  const viewLabel = calendarView === "day" ? "Day view" : calendarView === "week" ? "7-day view" : "30-day view";
+
+  return (
+    <div ref={ref} className="scheduling-print-source" data-testid="scheduling-print-source">
+      <style>{`
+        .scheduling-print-source { display: none; }
+        @media print {
+          .scheduling-print-source {
+            display: block !important;
+            width: 100%;
+            color: #171411;
+            background: #fff;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 10.5pt;
+            line-height: 1.45;
+          }
+          .scheduling-print-header {
+            display: grid;
+            gap: 4px;
+            margin-bottom: 22px;
+            padding-bottom: 14px;
+            border-bottom: 3px solid #245842;
+          }
+          .scheduling-print-header h1 {
+            margin: 0;
+            color: #171411;
+            font-size: 24pt;
+            line-height: 1.1;
+          }
+          .scheduling-print-kicker {
+            color: #245842;
+            font-size: 9pt;
+            font-weight: 750;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+          }
+          .scheduling-print-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 18px;
+            color: #5f5a51;
+            font-size: 9.5pt;
+          }
+          .scheduling-print-section {
+            margin: 0 0 18px;
+            break-inside: auto;
+          }
+          .scheduling-print-section h2 {
+            margin: 0 0 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #cfc7ba;
+            color: #211c17;
+            font-size: 14pt;
+          }
+          .scheduling-print-list {
+            display: grid;
+            gap: 7px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+          }
+          .scheduling-print-item {
+            display: grid;
+            grid-template-columns: minmax(80px, 110px) 1fr;
+            gap: 12px;
+            padding: 8px 10px;
+            border: 1px solid #d9d2c7;
+            border-left: 4px solid #245842;
+            background: #fffdf8;
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+          .scheduling-print-item.is-review { border-left-color: #a66a16; }
+          .scheduling-print-time { color: #245842; font-weight: 750; }
+          .scheduling-print-item.is-review .scheduling-print-time { color: #7a4b0a; }
+          .scheduling-print-detail { display: grid; gap: 2px; overflow-wrap: anywhere; }
+          .scheduling-print-detail small { color: #5f5a51; }
+          .scheduling-print-empty {
+            margin: 0;
+            padding: 9px 10px;
+            border: 1px solid #ddd6ca;
+            background: #faf7f1;
+            color: #5f5a51;
+          }
+          .scheduling-print-advisory {
+            margin: 0 0 12px;
+            padding: 9px 11px;
+            border: 1px solid #d9c49e;
+            background: #fff8e8;
+            color: #5d431c;
+            break-inside: avoid;
+          }
+          .scheduling-print-notes .scheduling-print-item {
+            grid-template-columns: 28px 1fr;
+            border-left-color: #7a746b;
+          }
+        }
+      `}</style>
+      <header className="scheduling-print-header">
+        <div className="scheduling-print-kicker">Workspace schedule export</div>
+        <h1>RentChain Scheduling</h1>
+        <div className="scheduling-print-meta">
+          <strong>{formatExportDate(selectedDate)}</strong>
+          <span>{viewLabel}; selected-day details</span>
+          <span>Printed on: {formatExportDate(printedDate)}</span>
+        </div>
+      </header>
+
+      <section className="scheduling-print-section" aria-label="Scheduled items export">
+        <h2>Scheduled items</h2>
+        {scheduled.length ? (
+          <ul className="scheduling-print-list">
+            {scheduled.map(({ note, parsed }) => (
+              <li key={note.id} className="scheduling-print-item">
+                <div className="scheduling-print-time">{parsed.timeLabel}</div>
+                <div className="scheduling-print-detail"><span>{note.text}</span></div>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="scheduling-print-empty">No exact-time workspace notes for this day.</p>}
+      </section>
+
+      <section className="scheduling-print-section" aria-label="Suggested schedule export">
+        <h2>Suggested day plan</h2>
+        {suggestions.length ? (
+          <ul className="scheduling-print-list">
+            {suggestions.map(({ note, parsed }) => (
+              <li key={note.id} className="scheduling-print-item is-review">
+                <div className="scheduling-print-time">{parsed.timeLabel || "Suggested"}</div>
+                <div className="scheduling-print-detail">
+                  <span>{note.text}</span>
+                  <small>Advisory parser suggestion; no calendar event or reminder was created.</small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="scheduling-print-empty">No daypart suggestions for this day.</p>}
+      </section>
+
+      <section className="scheduling-print-section" aria-label="Review items export">
+        <h2>Review items</h2>
+        {hasSameTimeWorkspaceNotes ? (
+          <p className="scheduling-print-advisory">Multiple workspace notes share the same time. Review before confirming the schedule.</p>
+        ) : null}
+        {needsReview.length || unscheduled.length ? (
+          <ul className="scheduling-print-list">
+            {[...needsReview, ...unscheduled].map(({ note, parsed }) => (
+              <li key={note.id} className="scheduling-print-item is-review">
+                <div className="scheduling-print-time">{parsed.timeLabel || "Unscheduled"}</div>
+                <div className="scheduling-print-detail">
+                  <span>{note.text}</span>
+                  <small>{parsed.needsReview ? `Needs review: ${parsed.reason}` : "No schedule time was derived."}</small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="scheduling-print-empty">No unresolved timing items for this day.</p>}
+      </section>
+
+      <section className="scheduling-print-section scheduling-print-notes" aria-label="Workspace notes export">
+        <h2>Workspace notes</h2>
+        {workspaceNotes.length ? (
+          <ul className="scheduling-print-list">
+            {workspaceNotes.map((note, index) => (
+              <li key={note.id} className="scheduling-print-item">
+                <div className="scheduling-print-time">{index + 1}</div>
+                <div className="scheduling-print-detail"><span>{note.text}</span></div>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="scheduling-print-empty">No workspace notes for this day.</p>}
+      </section>
+    </div>
+  );
+});
+
 export default function SchedulingWorkspacePage() {
-  const printSourceRef = React.useRef<HTMLDivElement>(null);
+  const printExportRef = React.useRef<HTMLDivElement>(null);
+  const [printExportRequested, setPrintExportRequested] = React.useState(false);
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const today = React.useMemo(() => new Date(), []);
@@ -592,11 +806,18 @@ export default function SchedulingWorkspacePage() {
   };
 
   const printSchedule = async () => {
-    const source = printSourceRef.current;
-    if (!source || typeof window === "undefined" || typeof document === "undefined") return;
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+    flushSync(() => setPrintExportRequested(true));
+    const source = printExportRef.current;
+    if (!source) {
+      setPrintExportRequested(false);
+      return;
+    }
 
     const body = document.body;
+    body.querySelectorAll('[data-scheduling-print-root="true"]').forEach((root) => root.remove());
     const printableRoot = createPrintRoot(document);
+    printableRoot.setAttribute("data-scheduling-print-root", "true");
     const printableContent = source.cloneNode(true) as HTMLElement;
     printableContent.querySelectorAll(".no-print").forEach((element) => element.remove());
     printableRoot.appendChild(printableContent);
@@ -608,6 +829,7 @@ export default function SchedulingWorkspacePage() {
       window.removeEventListener("afterprint", cleanup);
       printableRoot.remove();
       body.removeAttribute(PRINT_ROOT_ACTIVE_ATTRIBUTE);
+      setPrintExportRequested(false);
     };
 
     try {
@@ -622,7 +844,7 @@ export default function SchedulingWorkspacePage() {
   };
 
   return (
-    <div ref={printSourceRef} className="scheduling-workspace">
+    <div className="scheduling-workspace">
       <style>{`
         .scheduling-workspace {
           --schedule-card: #fffaf1;
@@ -1053,6 +1275,21 @@ export default function SchedulingWorkspacePage() {
           </Link>
         </div>
       </Card>
+
+      {printExportRequested ? (
+        <SchedulingPrintExport
+          ref={printExportRef}
+          selectedDate={selectedDate}
+          printedDate={today}
+          calendarView={calendarView}
+          scheduled={scheduleHours.flatMap((hour) => selectedNotePlan.grouped[hour] || [])}
+          suggestions={selectedNotePlan.suggestions}
+          needsReview={selectedNotePlan.needsReview}
+          unscheduled={selectedNotePlan.unscheduled}
+          workspaceNotes={selectedNotes}
+          hasSameTimeWorkspaceNotes={hasSameTimeWorkspaceNotes}
+        />
+      ) : null}
 
       {legacyNotes.length && !legacyNoticeDismissed ? (
         <Card className="scheduling-card scheduling-migration-card" aria-label="Browser-saved notes migration">
