@@ -21,28 +21,28 @@ export const header = {
   nav: [
     { label: "Features", href: "#features" },
     { label: "Solutions", href: "#who" },
-    { label: "Platform", href: "#lifecycle" },
+    { label: "Pricing", href: "/site/pricing#plan-fit" },
     { label: "About", href: "#vision" },
   ],
   logins: [
-    { label: "Landlord login", dotToken: "pine600", href: "/login?role=landlord" },
-    { label: "Property manager login", dotToken: "navy600", href: "/login?role=manager" },
-    { label: "Tenant login", dotToken: "amber500", href: "/tenant" },
-    { label: "Contractor login", dotToken: "slate600", href: "/contractor" },
+    { label: "Landlord Portal", dotToken: "pine600", href: "/login?role=landlord" },
+    { label: "Property Manager Portal", dotToken: "navy600", href: "/login?role=manager" },
+    { label: "Tenant Portal", dotToken: "amber500", href: "/tenant" },
+    { label: "Contractor Portal", dotToken: "slate600", href: "/contractor" },
   ],
   ctaLabel: "Book a demo",
   ctaHref: "/site/request-access",
 };
 
 export const hero = {
-  kicker: "The operating system for housing",
-  titleLine1: "Housing operations.",
-  titleAccent: "Connected.",
+  kicker: "Housing Operations Infrastructure",
+  titleLine1: "Connected housing",
+  titleAccent: "operations.",
   subtitle:
-    "One platform connecting landlords, tenants, contractors, and property managers — through governed workflows for communication, payments, maintenance, leasing, and evidence.",
+    "RentChain connects landlords, tenants, contractors, and property managers through governed workflows for leasing, payments, maintenance, communication, evidence, and operational review.",
   primaryCta: { label: "Start free", href: "/signup?next=/properties&intent=registry_readiness" },
   secondaryCta: { label: "Book a demo", href: "/site/request-access" },
-  microcopy: "Start with your first property · No credit card required",
+  microcopy: "Start with one property. Build the operating record as you grow.",
   personas: [
     { label: "Landlords", dotToken: "pine500" },
     { label: "Property managers", dotToken: "navy200" },
@@ -52,8 +52,8 @@ export const hero = {
 };
 
 export const trustFlow = {
-  kicker: "Built for real housing operations",
-  title: "Every role, working from one shared record",
+  kicker: "One operating record",
+  title: "Every role, working from the same record",
   nodes: [
     { code: "LL", role: "Landlords", blurb: "Set terms, keep the proof.", accent: "pine" as Accent },
     { code: "PM", role: "Property managers", blurb: "Coordinate teams and work.", accent: "navy" as Accent },
@@ -67,9 +67,13 @@ export const trustFlow = {
 };
 
 export const whyRentChain = {
-  kicker: "The difference",
+  kicker: "The RentChain difference",
   titlePlain: "Most platforms manage properties.",
   titleAccent: "RentChain manages operations.",
+  insightKicker: "The operating advantage",
+  insightTitle: "One operating history, from intake to outcome.",
+  insightBody:
+    "Property, lease, people, communication, payment, maintenance, and evidence context stay connected as work moves forward.",
   rows: [
     { from: "Property data", to: "Operational intelligence" },
     { from: "Messages", to: "Governed communication" },
@@ -80,8 +84,8 @@ export const whyRentChain = {
 };
 
 export const audiences = {
-  kicker: "Who it's for",
-  title: "One system, four points of view",
+  kicker: "Shared work, role-aware views",
+  title: "Landlords, managers, tenants, and contractors — connected without losing boundaries",
   cards: [
     {
       key: "landlords",
@@ -115,8 +119,8 @@ export const audiences = {
 };
 
 export const lifecycle = {
-  kicker: "Platform overview",
-  title: "One continuous lifecycle, from viewing to turnover",
+  kicker: "Connected lifecycle",
+  title: "Every housing workflow contributes to one operating history",
   subtitle:
     "Every step writes to the same record. Tap through the lifecycle to see how nothing falls through the cracks.",
   autoAdvanceMs: 3800,
@@ -198,7 +202,7 @@ export const lifecycle = {
 
 export const pricingStart = {
   kicker: "Start free",
-  title: "Start free. Grow when the workflow needs more support.",
+  title: "Start with one property. Build the operating record as you grow.",
   body:
     "Set up your first property, understand the workflow, and decide whether paid tools are worth it once you see the value in practice.",
   freeTitle: "Free includes",
@@ -219,8 +223,8 @@ export const pricingStart = {
 };
 
 export const features = {
-  kicker: "The platform",
-  title: "Five surfaces. One source of truth.",
+  kicker: "Platform surfaces",
+  title: "Every lease, payment, repair, message, and decision — connected.",
   rows: [
     {
       key: "leasing",
@@ -266,8 +270,8 @@ export const features = {
 };
 
 export const operationalTrust = {
-  kicker: "Operational trust",
-  title: "Housing professionals need more than software",
+  kicker: "Evidence and governance",
+  title: "Every action leaves a trail",
   subtitle:
     "RentChain is designed around the record: who said what, who approved what, what was paid, what was signed, and what evidence supports the outcome.",
   capabilities: [
@@ -294,13 +298,13 @@ export const operationalTrust = {
 };
 
 export const aboutVision = {
-  kicker: "Why we built RentChain",
+  kicker: "The fragmentation problem",
   title: "Housing operations are fragmented",
   body: [
     "Critical information lives in emails, texts, spreadsheets, filing cabinets, and a dozen disconnected tools. When something goes wrong, no one can find the record that proves what happened.",
     "RentChain was built to bring every housing workflow into one operational system — where the record is shared, governed, and difficult to quietly change.",
   ],
-  visionTitle: "Building housing infrastructure for the next generation",
+  visionTitle: "Housing Operations Infrastructure",
   tags: [
     "Operational governance",
     "Institutional housing",
@@ -314,8 +318,7 @@ export const aboutVision = {
 export const finalCta = {
   kicker: "Get started",
   title: "Run housing operations with confidence",
-  subtitle:
-    "Join the platform connecting people, properties, and operations — on one shared, governed record.",
+  subtitle: "Connect people, properties, workflows, and evidence on one shared, governed record.",
   primaryCta: { label: "Start free", href: "/signup?next=/properties&intent=registry_readiness" },
   secondaryCta: { label: "Book a demo", href: "/site/request-access" },
   microcopy: "Start free · Upgrade only when your workflow needs more support",
