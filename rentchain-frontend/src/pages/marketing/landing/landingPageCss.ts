@@ -525,8 +525,8 @@ export const landingPageCss = `
 
 .rc-difference-layout {
   display: grid;
-  grid-template-columns: minmax(300px, 0.82fr) minmax(520px, 1.18fr);
-  gap: clamp(42px, 7vw, 88px);
+  grid-template-columns: minmax(290px, 0.7fr) minmax(580px, 1.3fr);
+  gap: clamp(36px, 5vw, 64px);
   align-items: start;
 }
 
@@ -556,6 +556,36 @@ export const landingPageCss = `
 
 .rc-comparison-row strong {
   color: ${colors.pine700};
+}
+
+.rc-difference-insight {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.38fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  margin-top: 4px;
+  padding: 24px;
+  border: 1px solid ${colors.pine200};
+  border-radius: 16px;
+  background: ${colors.pine950};
+  color: ${colors.textInverse};
+}
+
+.rc-difference-insight .rc-kicker {
+  margin: 3px 0 0;
+  color: ${colors.amber500};
+}
+
+.rc-difference-insight h3 {
+  margin: 0;
+  font-family: ${typography.fontDisplay};
+  font-size: 1.35rem;
+}
+
+.rc-difference-insight div p {
+  margin: 9px 0 0;
+  color: ${colors.textInverseMuted};
+  line-height: 1.65;
 }
 
 .rc-audience-grid,
@@ -609,7 +639,7 @@ export const landingPageCss = `
   padding: 11px 13px;
   color: ${colors.ink700};
   cursor: pointer;
-  font-size: 1.0625rem;
+  font-size: 1.125rem;
   font-weight: 750;
   line-height: 1.35;
 }
@@ -951,6 +981,16 @@ export const landingPageCss = `
 
   .rc-comparison-row {
     grid-template-columns: 1fr;
+  }
+
+  .rc-difference-insight {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 20px;
+  }
+
+  .rc-landing .rc-lifecycle-tab {
+    font-size: 1.0625rem;
   }
 
   .rc-comparison-row em {

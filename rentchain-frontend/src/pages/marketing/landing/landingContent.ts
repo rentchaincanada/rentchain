@@ -70,6 +70,10 @@ export const whyRentChain = {
   kicker: "The RentChain difference",
   titlePlain: "Most platforms manage properties.",
   titleAccent: "RentChain manages operations.",
+  insightKicker: "The operating advantage",
+  insightTitle: "One operating history, from intake to outcome.",
+  insightBody:
+    "Property, lease, people, communication, payment, maintenance, and evidence context stay connected as work moves forward.",
   rows: [
     { from: "Property data", to: "Operational intelligence" },
     { from: "Messages", to: "Governed communication" },

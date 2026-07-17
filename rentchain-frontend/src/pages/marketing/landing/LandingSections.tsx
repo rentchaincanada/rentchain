@@ -310,6 +310,13 @@ export function WhyRentChainSection() {
               <strong>{row.to}</strong>
             </RevealOnScroll>
           ))}
+          <RevealOnScroll className="rc-difference-insight">
+            <p className="rc-kicker">{whyRentChain.insightKicker}</p>
+            <div>
+              <h3>{whyRentChain.insightTitle}</h3>
+              <p>{whyRentChain.insightBody}</p>
+            </div>
+          </RevealOnScroll>
         </div>
       </div>
     </section>

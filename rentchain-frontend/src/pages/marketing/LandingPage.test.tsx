@@ -236,6 +236,7 @@ describe("Marketing LandingPage", () => {
       "Every housing workflow contributes to one operating history",
       "Every role, working from the same record",
     ]);
+    expect(screen.getByRole("heading", { level: 3, name: "One operating history, from intake to outcome." })).toBeInTheDocument();
     expect(container.querySelectorAll(".rc-reveal:not(.is-visible)")).toHaveLength(0);
   });
 
