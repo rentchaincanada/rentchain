@@ -293,7 +293,7 @@ export function TrustFlowSection() {
 export function WhyRentChainSection() {
   return (
     <section className="rc-section rc-section--band" aria-labelledby="why-rentchain-title">
-      <div className="rc-container">
+      <div className="rc-container rc-difference-layout">
         <RevealOnScroll>
           <div className="rc-section-heading">
             <p className="rc-kicker">{whyRentChain.kicker}</p>

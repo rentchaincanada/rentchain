@@ -21,7 +21,7 @@ export const header = {
   nav: [
     { label: "Features", href: "#features" },
     { label: "Solutions", href: "#who" },
-    { label: "Pricing", href: "#pricing-start" },
+    { label: "Pricing", href: "/site/pricing#plan-fit" },
     { label: "About", href: "#vision" },
   ],
   logins: [

@@ -523,10 +523,23 @@ export const landingPageCss = `
   line-height: 1;
 }
 
+.rc-difference-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.82fr) minmax(520px, 1.18fr);
+  gap: clamp(42px, 7vw, 88px);
+  align-items: start;
+}
+
+.rc-difference-layout .rc-section-heading {
+  position: sticky;
+  top: 108px;
+  margin-bottom: 0;
+}
+
 .rc-comparison {
   display: grid;
   gap: 12px;
-  max-width: 760px;
+  width: 100%;
 }
 
 .rc-comparison-row {
@@ -587,7 +600,7 @@ export const landingPageCss = `
   gap: 8px;
 }
 
-.rc-lifecycle-tab {
+.rc-landing .rc-lifecycle-tab {
   width: 100%;
   text-align: left;
   border: 1px solid var(--rc-line);
@@ -596,7 +609,9 @@ export const landingPageCss = `
   padding: 11px 13px;
   color: ${colors.ink700};
   cursor: pointer;
+  font-size: 1.0625rem;
   font-weight: 750;
+  line-height: 1.35;
 }
 
 .rc-lifecycle-tab[aria-selected="true"] {
@@ -827,6 +842,7 @@ export const landingPageCss = `
   }
 
   .rc-hero__inner,
+  .rc-difference-layout,
   .rc-lifecycle,
   .rc-about-grid,
   .rc-pricing-start,
@@ -835,6 +851,11 @@ export const landingPageCss = `
   .rc-command-layout {
     grid-template-columns: 1fr;
     gap: 18px;
+  }
+
+  .rc-difference-layout .rc-section-heading {
+    position: static;
+    margin-bottom: 10px;
   }
 
   .rc-trust-connectors {

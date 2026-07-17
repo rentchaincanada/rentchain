@@ -164,7 +164,15 @@ describe("Marketing LandingPage", () => {
     const mobileMenu = container.querySelector("#rc-mobile-menu");
     expect(mobileMenu?.querySelector('a[href="/login?role=landlord"]')).toHaveTextContent("Landlord Portal");
     expect(mobileMenu?.querySelector('a[href="/contractor"]')).toHaveTextContent("Contractor Portal");
+    expect(mobileMenu?.querySelector('a[href="/site/pricing#plan-fit"]')).toHaveTextContent("Pricing");
     expect(mobileMenu?.querySelector("button.rc-button--accent")).toHaveTextContent("Start free");
+  });
+
+  it("links desktop pricing navigation directly to the plan-fit section", () => {
+    const { container } = renderLanding("/");
+
+    expect(container.querySelector('.rc-header-nav a[href="/site/pricing#plan-fit"]')).toHaveTextContent("Pricing");
+    expect(container.querySelector('.rc-header-nav a[href="#pricing-start"]')).not.toBeInTheDocument();
   });
 
   it("keeps the book-demo action on the request access route", () => {
