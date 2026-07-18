@@ -8,3 +8,5 @@ export * from "./leaseReceivablesDtoTypes";
 export * from "./leaseReceivablesDtoAssembler";
 export * from "./legacyReceivablesSourceTypes";
 export * from "./legacyReceivablesSourceNormalizer";
+export * from "./receivablesShadowComparatorTypes";
+export * from "./receivablesShadowComparator";
