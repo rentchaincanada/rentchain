@@ -6,3 +6,5 @@ export * from "./agingProjection";
 export * from "./rentRollProjection";
 export * from "./leaseReceivablesDtoTypes";
 export * from "./leaseReceivablesDtoAssembler";
+export * from "./legacyReceivablesSourceTypes";
+export * from "./legacyReceivablesSourceNormalizer";
