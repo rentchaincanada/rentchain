@@ -10,3 +10,5 @@ export * from "./legacyReceivablesSourceTypes";
 export * from "./legacyReceivablesSourceNormalizer";
 export * from "./receivablesShadowComparatorTypes";
 export * from "./receivablesShadowComparator";
+export * from "./receivablesSourceSnapshotTypes";
+export * from "./receivablesSourceSnapshotAdapter";
