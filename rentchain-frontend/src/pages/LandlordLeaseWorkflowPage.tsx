@@ -1190,10 +1190,10 @@ function TenantCommunicationSendReview({
         sourceRoute: decisionRoute,
         workspace: "notices",
         severity: "warning",
-        title: "Renewal tenant communication ready for approval",
+        title: "Review renewal communication draft",
         description:
-          "Saved renewal notice draft is ready for send approval review. Email delivery is available only after approval and explicit send confirmations.",
-        recommendedActionLabel: "Open notice review",
+          "A saved renewal communication draft is ready for internal review. Review the draft and approval state in the lease workflow.",
+        recommendedActionLabel: "Review renewal draft",
         recommendedActionHref: decisionRoute,
         status: "open",
         leaseId: lease.id,
