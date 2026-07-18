@@ -536,14 +536,15 @@ describe("DashboardPage", () => {
           },
           {
             id: "renewals-decision",
-            sourceType: "lease",
-            sourceId: "renewals-source",
-            workspace: "lease",
+            sourceType: "renewal_notice_send_review",
+            sourceId: "lease:lease-1:renewal_notice_send_review",
+            workspace: "notices",
             severity: "needs_review",
-            title: "Open renewals focus",
-            description: "Renewal operator inputs need review.",
-            recommendedActionLabel: "Review",
-            recommendedActionHref: "/portfolio-health?entry=lease-renewals",
+            title: "Renewal tenant communication ready for approval",
+            description:
+              "Saved renewal notice draft is ready for send approval review. Email delivery remains disabled until approved send infrastructure is available.",
+            recommendedActionLabel: "Open notice review",
+            recommendedActionHref: "/leases/lease-1/workflows/notice",
             dueAt: null,
             createdAt: "2026-06-18T12:00:00.000Z",
             updatedAt: "2026-06-19T12:00:00.000Z",
@@ -558,12 +559,29 @@ describe("DashboardPage", () => {
 
     renderDashboard();
 
-    expect(await screen.findByText("Review submitted applications")).toBeInTheDocument();
+    expect(await screen.findByText("Review application activity")).toBeInTheDocument();
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Applications · Review funnel");
-    expect(screen.getByRole("link", { name: /Review applications: Review submitted applications/i })).toHaveAttribute(
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent(
+      "Review current applications and recent funnel activity for follow-up opportunities."
+    );
+    expect(screen.getByRole("link", { name: /Open applications: Review application activity/i })).toHaveAttribute(
       "href",
       "/applications?entry=application-funnel&status=SUBMITTED"
     );
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Review renewal communication draft");
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Notices · Internal review");
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent(
+      "A saved renewal communication draft is ready for internal review. Review the draft and approval state in the lease workflow."
+    );
+    expect(screen.getByRole("link", { name: /Review renewal draft: Review renewal communication draft/i })).toHaveAttribute(
+      "href",
+      "/leases/lease-1/workflows/notice"
+    );
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Needs review");
+    expect(screen.getByTestId("decision-queue-section")).not.toHaveTextContent("Email delivery remains disabled");
+    expect(screen.getByTestId("decision-queue-section")).not.toHaveTextContent("send infrastructure");
+    expect(screen.getByTestId("decision-queue-section")).not.toHaveTextContent("applications-decision");
+    expect(screen.getByTestId("decision-queue-section")).not.toHaveTextContent("lease:lease-1:renewal_notice_send_review");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Revenue analytics · Review exposure");
     expect(screen.getByRole("link", { name: /View revenue analytics: Review revenue pressure/i })).toHaveAttribute(
       "href",
@@ -573,11 +591,6 @@ describe("DashboardPage", () => {
     expect(screen.getByRole("link", { name: /View vacancy readiness: View vacancy readiness/i })).toHaveAttribute(
       "href",
       "/analytics?entry=vacancy-readiness"
-    );
-    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Lease renewals · Review operator inputs");
-    expect(screen.getByRole("link", { name: /Review renewals: Open renewals focus/i })).toHaveAttribute(
-      "href",
-      "/portfolio-health?entry=lease-renewals"
     );
   });
 

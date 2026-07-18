@@ -214,6 +214,12 @@ function decisionDestinationCopy(item: LandlordDecisionQueueItem): { meta: strin
   const href = String(item.recommendedActionHref || "").trim();
   const label = String(item.recommendedActionLabel || "").trim();
 
+  if (isRenewalCommunicationReviewItem(item)) {
+    return { meta: "Notices · Internal review", action: "Review renewal draft" };
+  }
+  if (isApplicationActivityReviewItem(item)) {
+    return { meta: "Applications · Review funnel", action: "Open applications" };
+  }
   if (href.includes("/applications")) {
     return { meta: "Applications · Review funnel", action: "Review applications" };
   }
@@ -276,11 +282,19 @@ function isPaymentAllocationReviewItem(item: LandlordDecisionQueueItem): boolean
 }
 
 function decisionTitle(item: LandlordDecisionQueueItem): string {
+  if (isRenewalCommunicationReviewItem(item)) return "Review renewal communication draft";
+  if (isApplicationActivityReviewItem(item)) return "Review application activity";
   if (isPaymentAllocationReviewItem(item)) return "Review payment allocation";
   return item.title || "Review required";
 }
 
 function decisionReason(item: LandlordDecisionQueueItem): string {
+  if (isRenewalCommunicationReviewItem(item)) {
+    return "A saved renewal communication draft is ready for internal review. Review the draft and approval state in the lease workflow.";
+  }
+  if (isApplicationActivityReviewItem(item)) {
+    return "Review current applications and recent funnel activity for follow-up opportunities.";
+  }
   const description = String(item.description || "").replace(/\s+/g, " ").trim();
   if (isPaymentAllocationReviewItem(item)) {
     const hasSafeAllocationContext =
@@ -290,6 +304,26 @@ function decisionReason(item: LandlordDecisionQueueItem): string {
       : "Lease has an aggregate credit balance, but one or more obligations remain unmatched. Review payment allocation before taking overdue-rent action.";
   }
   return description || "Review the recommended next step for this operational decision.";
+}
+
+function isRenewalCommunicationReviewItem(item: LandlordDecisionQueueItem): boolean {
+  return item.sourceType === "renewal_notice_send_review";
+}
+
+function isApplicationActivityReviewItem(item: LandlordDecisionQueueItem): boolean {
+  const href = String(item.recommendedActionHref || "").toLowerCase();
+  return href.includes("/applications") && href.includes("entry=application-funnel");
+}
+
+function severityLabel(severity: LandlordDecisionQueueItem["severity"]): string {
+  const labels: Record<LandlordDecisionQueueItem["severity"], string> = {
+    critical: "Critical",
+    warning: "Warning",
+    needs_review: "Needs review",
+    upcoming: "Upcoming",
+    informational: "Information",
+  };
+  return labels[severity];
 }
 
 function useMediaQuery(query: string): boolean {
@@ -791,7 +825,7 @@ function DecisionRow({ item }: { item: LandlordDecisionQueueItem }) {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <span style={{ ...severityStyle(item.severity), borderRadius: 8, padding: "3px 8px", fontSize: 12, fontWeight: 850, width: "fit-content", whiteSpace: "nowrap" }}>
-            {item.severity.replace(/_/g, " ")}
+            {severityLabel(item.severity)}
           </span>
           <span style={{ color: text.muted, fontSize: 12, fontWeight: 750 }}>
             {decisionTimingLabel(item)}

@@ -1080,7 +1080,8 @@ describe("LandlordLeaseWorkflowPage", () => {
       sourceRoute: "/leases/lease-1/workflows/notice",
       workspace: "notices",
       severity: "warning",
-      title: "Renewal tenant communication ready for approval",
+      title: "Review renewal communication draft",
+      recommendedActionLabel: "Review renewal draft",
       recommendedActionHref: "/leases/lease-1/workflows/notice",
       leaseId: "lease-1",
       propertyId: "prop-1",
@@ -1088,7 +1089,10 @@ describe("LandlordLeaseWorkflowPage", () => {
       tenantId: "tenant-1",
       dedupeKey: "lease:lease-1:renewal_notice_send_review",
     });
-    expect(createPayload.description).toContain("Email delivery is available only after approval and explicit send confirmations");
+    expect(createPayload.description).toBe(
+      "A saved renewal communication draft is ready for internal review. Review the draft and approval state in the lease workflow."
+    );
+    expect(createPayload.description).not.toMatch(/email delivery|send infrastructure|legal notice/i);
     expect(createPayload.sourceSnapshot).toMatchObject({
       tenantLabel: "Jane Tenant",
       propertyUnitLabel: "12 Harbour Road · Unit 101",
