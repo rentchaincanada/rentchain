@@ -12,3 +12,5 @@ export * from "./receivablesShadowComparatorTypes";
 export * from "./receivablesShadowComparator";
 export * from "./receivablesSourceSnapshotTypes";
 export * from "./receivablesSourceSnapshotAdapter";
+export * from "./receivablesDiagnosticRunnerTypes";
+export * from "./receivablesDiagnosticRunnerCore";
