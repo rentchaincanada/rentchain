@@ -20,3 +20,5 @@ export * from "./receivablesSchemaReadinessTypes";
 export * from "./receivablesSchemaReadinessClassifier";
 export * from "./receivablesSchemaInventoryCommandTypes";
 export * from "./receivablesSchemaInventoryCommandCore";
+export * from "./receivablesSchemaInventoryLocalCommandTypes";
+export * from "./receivablesSchemaInventoryLocalCommand";
