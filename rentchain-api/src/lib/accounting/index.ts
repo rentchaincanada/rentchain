@@ -16,3 +16,5 @@ export * from "./receivablesDiagnosticRunnerTypes";
 export * from "./receivablesDiagnosticRunnerCore";
 export * from "./receivablesAuthoritativeSourceProviderTypes";
 export * from "./receivablesAuthoritativeSourceProviderCore";
+export * from "./receivablesSchemaReadinessTypes";
+export * from "./receivablesSchemaReadinessClassifier";
