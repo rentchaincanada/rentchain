@@ -1,0 +1,114 @@
+{
+  "checkedAt": "2026-07-20T12:00:00.000Z",
+  "receiptManifestVersion": "receivables_schema_inventory_receipt_v1",
+  "schema": {
+    "receiptVersion": "receivables_schema_inventory_receipt_v1",
+    "state": "ready",
+    "confirmed": true,
+    "conflictsDetected": false,
+    "claimScope": "next_audit_only",
+    "requiredSourcesCovered": true,
+    "supportedVersionsOnly": true,
+    "canonicalOwnershipPresent": true,
+    "canonicalMappingsPresent": true,
+    "sourceRevisionsPresent": true
+  },
+  "indexes": {
+    "receiptVersion": "receivables_schema_inventory_receipt_v1",
+    "state": "ready",
+    "confirmed": true,
+    "conflictsDetected": false,
+    "claimScope": "next_audit_only",
+    "requiredCount": 6,
+    "attestedReadyCount": 6,
+    "exactQueryCoverageAttested": true,
+    "targetStateAttested": true
+  },
+  "iam": {
+    "receiptVersion": "receivables_schema_inventory_receipt_v1",
+    "state": "ready",
+    "confirmed": true,
+    "conflictsDetected": false,
+    "claimScope": "next_audit_only",
+    "dedicatedIdentityAttested": true,
+    "shortLivedIdentityAttested": true,
+    "readOnlyAttested": true,
+    "writeDeniedAttested": true,
+    "privilegedAccessDeniedAttested": true,
+    "environmentBindingAttested": true
+  },
+  "completeness": {
+    "receiptVersion": "receivables_schema_inventory_receipt_v1",
+    "state": "ready",
+    "confirmed": true,
+    "conflictsDetected": false,
+    "claimScope": "next_audit_only",
+    "exactScopeAttested": true,
+    "exhaustionAttested": true,
+    "catchToEmptyAbsent": true,
+    "postReadFilteringAbsent": true
+  },
+  "consistency": {
+    "receiptVersion": "receivables_schema_inventory_receipt_v1",
+    "state": "ready",
+    "confirmed": true,
+    "conflictsDetected": false,
+    "claimScope": "next_audit_only",
+    "boundaryProtocolAttested": true,
+    "crossSourceBoundaryAttested": true,
+    "concurrentChangeInvalidates": true
+  },
+  "pagination": {
+    "receiptVersion": "receivables_schema_inventory_receipt_v1",
+    "state": "ready",
+    "confirmed": true,
+    "conflictsDetected": false,
+    "claimScope": "next_audit_only",
+    "deterministicOrderingAttested": true,
+    "cursorProgressionAttested": true,
+    "capFailsClosed": true,
+    "capHandlingAmbiguous": false
+  },
+  "unsafeFieldExclusion": {
+    "receiptVersion": "receivables_schema_inventory_receipt_v1",
+    "state": "ready",
+    "confirmed": true,
+    "conflictsDetected": false,
+    "claimScope": "next_audit_only",
+    "allowlistProjectionAttested": true,
+    "restrictedFieldsExcluded": true,
+    "safeOutputAttested": true
+  },
+  "rollout": {
+    "receiptVersion": "receivables_schema_inventory_receipt_v1",
+    "state": "ready",
+    "confirmed": true,
+    "conflictsDetected": false,
+    "claimScope": "next_audit_only",
+    "orderedGatesAttested": true,
+    "defaultOffAttested": true,
+    "mutationDeferred": true,
+    "operatorApprovalRequired": true
+  },
+  "rollback": {
+    "receiptVersion": "receivables_schema_inventory_receipt_v1",
+    "state": "ready",
+    "confirmed": true,
+    "conflictsDetected": false,
+    "claimScope": "next_audit_only",
+    "rollbackPlanAttested": true,
+    "appendSafeHistoryProtected": true,
+    "broaderIdentityFallbackProhibited": true
+  },
+  "verification": {
+    "receiptVersion": "receivables_schema_inventory_receipt_v1",
+    "state": "ready",
+    "confirmed": true,
+    "conflictsDetected": false,
+    "claimScope": "next_audit_only",
+    "automatedTestsAttested": true,
+    "negativePermissionTestsAttested": true,
+    "controlledContextChecksAttested": true,
+    "postChangeChecksAttested": true
+  }
+}
