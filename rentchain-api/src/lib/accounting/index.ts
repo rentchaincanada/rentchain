@@ -18,3 +18,5 @@ export * from "./receivablesAuthoritativeSourceProviderTypes";
 export * from "./receivablesAuthoritativeSourceProviderCore";
 export * from "./receivablesSchemaReadinessTypes";
 export * from "./receivablesSchemaReadinessClassifier";
+export * from "./receivablesSchemaInventoryCommandTypes";
+export * from "./receivablesSchemaInventoryCommandCore";
