@@ -14,3 +14,5 @@ export * from "./receivablesSourceSnapshotTypes";
 export * from "./receivablesSourceSnapshotAdapter";
 export * from "./receivablesDiagnosticRunnerTypes";
 export * from "./receivablesDiagnosticRunnerCore";
+export * from "./receivablesAuthoritativeSourceProviderTypes";
+export * from "./receivablesAuthoritativeSourceProviderCore";
