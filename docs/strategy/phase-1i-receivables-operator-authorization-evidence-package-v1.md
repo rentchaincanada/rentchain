@@ -55,6 +55,7 @@ Placeholders such as `[MANUAL INPUT REQUIRED]`, `[TBD]`, `[UNASSIGNED]`, `[DRAFT
 | --- | --- |
 | Package name | Phase 1I Receivables Operator Authorization Evidence Package |
 | Package version | v1 draft |
+| Package owner | Paul / Founder |
 | Package status | Reviewable but deferred |
 | Operator use | Unauthorized |
 | Execution | Not authorized |
@@ -69,11 +70,11 @@ Placeholders such as `[MANUAL INPUT REQUIRED]`, `[TBD]`, `[UNASSIGNED]`, `[DRAFT
 
 | Review area | Reviewer role | Assigned person | Status | Notes |
 | --- | --- | --- | --- | --- |
-| Business purpose | Founder or product owner | [MANUAL INPUT REQUIRED] | [UNASSIGNED] — Deferred | Confirms business purpose and scope only |
-| Technical safety | Backend-accounting reviewer | [MANUAL INPUT REQUIRED] | [UNASSIGNED] — Deferred | Confirms no runtime, Firestore, payment, or financial-output exposure |
-| Privacy/security | Privacy-security reviewer | [MANUAL INPUT REQUIRED] | [UNASSIGNED] — Deferred | Confirms no sensitive data is present |
+| Business purpose | Founder or product owner | Paul / Founder | [ASSIGNED] — Deferred | Confirms business purpose and scope only |
+| Technical safety | Backend-accounting reviewer | Reviewer A / Technical reviewer | [ASSIGNED] — Deferred | Confirms no runtime, Firestore, payment, or financial-output exposure |
+| Privacy/security | Privacy-security reviewer | Reviewer B / Privacy-security reviewer | [ASSIGNED] — Deferred | Confirms no sensitive data is present |
 | Accounting | Accountant-bookkeeper-controller reviewer | [MANUAL INPUT REQUIRED] | [UNASSIGNED] — Deferred | Confirms output is not treated as books or a rent balance |
-| Final decision owner | Authorized approver role | [MANUAL INPUT REQUIRED] | [UNASSIGNED] — Deferred | May only defer or approve a next review step; cannot authorize use here |
+| Final decision owner | Authorized approver role | Paul / Founder | [ASSIGNED] — Deferred | May only defer or approve a next review step; cannot authorize use here |
 
 Assignment rules:
 
@@ -86,14 +87,14 @@ Assignment rules:
 
 | Evidence item | Owner | Reviewer | Status | Notes |
 | --- | --- | --- | --- | --- |
-| Reviewer assignment table | [MANUAL INPUT REQUIRED] | [MANUAL INPUT REQUIRED] | [DRAFT] / Deferred | Must prove role eligibility and independence |
-| Evidence owner table | [MANUAL INPUT REQUIRED] | [MANUAL INPUT REQUIRED] | [DRAFT] / Deferred | Must prevent self-approval |
-| Sanitized receipt provenance sample | [MANUAL INPUT REQUIRED] | [MANUAL INPUT REQUIRED] | Sample only / Deferred | Synthetic evidence only |
-| Retention/deletion plan | [MANUAL INPUT REQUIRED] | [MANUAL INPUT REQUIRED] | [DRAFT] / Deferred | Policy text is not enforcement proof |
-| Escalation contacts | [MANUAL INPUT REQUIRED] | [MANUAL INPUT REQUIRED] | [UNASSIGNED] / Deferred | Role-based contacts only |
-| Audit-trail example | [MANUAL INPUT REQUIRED] | [MANUAL INPUT REQUIRED] | Sample only / Deferred | No persistence is approved |
-| Sign-off package sample | [MANUAL INPUT REQUIRED] | [MANUAL INPUT REQUIRED] | Sample only / Deferred | Cannot authorize operator use |
-| Gap reviewability table | [MANUAL INPUT REQUIRED] | [MANUAL INPUT REQUIRED] | [DRAFT] / Deferred | Every row defaults to Defer |
+| Reviewer assignment table | Paul / Founder | Reviewer A / Technical reviewer | Draft / Deferred | Must prove role eligibility and independence |
+| Evidence owner table | Paul / Founder | Reviewer A / Technical reviewer | Draft / Deferred | Must prevent self-approval |
+| Sanitized receipt provenance sample | Reviewer A / Technical reviewer | Reviewer B / Privacy-security reviewer | Sample only / Deferred | Synthetic evidence only |
+| Retention/deletion plan | Paul / Founder | Reviewer B / Privacy-security reviewer | Draft / Deferred | Policy text is not enforcement proof |
+| Escalation contacts | Paul / Founder | Reviewer B / Privacy-security reviewer | Draft / Deferred | Role-based contacts only |
+| Audit-trail example | Reviewer A / Technical reviewer | Paul / Founder | Sample only / Deferred | No persistence is approved |
+| Sign-off package sample | Paul / Founder | Reviewer A / Technical reviewer and Reviewer B / Privacy-security reviewer | Sample only / Deferred | Cannot authorize operator use |
+| Gap reviewability table | Paul / Founder | Reviewer A / Technical reviewer and Reviewer B / Privacy-security reviewer | Draft / Deferred | Every row defaults to Defer |
 
 If an evidence owner or independent reviewer is missing, the related gap remains open. Ownership of a template does not prove the underlying control exists.
 
@@ -105,10 +106,10 @@ The sample contains no real tenant names, tenant emails, bank data, rent amounts
 
 | Manual field | Value |
 | --- | --- |
-| Prepared by | [MANUAL INPUT REQUIRED] |
-| Prepared date | [MANUAL INPUT REQUIRED] |
+| Prepared by | Reviewer A / Technical reviewer |
+| Prepared date | [TO BE COMPLETED DURING REVIEW] |
 | Source type | Synthetic sample only |
-| Reviewer | [MANUAL INPUT REQUIRED] |
+| Reviewer | Reviewer B / Privacy-security reviewer |
 | Review status | Deferred |
 
 ```json
@@ -174,10 +175,10 @@ Discovery of sensitive data, financial amounts, credentials, paths, provider sec
 
 | Field | Value |
 | --- | --- |
-| Retention owner | [MANUAL INPUT REQUIRED] |
-| Deletion reviewer | [MANUAL INPUT REQUIRED] |
-| Approved local review folder | [MANUAL INPUT REQUIRED] |
-| Retention period | [MANUAL INPUT REQUIRED] |
+| Retention owner | Paul / Founder |
+| Deletion reviewer | Reviewer B / Privacy-security reviewer |
+| Approved local review folder | [TBD] — approved local review folder not yet designated |
+| Retention period | [TBD] — proposed period not yet reviewed |
 | Deletion confirmation required | Yes |
 | Current status | [DRAFT] / Deferred |
 
@@ -198,8 +199,8 @@ This sample plan is not proof that host, storage, retention, or deletion control
 
 | Manual field | Value |
 | --- | --- |
-| Primary role assignment | [MANUAL INPUT REQUIRED] |
-| Backup role assignment | [MANUAL INPUT REQUIRED] |
+| Primary role assignment | Paul / Founder |
+| Backup role assignment | Reviewer B / Privacy-security reviewer |
 | Escalation status | Deferred |
 
 The package does not require or permit personal phone numbers, personal email addresses, or other personal contact details. Missing role assignments keep the package deferred.
@@ -268,14 +269,14 @@ Any missing, placeholder-only, stale, conflicting, unsafe, or self-approved atta
 
 | Gap | Evidence artifact | Owner | Reviewer | Reviewable? | Current status | Decision |
 | --- | --- | --- | --- | --- | --- | --- |
-| Reviewer assignments | Reviewer assignment table | [UNASSIGNED] | [UNASSIGNED] | No | Draft / Incomplete | Defer |
-| Evidence owners | Evidence owner table | [UNASSIGNED] | [UNASSIGNED] | No | Draft / Incomplete | Defer |
-| Sanitized receipt provenance | Synthetic provenance sample | [UNASSIGNED] | [UNASSIGNED] | Sample only | Sample only / Deferred | Defer |
-| Retention/deletion plan | Plan sample and future control evidence | [UNASSIGNED] | [UNASSIGNED] | No | Draft / Incomplete | Defer |
-| Escalation contacts | Role-based contact table | [UNASSIGNED] | [UNASSIGNED] | No | Draft / Incomplete | Defer |
-| Audit trail | Non-persistent audit example | [UNASSIGNED] | [UNASSIGNED] | Sample only | Sample only / Deferred | Defer |
-| Sign-off package | Sign-off page sample | [UNASSIGNED] | [UNASSIGNED] | Sample only | Sample only / Deferred | Defer |
-| Non-sensitive proof | Non-sensitive proof summary | [UNASSIGNED] | [UNASSIGNED] | Draft only | Draft / Deferred | Defer |
+| Reviewer assignments | Reviewer assignment table | Paul / Founder | Reviewer A / Technical reviewer | Partial | Draft / Incomplete | Defer |
+| Evidence owners | Evidence owner table | Paul / Founder | Reviewer A / Technical reviewer | Partial | Draft / Incomplete | Defer |
+| Sanitized receipt provenance | Synthetic provenance sample | Reviewer A / Technical reviewer | Reviewer B / Privacy-security reviewer | Sample only | Sample only / Deferred | Defer |
+| Retention/deletion plan | Plan sample and future control evidence | Paul / Founder | Reviewer B / Privacy-security reviewer | Partial | Draft / Incomplete | Defer |
+| Escalation contacts | Role-based contact table | Paul / Founder | Reviewer B / Privacy-security reviewer | Partial | Draft / Incomplete | Defer |
+| Audit trail | Non-persistent audit example | Reviewer A / Technical reviewer | Paul / Founder | Sample only | Sample only / Deferred | Defer |
+| Sign-off package | Sign-off page sample | Paul / Founder | Reviewer A / Technical reviewer and Reviewer B / Privacy-security reviewer | Sample only | Sample only / Deferred | Defer |
+| Non-sensitive proof | Non-sensitive proof summary | Paul / Founder | Reviewer A / Technical reviewer and Reviewer B / Privacy-security reviewer | Draft only | Draft / Deferred | Defer |
 
 If any row is not reviewable, Phase 1I cannot proceed to a Stage 3 review. `Sample only` and `Draft only` are not complete or passing states.
 
