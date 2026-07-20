@@ -54,6 +54,7 @@ export type UnifiedInboxSourceActionRouteKind =
   | "applications_workspace"
   | "leases_workspace"
   | "maintenance_workspace"
+  | "messages_workspace"
   | "payment_workspace"
   | "work_order_workspace";
 
@@ -77,6 +78,8 @@ export type UnifiedInboxEvent = UnifiedInboxSafetyFlags & {
   occurredAt: string;
   readAt: string | null;
   sourceRef: UnifiedInboxSourceRef;
+  /** Internal-only routing context. Never included directly in public inbox records. */
+  sourceEntityId?: string;
 };
 
 export type UnifiedInboxPublicRecord = Pick<

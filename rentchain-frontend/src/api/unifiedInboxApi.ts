@@ -34,6 +34,7 @@ export type UnifiedInboxSourceAction = {
     | "applications_workspace"
     | "leases_workspace"
     | "maintenance_workspace"
+    | "messages_workspace"
     | "payment_workspace"
     | "work_order_workspace"
     | string;

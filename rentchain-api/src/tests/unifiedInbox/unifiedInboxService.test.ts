@@ -213,6 +213,7 @@ describe("unified inbox service", () => {
       title: "Tenant replied",
       body: "Thanks for the update.",
       sourceRef: { kind: "landlord.message" as const, ref: "inbox_v1_hidden_message_ref" },
+      sourceEntityId: "conversation-safe-1",
     });
 
     expect(maintenance.sourceAction).toMatchObject({
@@ -230,7 +231,11 @@ describe("unified inbox service", () => {
       label: "Open related leases",
       routeKind: "leases_workspace",
     });
-    expect(plainMessage.sourceAction).toBeNull();
+    expect(plainMessage.sourceAction).toMatchObject({
+      href: "/messages?threadId=conversation-safe-1",
+      label: "Open conversation",
+      routeKind: "messages_workspace",
+    });
 
     const json = JSON.stringify([maintenance, application, leasePayment, plainMessage]);
     expect(json).not.toContain("sourceId");

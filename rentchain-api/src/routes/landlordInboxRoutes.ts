@@ -5,6 +5,7 @@ import { requireLandlord } from "../middleware/requireLandlord";
 import { loadLandlordAnalyticsSnapshot } from "../services/landlord/landlordAnalyticsSnapshot";
 import {
   deriveLandlordUnifiedInbox,
+  buildLandlordConversationInboxRecords,
   toPublicInboxRecord,
   type SourceKind,
   type UnifiedInboxEvent,
@@ -159,6 +160,12 @@ async function loadCollection(name: string) {
   return (snap?.docs || []).map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }));
 }
 
+async function loadLandlordConversations(landlordId: string) {
+  const snap = await db.collection("conversations").where("landlordId", "==", landlordId).get().catch(() => null);
+  if (!snap) return [];
+  return (snap.docs || []).map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }));
+}
+
 async function loadReadStatesByRecordId(landlordId: string) {
   const records = await loadCollection(READ_STATES_COLLECTION);
   const entries: Array<[string, string]> = [];
@@ -210,6 +217,7 @@ function applySafeFilters(items: UnifiedInboxEvent[], request: LandlordInboxRequ
 
 function applyPersistedReadStates(items: UnifiedInboxEvent[], readStatesByRecordId: Map<string, string>) {
   return items.map((item) => {
+    if (item.sourceKind === "landlord.message") return item;
     const readAt = readStatesByRecordId.get(item.id);
     if (!readAt) return item;
     if (item.status !== "unread" && item.readAt) return item;
@@ -218,13 +226,14 @@ function applyPersistedReadStates(items: UnifiedInboxEvent[], readStatesByRecord
 }
 
 async function deriveScopedLandlordInbox(landlordId: string, request: LandlordInboxRequest) {
-  const [snapshot, leases, maintenanceRequests, messages] = await Promise.all([
+  const [snapshot, leases, maintenanceRequests, conversations, messages] = await Promise.all([
     loadLandlordAnalyticsSnapshot({
       landlordId,
       propertyId: request.propertyId || undefined,
     }),
     loadCollection("leases"),
     loadCollection("maintenanceRequests"),
+    loadLandlordConversations(landlordId),
     loadCollection("messages"),
   ]);
 
@@ -242,7 +251,12 @@ async function deriveScopedLandlordInbox(landlordId: string, request: LandlordIn
     ),
     leaseItems: filterScopedRecords(leases, landlordId, request.propertyId),
     maintenanceRequests: filterScopedRecords(maintenanceRequests, landlordId, request.propertyId),
-    messages: filterScopedRecords(messages, landlordId, request.propertyId),
+    messages: buildLandlordConversationInboxRecords({
+      landlordId,
+      propertyId: request.propertyId,
+      conversations,
+      messages,
+    }),
     limit: MAX_LIMIT,
   });
   const readStatesByRecordId = await loadReadStatesByRecordId(landlordId);
@@ -316,6 +330,21 @@ router.post("/inbox/:recordId/read", requireAuth, requireLandlord, async (req: R
 
     const existingReadAt = item.readAt && item.status === "read" ? item.readAt : null;
     const readAt = existingReadAt || new Date().toISOString();
+    if (item.sourceKind === "landlord.message") {
+      const conversationId = asString(item.sourceEntityId, 240);
+      if (!conversationId) {
+        return res.status(404).json({ ok: false, error: "INBOX_RECORD_NOT_FOUND", message: "Inbox record not found" });
+      }
+      const conversationDoc = await db.collection("conversations").doc(conversationId).get().catch(() => null);
+      const conversation = conversationDoc?.exists
+        ? { id: conversationDoc.id, ...((conversationDoc.data() as any) || {}) }
+        : null;
+      if (!conversation || !hasLandlordScope(conversation, landlordId)) {
+        return res.status(404).json({ ok: false, error: "INBOX_RECORD_NOT_FOUND", message: "Inbox record not found" });
+      }
+      await db.collection("conversations").doc(conversationId).set({ lastReadAtLandlord: readAt }, { merge: true });
+      return res.json({ ok: true, record: toPublicInboxRecord({ ...item, status: "read", readAt }) });
+    }
     await db
       .collection(READ_STATES_COLLECTION)
       .doc(readStateDocId(landlordId, recordId))

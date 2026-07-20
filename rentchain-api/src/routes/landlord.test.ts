@@ -8,10 +8,12 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
     return store.get(name)!;
   }
 
-  function makeQuery(name: string) {
+  function makeQuery(name: string, filters: Array<{ field: string; value: unknown }> = []) {
     return {
       get: async () => {
-        const docs = Array.from(ensureCollection(name).values()).map((doc) => ({
+        const docs = Array.from(ensureCollection(name).values()).filter((doc) =>
+          filters.every((filter) => doc.data?.[filter.field] === filter.value)
+        ).map((doc) => ({
           id: doc.id,
           exists: true,
           data: () => doc.data,
@@ -19,6 +21,8 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
         return { docs, empty: docs.length === 0, size: docs.length };
       },
       doc: (id: string) => makeDoc(name, id),
+      where: (field: string, _operator: string, value: unknown) =>
+        makeQuery(name, [...filters, { field, value }]),
     };
   }
 
@@ -44,6 +48,7 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
       collection: (name: string) => ({
         get: async () => makeQuery(name).get(),
         doc: (id: string) => makeDoc(name, id),
+        where: (field: string, operator: string, value: unknown) => makeQuery(name).where(field, operator, value),
       }),
     },
   };
@@ -51,7 +56,7 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
 
 const loadLandlordAnalyticsSnapshot = vi.fn();
 let mockUser: any = null;
-const PUBLIC_INBOX_KEYS = ["audienceRole", "body", "id", "occurredAt", "priority", "readAt", "sourceKind", "status", "title"];
+const PUBLIC_INBOX_KEYS = ["audienceRole", "body", "id", "occurredAt", "priority", "readAt", "sourceAction", "sourceKind", "status", "title"];
 const EXCLUDED_INBOX_FIELDS = [
   "sourceId",
   "sourceRef",
@@ -148,9 +153,17 @@ function seedLandlordSources() {
     status: "urgent",
     updatedAt: "2026-06-09T15:00:00.000Z",
   });
-  seedDoc("messages", "message_raw_1", {
+  seedDoc("conversations", "conversation_raw_1", {
     landlordId: "landlord-1",
     propertyId: "prop-1",
+    tenantDisplayName: "Taylor Tenant",
+    propertyDisplayLabel: "Main property",
+    unitDisplayLabel: "Unit 2A",
+    lastMessageAt: "2026-06-09T13:00:00.000Z",
+    lastReadAtLandlord: "2026-06-09T12:00:00.000Z",
+  });
+  seedDoc("messages", "message_raw_1", {
+    conversationId: "conversation_raw_1",
     senderRole: "tenant",
     body: "Can we discuss the renewal?",
     createdAt: "2026-06-09T13:00:00.000Z",
@@ -278,6 +291,15 @@ describe("landlord unified inbox route", () => {
     expect(res.body.total).toBe(1);
     expect(res.body.items).toHaveLength(1);
     expect(res.body.items[0].sourceKind).toBe("landlord.message");
+    expect(res.body.items[0]).toMatchObject({
+      title: "Message from Taylor Tenant",
+      body: "Main property · Unit 2A — Can we discuss the renewal?",
+      status: "unread",
+      sourceAction: {
+        href: "/messages?threadId=conversation_raw_1",
+        routeKind: "messages_workspace",
+      },
+    });
     expect(loadLandlordAnalyticsSnapshot).toHaveBeenCalledWith({
       landlordId: "landlord-1",
       propertyId: "prop-1",
@@ -318,6 +340,43 @@ describe("landlord unified inbox route", () => {
       before.body.items.filter((item: any) => item.status === "unread").length - 1
     );
     expectSafeResponse(after.body);
+  });
+
+  it("marks message items read on the authoritative conversation instead of inbox-only state", async () => {
+    const router = (await import("./landlordInboxRoutes")).default;
+    const user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord" };
+    const before = await invokeRouter(router, { url: "/inbox?source=message", user });
+    const target = before.body.items[0];
+
+    const read = await invokeRouter(router, { method: "POST", url: `/inbox/${target.id}/read`, user });
+    expect(read.status).toBe(200);
+    expect(read.body.record).toMatchObject({ status: "read", readAt: expect.any(String) });
+
+    const conversation = await fakeDb.collection("conversations").doc("conversation_raw_1").get();
+    expect(conversation.data().lastReadAtLandlord).toBe(read.body.record.readAt);
+    const inboxReadStates = await fakeDb.collection("unifiedInboxReadStates").get();
+    expect(inboxReadStates.docs).toHaveLength(0);
+  });
+
+  it("does not expose another landlord conversation or its child messages", async () => {
+    seedDoc("conversations", "conversation_other", {
+      landlordId: "landlord-2",
+      lastMessageAt: "2026-06-09T16:00:00.000Z",
+    });
+    seedDoc("messages", "message_other", {
+      conversationId: "conversation_other",
+      senderRole: "tenant",
+      body: "Other landlord private message",
+      createdAt: "2026-06-09T16:00:00.000Z",
+    });
+    const router = (await import("./landlordInboxRoutes")).default;
+    const res = await invokeRouter(router, {
+      url: "/inbox?source=message",
+      user: { id: "landlord-1", landlordId: "landlord-1", role: "landlord" },
+    });
+
+    expect(res.body.total).toBe(1);
+    expect(JSON.stringify(res.body)).not.toContain("Other landlord private message");
   });
 
   it("registers the read-state route expected by the /api/landlord mount", async () => {
