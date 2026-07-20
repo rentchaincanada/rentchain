@@ -129,6 +129,7 @@ function makeLandlordEvent(params: {
   status?: UnifiedInboxStatus;
   occurredAt: string;
   readAt?: string | null;
+  sourceEntityId?: string;
 }): UnifiedInboxEvent {
   const audienceScopeKey = generateSafeScopeKey("landlord", asString(params.context.landlordId, "", 160));
   const id = generateSafeInboxId(params.sourceKind, params.sourceStableKey, audienceScopeKey);
@@ -146,6 +147,7 @@ function makeLandlordEvent(params: {
     occurredAt: params.occurredAt,
     readAt: params.readAt || null,
     sourceRef: buildSafeSourceRef(params.sourceKind, params.sourceStableKey, audienceScopeKey),
+    ...(params.sourceEntityId ? { sourceEntityId: params.sourceEntityId } : {}),
   };
 }
 
@@ -243,21 +245,22 @@ export function adaptLandlordMessageInboxToInboxEvent(
   landlordScopeContext: LandlordScopeContext
 ): UnifiedInboxEvent | null {
   if (!hasLandlordScope(message, landlordScopeContext) || hasSensitiveValues(message)) return null;
-  const stableKey = asString(message?.id || message?.messageId, "", 240);
+  const stableKey = asString(message?.conversationId || message?.id || message?.messageId, "", 240);
   if (!stableKey) return null;
-  if (hasUnsafeText(message?.body, message?.text, message?.summary)) return null;
+  if (hasUnsafeText(message?.title, message?.body, message?.text, message?.summary)) return null;
   const readAt = message?.readAt ? toIso(message.readAt) : null;
   const senderRole = asString(message?.senderRole, "tenant", 40).toLowerCase();
   return makeLandlordEvent({
     sourceKind: "landlord.message",
     sourceStableKey: stableKey,
     context: landlordScopeContext,
-    title: senderRole === "contractor" ? "Contractor message" : "Tenant message",
+    title: asString(message?.title, senderRole === "contractor" ? "Contractor message" : "Tenant message", 180),
     body: asString(message?.body || message?.text || message?.summary, "You have a message update.", 1000),
     priority: normalizePriority(message?.priority),
     status: normalizeStatus(message?.status, readAt),
     occurredAt: toIso(message?.createdAt || message?.createdAtMs || message?.occurredAt),
     readAt,
+    sourceEntityId: asString(message?.conversationId, "", 240) || undefined,
   });
 }
 
