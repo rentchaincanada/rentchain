@@ -1,3 +1,5 @@
+import { getVercelOidcToken } from "@vercel/oidc";
+
 const STS_URL = "https://sts.googleapis.com/v1/token";
 const IAM_CREDENTIALS_BASE_URL = "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts";
 
@@ -7,7 +9,9 @@ const ID_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id_token";
 const CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 
 export type PreviewAuthConfig = {
-  gcpAudience: string;
+  vercelOidcTokenAudience: string;
+  googleStsAudience: string;
+  cloudRunIdTokenAudience: string;
   serviceAccountEmail: string;
   cloudRunServiceUrl: string;
   expectedSpikeCommit: string;
@@ -34,6 +38,9 @@ export class PreviewAuthBridgeError extends Error {
   constructor(
     readonly code: string,
     readonly status = 502,
+    readonly googleErrorCode?: string,
+    readonly safeDescription?: string,
+    readonly deniedPermission?: string,
   ) {
     super(code);
     this.name = "PreviewAuthBridgeError";
@@ -42,7 +49,9 @@ export class PreviewAuthBridgeError extends Error {
 
 export function readPreviewAuthConfig(env: NodeJS.ProcessEnv): PreviewAuthConfig {
   const required = {
-    gcpAudience: env.GCP_AUDIENCE,
+    projectNumber: env.GCP_PROJECT_NUMBER,
+    workloadIdentityPoolId: env.GCP_WORKLOAD_IDENTITY_POOL_ID,
+    workloadIdentityProviderId: env.GCP_WORKLOAD_IDENTITY_PROVIDER_ID,
     serviceAccountEmail: env.GCP_SERVICE_ACCOUNT_EMAIL,
     cloudRunServiceUrl: env.CLOUD_RUN_SERVICE_URL,
     expectedSpikeCommit: env.EXPECTED_SPIKE_COMMIT,
@@ -54,11 +63,74 @@ export function readPreviewAuthConfig(env: NodeJS.ProcessEnv): PreviewAuthConfig
     }
   }
 
+  const projectNumber = required.projectNumber!.trim();
+  const poolId = required.workloadIdentityPoolId!.trim();
+  const providerId = required.workloadIdentityProviderId!.trim();
+  const cloudRunServiceUrl = required.cloudRunServiceUrl!.trim().replace(/\/$/, "");
+
+  if (!/^\d+$/.test(projectNumber) || !/^[a-z0-9-]+$/.test(poolId) || !/^[a-z0-9-]+$/.test(providerId)) {
+    throw new PreviewAuthBridgeError("CONFIG_INVALID_WIF_RESOURCE", 500);
+  }
+
+  const providerPath = `projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
+
   return {
-    gcpAudience: required.gcpAudience!.trim(),
+    vercelOidcTokenAudience: `https://iam.googleapis.com/${providerPath}`,
+    googleStsAudience: `//iam.googleapis.com/${providerPath}`,
+    cloudRunIdTokenAudience: cloudRunServiceUrl,
     serviceAccountEmail: required.serviceAccountEmail!.trim(),
-    cloudRunServiceUrl: required.cloudRunServiceUrl!.trim().replace(/\/$/, ""),
+    cloudRunServiceUrl,
     expectedSpikeCommit: required.expectedSpikeCommit!.trim(),
+  };
+}
+
+type GetVercelOidcTokenLike = (options: { audience: string }) => Promise<string>;
+
+export function acquireVercelOidcToken(
+  config: PreviewAuthConfig,
+  getToken: GetVercelOidcTokenLike = getVercelOidcToken,
+): Promise<string> {
+  return getToken({ audience: config.vercelOidcTokenAudience });
+}
+
+function readGoogleError(payload: unknown): {
+  googleErrorCode: string;
+  safeDescription: string;
+  deniedPermission?: string;
+} {
+  const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const nested =
+    record.error && typeof record.error === "object"
+      ? (record.error as Record<string, unknown>)
+      : undefined;
+  const rawCode = typeof record.error === "string" ? record.error : nested?.status;
+  const googleErrorCode =
+    typeof rawCode === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(rawCode)
+      ? rawCode
+      : "GOOGLE_REQUEST_REJECTED";
+  const rawDescription =
+    typeof record.error_description === "string"
+      ? record.error_description
+      : typeof nested?.message === "string"
+        ? nested.message
+        : "";
+  const description = rawDescription.toLowerCase();
+  const permissionMatch = rawDescription.match(/permission ['"]?([A-Za-z0-9.]+)['"]? denied/i);
+  const safeDescription = description.includes("audience")
+    ? "Google rejected the configured audience."
+    : description.includes("issuer")
+      ? "Google rejected the configured issuer."
+      : description.includes("subject token")
+        ? "Google rejected the external subject token."
+        : description.includes("attribute")
+          ? "Google rejected the workload identity attributes."
+          : description.includes("permission")
+            ? "Google denied the requested permission."
+            : "Google rejected the request.";
+  return {
+    googleErrorCode,
+    safeDescription,
+    ...(permissionMatch ? { deniedPermission: permissionMatch[1] } : {}),
   };
 }
 
@@ -71,7 +143,7 @@ export async function exchangeVercelToken(
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      audience: config.gcpAudience,
+      audience: config.googleStsAudience,
       grant_type: TOKEN_EXCHANGE_GRANT_TYPE,
       requested_token_type: ACCESS_TOKEN_TYPE,
       scope: CLOUD_PLATFORM_SCOPE,
@@ -81,7 +153,13 @@ export async function exchangeVercelToken(
   });
 
   if (!response.ok) {
-    throw new PreviewAuthBridgeError("STS_EXCHANGE_DENIED", response.status);
+    const diagnostic = readGoogleError(await response.json().catch(() => undefined));
+    throw new PreviewAuthBridgeError(
+      "STS_EXCHANGE_DENIED",
+      response.status,
+      diagnostic.googleErrorCode,
+      diagnostic.safeDescription,
+    );
   }
 
   const payload = (await response.json()) as { access_token?: unknown };
@@ -108,7 +186,14 @@ export async function generateCloudRunIdToken(
   });
 
   if (!response.ok) {
-    throw new PreviewAuthBridgeError("IAM_ID_TOKEN_DENIED", response.status);
+    const diagnostic = readGoogleError(await response.json().catch(() => undefined));
+    throw new PreviewAuthBridgeError(
+      "IAM_ID_TOKEN_DENIED",
+      response.status,
+      diagnostic.googleErrorCode,
+      diagnostic.safeDescription,
+      diagnostic.deniedPermission,
+    );
   }
 
   const payload = (await response.json()) as { token?: unknown };
@@ -174,7 +259,7 @@ export async function runPreviewAuthBridge(input: {
   );
   const audience = input.wrongAudience
     ? "https://wrong-audience.invalid"
-    : input.config.cloudRunServiceUrl;
+    : input.config.cloudRunIdTokenAudience;
   const idToken = await generateCloudRunIdToken(
     federatedAccessToken,
     input.config,

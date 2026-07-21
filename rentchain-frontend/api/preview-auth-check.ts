@@ -1,6 +1,5 @@
-import { getVercelOidcToken } from "@vercel/oidc";
-
 import {
+  acquireVercelOidcToken,
   PreviewAuthBridgeError,
   readPreviewAuthConfig,
   runPreviewAuthBridge,
@@ -17,7 +16,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const config = readPreviewAuthConfig(process.env);
-    const vercelOidcToken = await getVercelOidcToken({ audience: config.gcpAudience });
+    const vercelOidcToken = await acquireVercelOidcToken(config);
     const evidence = await runPreviewAuthBridge({
       config,
       vercelOidcToken,
@@ -29,6 +28,18 @@ export default async function handler(req: any, res: any) {
       error instanceof PreviewAuthBridgeError
         ? error
         : new PreviewAuthBridgeError("IDENTITY_BRIDGE_FAILED");
-    return res.status(bridgeError.status).json({ ok: false, error: bridgeError.code });
+    return res.status(bridgeError.status).json({
+      ok: false,
+      error: bridgeError.code,
+      ...(bridgeError.googleErrorCode
+        ? {
+            googleErrorCode: bridgeError.googleErrorCode,
+            safeDescription: bridgeError.safeDescription,
+            ...(bridgeError.deniedPermission
+              ? { deniedPermission: bridgeError.deniedPermission }
+              : {}),
+          }
+        : {}),
+    });
   }
 }

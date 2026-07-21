@@ -22,8 +22,14 @@ The bounded non-production resources were created and reviewed through the first
 
 The exact-head Preview route acquired a short-lived Vercel OIDC assertion, then Google Security Token Service rejected the exchange with HTTP 400. No federated access token was issued, so service-account impersonation, Google ID-token generation, and authenticated Cloud Run invocation were not attempted. No IAM change or second exchange attempt followed.
 
-The current implementation uses the HTTPS provider URL both as the Vercel token audience and as the Security Token Service request audience. Google accepts the canonical provider name with or without the HTTPS prefix as the incoming OIDC token audience when the provider has no explicit allowed-audience list, while its Security Token Service examples use the `//iam.googleapis.com/...` canonical resource form for the request audience. Separating those two audience representations is the narrow revision to review before another attempt.
+The revised implementation keeps three audience domains separate and derives them from existing Preview-only identifiers:
 
-Classification: **Identity bridge requires revision**.
+- the Vercel-issued OIDC token uses the HTTPS Workload Identity Provider URL;
+- the Google Security Token Service request uses the canonical `//iam.googleapis.com/...` provider resource name; and
+- the Google-signed ID token uses the exact Cloud Run service URL.
+
+These values are separately named and tested. The HTTPS and canonical provider audiences are derived from `GCP_PROJECT_NUMBER`, `GCP_WORKLOAD_IDENTITY_POOL_ID`, and `GCP_WORKLOAD_IDENTITY_PROVIDER_ID`; no additional credential or ambiguous shared audience variable is required.
+
+The controlled retry result and final classification are recorded as exact-head PR evidence so this architecture note does not imply an unverified outcome.
 
 This result does not authorize Phase B. Temporary resources remain bounded by the CAD 10 and 24-hour limits and must be removed after the evidence review window.

@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  acquireVercelOidcToken,
   PreviewAuthBridgeError,
   readPreviewAuthConfig,
   runPreviewAuthBridge,
 } from "../../server/previewAuthBridge";
 
 const config = {
-  gcpAudience: "provider-audience",
+  vercelOidcTokenAudience: "https://iam.googleapis.com/provider-resource",
+  googleStsAudience: "//iam.googleapis.com/provider-resource",
+  cloudRunIdTokenAudience: "https://bounded-oidc-hello.example.invalid",
   serviceAccountEmail: "preview-invoker@example.invalid",
   cloudRunServiceUrl: "https://bounded-oidc-hello.example.invalid",
   expectedSpikeCommit: "expected-commit",
@@ -21,6 +24,39 @@ function jsonResponse(payload: unknown, status = 200): Response {
 }
 
 describe("preview auth bridge", () => {
+  it("keeps the three audience domains explicit and non-interchangeable", async () => {
+    const derived = readPreviewAuthConfig({
+      GCP_PROJECT_NUMBER: "1089948756798",
+      GCP_WORKLOAD_IDENTITY_POOL_ID: "vercel-preview-spike",
+      GCP_WORKLOAD_IDENTITY_PROVIDER_ID: "vercel-preview",
+      GCP_SERVICE_ACCOUNT_EMAIL: "preview-invoker@example.invalid",
+      CLOUD_RUN_SERVICE_URL: "https://bounded-oidc-hello.example.invalid/",
+      EXPECTED_SPIKE_COMMIT: "expected-commit",
+    });
+    const getTokenCalls: Array<{ audience: string }> = [];
+
+    await acquireVercelOidcToken(derived, async (options) => {
+      getTokenCalls.push(options);
+      return "vercel-token";
+    });
+
+    expect(getTokenCalls).toEqual([{ audience: derived.vercelOidcTokenAudience }]);
+    expect(derived.vercelOidcTokenAudience).toBe(
+      "https://iam.googleapis.com/projects/1089948756798/locations/global/workloadIdentityPools/vercel-preview-spike/providers/vercel-preview",
+    );
+    expect(derived.googleStsAudience).toBe(
+      "//iam.googleapis.com/projects/1089948756798/locations/global/workloadIdentityPools/vercel-preview-spike/providers/vercel-preview",
+    );
+    expect(derived.cloudRunIdTokenAudience).toBe(
+      "https://bounded-oidc-hello.example.invalid",
+    );
+    expect(new Set([
+      derived.vercelOidcTokenAudience,
+      derived.googleStsAudience,
+      derived.cloudRunIdTokenAudience,
+    ]).size).toBe(3);
+  });
+
   it("returns only whitelisted hello evidence after the three server-side calls", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
@@ -56,11 +92,23 @@ describe("preview auth bridge", () => {
       "https://bounded-oidc-hello.example.invalid",
     ]);
     expect(String(requests[0].init?.body)).toContain("subject_token=vercel-token");
+    expect(String(requests[0].init?.body)).toContain(
+      "audience=%2F%2Fiam.googleapis.com%2Fprovider-resource",
+    );
     expect(requests[1].init?.headers).toEqual({
       Authorization: "Bearer federated-token",
       "Content-Type": "application/json",
     });
+    expect(requests[1].init?.body).toBe(
+      JSON.stringify({
+        audience: "https://bounded-oidc-hello.example.invalid",
+        includeEmail: false,
+      }),
+    );
     expect(requests[2].init?.headers).toEqual({ Authorization: "Bearer google-id-token" });
+    expect(JSON.stringify(result)).not.toContain("vercel-token");
+    expect(JSON.stringify(result)).not.toContain("federated-token");
+    expect(JSON.stringify(result)).not.toContain("google-id-token");
   });
 
   it("proves an intentionally wrong audience is denied without returning a token", async () => {
@@ -90,14 +138,54 @@ describe("preview auth bridge", () => {
       runPreviewAuthBridge({
         config,
         vercelOidcToken: "vercel-token",
-        fetchImpl: (async () => jsonResponse({ secret: "not surfaced" }, 403)) as typeof fetch,
+        fetchImpl: (async () =>
+          jsonResponse(
+            {
+              error: "invalid_target",
+              error_description: "The audience is invalid; token-value-must-not-surface",
+            },
+            400,
+          )) as typeof fetch,
       }),
-    ).rejects.toMatchObject({ code: "STS_EXCHANGE_DENIED", status: 403 });
+    ).rejects.toMatchObject({
+      code: "STS_EXCHANGE_DENIED",
+      status: 400,
+      googleErrorCode: "invalid_target",
+      safeDescription: "Google rejected the configured audience.",
+    });
+
+    let requestCount = 0;
+    await expect(
+      runPreviewAuthBridge({
+        config,
+        vercelOidcToken: "vercel-token",
+        fetchImpl: (async () => {
+          requestCount += 1;
+          if (requestCount === 1) return jsonResponse({ access_token: "federated-token" });
+          return jsonResponse(
+            {
+              error: {
+                status: "PERMISSION_DENIED",
+                message:
+                  "Permission 'iam.serviceAccounts.getOpenIdToken' denied; raw-token-must-not-surface",
+              },
+            },
+            403,
+          );
+        }) as typeof fetch,
+      }),
+    ).rejects.toMatchObject({
+      code: "IAM_ID_TOKEN_DENIED",
+      status: 403,
+      googleErrorCode: "PERMISSION_DENIED",
+      safeDescription: "Google denied the requested permission.",
+      deniedPermission: "iam.serviceAccounts.getOpenIdToken",
+    });
   });
 
   it("rejects incomplete configuration without echoing values", () => {
-    expect(() => readPreviewAuthConfig({ GCP_AUDIENCE: "provider-audience" })).toThrow(
-      new PreviewAuthBridgeError("CONFIG_MISSING_SERVICEACCOUNTEMAIL", 500),
+    expect(() => readPreviewAuthConfig({ GCP_PROJECT_NUMBER: "1089948756798" })).toThrow(
+      new PreviewAuthBridgeError("CONFIG_MISSING_WORKLOADIDENTITYPOOLID", 500),
     );
   });
 
