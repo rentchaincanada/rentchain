@@ -2,7 +2,7 @@
 
 ## Planning assumptions
 
-Currency is CAD planning range; Google list prices are generally billed in account currency and vary by region/exchange rate. Assumptions: Montréal, request-based Cloud Run, min 0/max 1 per PR, 10–30 active PR previews/month, 5–15 build minutes each, fewer than 20 fixture users, under 1 GiB Firestore/Storage, under free-tier request/operation ranges where shared billing permits, and aggressive cleanup.
+All figures are planning estimates, not commitments or guaranteed caps. Currency is CAD planning range; Google list prices are generally billed in account currency and vary by region/exchange rate. Assumptions: Montréal, request-based Cloud Run, min 0/max 1 per PR, 10–30 active PR previews/month, one immutable build per SHA at 5–15 build minutes, no more than three retained revisions per active PR, seven retained images per service line for 14 days, fewer than 20 fixture users, under 1 GiB Firestore/Storage, fewer than 50,000 Firestore reads and 20,000 writes per active day, under 1 GiB/month Preview egress, under 1 GiB/day structured logs with seven-day retention, existing Vercel capacity, no incremental Terraform Cloud workspace/seat charge, and aggressive cleanup.
 
 Official references: [Cloud Run pricing](https://cloud.google.com/run/pricing), [Cloud Build pricing](https://cloud.google.com/build/pricing), [Artifact Registry pricing](https://cloud.google.com/artifact-registry/pricing), [Firebase pricing](https://firebase.google.com/pricing), and [Firestore billing](https://firebase.google.com/docs/firestore/pricing). Free tiers are billing-account scoped in several products and must not be treated as guaranteed zero cost.
 
@@ -32,3 +32,5 @@ One-time engineering/setup effort is excluded from cloud spend. Per-PR increment
 - Retention: min 0/max 1; three revisions per active PR; seven images per service line/14 days; logs seven days; run metadata 30 days; fixtures seven days; approved defect holds at most 30 days.
 
 Billing owner reviews actuals weekly during rollout and recalibrates after 30 days. Budget alerts are detective, not a guaranteed spend cap.
+
+Provider pricing, free-tier availability, currency conversion, applicable taxes, Vercel plan limits, and Terraform Cloud workspace or seat charges can change. The billing owner must revalidate all of them immediately before implementation authorization and replace these ranges if actual plan or tax evidence differs.

@@ -2,7 +2,7 @@
 
 ## Decision
 
-The planning package is implementation-ready as an architecture and authorization baseline, but Phase B itself is **not ready to authorize today**. Administrative ownership, Terraform Cloud authority/state isolation, permanent project choice, and separate runtime fixes for production coupling must be resolved first.
+The planning package is ready for governance review as an architecture and authorization baseline, but Phase B itself is **not ready to authorize today**. Administrative ownership, Terraform Cloud authority/state isolation, permanent project choice, and separate runtime fixes for production coupling must be resolved first.
 
 ## What Phase B would create and why
 
@@ -20,7 +20,7 @@ Security boundaries: no production identity/data/configuration, static keys, pub
 
 ## Cost and stages
 
-Expected cloud spend is CAD 0–20 idle and CAD 10–60 in a normal active month, approximately CAD 0.25–2.00 per active PR, with a CAD 100 monthly ceiling and CAD 15/day anomaly stop. Existing Vercel/Terraform plan impacts require owner confirmation.
+Planning estimates are CAD 0–20 idle and CAD 10–60 in a normal active month, approximately CAD 0.25–2.00 per active PR, with a proposed CAD 100 monthly ceiling and CAD 15/day anomaly stop. These are not commitments; pricing, plan limits, exchange rates, and taxes require revalidation. Existing Vercel/Terraform plan impacts require owner confirmation.
 
 Implement only via B0–B10: approvals; project/budget; Terraform state/APIs; deployment identity; Cloud Run; Vercel bridge; Auth/data; fixtures; provider suppression; role QA; then PR #1435 validation readiness. Every stage is separately authorized and reversible.
 
@@ -30,4 +30,4 @@ Name all operational owners; choose/review the permanent project; prove Terrafor
 
 ## Next mission
 
-Recommend a docs-only B0 administrative-prerequisites evidence package after owners agree to proceed. No implementation PR should begin before that package is approved. This work made no infrastructure, IAM, Vercel, Firebase, runtime, PR #1435, or Operational Credits change.
+Recommend a docs-only B0 administrative-prerequisites evidence package after owners agree to proceed. B0 must name accountable owners, decide project placement/reuse, prove isolated Terraform state authority, approve billing and budget controls, revalidate Vercel trust claims, and document incident/break-glass authority. No implementation PR should begin before that package is approved. This work made no infrastructure, IAM, Vercel, Firebase, runtime, PR #1435, or Operational Credits change.

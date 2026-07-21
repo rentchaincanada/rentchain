@@ -32,6 +32,13 @@ flowchart LR
 
 The repository treats the current Vercel/API/Firestore path as production. Preview and production are not presently separated end to end. The highest-risk couplings are hard-coded API rewrites, hard-coded Firebase project selection, provider-required production startup, public Cloud Run defaults in deployment files, and scripts that can write non-emulator Firestore with explicit overrides.
 
+## Evidence classification
+
+- **Confirmed repository facts:** the file-level observations in the topology table, including the Vercel rewrite target, explicit Firebase project selection, required production provider variables, public Cloud Run deployment defaults, and absence of a repository-visible isolated Terraform state declaration.
+- **Architectural inference:** those facts mean the current repository configuration cannot demonstrate a fully isolated authenticated Preview path. This is a risk conclusion, not proof that every deployed console setting matches the checked-in defaults.
+- **Recommendation:** introduce the isolated hybrid architecture and gates defined by this package; recommendations do not describe current behavior or grant implementation authority.
+- **Unresolved administrative facts:** actual Terraform Cloud workspace ownership/settings, organization/folder authority, billing ownership, Vercel administration, deployed-resource inventory, and project-reuse approval require independently supplied console or owner evidence.
+
 ## What already exists
 
 - Vercel Preview deployment and a server-function proxy seam.
