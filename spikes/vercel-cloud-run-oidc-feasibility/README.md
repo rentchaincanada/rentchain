@@ -16,11 +16,18 @@ The authorized deployment constraints are:
 - maximum CAD 10 incremental cost; and
 - teardown within 24 hours.
 
-## Identity-bridge checkpoint
+## Identity-bridge result
 
-The bounded non-production resources were created and reviewed through the first controlled Vercel Preview exchange attempt. The retained configuration remains limited to one IAM-protected hello service, one service-level invoker binding, one Workload Identity Pool and provider, and one exact-subject Workload Identity User binding. Both service accounts have zero user-managed keys.
+The first controlled Vercel Preview exchange attempt reached Google Security Token Service and was rejected because the implementation used one audience representation for two distinct protocol boundaries. No federated access token was issued during that attempt, and no IAM change followed it.
 
-The exact-head Preview route acquired a short-lived Vercel OIDC assertion, then Google Security Token Service rejected the exchange with HTTP 400. No federated access token was issued, so service-account impersonation, Google ID-token generation, and authenticated Cloud Run invocation were not attempted. No IAM change or second exchange attempt followed.
+The revised exact-head implementation then validated the complete bounded bridge:
+
+1. Vercel issued a Preview OIDC assertion for the HTTPS Workload Identity Provider audience.
+2. Google Security Token Service accepted the canonical provider resource audience.
+3. The restricted federated identity generated a Google-signed ID token for the exact Cloud Run service audience.
+4. The authenticated Cloud Run request returned only the expected hello evidence.
+
+The positive path passed. Anonymous access, a malformed bearer token, and an intentionally wrong Cloud Run ID-token audience were denied. Both temporary service accounts had zero user-managed keys, federation was restricted to one exact Preview subject, and Cloud Run Invoker was scoped to the single temporary service.
 
 The revised implementation keeps three audience domains separate and derives them from existing Preview-only identifiers:
 
@@ -30,6 +37,10 @@ The revised implementation keeps three audience domains separate and derives the
 
 These values are separately named and tested. The HTTPS and canonical provider audiences are derived from `GCP_PROJECT_NUMBER`, `GCP_WORKLOAD_IDENTITY_POOL_ID`, and `GCP_WORKLOAD_IDENTITY_PROVIDER_ID`; no additional credential or ambiguous shared audience variable is required.
 
-The controlled retry result and final classification are recorded as exact-head PR evidence so this architecture note does not imply an unverified outcome.
+Classification: **Identity bridge validated under bounded non-production conditions**.
 
-This result does not authorize Phase B. Temporary resources remain bounded by the CAD 10 and 24-hour limits and must be removed after the evidence review window.
+## Teardown
+
+The temporary Vercel Preview configuration and manual deployment, Workload Identity Pool and provider, IAM bindings, Cloud Run service and revision, image and Artifact Registry repository, source-bucket read binding, and both spike service accounts were removed on `2026-07-21`. The isolated project was retained without an active spike workload; project deletion or reuse requires separate authorization.
+
+The source and tests in this branch are reusable technical proof and do not require live cloud resources. Without the explicitly supplied spike configuration, the Preview route fails closed. This validation does not cover Firebase Auth, Firestore, authenticated user fixtures, full preview infrastructure, or product workflow QA, and it does not authorize Phase B.
