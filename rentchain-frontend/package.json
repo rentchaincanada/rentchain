@@ -30,6 +30,7 @@
     "check:merge-markers": "bash -lc 'if grep -R \"<<<<<<<\\|=======\\|>>>>>>>\" src; then echo \"Merge markers found\"; exit 1; else echo \"No merge markers found.\"; fi'"
   },
   "dependencies": {
+    "@vercel/oidc": "^3.0.5",
     "axios": "^1.13.2",
     "firebase": "^12.6.0",
     "lucide-react": "^0.562.0",
