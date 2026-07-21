@@ -27,6 +27,6 @@ flowchart LR
 
 Fixture manifests carry owner, schema/seed version, run ID, expected counts, created/expiry timestamps, and cleanup authority. Normal retention is seven days; a defect hold may extend to 30 days with privacy/QA approval. Reset deletes only manifest-owned namespaces/accounts/objects and reseeds; collection-wide deletion is forbidden.
 
-The QA owner owns fixture operations; privacy owner approves schema and any exception; security reviews access/logging; incident responder handles suspected real-data contamination. Any real-data discovery stops QA, revokes access, preserves minimum evidence, deletes/quarantines under privacy direction, and triggers incident review.
+Founder — Paul currently owns fixture operations, privacy/data governance, schema approval, security review, and incident response. This is founder-approved and not independently reviewed. Any exception involving real personal information requires separate written authorization and appropriate legal/privacy review; B0 grants none. Any real-data discovery stops QA, revokes access, preserves minimum evidence, deletes/quarantines under privacy direction, and triggers incident review.
 
-Status: **proposed; privacy, security, and QA approval required; blocking**.
+Status: **founder-approved and internally accepted under solo-founder governance**. Actual Firebase/data resources, fixtures, reset/deletion, and retention enforcement remain unimplemented.

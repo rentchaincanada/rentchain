@@ -9,19 +9,25 @@ B0 converts the architecture approved for governance review in PR #1442 into an 
 ## Evidence versus recommendation
 
 - **Confirmed:** the merged PR #1441 technical proof and teardown; the merged PR #1442 architecture, prohibitions, cost estimates, and B0–B10 sequence; repository configuration findings cited there.
-- **Recommended:** create a new purpose-built Preview project; use the ownership, cost, Terraform, trust, IAM, privacy, and provider policies in this package.
-- **Unresolved and blocking:** named owners, organization placement, billing authority, Terraform Cloud administration/state, Vercel administrative confirmation, project creation authority, and written B1 authorization.
+- **Founder-approved policy:** create a new purpose-built Preview project and use the ownership, cost, Terraform, trust, IAM, privacy, and provider policies in this package under disclosed solo-founder governance.
+- **Pending implementation/confirmation facts:** final project-ID availability and placement, billing attachment, budget/alerts, Terraform Cloud configuration, Vercel trust, IAM, Firebase, provider suppression, fixtures, cost revalidation, and separate written B1 authorization.
+
+## Solo-founder governance disclosure
+
+RentChain is presently operated by a solo founder. Administrative, engineering, security, billing, QA, infrastructure, privacy, provider, incident-response, and emergency-access responsibilities are therefore consolidated under **Founder — Paul**. This is an accepted early-stage operating constraint, not independent separation of duties. RentChain will separate implementation, approval, security review, billing oversight, and emergency-access responsibilities as qualified personnel or external reviewers become available and as risk requires.
+
+Founder approval is classified as `founder-approved`, `internally accepted under solo-founder governance`, and `not independently reviewed`. Bounded non-production work may be implemented and approved by the Founder only with written advance scope, production prohibition, keyless least privilege, reversibility, cost ceilings, passing automated checks, exact-head evidence, defined rollback/teardown, and no overridden substantive failure. External or second-person review is mandatory for the triggers in the [ownership model](phase-b-b0-ownership-and-raci.md).
 
 ## Gate outcome
 
-B0 is not complete merely because these templates exist. Every blocking checklist item requires independently reviewable, non-sensitive evidence and owner acceptance. Blank, self-approved, stale, or contradictory evidence means defer.
+The Founder has accepted all current accountable roles and the policies in this package. B0 policy and ownership are complete under solo-founder governance. Planned configuration is not implemented evidence. B1 is administratively ready for a **separate written authorization**, but this direction does not authorize or start B1.
 
 ```mermaid
 flowchart LR
   E[PR 1441 and 1442 evidence] --> P[B0 policies and registers]
   P --> O[Named owner acceptance]
-  P --> A[Executive security billing admin approvals]
-  O --> R{All blockers closed?}
+  P --> A[Founder policy acceptance under disclosed solo-founder governance]
+  O --> R{Policy accepted and implementation facts scoped?}
   A --> R
   R -->|No| D[Defer B1]
   R -->|Yes| S[Separate written B1 authorization request]

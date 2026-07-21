@@ -4,6 +4,8 @@
 
 No static keys, production service-account reuse, wildcard federation, project-wide Cloud Run Invoker, public Cloud Run, browser-held Google credentials, automation Owner/Editor, or routine break-glass use. Separate deployment, runtime, invocation, seeding, and cleanup identities. Prefer service/resource scope, least privilege, explicit ownership, expiry, and quarterly binding review.
 
+This policy is founder-approved, not an independent security certification. Founder — Paul is the current cloud administrator, security reviewer, and break-glass custodian. Broad principal-set trust also requires separate justification and approval; production fallback is prohibited.
+
 | Principal category | Proposed resource/role capability | Scope/justification | Owner/approval | Prohibited expansion |
 | --- | --- | --- | --- | --- |
 | GitHub deploy WIF | repository writer and minimal deploy capability | one Preview registry/project; immutable exact-head deploy | engineering owner; security/cloud approval | production, Owner/Editor |
@@ -20,4 +22,6 @@ Security approval is required for every WIF claim/condition, service-account imp
 
 Review bindings quarterly and after incidents, owner departure, trust changes, or project lifecycle events. Evidence records principal category, resource, role, condition, approvers, expiry, test, and revocation result without credentials.
 
-Status: **proposed; security and cloud administrator approval required; blocking**.
+Break-glass is never routine. Each use records purpose, time, scope, actions, outcome, temporary privilege removal, and post-event review; credentials remain keyless where possible. A qualified secondary custodian is prioritized when available.
+
+Status: **founder-approved and internally accepted under solo-founder governance; not independently reviewed**. No IAM grant exists or is authorized by B0.

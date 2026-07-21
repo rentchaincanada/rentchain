@@ -1,6 +1,6 @@
 # Phase B B0 Vercel Trust and Privileged Preview Policy
 
-## Eligibility
+## Founder-approved eligibility
 
 | Deployment source | Privileged backend/fixtures | Rule |
 | --- | --- | --- |
@@ -27,8 +27,8 @@ flowchart TD
 
 Team owner `rent-chain`, project `rentchain`, Team issuer `https://oidc.vercel.com/rent-chain`, environment `preview`, expected audience, and exact subject/attribute conditions require revalidation from current Vercel token documentation/evidence before implementation. PR #1441 proved the bounded pattern; its subject did not distinguish every PR, so eligibility must also be enforced by trusted deployment orchestration, protected environment approval, and exact backend mapping.
 
-Only named Vercel administrators may edit Preview variables, OIDC, protection, or domain settings. Security approves trust changes; engineering may authorize a trusted PR only after review policy; release authority controls promotion; security/Vercel admins revoke trust. No one may self-approve a trust widening they implement.
+Founder — Paul currently owns trusted-PR designation, Preview variables, OIDC, deployment protection, promotion, and trust revocation. This manual control is internally accepted under solo-founder governance and is not independently approved. External review is required when a mandatory trigger applies.
 
 Server-only variables are Preview-scoped and never exposed to browser bundles. The proxy accepts no client-selected origin. Preview domains map through a trusted deployment ID/SHA manifest. Revocation disables mapping, removes service-level invocation binding, invalidates the deployment, and records evidence.
 
-Status: **recommended; Vercel administrator and security confirmation required; blocking**.
+Status: **founder-approved policy; not independently reviewed**. Actual Vercel trust/configuration and current claim validation remain unimplemented technical facts.

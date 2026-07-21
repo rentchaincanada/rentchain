@@ -1,6 +1,6 @@
 # Phase B B0 Terraform Authority
 
-Repository evidence does not prove Terraform Cloud organization ownership, workspace configuration, state separation, variable authority, or recovery controls. No Terraform change is authorized.
+Founder-approved policy requires isolated Preview/production state and a dedicated workspace or equivalent boundary. Repository evidence still does not prove actual Terraform Cloud organization ownership, workspace configuration, state, variables, or recovery controls. No Terraform change is authorized.
 
 ## Proposed authority model
 
@@ -31,10 +31,10 @@ flowchart LR
 | Audit logs | Retain per enterprise policy; minimum recommendation 365 days, subject to legal/security approval. |
 | Break glass | Time-bound, dual-approved, monitored, retrospective required. |
 
-Prohibited: shared Preview/production state, unmanaged local production state, committed secrets, broad workspace access, untrusted automatic applies, or one person silently authoring/approving/applying privileged changes where avoidable.
+Prohibited: shared Preview/production state, unmanaged local production state, committed secrets, broad workspace access, untrusted automatic applies, or undocumented plan/apply/destroy events. Founder — Paul currently holds owner and approver roles; this is not independent separation. Compensating controls are saved plans, exact-head verification, passing CI, bounded written scope/approval, drift review, and post-action evidence. Independent review is mandatory when a trigger in the ownership policy applies.
 
 ## Evidence before B1/B2
 
 Before B1: organization/account owner attestation, proposed workspace/state owner, production-separation diagram, and import/no-reuse decision. Before B2: actual workspace ID (kept out of public docs if sensitive), permissions export, variable ownership, lock/recovery proof, plan/apply/destroy workflow, audit retention, and approved no-op baseline plan.
 
-Status: **unresolved blocker; administrator confirmation required**.
+Status: **policy founder-approved; not independently reviewed**. Workspace/state creation, permissions, locks, imports, and recovery remain unimplemented facts. B0 creates no workspace; B1 includes none unless separately enumerated.

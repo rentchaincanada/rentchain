@@ -2,6 +2,8 @@
 
 Provider access is deny-by-default. A real non-production provider account always requires separate written authorization; B0 does not grant it.
 
+Founder — Paul is the current provider-suppression approver. This is not independent review. Every real connection request must specify provider, environment/account, purpose, data, operations, cost cap, owner, keyless/credential model, expiry, logging, negative tests, rollback, incident response, and proof production customers cannot be affected.
+
 | Category | Default | Exception authority / maximum scope | Evidence, expiry, logging, rollback |
 | --- | --- | --- | --- |
 | Certn/screening | stubbed state | security, product, privacy; synthetic sandbox case only | test plan, cost/data review, ≤7 days; reason/status only; revoke credentials/disable adapter |
@@ -30,4 +32,4 @@ flowchart LR
   M -->|incident| I[Immediate disable and incident response]
 ```
 
-Status: **policy recommended; named exception authority and approvals unresolved/blocking**.
+Status: **founder-approved policy; not independently reviewed**. No provider exception, credential, account, stub, sink, or integration is approved or implemented by B0.

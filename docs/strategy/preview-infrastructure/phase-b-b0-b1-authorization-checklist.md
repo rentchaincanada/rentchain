@@ -1,31 +1,24 @@
 # Phase B B0-to-B1 Authorization Checklist
 
-> Current package status: **B1 not authorized**. Default every incomplete item to blocking.
+> Current package status: **B0 policy and ownership complete under solo-founder governance; B1 administratively ready for separate authorization; B1 not authorized**.
 
 | Prerequisite | Current classification | Evidence required |
 | --- | --- | --- |
-| Project option and naming approved | Proposed / blocking | executive, security, cloud decision |
-| Organization/folder placement approved | Unresolved / blocking | organization administrator confirmation |
-| Billing account attachment approved | Unresolved / blocking | billing-owner attestation, no identifier in repo |
-| Budget/thresholds approved | Proposed / blocking | executive/billing approval |
-| Alert recipients assigned | Unresolved / blocking | named owners/backups acceptance |
-| Engineering owner assigned | Unresolved / blocking | written acceptance |
-| Cloud administrator assigned | Unresolved / blocking | written/admin authority evidence |
-| Security reviewer assigned | Unresolved / blocking | written acceptance |
-| QA owner assigned | Unresolved / blocking | written acceptance |
-| Terraform owner and approver assigned | Unresolved / blocking | TFC authority evidence |
-| Vercel administrator assigned | Unresolved / blocking | admin attestation |
-| Incident responder/break glass assigned | Unresolved / blocking | acceptance and procedure |
-| Privacy owner assigned | Unresolved / blocking | written acceptance |
-| IAM principles approved | Proposed / blocking | security/cloud sign-off |
-| Terraform state model approved | Unresolved / blocking | isolated state/workspace evidence |
-| Trusted PR policy approved | Proposed / blocking | engineering/security/Vercel sign-off |
-| Synthetic-data policy approved | Proposed / blocking | privacy/security/QA sign-off |
-| Provider suppression approved | Proposed / blocking | security/product/privacy sign-off |
+| Project option and naming approved | Satisfied / founder-approved | written Founder direction |
+| Organization/folder placement policy | Satisfied / founder-approved | organization-first with documented fallback; actual placement pending B1 |
+| Billing attachment policy | Satisfied / founder-approved | actual attachment pending B1 |
+| Budget/thresholds approved | Satisfied / founder-approved | CAD 100 and CAD 15/day policy |
+| Alert recipient assigned | Satisfied | Founder — Paul; no backup currently |
+| All accountable roles assigned | Satisfied | Founder — Paul accepted all roles; not independent |
+| IAM principles approved | Satisfied / founder-approved | policy only; grants pending |
+| Terraform state model approved | Satisfied / founder-approved | isolated-state policy; workspace pending |
+| Trusted PR policy approved | Satisfied / founder-approved | manual solo-founder trust; implementation pending |
+| Synthetic-data policy approved | Satisfied / founder-approved | policy only; fixtures pending |
+| Provider suppression approved | Satisfied / founder-approved | policy only; gates pending |
 | Cost model revalidated | Deferred / blocking | current prices, plans, tax, exchange evidence |
-| Production fallback prohibition accepted | Recommended / blocking | executive/engineering/security sign-off |
-| Rollback/deletion authority defined | Unresolved / blocking | named authority and evidence procedure |
-| B1 sequence/scope approved | Proposed / blocking | approved mission with exact resource list |
+| Production fallback prohibition accepted | Satisfied / founder-approved | no exception inside Phase B |
+| Rollback/deletion authority defined | Satisfied | Founder current authority; written evidence required per action |
+| B1 sequence/scope approved | Satisfied as proposed boundary | exact mission/resource list still required |
 | Separate B1 authorization issued | Deferred / blocking | explicit operator authorization |
 
-No checklist item is satisfied by this document alone. B1 must stop after project/billing/labels/budgets/ownership/placement evidence. Enabling APIs is assigned to B2. B1 may not create Terraform Cloud workspaces, Cloud Run, WIF, service accounts, Vercel changes, Firebase, Firestore, Storage, fixtures, providers, or QA.
+The Founder direction supplies policy acceptance and role evidence; it does not supply implementation evidence. Cost revalidation and separate written B1 authorization remain blocking before execution. B1 must stop after project/billing/labels/budgets/ownership/placement evidence. Enabling APIs is assigned to B2 unless a future B1 authorization enumerates a minimal list. B1 may not create Terraform Cloud workspaces, Cloud Run, WIF, service accounts, Vercel changes, Firebase, Firestore, Storage, fixtures, providers, or QA.

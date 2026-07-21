@@ -10,7 +10,7 @@
 
 ## Recommendation
 
-Create a new project only in a separately authorized B1. Proposed display name: `RentChain Shared Preview`. Proposed immutable project-ID convention: `rentchain-preview-<approved-suffix>`; the final globally available ID must be recorded before creation. Do not rename, reuse, or delete `rentchain-boundedoidc` in B0.
+Founder-approved policy: create a new project only in a separately authorized B1. Proposed display name: `RentChain Shared Preview`. Proposed immutable project-ID convention: `rentchain-preview-<approved-suffix>`; the final globally available ID remains subject to availability and must be recorded before creation. Do not reuse `rentchain-boundedoidc` as the permanent environment, and do not rename or delete it in B0.
 
 Preferred hierarchy: RentChain organization → existing approved non-production folder → project → approved billing account. If folder creation/placement authority is unavailable, place the dedicated project directly under the organization with inherited policies and a documented exception; do not weaken organization policy.
 
@@ -29,4 +29,4 @@ The project may not trust, impersonate, read, write, route to, copy from, or sha
 - Terraform owner confirms clean state adoption and no production state reference.
 - Recovery/deletion owner documents deletion hold, recovery expectations, and evidence retention.
 
-Status: **recommended; unresolved blocker until approvals exist**.
+Status: **founder-approved and internally accepted under solo-founder governance; not independently reviewed**. Organization placement, final project-ID availability, project creation, billing attachment, and Terraform adoption remain implementation facts for later confirmation. No project action occurred.

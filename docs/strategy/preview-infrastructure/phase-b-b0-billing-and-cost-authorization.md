@@ -1,10 +1,10 @@
 # Phase B B0 Billing and Cost Authorization
 
-## Proposed decision
+## Founder-approved decision
 
 These are planning estimates, not commitments: CAD 0–20/month idle, CAD 10–60 normal active, approximately CAD 0.25–2.00 per active PR, CAD 100 proposed monthly ceiling, and CAD 15/day abnormal-use threshold. Provider prices, exchange rates, taxes, free tiers, Vercel limits, and Terraform Cloud charges must be revalidated immediately before B1.
 
-Tax treatment is **unresolved**; estimates exclude tax unless the billing owner documents otherwise.
+Tax treatment remains to be confirmed before B1; estimates exclude tax unless documented otherwise. Founder — Paul is the current billing owner, alert recipient, escalation owner, and workload-stop authority.
 
 ## Alerts and authority
 
@@ -34,4 +34,6 @@ flowchart LR
 
 Required recipients: named billing, engineering, cloud, executive, and incident owners plus backups. Review weekly during rollout and monthly thereafter. Every resource must carry environment, owner, cost-center, lifecycle, and phase labels. Unexpected cost triage records service/SKU, date, authorized workload, retained resources, suspected abuse, containment, forecast, and closure without exposing billing identifiers.
 
-Status: **requires billing and executive approval; blocking**.
+Any increase above CAD 100/month requires new written Founder approval. Any day above CAD 15 requires a documented continue, reduce, or stop decision. Alerts are informational, never automatic spending caps.
+
+Status: **founder-approved, internally accepted under solo-founder governance, not independently reviewed**. Actual billing attachment, budget creation, recipients, tax, and current pricing remain implementation/confirmation facts.
