@@ -4,7 +4,7 @@ import {
   PreviewAuthBridgeError,
   readPreviewAuthConfig,
   runPreviewAuthBridge,
-} from "../../api/previewAuthBridge";
+} from "../../server/previewAuthBridge";
 
 const config = {
   gcpAudience: "provider-audience",

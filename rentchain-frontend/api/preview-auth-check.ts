@@ -4,7 +4,7 @@ import {
   PreviewAuthBridgeError,
   readPreviewAuthConfig,
   runPreviewAuthBridge,
-} from "./previewAuthBridge.js";
+} from "../server/previewAuthBridge.js";
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Cache-Control", "no-store");
