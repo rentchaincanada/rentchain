@@ -2,6 +2,8 @@
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd "$root_dir/../../.." && pwd)"
+workflow_file="$repo_dir/.github/workflows/preview-deployment-identity-validation.yml"
 
 expected_resources="$(cat <<'EOF'
 google_iam_workload_identity_pool
@@ -56,6 +58,21 @@ test "$(rg -No '"(resourcemanager.projects.get|serviceusage.services.get|service
 
 if rg -n 'roles/(owner|editor|run\.admin|artifactregistry\.writer|cloudbuild\.builds\.editor|iam\.serviceAccountTokenCreator|iam\.serviceAccountUser|storage\.admin)|google_service_account_key|principalSet://.*/workloadIdentityPools/github-preview-deploy/\*' "$root_dir" --glob '*.tf'; then
   echo "Broad deployment permission, static key, or wildcard federation found" >&2
+  exit 1
+fi
+
+rg -q '^  workflow_dispatch:$' "$workflow_file"
+rg -q '^  contents: read$' "$workflow_file"
+rg -q '^  id-token: write$' "$workflow_file"
+rg -q "github.repository == 'rentchaincanada/rentchain'" "$workflow_file"
+rg -q "github.ref == 'refs/heads/main'" "$workflow_file"
+rg -q "github.event_name == 'workflow_dispatch'" "$workflow_file"
+rg -q 'workload_identity_provider: projects/501298948635/locations/global/workloadIdentityPools/github-preview-deploy/providers/github' "$workflow_file"
+rg -q 'service_account: github-preview-deploy@rentchain-preview.iam.gserviceaccount.com' "$workflow_file"
+rg -q 'gcloud projects describe rentchain-preview' "$workflow_file"
+
+if rg -n '^  (push|pull_request|schedule):|gcloud (run|builds|artifacts|iam|projects add-iam-policy-binding)|docker (build|push)|terraform (apply|destroy)' "$workflow_file"; then
+  echo "Untrusted trigger or mutation command found in B3 validation workflow" >&2
   exit 1
 fi
 

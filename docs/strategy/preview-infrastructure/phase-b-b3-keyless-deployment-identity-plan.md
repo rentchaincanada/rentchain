@@ -152,7 +152,36 @@ This PR supplies configuration proof only. It does not manufacture a JWT or clai
 
 ## Terraform plan evidence
 
-To be recorded after the exact HCP plan is generated. The expected change is six additions, zero changes, and zero destroys. Any API, workload, billing, production, broad-IAM, key, change, destroy, or import action blocks B3.
+The immutable Terraform source commit is:
+
+`997144d239e34dbe7d7d87c65a4d0178d905ff1c`
+
+The exact confirmable HCP plan is:
+
+| Evidence | Value |
+| --- | --- |
+| Run | `run-ccC8nZHromtvHT6i` |
+| Configuration version | `cv-dTzxEtbX1jAZKXgv` |
+| Plan | `plan-BhfLLoGjGf4xQFUq` |
+| Workspace | `rentchain-preview-foundation` / `ws-ebtKQ2gkLZuoRis4` |
+| Status | `planned` and confirmable |
+| Auto-apply | Off |
+| Result | `6 to add, 0 to change, 0 to destroy, 0 to import` |
+
+The six create actions are exactly:
+
+```text
+google_iam_workload_identity_pool.github_preview_deploy
+google_iam_workload_identity_pool_provider.github
+google_project_iam_custom_role.github_preview_deployment_inspector
+google_project_iam_member.github_preview_deployment_inspector
+google_service_account.github_preview_deploy
+google_service_account_iam_member.github_preview_deploy_federation
+```
+
+The existing three `google_project_service.approved_management` addresses are no-ops. Every planned resource targets `rentchain-preview`; no API, workload, billing, production, broad-IAM, key, change, destroy, or import action appears.
+
+A preceding CLI validation run, `run-4kMm7ZhzWy1fMYgm`, produced the same six-resource plan but was speculative and non-confirmable. It is not eligible for approval or apply. No state or cloud resource resulted from that validation run.
 
 No apply is authorized by this document or PR.
 
@@ -178,14 +207,15 @@ Any B3-only API removal would require a dependency review, but B3 proposes no AP
 
 ## Blockers and approval boundary
 
-- The exact HCP plan must pass and contain only the six proposed B3 resources.
-- The HCP apply identity requires separately verified least-privilege permissions for those exact resource types before an apply can be authorized.
+- The exact HCP plan passed and contains only the six proposed B3 resources.
+- The current HCP apply custom role contains only project inspection and Service Usage permissions. It cannot create the planned WIF, service-account, custom-role, or IAM-member resources.
+- A separately authorized least-privilege HCP plan/apply role expansion must be designed, reviewed, and validated before this run can be considered for apply approval. It must not add Owner, Editor, IAM Admin, wildcard, production, workload-deployment, or static-key capability.
 - Founder approval must name the exact immutable HCP run and configuration version.
 - Runtime validation and negative runtime evidence occur only after apply.
 - B4 deployment permissions and workload resources remain separately unauthorized.
 
 ## Classification
 
-Pending exact-plan verification: **B3 awaiting controlled apply** if the plan matches; otherwise **B3 identity requires revision** or **B3 blocked**.
+**B3 blocked** pending a separately authorized least-privilege HCP Terraform plan/apply permission expansion. The B3 deployment identity configuration and exact plan are valid, but the exact run must not be applied with the current HCP apply role.
 
 No workload was deployed. B4 did not begin. PR #1435 remains unchanged, draft, and on hold.

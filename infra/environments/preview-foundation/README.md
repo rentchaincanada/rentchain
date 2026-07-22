@@ -60,4 +60,4 @@ The API resources use `prevent_destroy` and do not disable services on destroy. 
 
 ## Current classification
 
-B2 controlled apply is complete. B3 code and exact-plan review are authorized, but B3 apply is not. No workload deployment is authorized, B4 has not begun, and PR #1435 remains unchanged and on hold pending authenticated Preview infrastructure.
+B2 controlled apply is complete. The B3 exact plan proposes only the six bounded identity resources, but B3 is blocked because the current HCP apply role cannot create those resource types. A separately authorized least-privilege HCP plan/apply permission expansion is required before apply approval. No workload deployment is authorized, B4 has not begun, and PR #1435 remains unchanged and on hold pending authenticated Preview infrastructure.
