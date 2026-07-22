@@ -10,6 +10,11 @@ This is the isolated Phase B B2 Terraform root for the permanent `rentchain-prev
 - Workflow: CLI-driven
 - Execution mode: Remote
 - State: isolated from production
+- Resources/state objects: zero
+- Configuration uploaded: none
+- VCS connection: none
+- Google credentials: none
+- Production-state connection: none
 - Auto-apply: off
 - Auto-destroy: off
 - Apply and destroy authority: Founder — Paul, with explicit confirmation
@@ -30,7 +35,9 @@ IAM Credentials and Security Token Service are excluded because no keyless Terra
 
 ## Authentication and execution boundary
 
-No Google credentials, service account, IAM binding, Workload Identity pool/provider, key, or environment-derived fallback is configured. HCP Terraform therefore cannot create a cloud-backed plan or apply until a separately authorized keyless planning identity exists.
+No Google credentials, service account, IAM binding, Workload Identity pool/provider, key, or environment-derived fallback is configured. HCP Terraform therefore cannot complete remote initialization, provider-backed validation, planning, or apply until a separately authorized keyless planning identity exists.
+
+The preferred future authentication model is HCP Terraform workload identity → Google Workload Identity Federation → a narrowly scoped Preview Terraform planning/apply identity → short-lived credentials. That path is a separate mission and is not implemented here. Service-account JSON keys, production credentials, wildcard federation, production project access, and automatic apply are prohibited.
 
 Static credentials are prohibited. Local state must never become authoritative. Plans and applies belong only to the fixed HCP workspace. Auto-apply and auto-destroy remain off.
 

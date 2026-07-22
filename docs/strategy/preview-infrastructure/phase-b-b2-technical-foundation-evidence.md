@@ -15,7 +15,7 @@ The Founder supplied and Codex reconfirmed the following before implementation:
 - approved Preview labels and CAD 100 monthly planning ceiling;
 - no custom service accounts, buckets, Cloud Run workload, Artifact Registry repository, or Phase B workload API intentionally enabled;
 - HCP Terraform organization `Rentchain`, project `RentChain Preview`, workspace `rentchain-preview-foundation`;
-- CLI-driven remote execution, zero resources/configuration, no production state or VCS connection, and auto-apply/auto-destroy off.
+- CLI-driven remote execution, zero resources/state objects, no uploaded configuration, no production state or VCS connection, no Google credentials, and auto-apply/auto-destroy off.
 
 New Google projects contain default Google-managed services. They are not represented as Phase B workload enablement or managed by this root. The B2 allowlist concerns only services intentionally proposed by this configuration.
 
@@ -37,7 +37,9 @@ No API has been enabled by this PR. IAM Credentials and Security Token Service r
 
 ## Authentication status
 
-The root contains no static credential path or cloud identity resource. HCP Terraform has no authorized Google identity in this stage, so no cloud-backed remote plan or apply is permitted. The next dependency is a separately authorized, least-privilege, keyless Terraform planning identity design and exact IAM review.
+The root contains no static credential path or cloud identity resource. HCP Terraform has no authorized Google identity in this stage, so remote initialization, provider-backed validation, planning, and apply remain blocked.
+
+The preferred future authentication model is HCP Terraform workload identity → Google Workload Identity Federation → a narrowly scoped Preview Terraform planning/apply identity → short-lived credentials. The next dependency is a separately authorized design and exact IAM review for that bounded path. No service-account JSON key, production credential, wildcard federation, production project access, or automatic apply is permitted.
 
 ## Apply and destroy controls
 
