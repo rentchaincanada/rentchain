@@ -1,0 +1,14 @@
+project_id     = "rentchain-preview"
+project_number = "501298948635"
+environment    = "preview"
+
+baseline_labels = {
+  environment = "preview"
+  lifecycle   = "permanent"
+  managed-by  = "terraform"
+  owner       = "founder"
+  platform    = "rentchain"
+  purpose     = "shared-preview"
+}
+
+monthly_planning_ceiling_cad = 100
