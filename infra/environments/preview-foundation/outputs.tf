@@ -14,3 +14,14 @@ output "proposed_management_services" {
   value       = sort(tolist(local.approved_management_services))
   sensitive   = false
 }
+
+output "github_preview_deployment_identity" {
+  description = "Non-sensitive identifiers for the B3 keyless Preview deployment identity."
+  value = {
+    workload_identity_provider = google_iam_workload_identity_pool_provider.github.name
+    service_account_email      = google_service_account.github_preview_deploy.email
+    trusted_repository         = local.github_repository
+    trusted_workflow           = local.github_trusted_workflow
+  }
+  sensitive = false
+}
