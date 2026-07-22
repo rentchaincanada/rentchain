@@ -4,6 +4,7 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 repo_dir="$(cd "$root_dir/../../.." && pwd)"
 workflow_file="$repo_dir/.github/workflows/preview-deployment-identity-validation.yml"
+apply_permissions_file="$root_dir/tests/hcp_apply_permissions.txt"
 
 expected_resources="$(cat <<'EOF'
 google_iam_workload_identity_pool
@@ -55,6 +56,38 @@ rg -q 'assertion.job_workflow_ref ==' "$root_dir/deployment_identity.tf"
 rg -q 'principal://iam.googleapis.com/projects/.*subject/' "$root_dir/deployment_identity.tf"
 
 test "$(rg -No '"(resourcemanager.projects.get|serviceusage.services.get|serviceusage.services.list)"' "$root_dir/deployment_identity.tf" | sort -u | wc -l | tr -d ' ')" = "3"
+
+expected_apply_permissions="$(cat <<'EOF'
+iam.googleapis.com/workloadIdentityPoolProviders.create
+iam.googleapis.com/workloadIdentityPoolProviders.get
+iam.googleapis.com/workloadIdentityPools.create
+iam.googleapis.com/workloadIdentityPools.get
+iam.roles.create
+iam.roles.get
+iam.serviceAccounts.create
+iam.serviceAccounts.get
+iam.serviceAccounts.getIamPolicy
+iam.serviceAccounts.setIamPolicy
+resourcemanager.projects.get
+resourcemanager.projects.getIamPolicy
+resourcemanager.projects.setIamPolicy
+serviceusage.services.enable
+serviceusage.services.get
+serviceusage.services.list
+EOF
+)"
+test "$(sort -u "$apply_permissions_file")" = "$expected_apply_permissions"
+test "$(wc -l < "$apply_permissions_file" | tr -d ' ')" = "16"
+
+if rg -n '(delete|undelete|update|workloadIdentityPools\.list|workloadIdentityPoolProviders\.list|serviceAccounts\.list|roles\.list|serviceAccountKeys|signBlob|signJwt|getAccessToken|generateAccessToken|run\.|artifactregistry\.|cloudbuild\.|storage\.|firebase|firestore|billing|setOrgPolicy)' "$apply_permissions_file"; then
+  echo "Forbidden HCP apply permission found" >&2
+  exit 1
+fi
+
+if rg -n 'project-0d9658de-af29-4dc0-a99|production' "$apply_permissions_file"; then
+  echo "Production reference found in HCP apply permission allowlist" >&2
+  exit 1
+fi
 
 if rg -n 'roles/(owner|editor|run\.admin|artifactregistry\.writer|cloudbuild\.builds\.editor|iam\.serviceAccountTokenCreator|iam\.serviceAccountUser|storage\.admin)|google_service_account_key|principalSet://.*/workloadIdentityPools/github-preview-deploy/\*' "$root_dir" --glob '*.tf'; then
   echo "Broad deployment permission, static key, or wildcard federation found" >&2

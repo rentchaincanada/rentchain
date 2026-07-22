@@ -185,6 +185,43 @@ A preceding CLI validation run, `run-4kMm7ZhzWy1fMYgm`, produced the same six-re
 
 No apply is authorized by this document or PR.
 
+## HCP apply permission audit
+
+The locked HashiCorp Google provider version is `6.50.0`. Its exact create paths for the six planned resources were inspected before changing IAM. The provider creates each resource and then reads it. The two IAM member resources use read-modify-write policy operations. The custom-role create path also reads the requested role ID first so it can distinguish absence from a soft-deleted role.
+
+The target pool, deployment service account, and deployment-inspector role were independently confirmed absent before the permission change. That absence makes update and undelete branches inapplicable to this exact plan. Provider source inspection found no list call in any exact create/read path.
+
+The existing four apply permissions are preserved. The exact 12-permission addition is:
+
+- `iam.googleapis.com/workloadIdentityPools.create`;
+- `iam.googleapis.com/workloadIdentityPools.get`;
+- `iam.googleapis.com/workloadIdentityPoolProviders.create`;
+- `iam.googleapis.com/workloadIdentityPoolProviders.get`;
+- `iam.serviceAccounts.create`;
+- `iam.serviceAccounts.get`;
+- `iam.serviceAccounts.getIamPolicy`;
+- `iam.serviceAccounts.setIamPolicy`;
+- `iam.roles.create`;
+- `iam.roles.get`;
+- `resourcemanager.projects.getIamPolicy`; and
+- `resourcemanager.projects.setIamPolicy`.
+
+The resulting custom role has exactly the 16 permissions recorded in `infra/environments/preview-foundation/tests/hcp_apply_permissions.txt`.
+
+| Terraform resource | Permission | Purpose and phase | Scope | Residual privilege and narrower-alternative assessment |
+| --- | --- | --- | --- | --- |
+| `google_iam_workload_identity_pool` | `iam.googleapis.com/workloadIdentityPools.create`, `iam.googleapis.com/workloadIdentityPools.get` | Create and post-create read during apply | `rentchain-preview`, global location | Can create/read another pool in Preview while the apply-phase credential exists. IAM cannot restrict these permissions to one future pool ID; exact HCP trust, exact plan review, and manual confirmation are the operational boundary. |
+| `google_iam_workload_identity_pool_provider` | `iam.googleapis.com/workloadIdentityPoolProviders.create`, `iam.googleapis.com/workloadIdentityPoolProviders.get` | Create and post-create read during apply | `github-preview-deploy` pool in `rentchain-preview` | Can create/read another provider under a Preview pool. No narrower custom-role permission exists; exact-plan review is required. |
+| `google_service_account` | `iam.serviceAccounts.create`, `iam.serviceAccounts.get` | Create and post-create read during apply | `rentchain-preview` | Can create/read another Preview service account. Key, token, signing, update, disable, and delete permissions remain absent. |
+| `google_service_account_iam_member` | `iam.serviceAccounts.getIamPolicy`, `iam.serviceAccounts.setIamPolicy` | Read-modify-write the new service account policy during apply | Preview service accounts | Policy setters are sensitive and cannot be constrained to the future account in a project custom role. The exact plan must contain only the exact-subject Workload Identity User member. |
+| `google_project_iam_custom_role` | `iam.roles.get`, `iam.roles.create` | Absence check, create, and post-create read during apply | Project custom roles in `rentchain-preview` | Can create another Preview project role, but cannot update, delete, or undelete one. Exact-plan review is the narrowest available operational constraint. |
+| `google_project_iam_member` | `resourcemanager.projects.getIamPolicy`, `resourcemanager.projects.setIamPolicy` | Read-modify-write the Preview project policy during apply | `rentchain-preview` project | This pair can modify Preview project IAM and is the largest residual capability. Google exposes no role-specific setter for this Terraform resource. It is permitted only for the phase-restricted apply identity and a manually confirmed exact plan. |
+| Existing B2 services | `resourcemanager.projects.get`, `serviceusage.services.get`, `serviceusage.services.list`, `serviceusage.services.enable` | Preserve existing project and managed-service apply behavior | `rentchain-preview` project | No new API is planned by B3; these permissions are unchanged from B2. |
+
+List, update, delete, and undelete permissions are excluded because provider 6.50.0 does not invoke them for the exact absent-resource create path. They would be required only for a separately reviewed configuration update or rollback. The plan identity remains unchanged. A later zero-drift plan after B3 creation may require a separately authorized read-only plan-role expansion; this apply-role mission does not grant it pre-emptively.
+
+Explicitly absent permissions include service-account key creation or upload, access-token generation, signing, Cloud Run, Artifact Registry, Cloud Build, Storage, Firebase, Firestore, billing, organization IAM, project deletion, production access, and all B3 update/delete/undelete operations. No broad predefined role is granted.
+
 ## Cost impact
 
 Workload Identity Federation, service accounts, and IAM policy configuration have no expected direct incremental charge. One manually dispatched validation workflow consumes a small amount of GitHub Actions time. No billable workload or storage is created. Expected incremental Google Cloud cost is approximately CAD 0.
@@ -208,14 +245,15 @@ Any B3-only API removal would require a dependency review, but B3 proposes no AP
 ## Blockers and approval boundary
 
 - The exact HCP plan passed and contains only the six proposed B3 resources.
-- The current HCP apply custom role contains only project inspection and Service Usage permissions. It cannot create the planned WIF, service-account, custom-role, or IAM-member resources.
-- A separately authorized least-privilege HCP plan/apply role expansion must be designed, reviewed, and validated before this run can be considered for apply approval. It must not add Owner, Editor, IAM Admin, wildcard, production, workload-deployment, or static-key capability.
+- The previous exact HCP run predates the reviewed permission-evidence commit and is not eligible for apply approval.
+- The HCP apply custom role expansion is an external administrative prerequisite, not a Terraform-managed B3 resource. It must remain exact, apply-phase restricted, and bound only to `hcp-terraform-preview-apply@rentchain-preview.iam.gserviceaccount.com` on `rentchain-preview`.
+- A fresh plan from the reviewed source head must remain exactly six creates, with no change, destroy, import, API, workload, billing, key, public-access, or production action.
 - Founder approval must name the exact immutable HCP run and configuration version.
 - Runtime validation and negative runtime evidence occur only after apply.
 - B4 deployment permissions and workload resources remain separately unauthorized.
 
 ## Classification
 
-**B3 blocked** pending a separately authorized least-privilege HCP Terraform plan/apply permission expansion. The B3 deployment identity configuration and exact plan are valid, but the exact run must not be applied with the current HCP apply role.
+**B3 permission expansion under validation.** The exact permission model is documented and statically enforced. B3 remains unapplied and cannot advance until the administrative role update, fresh exact plan, and post-change isolation checks succeed.
 
 No workload was deployed. B4 did not begin. PR #1435 remains unchanged, draft, and on hold.

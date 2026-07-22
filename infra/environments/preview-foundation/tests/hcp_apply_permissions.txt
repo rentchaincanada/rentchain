@@ -1,0 +1,16 @@
+iam.googleapis.com/workloadIdentityPoolProviders.create
+iam.googleapis.com/workloadIdentityPoolProviders.get
+iam.googleapis.com/workloadIdentityPools.create
+iam.googleapis.com/workloadIdentityPools.get
+iam.roles.create
+iam.roles.get
+iam.serviceAccounts.create
+iam.serviceAccounts.get
+iam.serviceAccounts.getIamPolicy
+iam.serviceAccounts.setIamPolicy
+resourcemanager.projects.get
+resourcemanager.projects.getIamPolicy
+resourcemanager.projects.setIamPolicy
+serviceusage.services.enable
+serviceusage.services.get
+serviceusage.services.list
