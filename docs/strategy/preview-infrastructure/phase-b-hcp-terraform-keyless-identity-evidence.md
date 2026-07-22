@@ -2,9 +2,9 @@
 
 ## Executive summary
 
-The bounded HCP Terraform plan-phase identity bootstrap was created in the isolated `rentchain-preview` project. HCP Terraform initialization succeeded, but Terraform validation failed on the existing `baseline_labels` validation in the merged B2 root. The mission stopped immediately: no plan or apply ran and the three-service B2 proposal was not applied.
+The bounded HCP Terraform plan-phase identity is validated in the isolated `rentchain-preview` project. After a narrow correction to the `baseline_labels` type comparison, focused tests and Terraform validation passed and one remote keyless plan completed. The plan contains exactly the three approved project-service resources. No apply ran and the three-service B2 proposal remains unapplied.
 
-Final classification: **keyless Terraform identity requires revision**.
+Final classification: **keyless Terraform planning identity validated**.
 
 ## Approved target
 
@@ -17,7 +17,7 @@ Final classification: **keyless Terraform identity requires revision**.
 | HCP workspace | `rentchain-preview-foundation` / `ws-ebtKQ2gkLZuoRis4` |
 | Terraform root | `infra/environments/preview-foundation` |
 
-The workspace remained remote, CLI-driven, auto-apply off, and at zero state resources after the stopped validation. No production credential, state, project, or command target was used.
+The workspace remained remote, CLI-driven, auto-apply off, and at zero state resources after the plan. No production credential, state, project, or command target was used.
 
 ## Bootstrap method and enabled APIs
 
@@ -103,16 +103,54 @@ No run or apply service-account variable, JSON credential, token, key, or produc
 
 `terraform init` succeeded from the isolated root and installed `hashicorp/google` v6.50.0. The generated dependency lock file is committed with this evidence.
 
-`terraform validate` did not pass. It stopped with:
+### Validation diagnosis and correction
+
+The original validation compared `var.baseline_labels`, declared as `map(string)`, directly with an object literal:
 
 ```text
-Invalid value for variable baseline_labels
-baseline_labels must exactly match the approved B1 Preview label set.
+var.baseline_labels == { ... }
 ```
 
-The failure points to the equality validation in `variables.tf`. No retry, source fix, IAM change, remote plan, or apply followed the error.
+Terraform equality requires values with compatible types. A converted `map(string)` and an object literal are not equal merely because they contain the same string keys and values. This was an object-versus-map mismatch, not a map-ordering, null, missing-key, or cross-variable problem.
 
-Remote plan result: **not run**. Exact plan summary: **none**. B2 project-service resources applied: **zero**.
+The merged B1/B2 policy requires an exact map: all six approved labels are mandatory and additional labels are prohibited. The correction preserves that policy by normalizing the literal before comparison:
+
+```text
+var.baseline_labels == tomap({ ... })
+```
+
+No label, project, environment, API, provider, IAM, or identity safeguard was weakened.
+
+### Focused tests and validation
+
+Terraform native tests use a mocked Google provider and require no cloud credentials. Results: **12 passed, 0 failed**.
+
+- exact approved labels pass;
+- an additional label fails;
+- missing environment, lifecycle, platform, purpose, or `managed-by` fails;
+- production environment, wrong purpose, and wrong owner fail;
+- the production project ID fails;
+- a wrong project number fails.
+
+`terraform fmt -check -recursive`, the repository scope validation, and `terraform validate` passed after the correction.
+
+### Remote plan
+
+HCP run `run-Z9oirF7PaGDkSGJq` authenticated successfully with the plan-only dynamic identity. Exact summary:
+
+```text
+Plan: 3 to add, 0 to change, 0 to destroy.
+```
+
+The only planned addresses are:
+
+- `google_project_service.approved_management["cloudresourcemanager.googleapis.com"]`;
+- `google_project_service.approved_management["iam.googleapis.com"]`;
+- `google_project_service.approved_management["serviceusage.googleapis.com"]`.
+
+Cloud Resource Manager and IAM were enabled manually for identity bootstrap, and Service Usage was already enabled. Because these enabled services are not yet represented in Terraform state, the provider reports all three as creates; a future apply would adopt/manage the existing service configuration rather than recreate a workload. No import or apply was attempted. No drift or unexpected resource appeared.
+
+Apply result: **not run**. B2 project-service resources applied: **zero**. HCP state resources after plan: **zero**.
 
 ## Negative-test evidence
 
@@ -123,15 +161,15 @@ Remote plan result: **not run**. Exact plan summary: **none**. B2 project-servic
 | Wrong workspace | Denied by immutable provider condition and exact subject binding; configuration verified |
 | Production workspace | No trust or binding exists; configuration verified |
 | Apply phase | Denied by `terraform_run_phase=='plan'`; no apply identity variable exists |
-| Missing or malformed token | No unauthenticated path exists; active exchange test not reached |
-| Wrong audience | Google default canonical audience enforced; active exchange test not reached |
+| Missing or malformed token | No unauthenticated path exists; unsupported synthetic token testing was not attempted |
+| Wrong audience | Google default canonical audience enforced; unsupported synthetic token testing was not attempted |
 | Static service-account keys | Zero |
 | Wildcard federation | Zero |
 | Project-level Workload Identity User | Zero |
 | Auto-apply | Off |
 | Apply confirmation | None |
 
-Token-bearing negative requests were not fabricated after the validation stop. No JWT, access token, ID token, authorization header, or credential was captured.
+The successful remote plan proves the exact HCP plan identity exchange. Token-bearing negative requests were not fabricated because HCP does not expose a safe supported mechanism for those tests. No JWT, access token, ID token, authorization header, or credential was captured.
 
 ## Production isolation and cost
 
@@ -149,6 +187,7 @@ Expected incremental cost for the pool, provider, service account, IAM bindings,
 - one project-level custom-role binding;
 - one service-account-level exact-subject Workload Identity User binding;
 - four non-sensitive HCP workspace environment variables;
+- one completed plan-only HCP run containing exactly three approved service resources;
 - zero HCP state resources;
 - zero Terraform applies.
 
@@ -168,4 +207,4 @@ Do not execute rollback against production or infer deletion authorization from 
 
 ## Stage boundary
 
-B3 did not begin. PR #1435 remains unchanged and on hold. The next action is a narrow correction and review of the B2 `baseline_labels` validation, followed by a separately authorized validation retry and plan-only run. No apply is authorized.
+B3 did not begin. PR #1435 remains unchanged and on hold. The keyless planning identity is validated, but the captured three-service plan remains unapplied. Any apply requires a separate exact-plan authorization.

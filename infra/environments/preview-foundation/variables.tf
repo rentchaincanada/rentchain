@@ -42,14 +42,14 @@ variable "baseline_labels" {
   nullable    = false
 
   validation {
-    condition = var.baseline_labels == {
+    condition = var.baseline_labels == tomap({
       environment = "preview"
       lifecycle   = "permanent"
       managed-by  = "terraform"
       owner       = "founder"
       platform    = "rentchain"
       purpose     = "shared-preview"
-    }
+    })
     error_message = "baseline_labels must exactly match the approved B1 Preview label set."
   }
 }
