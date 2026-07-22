@@ -152,17 +152,17 @@ This PR supplies configuration proof only. It does not manufacture a JWT or clai
 
 ## Terraform plan evidence
 
-The immutable Terraform source commit is:
+The reviewed Terraform source commit is:
 
-`997144d239e34dbe7d7d87c65a4d0178d905ff1c`
+`4ff3f2f023ebbf7598e80b87503890d1d569abce`
 
 The exact confirmable HCP plan is:
 
 | Evidence | Value |
 | --- | --- |
-| Run | `run-ccC8nZHromtvHT6i` |
-| Configuration version | `cv-dTzxEtbX1jAZKXgv` |
-| Plan | `plan-BhfLLoGjGf4xQFUq` |
+| Run | `run-pbmPLZcFQzN7jC5m` |
+| Configuration version | `cv-5FvrwG2ZoeABVAnJ` |
+| Plan | `plan-Gwt7aQDuvekMj4Qf` |
 | Workspace | `rentchain-preview-foundation` / `ws-ebtKQ2gkLZuoRis4` |
 | Status | `planned` and confirmable |
 | Auto-apply | Off |
@@ -181,7 +181,7 @@ google_service_account_iam_member.github_preview_deploy_federation
 
 The existing three `google_project_service.approved_management` addresses are no-ops. Every planned resource targets `rentchain-preview`; no API, workload, billing, production, broad-IAM, key, change, destroy, or import action appears.
 
-A preceding CLI validation run, `run-4kMm7ZhzWy1fMYgm`, produced the same six-resource plan but was speculative and non-confirmable. It is not eligible for approval or apply. No state or cloud resource resulted from that validation run.
+A preceding CLI validation run, `run-4kMm7ZhzWy1fMYgm`, produced the same six-resource plan but was speculative and non-confirmable. The previous confirmable run, `run-ccC8nZHromtvHT6i`, was discarded unapplied after the reviewed permission-evidence source superseded it. Neither run is eligible for approval or apply. No state or cloud resource resulted from either preceding run.
 
 No apply is authorized by this document or PR.
 
@@ -206,7 +206,7 @@ The existing four apply permissions are preserved. The exact 12-permission addit
 - `resourcemanager.projects.getIamPolicy`; and
 - `resourcemanager.projects.setIamPolicy`.
 
-The resulting custom role has exactly the 16 permissions recorded in `infra/environments/preview-foundation/tests/hcp_apply_permissions.txt`.
+The resulting custom role has exactly the 16 permissions recorded in `infra/environments/preview-foundation/tests/hcp_apply_permissions.txt`. The administrative update changed only `projects/rentchain-preview/roles/hcpTerraformPreviewApply`; it added no predefined role, binding, service account, federation member, or Terraform state resource.
 
 | Terraform resource | Permission | Purpose and phase | Scope | Residual privilege and narrower-alternative assessment |
 | --- | --- | --- | --- | --- |
@@ -244,8 +244,8 @@ Any B3-only API removal would require a dependency review, but B3 proposes no AP
 
 ## Blockers and approval boundary
 
-- The exact HCP plan passed and contains only the six proposed B3 resources.
-- The previous exact HCP run predates the reviewed permission-evidence commit and is not eligible for apply approval.
+- The fresh exact HCP plan passed and contains only the six proposed B3 resources.
+- The previous exact HCP run was discarded unapplied and is not eligible for apply approval.
 - The HCP apply custom role expansion is an external administrative prerequisite, not a Terraform-managed B3 resource. It must remain exact, apply-phase restricted, and bound only to `hcp-terraform-preview-apply@rentchain-preview.iam.gserviceaccount.com` on `rentchain-preview`.
 - A fresh plan from the reviewed source head must remain exactly six creates, with no change, destroy, import, API, workload, billing, key, public-access, or production action.
 - Founder approval must name the exact immutable HCP run and configuration version.
@@ -254,6 +254,6 @@ Any B3-only API removal would require a dependency review, but B3 proposes no AP
 
 ## Classification
 
-**B3 permission expansion under validation.** The exact permission model is documented and statically enforced. B3 remains unapplied and cannot advance until the administrative role update, fresh exact plan, and post-change isolation checks succeed.
+**B3 exact apply awaiting Founder approval.** The apply role is exact, the fresh confirmable plan contains only six approved creates, auto-apply is off, and state remains at the three B2 service resources. This document and PR do not authorize apply.
 
 No workload was deployed. B4 did not begin. PR #1435 remains unchanged, draft, and on hold.
