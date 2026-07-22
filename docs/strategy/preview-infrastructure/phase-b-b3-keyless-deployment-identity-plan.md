@@ -6,9 +6,9 @@
 
 GitHub Actions is the selected owner of future Preview backend deployment authentication. B3 proposes a dedicated GitHub OIDC to Google Workload Identity Federation path that is separate from production Cloud Build, HCP Terraform plan/apply identities, the retired Vercel spike identity, and all future runtime identities.
 
-The proposed identity is inspection-only. It can authenticate, describe `rentchain-preview`, and inspect enabled services. It cannot deploy Cloud Run, push images, run Cloud Build, mutate IAM, impersonate a runtime identity, access application data, or reach production.
+The applied identity is inspection-only. It can authenticate, describe `rentchain-preview`, and inspect enabled services. It cannot deploy Cloud Run, push images, run Cloud Build, mutate IAM, impersonate a runtime identity, access application data, or reach production.
 
-No workload is deployed by this change. Terraform apply remains blocked until the Founder separately approves the exact HCP run. B4 is not authorized, and PR #1435 remains unchanged, draft, and on hold.
+Founder-authorized HCP run `run-pbmPLZcFQzN7jC5m` applied exactly the six B3 identity resources. No workload was deployed. Runtime GitHub OIDC validation remains incomplete because GitHub rejected the manual dispatch before execution: the new validation workflow is not present on the default branch while PR #1449 remains draft. B4 is not authorized, and PR #1435 remains unchanged, draft, and on hold.
 
 ## Audit findings
 
@@ -164,9 +164,10 @@ The exact confirmable HCP plan is:
 | Configuration version | `cv-5FvrwG2ZoeABVAnJ` |
 | Plan | `plan-Gwt7aQDuvekMj4Qf` |
 | Workspace | `rentchain-preview-foundation` / `ws-ebtKQ2gkLZuoRis4` |
-| Status | `planned` and confirmable |
+| Status | `applied` |
 | Auto-apply | Off |
 | Result | `6 to add, 0 to change, 0 to destroy, 0 to import` |
+| Apply | `apply-2NsX8YBNBPBdwX4L` |
 
 The six create actions are exactly:
 
@@ -183,7 +184,7 @@ The existing three `google_project_service.approved_management` addresses are no
 
 A preceding CLI validation run, `run-4kMm7ZhzWy1fMYgm`, produced the same six-resource plan but was speculative and non-confirmable. The previous confirmable run, `run-ccC8nZHromtvHT6i`, was discarded unapplied after the reviewed permission-evidence source superseded it. Neither run is eligible for approval or apply. No state or cloud resource resulted from either preceding run.
 
-No apply is authorized by this document or PR.
+The Founder separately authorized only this exact run, configuration version, plan, source head, workspace, project, and six-resource create set. It applied successfully without retry, variable change, source change, or IAM broadening.
 
 ## HCP apply permission audit
 
@@ -222,6 +223,29 @@ List, update, delete, and undelete permissions are excluded because provider 6.5
 
 Explicitly absent permissions include service-account key creation or upload, access-token generation, signing, Cloud Run, Artifact Registry, Cloud Build, Storage, Firebase, Firestore, billing, organization IAM, project deletion, production access, and all B3 update/delete/undelete operations. No broad predefined role is granted.
 
+## Post-apply evidence
+
+HCP reported the exact run as `applied` with apply ID `apply-2NsX8YBNBPBdwX4L`. The apply-phase keyless identity authenticated successfully at runtime. Terraform state now contains exactly nine resources: the three existing B2 services and the six authorized B3 addresses. No additional address entered state.
+
+Live Google Cloud verification confirmed:
+
+- pool `github-preview-deploy` is active;
+- provider `github` is active and uses issuer `https://token.actions.githubusercontent.com`;
+- provider mappings remain limited to subject, repository, immutable repository ID, repository owner, immutable owner ID, ref, event, and workflow reference;
+- the provider condition fixes repository `rentchaincanada/rentchain`, repository ID `1103977082`, owner `rentchaincanada`, owner ID `246115482`, ref `refs/heads/main`, event `workflow_dispatch`, the exact validation workflow on `main`, and the exact main-branch subject;
+- service account `github-preview-deploy@rentchain-preview.iam.gserviceaccount.com` exists with zero user-managed keys;
+- its only federation member is the exact main-branch subject principal with `roles/iam.workloadIdentityUser` on that service account;
+- no project-level Workload Identity User binding exists;
+- custom role `githubPreviewDeploymentInspector` contains only `resourcemanager.projects.get`, `serviceusage.services.get`, and `serviceusage.services.list`;
+- the custom role is bound only to the deployment service account in `rentchain-preview`;
+- HCP plan and apply service accounts retain zero user-managed keys;
+- Cloud Run, Artifact Registry, Cloud Build, Firebase, and Firestore workload APIs remain disabled or absent; and
+- Storage buckets remain zero.
+
+The single authorized manual workflow dispatch targeted `main`. GitHub rejected it with HTTP 404 because `preview-deployment-identity-validation.yml` is not on the default branch. No workflow job started, no GitHub OIDC token was requested, no credential exchange occurred, and no runtime or negative OIDC test executed. The provider condition was not weakened and the dispatch was not retried.
+
+The mission required an immediate stop after runtime validation failure. Therefore no post-apply HCP plan was generated. No missing plan-role read permission was observed because refresh was not attempted. Zero-drift remains unproven and requires a later, separately authorized sequence after the workflow becomes available on the default branch.
+
 ## Cost impact
 
 Workload Identity Federation, service accounts, and IAM policy configuration have no expected direct incremental charge. One manually dispatched validation workflow consumes a small amount of GitHub Actions time. No billable workload or storage is created. Expected incremental Google Cloud cost is approximately CAD 0.
@@ -244,16 +268,16 @@ Any B3-only API removal would require a dependency review, but B3 proposes no AP
 
 ## Blockers and approval boundary
 
-- The fresh exact HCP plan passed and contains only the six proposed B3 resources.
+- The fresh exact HCP plan passed and applied only the six proposed B3 resources.
 - The previous exact HCP run was discarded unapplied and is not eligible for apply approval.
 - The HCP apply custom role expansion is an external administrative prerequisite, not a Terraform-managed B3 resource. It must remain exact, apply-phase restricted, and bound only to `hcp-terraform-preview-apply@rentchain-preview.iam.gserviceaccount.com` on `rentchain-preview`.
-- A fresh plan from the reviewed source head must remain exactly six creates, with no change, destroy, import, API, workload, billing, key, public-access, or production action.
-- Founder approval must name the exact immutable HCP run and configuration version.
-- Runtime validation and negative runtime evidence occur only after apply.
+- Runtime validation is blocked until the approved workflow exists on the default branch. No alternate ref, temporary workflow, condition relaxation, or rerun is authorized.
+- Zero-drift validation was not attempted after the runtime stop condition.
+- Future authorization must decide the safe ordering between merging the evidence/configuration PR and executing the main-only validation workflow.
 - B4 deployment permissions and workload resources remain separately unauthorized.
 
 ## Classification
 
-**B3 exact apply awaiting Founder approval.** The apply role is exact, the fresh confirmable plan contains only six approved creates, auto-apply is off, and state remains at the three B2 service resources. This document and PR do not authorize apply.
+**B3 applied; validation incomplete.** The exact six-resource identity apply succeeded and state contains nine expected resources, but GitHub OIDC runtime validation and post-apply zero-drift validation remain incomplete. Neither full identity-foundation validation nor a missing-read-permission classification can be claimed yet.
 
 No workload was deployed. B4 did not begin. PR #1435 remains unchanged, draft, and on hold.
