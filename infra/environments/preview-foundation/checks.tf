@@ -92,7 +92,13 @@ check "b5_image_delivery_boundary" {
     condition = (
       google_artifact_registry_repository_iam_member.github_preview_image_publisher.project == "rentchain-preview" &&
       google_artifact_registry_repository_iam_member.github_preview_image_publisher.location == "northamerica-northeast1" &&
-      google_artifact_registry_repository_iam_member.github_preview_image_publisher.repository == "rentchain-preview" &&
+      contains(
+        toset([
+          "rentchain-preview",
+          "projects/rentchain-preview/locations/northamerica-northeast1/repositories/rentchain-preview",
+        ]),
+        google_artifact_registry_repository_iam_member.github_preview_image_publisher.repository
+      ) &&
       local.github_preview_image_publisher_member == "serviceAccount:github-preview-deploy@rentchain-preview.iam.gserviceaccount.com"
     )
     error_message = "The B5 repository-scoped image-publisher binding has changed."

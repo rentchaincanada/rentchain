@@ -10,8 +10,8 @@ This is the isolated Phase B Terraform root for the permanent `rentchain-preview
 - Workflow: CLI-driven
 - Execution mode: Remote
 - State: isolated from production
-- Resources/state objects: 13 applied B2/B3/B4 resources
-- Configuration uploaded: B2, B3, and B4 applied; B5A remains an unapplied proposal
+- Resources/state objects: 15 applied B2/B3/B4/B5 IAM resources
+- Configuration uploaded: B2, B3, B4, and B5 image-publisher IAM applied
 - VCS connection: none
 - Google credentials: none
 - Production-state connection: none
@@ -51,7 +51,7 @@ The applied B4 foundation contains only:
 - immutable Docker tags plus enforced cleanup that deletes untagged versions after seven days and keeps 15 recent versions; and
 - one role-less `preview-backend-runtime` service account.
 
-The proposed B5A image-delivery foundation adds only:
+The applied B5 image-delivery IAM foundation contains only:
 
 - one six-permission `githubPreviewImagePublisher` custom role; and
 - one repository-level IAM member granting that role to the exact GitHub
@@ -73,4 +73,4 @@ The API resources use `prevent_destroy` and do not disable services on destroy. 
 
 ## Current classification
 
-B2, B3, and B4 are complete. B3 runtime identity is validated, B4 is applied, and the latest authoritative plan reports zero drift with exactly 13 state resources. B5A proposes exactly two IAM additions and remains unapplied. Its manual image workflow must not run with registry write access until a separate exact-plan apply and later image-push authorization. No workload deployment or B6 work is authorized, and PR #1435 remains unchanged and on hold.
+B2, B3, and B4 are complete. B3 runtime identity is validated, B4 is applied, and B5 image-publisher IAM is applied with exactly 15 state resources and zero drift. The manual image workflow remains unmerged and must not run before a separate exact-main-head image-push authorization. No workload deployment or B6 work is authorized, and PR #1435 remains unchanged and on hold.

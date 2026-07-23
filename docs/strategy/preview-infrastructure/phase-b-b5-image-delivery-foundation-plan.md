@@ -4,12 +4,13 @@
 
 ## Executive summary
 
-B5A proposes the permanent, keyless path for one manually authorized GitHub
+B5 establishes the permanent, keyless path for one manually authorized GitHub
 Actions run to build the Preview backend and upload it to the existing private
-Preview Artifact Registry repository. It adds only one custom image-publisher
-role and one repository-level member. This phase does not apply Terraform, run
-the privileged workflow, push an image, deploy Cloud Run, change runtime IAM,
-or begin B6.
+Preview Artifact Registry repository. B5B applied only one custom
+image-publisher role and one repository-level member. B5C.1 corrects the
+workflow so local build, inspection, and smoke validation must pass before
+authentication or publication. It does not run the privileged workflow, push
+an image, deploy Cloud Run, change runtime IAM, or begin B6.
 
 The existing exact-workflow Workload Identity Federation condition remains
 unchanged. To avoid changing that trusted condition or adding a third trusted
@@ -39,6 +40,10 @@ Vercel, PR #1435, and B6 remain out of scope.
 ```text
 Manual workflow_dispatch on main
   -> exact full commit SHA equals the workflow's main HEAD
+  -> checkout and ancestry verification
+  -> local linux/amd64 build
+  -> image configuration and filesystem inspection
+  -> bounded /health and /health/ready smoke validation
   -> pinned GitHub Actions
   -> GitHub OIDC
   -> exact-subject Google Workload Identity Federation
@@ -105,9 +110,9 @@ on:
 projects/rentchain-preview/locations/northamerica-northeast1/repositories/rentchain-preview
 ```
 
-The existing 13 addresses remain unchanged. A later separately authorized
-apply would produce 15 state resources. The external HCP bootstrap roles remain
-outside Terraform state.
+The B5B apply produced exactly 15 state resources and a subsequent plan
+reported zero drift. The external HCP bootstrap roles remain outside Terraform
+state.
 
 ## Image naming and immutable deployment identity
 
@@ -126,10 +131,10 @@ sha-<full-40-character-commit>
 ```
 
 No `latest`, branch, environment, stable, or production tag is created. The
-workflow captures the Buildx `containerimage.digest`, validates its SHA-256
-shape, resolves the immutable tag through Artifact Registry, and requires the
-observed digest to match. Any future Cloud Run deployment must reference that
-digest rather than the tag.
+workflow pushes the already validated local image, captures Docker's published
+manifest digest, validates its SHA-256 shape, resolves the immutable tag
+through Artifact Registry, and requires the observed digest to match. Any
+future Cloud Run deployment must reference that digest rather than the tag.
 
 ## Docker build
 
@@ -160,15 +165,25 @@ permissions are only `contents: read` and `id-token: write`. Checkout, Google
 authentication, Google CLI setup, and Buildx actions are pinned to full commit
 SHAs. Checkout does not persist GitHub credentials.
 
-The SHA is validated before checkout and must equal the main dispatch SHA.
-Repository/ref/event guards prevent privileged execution from another
-repository, branch, event, pull request, or fork. Authentication remains
-keyless; no JSON key, runtime secret, production value, or broad repository
-credential enters the workflow.
+The workflow first checks out protected `main`, validates the full SHA, requires
+it to equal the dispatch SHA and be an ancestor of that protected head, then
+checks out and re-verifies the exact commit. Repository/ref/event guards
+prevent privileged execution from another repository, branch, event, pull
+request, or fork.
 
-Buildx writes local metadata after the future push. Only the validated image
-path, immutable tag, and digest are reported. Tokens and generated credential
-files are not printed or uploaded.
+Buildx creates and loads one local `linux/amd64` image without registry
+authentication. Before authentication, the workflow verifies the platform,
+non-root runtime user, exact command, declared port, compiled output,
+production dependency layout, prohibited paths, and high-confidence credential
+patterns. It then starts the same image with only non-secret local-development
+values, requires the process to remain alive, and probes `/health` and
+`/health/ready` with bounded retries. Database readiness is expected to be
+`skipped` because no credentials are supplied.
+
+Only after every validation succeeds does keyless authentication occur. The
+same local image is tagged once and pushed without a rebuild. Docker's digest
+is compared with the remote Artifact Registry digest. Tokens, generated
+credential files, and potential secret values are not printed or uploaded.
 
 ## Rollback and cleanup
 
@@ -194,22 +209,24 @@ or policy changes are not authorized by B5A.
 - No public IAM is introduced.
 - No Cloud Run service, job, revision, or deployment is included.
 - Cloud Build remains disabled and unused.
-- No image is pushed during B5A.
+- B5B IAM is applied and zero drift is established at 15 state resources.
+- No image is pushed during B5C.1.
 - Production is inaccessible and unchanged.
 - PR #1435 remains draft, unchanged, and on hold.
 - B6 remains unstarted.
 
 ## Future B6 dependencies
 
-A future phase may be considered only after separate Founder authorization for
-the exact B5 IAM apply, successful zero-drift verification, separate
-authorization to run the manual workflow, one exact-head image push, digest and
-provenance verification, and confirmation that no Cloud Run deployment
-occurred. This document does not authorize B6.
+A future phase may be considered only after the corrected workflow is merged to
+`main`, a separately authorized exact-main-head workflow run builds, validates,
+and pushes one image, digest and provenance are verified, and no Cloud Run
+deployment is confirmed. This document does not authorize workflow execution,
+merge, or B6.
 
 ## Plan evidence
 
-The authoritative exact-head HCP configuration version, run, plan, complete
-action inventory, and no-apply confirmation will be recorded in the draft PR
-review summary after the final tracked branch head is uploaded for speculative
-planning. No plan identifier is represented here before that run exists.
+B5B applied two approved IAM resources and established a 15-resource,
+zero-drift state. Because B5C.1 adjusts a Terraform check to accept the
+provider's documented short and fully qualified repository representations, a
+fresh speculative zero-drift plan is required from the final corrected head.
+No Terraform apply is authorized by B5C.1.

@@ -159,6 +159,7 @@ fi
 rg -q '^  workflow_dispatch:$' "$workflow_file"
 rg -q '^  contents: read$' "$workflow_file"
 rg -q '^  id-token: write$' "$workflow_file"
+test "$(rg -No '^  [a-z-]+: (read|write)$' "$workflow_file" | wc -l | tr -d ' ')" = "2"
 rg -q 'source_sha:' "$workflow_file"
 rg -q "github.repository == 'rentchaincanada/rentchain'" "$workflow_file"
 rg -q "github.ref == 'refs/heads/main'" "$workflow_file"
@@ -166,20 +167,53 @@ rg -q "github.event_name == 'workflow_dispatch'" "$workflow_file"
 grep -Fq '[[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]' "$workflow_file"
 grep -Fq 'test "${SOURCE_SHA}" = "${WORKFLOW_SHA}"' "$workflow_file"
 rg -q 'persist-credentials: false' "$workflow_file"
+grep -Fq 'git merge-base --is-ancestor "${SOURCE_SHA}" "${WORKFLOW_SHA}"' "$workflow_file"
+grep -Fq 'git checkout --detach "${SOURCE_SHA}"' "$workflow_file"
 rg -q 'workload_identity_provider: projects/501298948635/locations/global/workloadIdentityPools/github-preview-deploy/providers/github' "$workflow_file"
 rg -q 'service_account: github-preview-deploy@rentchain-preview.iam.gserviceaccount.com' "$workflow_file"
 rg -q 'northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend' "$workflow_file"
 grep -Fq 'image_tag="sha-${SOURCE_SHA}"' "$workflow_file"
-rg -q -- '--push' "$workflow_file"
-rg -q 'containerimage.digest' "$workflow_file"
+rg -q -- '--platform linux/amd64' "$workflow_file"
+rg -q -- '--load' "$workflow_file"
+rg -q 'docker image inspect' "$workflow_file"
+rg -q 'runtime_user=' "$workflow_file"
+rg -q 'node dist/index\.build\.js' "$workflow_file"
+rg -q '8080/tcp' "$workflow_file"
+rg -q 'Prohibited embedded file paths' "$workflow_file"
+rg -q 'High-confidence credential pattern categories detected in' "$workflow_file"
+rg -q 'docker run --detach' "$workflow_file"
+rg -q '/health/ready' "$workflow_file"
+grep -Fq 'docker tag "${VALIDATION_IMAGE}" "${remote_image}"' "$workflow_file"
+grep -Fq 'docker push "${remote_image}"' "$workflow_file"
 test "$(rg -No 'uses: [^@]+@[0-9a-f]{40}' "$workflow_file" | wc -l | tr -d ' ')" = "4"
+
+build_line="$(rg -n 'docker buildx build' "$workflow_file" | cut -d: -f1)"
+inspect_line="$(rg -n -- '- name: Inspect image configuration and runtime contents' "$workflow_file" | cut -d: -f1)"
+smoke_line="$(rg -n -- '- name: Smoke-test the validated image' "$workflow_file" | cut -d: -f1)"
+auth_line="$(rg -n -- '- name: Authenticate to the isolated Preview project' "$workflow_file" | cut -d: -f1)"
+push_line="$(rg -n 'docker push "\$\{remote_image\}"' "$workflow_file" | cut -d: -f1)"
+test -n "$build_line"
+test -n "$inspect_line"
+test -n "$smoke_line"
+test -n "$auth_line"
+test -n "$push_line"
+test "$build_line" -lt "$inspect_line"
+test "$inspect_line" -lt "$smoke_line"
+test "$smoke_line" -lt "$auth_line"
+test "$build_line" -lt "$auth_line"
+test "$auth_line" -lt "$push_line"
+
+if rg -n -- '--push|docker buildx build.*--push' "$workflow_file"; then
+  echo "Buildx must load locally and must not publish before validation" >&2
+  exit 1
+fi
 
 if rg -n '^  (push|pull_request|pull_request_target|schedule):|gcloud (run|builds|iam|projects add-iam-policy-binding)|terraform (apply|destroy)|(^|:)latest($|[[:space:]])|:main($|[[:space:]])|:preview($|[[:space:]])|:stable($|[[:space:]])|:production($|[[:space:]])' "$workflow_file"; then
   echo "Untrusted trigger, prohibited command, or mutable image tag found in B5 workflow" >&2
   exit 1
 fi
 
-if rg -n 'credentials_json|service_account_key|private_key|pull_request_target|contents: write|packages: write|deployments: write|security-events: write' "$workflow_file"; then
+if rg -n 'credentials_json|service_account_key|private_key([[:space:]]*:|_data)|pull_request_target|contents: write|packages: write|deployments: write|security-events: write' "$workflow_file"; then
   echo "Static credential or excessive workflow permission found" >&2
   exit 1
 fi

@@ -22,8 +22,16 @@ jobs:
     env:
       IMAGE: northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend
       SOURCE_SHA: ${{ inputs.source_sha }}
+      VALIDATION_IMAGE: rentchain-preview-backend-validation:${{ inputs.source_sha }}
     steps:
-      - name: Validate authorized source
+      - name: Check out protected main for source authorization
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/heads/main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate and check out the authorized source
         env:
           WORKFLOW_SHA: ${{ github.sha }}
         shell: bash
@@ -31,24 +39,172 @@ jobs:
           set -euo pipefail
           [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]
           test "${SOURCE_SHA}" = "${WORKFLOW_SHA}"
-
-      - name: Check out the exact authorized source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ inputs.source_sha }}
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Verify checked-out source
-        shell: bash
-        run: |
-          set -euo pipefail
+          git cat-file -e "${SOURCE_SHA}^{commit}"
+          git merge-base --is-ancestor "${SOURCE_SHA}" "${WORKFLOW_SHA}"
+          git checkout --detach "${SOURCE_SHA}"
           checked_out_sha="$(git rev-parse HEAD)"
           test "${checked_out_sha}" = "${SOURCE_SHA}"
           printf 'Checked out source: %s\n' "${checked_out_sha}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build the local validation image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --file rentchain-api/Dockerfile \
+            --platform linux/amd64 \
+            --tag "${VALIDATION_IMAGE}" \
+            --load \
+            rentchain-api
+
+      - name: Inspect image configuration and runtime contents
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          platform="$(docker image inspect "${VALIDATION_IMAGE}" --format '{{.Os}}/{{.Architecture}}')"
+          test "${platform}" = "linux/amd64"
+
+          runtime_user="$(docker image inspect "${VALIDATION_IMAGE}" --format '{{.Config.User}}')"
+          case "${runtime_user}" in
+            ""|root|0|0:0)
+              printf 'Blocked root runtime user: %s\n' "${runtime_user:-<empty>}" >&2
+              exit 1
+              ;;
+          esac
+
+          docker image inspect "${VALIDATION_IMAGE}" \
+            | jq -e '
+                .[0].Config.Entrypoint == null and
+                .[0].Config.Cmd == ["node", "dist/index.build.js"] and
+                .[0].Config.ExposedPorts["8080/tcp"] == {}
+              ' >/dev/null
+
+          container_id="$(docker create "${VALIDATION_IMAGE}")"
+          rootfs="${RUNNER_TEMP}/preview-backend-rootfs"
+          mkdir -p "${rootfs}"
+          cleanup_export() {
+            docker rm -f "${container_id}" >/dev/null 2>&1 || true
+            rm -rf "${rootfs}"
+          }
+          trap cleanup_export EXIT
+          docker export "${container_id}" | tar -xf - -C "${rootfs}"
+
+          test -f "${rootfs}/app/dist/index.build.js"
+          test -f "${rootfs}/app/package.json"
+          test -f "${rootfs}/app/package-lock.json"
+          test -d "${rootfs}/app/node_modules"
+          test ! -e "${rootfs}/app/src"
+          test ! -e "${rootfs}/app/tests"
+          test ! -e "${rootfs}/app/tsconfig.json"
+          test ! -e "${rootfs}/app/node_modules/typescript"
+
+          prohibited_paths="${RUNNER_TEMP}/preview-backend-prohibited-paths.txt"
+          find "${rootfs}/app" \
+            \( \
+              -name '.env' -o \
+              -name '.env.*' -o \
+              -name '*.pem' -o \
+              -name '*.key' -o \
+              -name '*.tfstate' -o \
+              -name '*.tfstate.*' -o \
+              -iname '*service-account*.json' -o \
+              -iname 'application_default_credentials.json' -o \
+              -iname 'credentials*.json' \
+            \) -print > "${prohibited_paths}"
+          for prohibited_root in \
+            "${rootfs}/app/.git" \
+            "${rootfs}/app/.github" \
+            "${rootfs}/app/.handoff" \
+            "${rootfs}/app/.config/gcloud" \
+            "${rootfs}/app/.aws" \
+            "${rootfs}/app/.azure" \
+            "${rootfs}/app/.kube"; do
+            if [[ -e "${prohibited_root}" ]]; then
+              printf '%s\n' "${prohibited_root}" >> "${prohibited_paths}"
+            fi
+          done
+          if [[ -s "${prohibited_paths}" ]]; then
+            printf '%s\n' 'Prohibited embedded file paths:' >&2
+            sed "s#^${rootfs}##" "${prohibited_paths}" >&2
+            exit 1
+          fi
+
+          secret_paths="${RUNNER_TEMP}/preview-backend-secret-pattern-paths.txt"
+          rg --text -l -uuu \
+            -g '!node_modules/**' \
+            -e '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----' \
+            -e '"type"[[:space:]]*:[[:space:]]*"service_account"' \
+            -e '"private_key_id"[[:space:]]*:' \
+            -e '"client_email"[[:space:]]*:[[:space:]]*"[^"]+\.iam\.gserviceaccount\.com"' \
+            "${rootfs}/app" > "${secret_paths}" || true
+          if [[ -s "${secret_paths}" ]]; then
+            printf '%s\n' 'High-confidence credential pattern categories detected in:' >&2
+            sed "s#^${rootfs}##" "${secret_paths}" >&2
+            exit 1
+          fi
+
+          printf 'Validated platform: %s\n' "${platform}"
+          printf 'Validated runtime user: %s\n' "${runtime_user}"
+          printf '%s\n' 'Validated command: node dist/index.build.js'
+          printf '%s\n' 'Validated exposed port: 8080/tcp'
+          printf '%s\n' 'Embedded-file and credential checks: passed'
+
+      - name: Smoke-test the validated image
+        shell: bash
+        run: |
+          set -euo pipefail
+          container_name="preview-backend-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          smoke_log="${RUNNER_TEMP}/preview-backend-smoke.log"
+          cleanup_smoke() {
+            docker logs --tail 100 "${container_name}" > "${smoke_log}" 2>&1 || true
+            docker rm -f "${container_name}" >/dev/null 2>&1 || true
+          }
+          trap cleanup_smoke EXIT
+
+          docker run --detach \
+            --name "${container_name}" \
+            --publish 127.0.0.1::8080 \
+            --env NODE_ENV=development \
+            --env PORT=8080 \
+            --env FIRESTORE_EMULATOR_HOST=127.0.0.1:65535 \
+            --env ALLOW_LOCAL_PROD_FIRESTORE=false \
+            "${VALIDATION_IMAGE}" >/dev/null
+
+          host_port="$(docker port "${container_name}" 8080/tcp | awk -F: 'NR == 1 { print $NF }')"
+          [[ "${host_port}" =~ ^[0-9]+$ ]]
+
+          ready=false
+          for attempt in $(seq 1 30); do
+            if ! docker inspect "${container_name}" --format '{{.State.Running}}' | grep -qx true; then
+              printf '%s\n' 'Container exited during smoke validation.' >&2
+              docker logs --tail 100 "${container_name}" >&2 || true
+              exit 1
+            fi
+            if curl --fail --silent --show-error \
+              --max-time 2 \
+              "http://127.0.0.1:${host_port}/health/ready" \
+              | jq -e '
+                  .status == "ok" and
+                  .service == "rentchain-api" and
+                  .checks.routes == "ok" and
+                  .checks.db == "skipped"
+                ' >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          test "${ready}" = true
+          curl --fail --silent --show-error \
+            --max-time 2 \
+            "http://127.0.0.1:${host_port}/health" \
+            | jq -e '.ok == true' >/dev/null
+          docker inspect "${container_name}" --format '{{.State.Running}}' | grep -qx true
+          printf '%s\n' 'Smoke validation: process running, port 8080 bound, /health and /health/ready passed'
 
       - name: Authenticate to the isolated Preview project
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
@@ -69,20 +225,17 @@ jobs:
             northamerica-northeast1-docker.pkg.dev \
             --quiet
 
-      - name: Build and push the exact Preview backend image
+      - name: Push the validated Preview backend image
         id: image
         shell: bash
         run: |
           set -euo pipefail
           image_tag="sha-${SOURCE_SHA}"
-          metadata_file="${RUNNER_TEMP}/preview-backend-image-metadata.json"
-          docker buildx build \
-            --file rentchain-api/Dockerfile \
-            --tag "${IMAGE}:${image_tag}" \
-            --metadata-file "${metadata_file}" \
-            --push \
-            rentchain-api
-          digest="$(jq -r '."containerimage.digest"' "${metadata_file}")"
+          remote_image="${IMAGE}:${image_tag}"
+          push_log="${RUNNER_TEMP}/preview-backend-push.log"
+          docker tag "${VALIDATION_IMAGE}" "${remote_image}"
+          docker push "${remote_image}" 2>&1 | tee "${push_log}"
+          digest="$(sed -nE 's/^.*digest: (sha256:[0-9a-f]{64}).*$/\1/p' "${push_log}" | tail -n 1)"
           [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
           printf 'image=%s\n' "${IMAGE}" >> "${GITHUB_OUTPUT}"
           printf 'tag=%s\n' "${image_tag}" >> "${GITHUB_OUTPUT}"
@@ -101,3 +254,10 @@ jobs:
           printf 'Image: %s@%s\n' \
             "${IMAGE}" \
             "${{ steps.image.outputs.digest }}"
+          printf 'Workflow run: %s\n' "${GITHUB_RUN_ID}"
+          printf 'Initiating actor: %s\n' "${GITHUB_ACTOR}"
+          printf 'Source repository: %s\n' "${GITHUB_REPOSITORY}"
+          printf 'Workflow ref: %s\n' "${GITHUB_WORKFLOW_REF}"
+          printf '%s\n' 'OIDC subject: repo:rentchaincanada/rentchain:ref:refs/heads/main'
+          printf '%s\n' 'Google identity: github-preview-deploy@rentchain-preview.iam.gserviceaccount.com'
+          printf '%s\n' 'Target platform: linux/amd64'
