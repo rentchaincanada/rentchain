@@ -404,6 +404,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
 
   return (
     <div
+      className="rc-tenant-profile-content"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -692,7 +693,6 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
             border: `1px solid ${tenantProfileTheme.border}`,
             background: tenantProfileTheme.card,
             boxShadow: shadows.sm,
-            overflow: "hidden",
           }}
         >
           <summary

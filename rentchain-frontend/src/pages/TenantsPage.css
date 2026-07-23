@@ -125,11 +125,28 @@
   border-color: rgba(91, 70, 48, 0.18) !important;
   box-shadow: 0 6px 14px rgba(59, 44, 28, 0.06);
   min-height: 44px;
+  height: auto;
+  flex: 0 0 auto;
+  overflow: visible;
   transition:
     background-color 0.16s ease,
     border-color 0.16s ease,
     box-shadow 0.16s ease,
     transform 0.16s ease;
+}
+
+.rc-tenant-profile-content {
+  height: auto;
+  min-height: max-content;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  overflow: visible;
+  align-self: stretch;
+}
+
+.rc-tenant-profile-content > * {
+  flex: 0 0 auto;
+  min-height: max-content;
 }
 
 .rc-tenants-list-item:hover {
@@ -197,6 +214,10 @@
 
   .rc-tenants-detail {
     overflow: visible;
+  }
+
+  .rc-tenant-profile-content {
+    min-height: 0;
   }
 
   .rc-tenants-page {
