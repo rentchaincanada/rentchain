@@ -2143,6 +2143,44 @@ describe("leaseRoutes GET /active", () => {
     );
   });
 
+  it("does not commit lease end when atomic occupancy reconciliation fails", async () => {
+    seedDoc("properties", "prop-rollback", {
+      landlordId: "landlord-1",
+      units: [{ id: "unit-rollback", unitNumber: "201", status: "occupied" }],
+    });
+    seedDoc("leases", "lease-rollback", {
+      landlordId: "landlord-1",
+      propertyId: "prop-rollback",
+      tenantId: "tenant-rollback",
+      unitId: "unit-rollback",
+      unitNumber: "201",
+      status: "active",
+      endDate: null,
+    });
+    seedDoc("units", "unit-rollback", {
+      landlordId: "landlord-1",
+      propertyId: "prop-rollback",
+      unitNumber: "201",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "tenant-rollback",
+      leaseId: "lease-rollback",
+    });
+    vi.spyOn(fakeDb, "runTransaction").mockRejectedValueOnce(new Error("synthetic transaction failure"));
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-rollback/end", body: {} });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ ok: false, error: "lease_end_occupancy_reconciliation_failed" });
+    expect((await fakeDb.collection("leases").doc("lease-rollback").get()).data()).toEqual(
+      expect.objectContaining({ status: "active", endDate: null })
+    );
+    expect((await fakeDb.collection("units").doc("unit-rollback").get()).data()).toEqual(
+      expect.objectContaining({ status: "occupied", leaseId: "lease-rollback" })
+    );
+  });
+
   it("restores an ended firestore lease and marks the matched unit occupied", async () => {
     seedDoc("properties", "prop-1", {
       landlordId: "landlord-1",
