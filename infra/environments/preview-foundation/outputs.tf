@@ -25,3 +25,15 @@ output "github_preview_deployment_identity" {
   }
   sensitive = false
 }
+
+output "preview_deployment_foundation" {
+  description = "Non-sensitive identifiers for the un-deployed B4 Preview foundation."
+  value = {
+    region                        = google_artifact_registry_repository.preview_backend.location
+    repository_id                 = google_artifact_registry_repository.preview_backend.repository_id
+    repository_format             = google_artifact_registry_repository.preview_backend.format
+    runtime_service_account_email = google_service_account.preview_backend_runtime.email
+    workload_deployed             = false
+  }
+  sensitive = false
+}

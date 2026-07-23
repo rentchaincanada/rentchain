@@ -12,11 +12,40 @@ check "preview_project_identity" {
 check "management_api_boundary" {
   assert {
     condition = local.approved_management_services == toset([
+      "artifactregistry.googleapis.com",
       "cloudresourcemanager.googleapis.com",
       "iam.googleapis.com",
+      "run.googleapis.com",
       "serviceusage.googleapis.com",
     ])
-    error_message = "The B2 management API allowlist has changed."
+    error_message = "The B4 Preview foundation API allowlist has changed."
+  }
+}
+
+check "b4_deployment_foundation_boundary" {
+  assert {
+    condition = (
+      local.preview_deployment_region == "northamerica-northeast1" &&
+      local.preview_repository_id == "rentchain-preview" &&
+      local.preview_repository_format == "DOCKER"
+    )
+    error_message = "The B4 repository project boundary, region, ID, or format has changed."
+  }
+
+  assert {
+    condition = (
+      local.preview_repository_cleanup.keep_recent_tagged_count == 15 &&
+      local.preview_repository_cleanup.delete_untagged_after == "604800s"
+    )
+    error_message = "The B4 repository cleanup policy is no longer bounded to 15 recent versions and seven-day untagged cleanup."
+  }
+
+  assert {
+    condition = (
+      google_service_account.preview_backend_runtime.account_id == "preview-backend-runtime" &&
+      google_service_account.preview_backend_runtime.project == "rentchain-preview"
+    )
+    error_message = "The B4 future runtime identity has changed."
   }
 }
 

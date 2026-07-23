@@ -1,6 +1,6 @@
 # Preview Foundation Terraform Root
 
-This is the isolated Phase B Terraform root for the permanent `rentchain-preview` non-production project. It is intentionally independent from the repository-root Terraform configuration and has no production remote-state dependency. B2 manages only the three approved management APIs. B3 proposes a separate GitHub Actions keyless inspection identity; it does not authorize or create an application workload.
+This is the isolated Phase B Terraform root for the permanent `rentchain-preview` non-production project. It is intentionally independent from the repository-root Terraform configuration and has no production remote-state dependency. B2 manages the three approved management APIs, and B3 manages the runtime-proven keyless GitHub inspection identity. B4 proposes only a private deployment repository, a role-less future runtime identity, and the Artifact Registry and Cloud Run APIs. It does not authorize or create an application workload.
 
 ## HCP Terraform mapping
 
@@ -10,8 +10,8 @@ This is the isolated Phase B Terraform root for the permanent `rentchain-preview
 - Workflow: CLI-driven
 - Execution mode: Remote
 - State: isolated from production
-- Resources/state objects: three B2 management-service resources
-- Configuration uploaded: B2 applied; B3 plan requires separate review and exact-run approval
+- Resources/state objects: nine applied B2/B3 resources
+- Configuration uploaded: B2 and B3 applied; B4 remains an unapplied proposal
 - VCS connection: none
 - Google credentials: none
 - Production-state connection: none
@@ -33,7 +33,7 @@ The completed B2 apply manages only three `google_project_service` resources:
 
 IAM Credentials and Security Token Service were enabled during the separately governed keyless HCP identity bootstrap and remain enabled. B3 does not add or enable APIs.
 
-The proposed B3 deployment-identity foundation contains only:
+The applied B3 deployment-identity foundation contains only:
 
 - one `github-preview-deploy` Workload Identity Pool;
 - one `github` OIDC provider for `https://token.actions.githubusercontent.com`;
@@ -44,7 +44,14 @@ The proposed B3 deployment-identity foundation contains only:
 
 The provider requires the immutable GitHub repository ID `1103977082`, owner ID `246115482`, exact repository, exact `main` ref, `workflow_dispatch`, exact workflow file/ref, and exact branch subject. Forks, other repositories, other workflows, other events, other refs, and other subjects fail closed.
 
-All workload, data, build, registry, secret, messaging, compute, and Firebase services remain outside this root. B3 grants no Cloud Run, Artifact Registry, Cloud Build, IAM mutation, Service Account User, Token Creator, Storage, Firebase, or production permission.
+The proposed B4 foundation adds only:
+
+- `artifactregistry.googleapis.com` and `run.googleapis.com`;
+- one private Docker repository named `rentchain-preview` in `northamerica-northeast1`;
+- enforced cleanup that deletes untagged versions after seven days and keeps 15 recent versions; and
+- one role-less `preview-backend-runtime` service account.
+
+No Cloud Run service, image, Cloud Build resource, public IAM, Service Account User, deployment permission, Storage, Firebase, Firestore, secret, provider, billing, production, or runtime-data resource is proposed.
 
 ## Authentication and execution boundary
 
@@ -60,4 +67,4 @@ The API resources use `prevent_destroy` and do not disable services on destroy. 
 
 ## Current classification
 
-B2 controlled apply is complete. The bounded HCP apply-role expansion is documented and validated, and the fresh B3 plan proposes only the six approved identity resources. B3 remains unapplied and awaits separate Founder authorization naming the exact run and configuration version. No workload deployment is authorized, B4 has not begun, and PR #1435 remains unchanged and on hold pending authenticated Preview infrastructure.
+B2 and B3 are complete. B3 runtime identity and zero drift are validated with exactly nine state resources and zero user-managed keys. B4 is an unapplied infrastructure-only proposal; its controlled plan and separate apply-permission review remain pending. No workload deployment or B5 work is authorized, and PR #1435 remains unchanged and on hold.

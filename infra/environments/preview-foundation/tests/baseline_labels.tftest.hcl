@@ -19,8 +19,8 @@ run "exact_approved_labels_pass" {
   command = plan
 
   assert {
-    condition     = length(google_project_service.approved_management) == 3
-    error_message = "The approved baseline must retain exactly three proposed management services."
+    condition     = length(google_project_service.approved_management) == 5
+    error_message = "The approved baseline must retain exactly the three B2 and two B4 management services."
   }
 }
 
