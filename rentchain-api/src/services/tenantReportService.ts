@@ -258,7 +258,6 @@ export async function buildTenantReportData(
   const currentLeaseId = String(
     bundle?.currentLease?.id ||
       bundle?.lease?.id ||
-      bundle?.tenant?.currentLeaseId ||
       ""
   ).trim();
   const landlordId = String(bundle?.tenant?.landlordId || "").trim() || null;

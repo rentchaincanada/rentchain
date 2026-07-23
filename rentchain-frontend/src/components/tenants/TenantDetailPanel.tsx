@@ -169,6 +169,9 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
   const stateCoherence = bundle.stateCoherence || null;
   const property = bundle.property || null;
   const unit = bundle.unit || null;
+  const activeOccupantWithoutLease = !lease && [unit?.status, unit?.occupancyStatus].some((value) =>
+    String(value || "").trim().toLowerCase() === "occupied"
+  );
   const latestLeaseNoticeSummary = bundle.latestLeaseNoticeSummary || null;
   const credibilityInsights = bundle.credibilityInsights || null;
   const [moveInReadiness, setMoveInReadiness] = useState<MoveInReadiness | null>(bundle.moveInReadiness || null);
@@ -589,7 +592,10 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
               : "--"
           }
         />
-        <DetailField label="Lease Status" value={formatLeaseStatus(lease?.status)} />
+        <DetailField
+          label="Lease Status"
+          value={lease?.status ? formatLeaseStatus(lease.status) : activeOccupantWithoutLease ? "Active occupant — no lease linked" : "--"}
+        />
         <DetailField label="Lifecycle" value={lifecycle?.lifecycleLabel ?? "--"} />
         {stateCoherence ? (
           <DetailField
