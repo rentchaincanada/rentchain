@@ -89,7 +89,7 @@ export const TenantAiInsightsPanel: React.FC<TenantAiInsightsPanelProps> = ({
         display: "flex",
         flexDirection: "column",
         gap: "0.6rem",
-        height: "100%",
+        height: "auto",
       }}
     >
       {/* Header */}
