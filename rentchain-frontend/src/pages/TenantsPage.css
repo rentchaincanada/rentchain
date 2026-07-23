@@ -105,6 +105,22 @@
   overflow-x: hidden;
 }
 
+/* Top-level profile sections must occupy their natural height inside the
+ * independently scrolling detail pane; otherwise flex-shrink collapses one
+ * section underneath the next when the pane is bounded. */
+.rc-tenants-detail > * {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  height: auto;
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  position: static;
+  transform: none;
+}
+
 /* Desktop split panes own their scroll independently; the search/title stay fixed. */
 @media (min-width: 769px) {
   .rc-tenants-grid .rc-master-detail--desktop {
