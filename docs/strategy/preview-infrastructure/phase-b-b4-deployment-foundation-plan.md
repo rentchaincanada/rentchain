@@ -188,15 +188,35 @@ After any separately authorized apply, `prevent_destroy` and non-disabling API b
 
 ## Controlled plan evidence
 
-The exact HCP configuration version, run, plan, source commit, resource addresses, and action summary will be recorded here after local validation and one controlled plan. The plan must remain unapplied.
+| Evidence | Value |
+| --- | --- |
+| Source commit | `bba68c10a861ee5a018dc79cf598683e25c8f102` |
+| Configuration version | `cv-n2m3gTaPBYWJwAqc` |
+| Run | `run-W5WrF3PpaSURh1cS` |
+| Plan | `plan-ppeaQYKGDvBxFhxA` |
+| Status | `planned`; manual confirmation available |
+| Auto-apply | Off |
+| Result | `4 add, 0 change, 0 destroy, 0 import` |
+| Apply object | Pending, never started |
+| Current state | Nine resources, unchanged |
+
+The four planned creates are exactly:
+
+```text
+google_artifact_registry_repository.preview_backend
+google_project_service.approved_management["artifactregistry.googleapis.com"]
+google_project_service.approved_management["run.googleapis.com"]
+google_service_account.preview_backend_runtime
+```
+
+Every existing state resource is a planned `no-op`. Refresh reported one normalization-only drift observation on `google_iam_workload_identity_pool_provider.github`: the provider represented `oidc.allowed_audiences` as an empty list instead of `null`. The structured plan assigns that resource `no-op`, preserves its exact trust condition and mappings, and proposes no update.
+
+No Cloud Run service or revision, image, Cloud Build resource, Firebase, Firestore, Storage, Vercel, public IAM, production, billing, application, provider, change, destroy, or import action appears. The plan remains unapplied.
 
 ## Acceptance and next boundary
 
-B4 may be classified **awaiting controlled apply** only if:
+B4 cannot proceed to controlled apply until the separately reviewed HCP apply-role delta is authorized and runtime-verified. Current classification: **B4 permission expansion requires review**.
 
-- the single HCP plan completes;
-- it proposes only the four approved B4 resources;
-- no workload, image, public IAM, or production action appears; and
-- all repository checks pass.
+The single HCP plan completed and proposes only the four approved B4 resources. No workload, image, public IAM, or production action appears.
 
 The apply role permission delta remains a separate review gate. No apply, image validation, deployment permission, B5 work, or PR #1435 change is authorized by this document.

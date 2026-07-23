@@ -67,4 +67,4 @@ The API resources use `prevent_destroy` and do not disable services on destroy. 
 
 ## Current classification
 
-B2 and B3 are complete. B3 runtime identity and zero drift are validated with exactly nine state resources and zero user-managed keys. B4 is an unapplied infrastructure-only proposal; its controlled plan and separate apply-permission review remain pending. No workload deployment or B5 work is authorized, and PR #1435 remains unchanged and on hold.
+B2 and B3 are complete. B3 runtime identity and zero drift are validated with exactly nine state resources and zero user-managed keys. The B4 plan proposes exactly four foundation additions and remains unapplied; its exact Artifact Registry apply-permission delta requires separate review. No workload deployment or B5 work is authorized, and PR #1435 remains unchanged and on hold.
