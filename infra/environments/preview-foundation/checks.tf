@@ -74,3 +74,33 @@ check "github_preview_deployment_identity_boundary" {
     error_message = "The B3 deployment identity permission set has changed."
   }
 }
+
+check "b5_image_delivery_boundary" {
+  assert {
+    condition = local.github_preview_image_publisher_permissions == toset([
+      "artifactregistry.dockerimages.get",
+      "artifactregistry.repositories.downloadArtifacts",
+      "artifactregistry.repositories.get",
+      "artifactregistry.repositories.uploadArtifacts",
+      "artifactregistry.tags.create",
+      "artifactregistry.tags.get",
+    ])
+    error_message = "The B5 GitHub image-publisher permission set has changed."
+  }
+
+  assert {
+    condition = (
+      google_artifact_registry_repository_iam_member.github_preview_image_publisher.project == "rentchain-preview" &&
+      google_artifact_registry_repository_iam_member.github_preview_image_publisher.location == "northamerica-northeast1" &&
+      contains(
+        toset([
+          "rentchain-preview",
+          "projects/rentchain-preview/locations/northamerica-northeast1/repositories/rentchain-preview",
+        ]),
+        google_artifact_registry_repository_iam_member.github_preview_image_publisher.repository
+      ) &&
+      local.github_preview_image_publisher_member == "serviceAccount:github-preview-deploy@rentchain-preview.iam.gserviceaccount.com"
+    )
+    error_message = "The B5 repository-scoped image-publisher binding has changed."
+  }
+}

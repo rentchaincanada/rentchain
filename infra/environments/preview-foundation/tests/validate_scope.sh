@@ -4,11 +4,14 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 repo_dir="$(cd "$root_dir/../../.." && pwd)"
 workflow_file="$repo_dir/.github/workflows/preview-deployment-identity-validation.yml"
+dockerfile="$repo_dir/rentchain-api/Dockerfile"
+dockerignore_file="$repo_dir/rentchain-api/.dockerignore"
 apply_permissions_file="$root_dir/tests/hcp_apply_permissions.txt"
 b4_apply_delta_file="$root_dir/tests/hcp_b4_apply_permission_delta.txt"
 
 expected_resources="$(cat <<'EOF'
 google_artifact_registry_repository
+google_artifact_registry_repository_iam_member
 google_iam_workload_identity_pool
 google_iam_workload_identity_pool_provider
 google_project_iam_custom_role
@@ -21,7 +24,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "9"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "11"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(artifactregistry|cloudresourcemanager|iam|run|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "5"
@@ -54,7 +57,36 @@ rg -q 'delete_untagged_after    = "604800s"' "$root_dir/deployment_foundation.tf
 rg -q 'account_id   = "preview-backend-runtime"' "$root_dir/deployment_foundation.tf"
 
 if rg -n 'preview_backend_runtime.*(role|member|iam)|roles/iam\.serviceAccountUser' "$root_dir" --glob '*.tf'; then
-  echo "The future Preview runtime identity must remain role-less and non-delegable in B4" >&2
+  echo "The future Preview runtime identity must remain role-less and non-delegable" >&2
+  exit 1
+fi
+
+expected_image_publisher_permissions="$(cat <<'EOF'
+artifactregistry.dockerimages.get
+artifactregistry.repositories.downloadArtifacts
+artifactregistry.repositories.get
+artifactregistry.repositories.uploadArtifacts
+artifactregistry.tags.create
+artifactregistry.tags.get
+EOF
+)"
+actual_image_publisher_permissions="$(
+  rg -No '"artifactregistry\.[^"]+"' "$root_dir/image_delivery.tf" \
+    | tr -d '"' \
+    | sort -u
+)"
+test "$actual_image_publisher_permissions" = "$expected_image_publisher_permissions"
+test "$(printf '%s\n' "$actual_image_publisher_permissions" | wc -l | tr -d ' ')" = "6"
+
+rg -q 'role_id     = "githubPreviewImagePublisher"' "$root_dir/image_delivery.tf"
+rg -q 'resource "google_artifact_registry_repository_iam_member" "github_preview_image_publisher"' "$root_dir/image_delivery.tf"
+rg -q 'repository = google_artifact_registry_repository\.preview_backend\.repository_id' "$root_dir/image_delivery.tf"
+rg -q 'github_preview_image_publisher_member = "serviceAccount:github-preview-deploy@rentchain-preview\.iam\.gserviceaccount\.com"' "$root_dir/image_delivery.tf"
+rg -q 'member     = local\.github_preview_image_publisher_member' "$root_dir/image_delivery.tf"
+rg -q 'role       = google_project_iam_custom_role\.github_preview_image_publisher\.name' "$root_dir/image_delivery.tf"
+
+if rg -n 'artifactregistry\.repositories\.(create|update|delete|getIamPolicy|setIamPolicy|list)|artifactregistry\.(packages|versions|files)\.delete|artifactregistry\.tags\.(delete|update)|iam\.serviceAccounts\.actAs|roles/artifactregistry\.' "$root_dir/image_delivery.tf"; then
+  echo "Forbidden B5 image-publisher permission or predefined role found" >&2
   exit 1
 fi
 
@@ -127,16 +159,93 @@ fi
 rg -q '^  workflow_dispatch:$' "$workflow_file"
 rg -q '^  contents: read$' "$workflow_file"
 rg -q '^  id-token: write$' "$workflow_file"
+test "$(rg -No '^  [a-z-]+: (read|write)$' "$workflow_file" | wc -l | tr -d ' ')" = "2"
+rg -q 'source_sha:' "$workflow_file"
 rg -q "github.repository == 'rentchaincanada/rentchain'" "$workflow_file"
 rg -q "github.ref == 'refs/heads/main'" "$workflow_file"
 rg -q "github.event_name == 'workflow_dispatch'" "$workflow_file"
+grep -Fq '[[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]' "$workflow_file"
+grep -Fq 'test "${SOURCE_SHA}" = "${WORKFLOW_SHA}"' "$workflow_file"
+rg -q 'persist-credentials: false' "$workflow_file"
+grep -Fq 'git merge-base --is-ancestor "${SOURCE_SHA}" "${WORKFLOW_SHA}"' "$workflow_file"
+grep -Fq 'git checkout --detach "${SOURCE_SHA}"' "$workflow_file"
 rg -q 'workload_identity_provider: projects/501298948635/locations/global/workloadIdentityPools/github-preview-deploy/providers/github' "$workflow_file"
 rg -q 'service_account: github-preview-deploy@rentchain-preview.iam.gserviceaccount.com' "$workflow_file"
-rg -q 'gcloud projects describe rentchain-preview' "$workflow_file"
+rg -q 'northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend' "$workflow_file"
+grep -Fq 'image_tag="sha-${SOURCE_SHA}"' "$workflow_file"
+rg -q -- '--platform linux/amd64' "$workflow_file"
+rg -q -- '--load' "$workflow_file"
+rg -q 'docker image inspect' "$workflow_file"
+rg -q 'runtime_user=' "$workflow_file"
+rg -q 'node dist/index\.build\.js' "$workflow_file"
+rg -q '8080/tcp' "$workflow_file"
+rg -q 'Prohibited embedded file paths' "$workflow_file"
+rg -q 'High-confidence credential pattern categories detected in' "$workflow_file"
+rg -q 'docker run --detach' "$workflow_file"
+rg -q '/health/ready' "$workflow_file"
+grep -Fq 'docker tag "${VALIDATION_IMAGE}" "${remote_image}"' "$workflow_file"
+grep -Fq 'docker push "${remote_image}"' "$workflow_file"
+test "$(rg -No 'uses: [^@]+@[0-9a-f]{40}' "$workflow_file" | wc -l | tr -d ' ')" = "4"
 
-if rg -n '^  (push|pull_request|schedule):|gcloud (run|builds|artifacts|iam|projects add-iam-policy-binding)|docker (build|push)|terraform (apply|destroy)' "$workflow_file"; then
-  echo "Untrusted trigger or mutation command found in B3 validation workflow" >&2
+build_line="$(rg -n 'docker buildx build' "$workflow_file" | cut -d: -f1)"
+inspect_line="$(rg -n -- '- name: Inspect image configuration and runtime contents' "$workflow_file" | cut -d: -f1)"
+smoke_line="$(rg -n -- '- name: Smoke-test the validated image' "$workflow_file" | cut -d: -f1)"
+auth_line="$(rg -n -- '- name: Authenticate to the isolated Preview project' "$workflow_file" | cut -d: -f1)"
+push_line="$(rg -n 'docker push "\$\{remote_image\}"' "$workflow_file" | cut -d: -f1)"
+test -n "$build_line"
+test -n "$inspect_line"
+test -n "$smoke_line"
+test -n "$auth_line"
+test -n "$push_line"
+test "$build_line" -lt "$inspect_line"
+test "$inspect_line" -lt "$smoke_line"
+test "$smoke_line" -lt "$auth_line"
+test "$build_line" -lt "$auth_line"
+test "$auth_line" -lt "$push_line"
+
+if rg -n -- '--push|docker buildx build.*--push' "$workflow_file"; then
+  echo "Buildx must load locally and must not publish before validation" >&2
   exit 1
 fi
+
+if rg -n '^  (push|pull_request|pull_request_target|schedule):|gcloud (run|builds|iam|projects add-iam-policy-binding)|terraform (apply|destroy)|(^|:)latest($|[[:space:]])|:main($|[[:space:]])|:preview($|[[:space:]])|:stable($|[[:space:]])|:production($|[[:space:]])' "$workflow_file"; then
+  echo "Untrusted trigger, prohibited command, or mutable image tag found in B5 workflow" >&2
+  exit 1
+fi
+
+if rg -n 'credentials_json|service_account_key|private_key([[:space:]]*:|_data)|pull_request_target|contents: write|packages: write|deployments: write|security-events: write' "$workflow_file"; then
+  echo "Static credential or excessive workflow permission found" >&2
+  exit 1
+fi
+
+test "$(rg -No '^FROM node:20\.20\.2-slim AS (build|runtime)$' "$dockerfile" | wc -l | tr -d ' ')" = "2"
+rg -q '^RUN npm ci$' "$dockerfile"
+rg -q '^RUN npm ci --omit=dev && npm cache clean --force$' "$dockerfile"
+rg -q '^COPY --from=build /app/dist ./dist$' "$dockerfile"
+rg -q '^ENV NODE_ENV=production$' "$dockerfile"
+rg -q '^ENV PORT=8080$' "$dockerfile"
+rg -q '^EXPOSE 8080$' "$dockerfile"
+rg -q '^USER node$' "$dockerfile"
+rg -q '^CMD \["node", "dist/index\.build\.js"\]$' "$dockerfile"
+
+if rg -n '^(ARG|ENV) .*(SECRET|TOKEN|PASSWORD|CREDENTIAL|PRODUCTION_PROJECT)' "$dockerfile"; then
+  echo "Sensitive Docker build or runtime input found" >&2
+  exit 1
+fi
+
+for ignored_path in \
+  '.git' \
+  '.github' \
+  '.handoff' \
+  '.env' \
+  '.env.*' \
+  'node_modules' \
+  'dist' \
+  'coverage' \
+  'tests' \
+  '**/__tests__' \
+  'cloudbuild.yaml'; do
+  grep -Fqx "$ignored_path" "$dockerignore_file"
+done
 
 echo "Preview foundation scope validation passed"

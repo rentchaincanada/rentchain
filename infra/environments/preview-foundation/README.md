@@ -1,6 +1,6 @@
 # Preview Foundation Terraform Root
 
-This is the isolated Phase B Terraform root for the permanent `rentchain-preview` non-production project. It is intentionally independent from the repository-root Terraform configuration and has no production remote-state dependency. B2 manages the three approved management APIs, and B3 manages the runtime-proven keyless GitHub inspection identity. B4 proposes only a private deployment repository, a role-less future runtime identity, and the Artifact Registry and Cloud Run APIs. It does not authorize or create an application workload.
+This is the isolated Phase B Terraform root for the permanent `rentchain-preview` non-production project. It is intentionally independent from the repository-root Terraform configuration and has no production remote-state dependency. B2 manages the three approved management APIs, B3 manages the runtime-proven keyless GitHub identity, and B4 manages the private deployment repository, role-less future runtime identity, and Artifact Registry and Cloud Run APIs. B5A proposes only repository-scoped image-publisher IAM. It does not authorize or create an application workload.
 
 ## HCP Terraform mapping
 
@@ -10,8 +10,8 @@ This is the isolated Phase B Terraform root for the permanent `rentchain-preview
 - Workflow: CLI-driven
 - Execution mode: Remote
 - State: isolated from production
-- Resources/state objects: nine applied B2/B3 resources
-- Configuration uploaded: B2 and B3 applied; B4 remains an unapplied proposal
+- Resources/state objects: 15 applied B2/B3/B4/B5 IAM resources
+- Configuration uploaded: B2, B3, B4, and B5 image-publisher IAM applied
 - VCS connection: none
 - Google credentials: none
 - Production-state connection: none
@@ -44,14 +44,20 @@ The applied B3 deployment-identity foundation contains only:
 
 The provider requires the immutable GitHub repository ID `1103977082`, owner ID `246115482`, exact repository, exact `main` ref, `workflow_dispatch`, exact workflow file/ref, and exact branch subject. Forks, other repositories, other workflows, other events, other refs, and other subjects fail closed.
 
-The proposed B4 foundation adds only:
+The applied B4 foundation contains only:
 
 - `artifactregistry.googleapis.com` and `run.googleapis.com`;
 - one private Docker repository named `rentchain-preview` in `northamerica-northeast1`;
 - immutable Docker tags plus enforced cleanup that deletes untagged versions after seven days and keeps 15 recent versions; and
 - one role-less `preview-backend-runtime` service account.
 
-No Cloud Run service, image, Cloud Build resource, public IAM, Service Account User, deployment permission, Storage, Firebase, Firestore, secret, provider, billing, production, or runtime-data resource is proposed.
+The applied B5 image-delivery IAM foundation contains only:
+
+- one six-permission `githubPreviewImagePublisher` custom role; and
+- one repository-level IAM member granting that role to the exact GitHub
+  deployment service account on the existing `rentchain-preview` repository.
+
+No Cloud Run service, image, Cloud Build resource, public IAM, Service Account User, runtime-account permission, Storage, Firebase, Firestore, secret, provider, billing, production, or runtime-data resource is proposed.
 
 ## Authentication and execution boundary
 
@@ -67,4 +73,4 @@ The API resources use `prevent_destroy` and do not disable services on destroy. 
 
 ## Current classification
 
-B2 and B3 are complete. B3 runtime identity and zero drift are validated with exactly nine state resources and zero user-managed keys. B4 proposes exactly four foundation additions and remains unapplied; an authoritative speculative plan from the final tracked head and separate review of its exact Artifact Registry apply-permission prerequisite are required. No workload deployment or B5 work is authorized, and PR #1435 remains unchanged and on hold.
+B2, B3, and B4 are complete. B3 runtime identity is validated, B4 is applied, and B5 image-publisher IAM is applied with exactly 15 state resources and zero drift. The manual image workflow remains unmerged and must not run before a separate exact-main-head image-push authorization. No workload deployment or B6 work is authorized, and PR #1435 remains unchanged and on hold.
