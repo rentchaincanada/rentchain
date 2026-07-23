@@ -440,6 +440,12 @@ const loadTenants = useCallback(async () => {
     }
   }, [authLoading, authStatus, canViewTenants, ready, showToast]);
 
+  const refreshAfterLeaseEnded = useCallback(async () => {
+    await loadTenants();
+    if (selectedTenantId) await refreshTenantTenancies(selectedTenantId);
+    setActivityRefreshKey((value) => value + 1);
+  }, [loadTenants, refreshTenantTenancies, selectedTenantId]);
+
   useEffect(() => {
     void loadTenants();
   }, [loadTenants]);
@@ -1203,7 +1209,10 @@ const loadTenants = useCallback(async () => {
               </Section>
 
               <Section style={tenantWorkspaceSectionStyle}>
-                <TenantLeasePanel tenantId={tenantExists ? selectedTenantId : null} />
+                <TenantLeasePanel
+                  tenantId={tenantExists ? selectedTenantId : null}
+                  onLeaseEnded={refreshAfterLeaseEnded}
+                />
               </Section>
 
               <Section style={tenantWorkspaceSectionStyle}>

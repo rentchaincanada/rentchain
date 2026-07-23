@@ -1,5 +1,8 @@
 .rc-tenants-grid {
   display: block;
+  height: min(760px, calc(100vh - 220px));
+  max-height: calc(100vh - 220px);
+  overflow: hidden;
   min-height: 0;
 }
 
@@ -82,6 +85,7 @@
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
+  overflow-x: hidden;
   padding-bottom: 12px;
 }
 
@@ -90,6 +94,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .rc-tenants-list-item {
@@ -161,6 +167,16 @@
 }
 
 @media (max-width: 768px) {
+  .rc-tenants-grid {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .rc-tenants-detail {
+    overflow: visible;
+  }
+
   .rc-tenants-page {
     padding: 14px;
     border-radius: 14px;
