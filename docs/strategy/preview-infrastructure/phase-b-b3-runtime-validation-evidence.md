@@ -6,7 +6,7 @@
 
 The B3 GitHub Actions to Google Workload Identity Federation path is runtime-proven for the approved read-only Preview inspection workflow. The single manual run authenticated successfully, described `rentchain-preview`, and listed its enabled services. No credential material or workflow artifact was exposed.
 
-The post-apply HCP Terraform plan did not reach drift evaluation because the phase-separated plan identity lacks three observed read-only permissions for B3 resources. No IAM change, retry, apply, state change, workload, or API enablement followed. Final classification: **B3 runtime identity validated; zero-drift requires bounded read revision**.
+The first post-apply HCP Terraform plan did not reach drift evaluation because the phase-separated plan identity lacked the provider's complete read surface for B3 resources. A separately authorized bounded correction replaced two ineffective service-qualified Workload Identity Federation permission identifiers with their canonical IAM authorization identifiers. One fresh plan then completed with `0 add, 0 change, 0 destroy, 0 import`. No apply, state change, workload, API enablement, or production access followed. Final classification: **B3 identity foundation validated**.
 
 This evidence extends the merged [B3 keyless deployment identity plan](./phase-b-b3-keyless-deployment-identity-plan.md). B4 remains unstarted, and PR #1435 remains unchanged, draft, and on hold.
 
@@ -102,11 +102,61 @@ The reported zero actions are not a zero-drift result because refresh did not co
 | `iam.workloadIdentityPools.get` | IAM | `google_iam_workload_identity_pool.github_preview_deploy` | `projects/rentchain-preview/locations/global/workloadIdentityPools/github-preview-deploy` |
 | `iam.roles.get` | IAM | `google_project_iam_custom_role.github_preview_deployment_inspector` | `projects/rentchain-preview/roles/githubPreviewDeploymentInspector` |
 
-All three permissions are read-only. Their observation does not authorize adding them, and later refresh operations may reveal other read-only requirements. No IAM permission was added, no variable or source was changed, and the plan was not retried.
+All three permissions are read-only. Their observation did not authorize adding them at that time, and the failed run was not retried.
+
+## Bounded plan-role normalization
+
+The Founder separately authorized the complete read-only provider refresh surface. The first authorized role revision used these service-qualified WIF identifiers:
+
+```text
+iam.googleapis.com/workloadIdentityPoolProviders.get
+iam.googleapis.com/workloadIdentityPools.get
+```
+
+Run `run-p7Ebx9WVi2YLbctC` proved those identifiers ineffective for authorization. The IAM API denied canonical permission `iam.workloadIdentityPools.get` on the existing Preview WIF pool even though the service-qualified string was present in the role. No apply or retry followed that denial.
+
+A second, separately authorized correction removed only those two ineffective strings and substituted:
+
+```text
+iam.workloadIdentityPoolProviders.get
+iam.workloadIdentityPools.get
+```
+
+The live HCP plan custom role now contains exactly:
+
+```text
+iam.roles.get
+iam.serviceAccounts.get
+iam.serviceAccounts.getIamPolicy
+iam.workloadIdentityPoolProviders.get
+iam.workloadIdentityPools.get
+resourcemanager.projects.get
+resourcemanager.projects.getIamPolicy
+serviceusage.services.get
+serviceusage.services.list
+```
+
+It contains no list, create, update, delete, undelete, policy-mutation, API-enablement, key, token, signing, deployment, workload, billing, Storage, Firebase, Firestore, or production permission. The HCP apply role remained unchanged, and the plan service-account trust remains restricted to `attribute.terraform_run_phase/plan`.
+
+## Successful zero-drift plan
+
+| Evidence | Value |
+| --- | --- |
+| Workspace | `rentchain-preview-foundation` / `ws-ebtKQ2gkLZuoRis4` |
+| Configuration version | `cv-6DUZJVzfpFXPXPAQ` |
+| Run | `run-wS9nWXNp9QjPASJG` |
+| Plan | `plan-bCwjhtTmxHXNUAFq` |
+| Source | merged `main` at `1a1144aec05c2f46561cb9c5f96dd16f130fcceb` |
+| Created | `2026-07-23T00:41:12.169Z` |
+| Run status | `planned_and_finished` |
+| Result | `0 add, 0 change, 0 destroy, 0 import` |
+| Apply | None |
+
+This was the only plan generated after the canonical identifier correction. Refresh completed, no additional permission denial appeared, and the plan was not applied.
 
 ## Final state and isolation
 
-HCP Terraform remains remote with auto-apply off and no auto-destroy configuration. State remains exactly nine resources: three B2 service resources and six B3 identity resources. The failed validation plan added no state resource and ran no apply.
+HCP Terraform remains remote with auto-apply off and no auto-destroy configuration. Current state metadata confirms exactly nine resources: three B2 service resources and six B3 identity resources. The successful validation plan changed no state resource and ran no apply.
 
 User-managed key counts remain:
 
@@ -126,10 +176,10 @@ The workflow consumed approximately 13 seconds of GitHub-hosted runner time. WIF
 
 ## Remaining limitation and next boundary
 
-Runtime identity validation is complete. Terraform zero drift is not proven. A separately reviewed mission must audit the provider refresh operations and design the narrowest read-only HCP plan-role permission revision. That mission must not grant create, update, delete, undelete, policy mutation, key, token, deployment, billing, workload, or production capability and must not retry planning until separately authorized.
+Runtime identity validation and Terraform zero-drift validation are complete for the B3 identity foundation. This evidence does not authorize an apply, B4, workload deployment, broader IAM, another API, or production access.
 
 B4 remains unauthorized and unstarted.
 
 ## Classification
 
-**B3 runtime identity validated; zero-drift requires bounded read revision.**
+**B3 identity foundation validated.**
