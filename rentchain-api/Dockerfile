@@ -1,20 +1,27 @@
-FROM node:20-slim
+FROM node:20.20.2-slim AS build
 
 WORKDIR /app
 
-# Install dependencies first for better layer caching
 COPY package*.json ./
 RUN npm ci
 
-# Copy source
 COPY . .
-
-# Build TypeScript
 RUN npm run build
+
+FROM node:20.20.2-slim AS runtime
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+COPY --from=build /app/dist ./dist
 
 ENV NODE_ENV=production
 ENV PORT=8080
+
 EXPOSE 8080
 
-# Start the build-safe entrypoint
+USER node
+
 CMD ["node", "dist/index.build.js"]

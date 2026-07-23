@@ -1,20 +1,55 @@
-name: Preview deployment identity validation
+name: Preview backend image delivery
 
 on:
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full 40-character commit SHA at the current main head
+        required: true
+        type: string
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
-  validate-preview-identity:
+  build-and-push-preview-backend:
     if: >-
       github.repository == 'rentchaincanada/rentchain' &&
       github.ref == 'refs/heads/main' &&
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      IMAGE: northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend
+      SOURCE_SHA: ${{ inputs.source_sha }}
     steps:
+      - name: Validate authorized source
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "${SOURCE_SHA}" = "${WORKFLOW_SHA}"
+
+      - name: Check out the exact authorized source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify checked-out source
+        shell: bash
+        run: |
+          set -euo pipefail
+          checked_out_sha="$(git rev-parse HEAD)"
+          test "${checked_out_sha}" = "${SOURCE_SHA}"
+          printf 'Checked out source: %s\n' "${checked_out_sha}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
       - name: Authenticate to the isolated Preview project
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
@@ -26,16 +61,43 @@ jobs:
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
 
-      - name: Verify inspection-only Preview access
+      - name: Configure Docker authentication
         shell: bash
         run: |
           set -euo pipefail
-          test "${GITHUB_REPOSITORY}" = "rentchaincanada/rentchain"
-          test "${GITHUB_REF}" = "refs/heads/main"
-          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
-          gcloud projects describe rentchain-preview \
-            --format='value(projectId,projectNumber)'
-          gcloud services list \
-            --enabled \
+          gcloud auth configure-docker \
+            northamerica-northeast1-docker.pkg.dev \
+            --quiet
+
+      - name: Build and push the exact Preview backend image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_tag="sha-${SOURCE_SHA}"
+          metadata_file="${RUNNER_TEMP}/preview-backend-image-metadata.json"
+          docker buildx build \
+            --file rentchain-api/Dockerfile \
+            --tag "${IMAGE}:${image_tag}" \
+            --metadata-file "${metadata_file}" \
+            --push \
+            rentchain-api
+          digest="$(jq -r '."containerimage.digest"' "${metadata_file}")"
+          [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          printf 'image=%s\n' "${IMAGE}" >> "${GITHUB_OUTPUT}"
+          printf 'tag=%s\n' "${image_tag}" >> "${GITHUB_OUTPUT}"
+          printf 'digest=%s\n' "${digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Inspect the uploaded immutable artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          observed_digest="$(gcloud artifacts docker images describe \
+            "${IMAGE}:${{ steps.image.outputs.tag }}" \
             --project=rentchain-preview \
-            --format='value(config.name)'
+            --format='value(image_summary.digest)')"
+          test "${observed_digest}" = "${{ steps.image.outputs.digest }}"
+          printf 'Source commit: %s\n' "${SOURCE_SHA}"
+          printf 'Image: %s@%s\n' \
+            "${IMAGE}" \
+            "${{ steps.image.outputs.digest }}"
