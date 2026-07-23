@@ -282,6 +282,21 @@ describe("TenantsPage", () => {
     mocks.fetchTenantTenanciesMock.mockResolvedValue([
       { id: "tenancy-1", tenantId: "tenant-1", status: "active", unitLabel: "Unit 4" },
     ]);
+    mocks.useTenantDetailMock.mockReturnValue({
+      loading: false,
+      error: null,
+      bundle: {
+        tenant: { id: "tenant-1", fullName: "Taylor Tenant" },
+        currentLease: {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyName: "Main Street",
+          unit: "Unit 4",
+          status: "active",
+        },
+        unit: { id: "unit-4", unitNumber: "Unit 4", status: "occupied" },
+      },
+    });
 
     render(
       <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>

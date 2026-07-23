@@ -172,7 +172,7 @@ function describeTenantLinkage(
   const activeTenancies = tenancies.filter((tenancy) => tenancy.status !== "inactive");
   const primaryProperty = tenant.propertyName || tenant.propertyId || "No property linked";
   const primaryUnit = tenant.unit || tenant.unitLabel || tenant.unitId || "No unit linked";
-  const currentLeaseId = String(currentLease?.id || tenant.currentLeaseId || "").trim();
+  const currentLeaseId = String(currentLease?.id || "").trim();
   const hasCurrentLeaseLink = Boolean(currentLeaseId);
   const leaseLabel = currentLeaseId
     ? [primaryProperty !== "No property linked" ? primaryProperty : null, primaryUnit !== "No unit linked" ? primaryUnit : null, "Lease"]
@@ -202,7 +202,7 @@ function getTenantCurrentLeaseId(
   tenant?: TenantApiModel | null,
   currentLease?: TenantLeaseSummary | null
 ): string {
-  return String(currentLease?.id || tenant?.currentLeaseId || "").trim();
+  return String(currentLease?.id || "").trim();
 }
 
 function buildTenantLeaseLink(

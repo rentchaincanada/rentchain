@@ -298,6 +298,37 @@ describe("TenantDetailPanel", () => {
     await waitFor(() => expect(mocks.fetchTenantFinancialActivity).toHaveBeenCalledWith("tenant-1"));
   });
 
+  it("does not fabricate an active lease from stale tenant fields and labels active occupancy separately", async () => {
+    mocks.useTenantDetail.mockReturnValue({
+      loading: false,
+      error: null,
+      bundle: {
+        tenant: {
+          id: "tenant-1",
+          fullName: "Taylor Tenant",
+          currentLeaseId: "stale-lease",
+          leaseStatus: "active",
+          monthlyRent: 1850,
+        },
+        currentLease: null,
+        property: { id: "prop-1", name: "Harbour View" },
+        unit: { id: "unit-1", unitNumber: "101", status: "occupied" },
+        moveInReadiness: null,
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantDetailPanel tenantId="tenant-1" />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Active occupant — no lease linked")).toBeInTheDocument();
+    expect(screen.queryByText("Lease Status Active")).not.toBeInTheDocument();
+    expect(screen.queryByText("Current lease rent")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Lease/i })).not.toBeInTheDocument();
+  });
+
   it("formats current lease date-only values without shifting to the previous day", async () => {
     mocks.useTenantDetail.mockReturnValue({
       loading: false,
