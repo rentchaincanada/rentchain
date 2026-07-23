@@ -11,6 +11,8 @@
   position: relative;
   z-index: 0;
   box-sizing: border-box;
+  min-height: 0;
+  height: calc(100vh - var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height, 120px)));
   padding: 20px;
   border: 1px solid rgba(91, 70, 48, 0.16);
   border-radius: 18px;
@@ -19,6 +21,24 @@
     linear-gradient(180deg, #fbf6ed 0%, #f7f1e7 100%);
   box-shadow: 0 12px 28px rgba(59, 44, 28, 0.1);
   scroll-margin-top: calc(var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height, 120px)) + 24px);
+}
+
+@media (min-width: 769px) {
+  .rc-tenants-page {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .rc-tenants-page > .rc-tenants-header {
+    flex: 0 0 auto;
+  }
+
+  .rc-tenants-page > .rc-tenants-grid {
+    flex: 1 1 auto;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+  }
 }
 
 .rc-tenants-header {
@@ -245,6 +265,11 @@
 }
 
 @media (max-width: 768px) {
+  .rc-tenants-page {
+    height: auto;
+    min-height: 0;
+  }
+
   .rc-tenants-grid {
     height: auto;
     max-height: none;
