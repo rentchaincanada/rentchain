@@ -18,6 +18,10 @@ resource "google_artifact_registry_repository" "preview_backend" {
 
   cleanup_policy_dry_run = false
 
+  docker_config {
+    immutable_tags = true
+  }
+
   cleanup_policies {
     id     = "delete-untagged-after-seven-days"
     action = "DELETE"

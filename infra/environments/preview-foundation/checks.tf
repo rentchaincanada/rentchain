@@ -27,9 +27,10 @@ check "b4_deployment_foundation_boundary" {
     condition = (
       local.preview_deployment_region == "northamerica-northeast1" &&
       local.preview_repository_id == "rentchain-preview" &&
-      local.preview_repository_format == "DOCKER"
+      local.preview_repository_format == "DOCKER" &&
+      google_artifact_registry_repository.preview_backend.docker_config[0].immutable_tags
     )
-    error_message = "The B4 repository project boundary, region, ID, or format has changed."
+    error_message = "The B4 repository project boundary, region, ID, format, or tag immutability has changed."
   }
 
   assert {

@@ -44,6 +44,11 @@ run "exact_b4_foundation_contract_passes" {
   }
 
   assert {
+    condition     = google_artifact_registry_repository.preview_backend.docker_config[0].immutable_tags == true
+    error_message = "The B4 repository must prevent tag mutation."
+  }
+
+  assert {
     condition     = google_artifact_registry_repository.preview_backend.cleanup_policy_dry_run == false
     error_message = "The bounded cleanup policies must remain enforced."
   }

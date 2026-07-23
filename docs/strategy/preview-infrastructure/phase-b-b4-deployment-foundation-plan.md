@@ -91,6 +91,7 @@ Only Artifact Registry and Cloud Run are B4 additions. Cloud Build remains disab
 | Location | `northamerica-northeast1` |
 | Format | Docker |
 | Access | Private by default; no IAM member is added |
+| Tag mutation | Immutable tags; tags may be created but not moved, modified, or deleted |
 | Cross-project writer | None |
 | Production mirroring | Prohibited |
 | Untagged cleanup | Delete after seven days |
@@ -98,7 +99,7 @@ Only Artifact Registry and Cloud Run are B4 additions. Cloud Build remains disab
 | Cleanup enforcement | Enabled, not dry-run |
 | Destroy posture | `prevent_destroy` |
 
-Future exact-head images should use immutable commit-SHA tags and record their digest. Tags associated with actively reviewed PRs should be retained within the 15-version bound where operationally feasible. No application image is pushed in B4.
+Future exact-head images should use immutable commit-SHA tags and record their digest. Immutable tags prevent an approved tag from being silently moved to another digest. The keep policy protects the 15 most recent versions per package, while the delete policy applies only to untagged versions older than seven days. Tags associated with active reviewed deployments therefore remain protected from the untagged cleanup rule. No application image is pushed in B4.
 
 ## Runtime service account
 
@@ -186,7 +187,7 @@ Before apply, rollback is source-only: close the draft PR and delete the feature
 
 After any separately authorized apply, `prevent_destroy` and non-disabling API behavior intentionally prevent automatic destructive rollback. Disabling APIs, deleting the repository, deleting the runtime account, changing cleanup policy, or removing evidence requires a separate dependency audit and exact Founder authorization. Images must never be deleted implicitly as part of source rollback.
 
-## Controlled plan evidence
+## Preliminary plan evidence
 
 | Evidence | Value |
 | --- | --- |
@@ -194,11 +195,12 @@ After any separately authorized apply, `prevent_destroy` and non-disabling API b
 | Configuration version | `cv-n2m3gTaPBYWJwAqc` |
 | Run | `run-W5WrF3PpaSURh1cS` |
 | Plan | `plan-ppeaQYKGDvBxFhxA` |
-| Status | `planned`; manual confirmation available |
+| Status | `planned`; non-speculative and not authoritative for final B4 review |
 | Auto-apply | Off |
 | Result | `4 add, 0 change, 0 destroy, 0 import` |
 | Apply object | Pending, never started |
 | Current state | Nine resources, unchanged |
+| Expected state after a separately approved apply | Thirteen resources |
 
 The four planned creates are exactly:
 
@@ -215,8 +217,8 @@ No Cloud Run service or revision, image, Cloud Build resource, Firebase, Firesto
 
 ## Acceptance and next boundary
 
-B4 cannot proceed to controlled apply until the separately reviewed HCP apply-role delta is authorized and runtime-verified. Current classification: **B4 permission expansion requires review**.
+The preliminary plan demonstrates the bounded four-resource shape but does not satisfy the final-head speculative-plan requirement. The authoritative speculative configuration, run, plan, and full action inventory must be recorded in the draft PR review record after the final tracked branch head is committed. This preserves exact source provenance without changing the tracked head after planning.
 
-The single HCP plan completed and proposes only the four approved B4 resources. No workload, image, public IAM, or production action appears.
+If that exact-head speculative plan contains only the four approved creates and zero changes, destroys, or imports, the classification becomes **B4 deployment foundation plan validated — awaiting Founder apply authorization**.
 
-The apply role permission delta remains a separate review gate. No apply, image validation, deployment permission, B5 work, or PR #1435 change is authorized by this document.
+The apply role permission delta remains a separate Founder review prerequisite for any future exact-run apply authorization. No IAM change, apply, image validation, deployment permission, B5 work, or PR #1435 change is authorized by this document.

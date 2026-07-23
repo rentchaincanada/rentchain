@@ -48,7 +48,7 @@ The proposed B4 foundation adds only:
 
 - `artifactregistry.googleapis.com` and `run.googleapis.com`;
 - one private Docker repository named `rentchain-preview` in `northamerica-northeast1`;
-- enforced cleanup that deletes untagged versions after seven days and keeps 15 recent versions; and
+- immutable Docker tags plus enforced cleanup that deletes untagged versions after seven days and keeps 15 recent versions; and
 - one role-less `preview-backend-runtime` service account.
 
 No Cloud Run service, image, Cloud Build resource, public IAM, Service Account User, deployment permission, Storage, Firebase, Firestore, secret, provider, billing, production, or runtime-data resource is proposed.
@@ -67,4 +67,4 @@ The API resources use `prevent_destroy` and do not disable services on destroy. 
 
 ## Current classification
 
-B2 and B3 are complete. B3 runtime identity and zero drift are validated with exactly nine state resources and zero user-managed keys. The B4 plan proposes exactly four foundation additions and remains unapplied; its exact Artifact Registry apply-permission delta requires separate review. No workload deployment or B5 work is authorized, and PR #1435 remains unchanged and on hold.
+B2 and B3 are complete. B3 runtime identity and zero drift are validated with exactly nine state resources and zero user-managed keys. B4 proposes exactly four foundation additions and remains unapplied; an authoritative speculative plan from the final tracked head and separate review of its exact Artifact Registry apply-permission prerequisite are required. No workload deployment or B5 work is authorized, and PR #1435 remains unchanged and on hold.
