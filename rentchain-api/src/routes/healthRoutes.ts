@@ -2,6 +2,7 @@ import express from "express";
 import { getVersion } from "../version";
 import { db, initializationState } from "../firebase";
 import { safeDiagnosticBuildMetadata } from "../middleware/diagnosticSurfaceGuard";
+import { getRuntimeEnvironment, getConfiguredProjectId } from "../config/runtimeEnvironment";
 
 const router = express.Router();
 
@@ -14,6 +15,8 @@ router.get("/", (_req, res) => {
     reportingEnabled: process.env.REPORTING_ENABLED === "true",
     reportingDryRun: process.env.REPORTING_DRY_RUN === "true",
     firebaseInitializationMode: firebaseState.mode,
+    environment: getRuntimeEnvironment(),
+    project: getConfiguredProjectId() || null,
   });
 });
 
@@ -30,6 +33,18 @@ router.get("/ready", async (_req, res) => {
   const checks: Record<string, string> = {
     routes: "ok",
   };
+
+  if (getRuntimeEnvironment() === "preview" && firebaseState.mode === "preview-disabled") {
+    return res.status(503).json({
+      status: "fail",
+      service: "rentchain-api",
+      checks: { routes: "ok", datastore: "deferred" },
+      firebaseInitializationMode: firebaseState.mode,
+      environment: getRuntimeEnvironment(),
+      mode: "foundation",
+      message: "Preview datastore is not provisioned; readiness is deferred.",
+    });
+  }
 
   const hasDbCreds = Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIREBASE_CONFIG);
   if (!hasDbCreds) {

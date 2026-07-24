@@ -9,6 +9,8 @@ function resetEnv() {
 
 function setCommonRequiredEnv() {
   process.env.NODE_ENV = "production";
+  process.env.APP_ENV = "production";
+  process.env.GOOGLE_CLOUD_PROJECT = "project-0d9658de-af29-4dc0-a99";
   process.env.JWT_SECRET = "test_jwt";
   process.env.PUBLIC_APP_URL = "https://app.example.com";
   process.env.STRIPE_SECRET_KEY = "sk_test";
@@ -37,6 +39,8 @@ describe("requiredEnv provider-aware email requirements", () => {
     process.env = {
       ...ENV_BACKUP,
       NODE_ENV: "production",
+      APP_ENV: "production",
+      GOOGLE_CLOUD_PROJECT: "project-0d9658de-af29-4dc0-a99",
       FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080",
       ALLOW_LOCAL_PROD_FIRESTORE: "false",
     };

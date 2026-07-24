@@ -78,4 +78,18 @@ describe("firestoreEnvironmentGuard", () => {
       googleApplicationCredentialsPresent: true,
     });
   });
+
+  it("supports explicitly disabled Preview Firestore without initializing credentials", () => {
+    const result = assertSafeFirestoreEnvironment({
+      APP_ENV: "preview",
+      GOOGLE_CLOUD_PROJECT: "rentchain-preview",
+      FIRESTORE_ENABLED: "false",
+    });
+
+    expect(result).toMatchObject({
+      environment: "preview",
+      mode: "preview-disabled",
+      localProductionFirestoreOverride: false,
+    });
+  });
 });

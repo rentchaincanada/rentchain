@@ -33,7 +33,7 @@ export function recordInitializationState(input: {
 export function initializationState(): FirebaseInitializationState {
   if (currentState) return { ...currentState };
   return {
-    environment: String(process.env.NODE_ENV || "development").toLowerCase(),
+    environment: String(process.env.APP_ENV || process.env.NODE_ENV || "development").toLowerCase(),
     mode: "emulator",
     emulatorHost: String(process.env.FIRESTORE_EMULATOR_HOST || "").trim() || null,
     projectId: "",

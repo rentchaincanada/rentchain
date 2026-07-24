@@ -2,7 +2,7 @@ type FirestoreGuardEnv = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
 export type FirestoreEnvironmentGuardResult = {
   environment: string;
-  mode: "production" | "emulator" | "local-prod-firestore-override";
+  mode: "production" | "preview-disabled" | "emulator" | "local-prod-firestore-override";
   emulatorHost: string | null;
   localProductionFirestoreOverride: boolean;
   googleApplicationCredentialsPresent: boolean;
@@ -15,7 +15,7 @@ function envValue(env: FirestoreGuardEnv, key: string): string {
 }
 
 function normalizedEnvironment(env: FirestoreGuardEnv): string {
-  return envValue(env, "NODE_ENV").toLowerCase() || "development";
+  return envValue(env, "APP_ENV").toLowerCase() || envValue(env, "NODE_ENV").toLowerCase() || "development";
 }
 
 function isTrue(value: string): boolean {
@@ -30,6 +30,16 @@ export function assertSafeFirestoreEnvironment(
   const emulatorHost = envValue(env, "FIRESTORE_EMULATOR_HOST");
   const googleApplicationCredentials = envValue(env, "GOOGLE_APPLICATION_CREDENTIALS");
   const localProductionFirestoreOverride = isTrue(envValue(env, "ALLOW_LOCAL_PROD_FIRESTORE"));
+
+  if (environment === "preview" && !isTrue(envValue(env, "FIRESTORE_ENABLED"))) {
+    return {
+      environment,
+      mode: "preview-disabled",
+      emulatorHost: emulatorHost || null,
+      localProductionFirestoreOverride: false,
+      googleApplicationCredentialsPresent: Boolean(googleApplicationCredentials),
+    };
+  }
 
   if (environment === "production") {
     return {
