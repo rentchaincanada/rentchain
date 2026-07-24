@@ -91,6 +91,34 @@ check "b6_preview_backend_boundary" {
   }
 }
 
+check "b6_cloud_run_deployer_iam_boundary" {
+  assert {
+    condition = (
+      google_project_iam_custom_role.terraform_preview_cloud_run_deployer.project == "rentchain-preview" &&
+      google_project_iam_custom_role.terraform_preview_cloud_run_deployer.role_id == "terraformPreviewCloudRunDeployer" &&
+      local.terraform_preview_cloud_run_deployer_permissions == toset([
+        "run.locations.get",
+        "run.operations.get",
+        "run.services.create",
+        "run.services.delete",
+        "run.services.get",
+        "run.services.update",
+      ])
+    )
+    error_message = "The B6 Cloud Run deployer role must remain Preview-scoped and lifecycle-only."
+  }
+
+  assert {
+    condition = (
+      google_project_iam_member.terraform_preview_cloud_run_deployer.member == local.hcp_terraform_apply_member &&
+      google_service_account_iam_member.terraform_preview_runtime_act_as.service_account_id == google_service_account.preview_backend_runtime.name &&
+      google_service_account_iam_member.terraform_preview_runtime_act_as.member == local.hcp_terraform_apply_member &&
+      google_service_account_iam_member.terraform_preview_runtime_act_as.role == "roles/iam.serviceAccountUser"
+    )
+    error_message = "B6 deployer access must use the exact HCP apply principal and runtime-account actAs binding."
+  }
+}
+
 check "b5_image_delivery_boundary" {
   assert {
     condition = local.github_preview_image_publisher_permissions == toset([
