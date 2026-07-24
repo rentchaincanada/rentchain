@@ -407,7 +407,7 @@ describe("UnifiedInboxPage", () => {
     expect(screen.getByRole("button", { name: /Pipe leak reported/i })).toHaveTextContent("Unread");
   });
 
-  it("shows honest source-action copy when no linked workspace action is available", async () => {
+  it("finds unread tenant messages and opens the supported deep-linked Messages workspace", async () => {
     const messageRecord = record({
       id: "landlord-message",
       audienceRole: "landlord",
@@ -415,8 +415,14 @@ describe("UnifiedInboxPage", () => {
       title: "Tenant replied",
       body: "Thanks for the update.",
       priority: "normal",
-      status: "read",
-      readAt: "2026-06-09T15:00:00.000Z",
+      status: "unread",
+      readAt: null,
+      sourceAction: {
+        href: "/messages?threadId=conversation-safe-1",
+        label: "Open conversation",
+        helper: "Open the supported Messages workspace to read and reply.",
+        routeKind: "messages_workspace",
+      },
     });
     mocks.fetchUnifiedInbox.mockResolvedValue({
       ok: true,
@@ -431,12 +437,14 @@ describe("UnifiedInboxPage", () => {
     render(<UnifiedInboxPage role="landlord" />);
 
     expect(await screen.findByRole("heading", { name: "Unified inbox" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Unread 1/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search inbox" }), { target: { value: "Thanks" } });
     fireEvent.click(screen.getByRole("button", { name: /Tenant replied/i }));
 
-    expect(screen.getByTestId("unified-inbox-detail-panel")).toHaveTextContent(
-      "This inbox item does not include a linked workspace action yet."
+    expect(screen.getByRole("link", { name: "Open conversation" })).toHaveAttribute(
+      "href",
+      "/messages?threadId=conversation-safe-1"
     );
-    expect(screen.queryByRole("link", { name: /Stay in inbox/i })).not.toBeInTheDocument();
   });
 
   it("shows a safe error state when the inbox cannot load", async () => {
