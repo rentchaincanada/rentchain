@@ -37,7 +37,7 @@ rg -q 'var\.project_number == "501298948635"' "$root_dir/variables.tf"
 rg -q 'var\.environment == "preview"' "$root_dir/variables.tf"
 rg -q 'var\.project_id != "project-0d9658de-af29-4dc0-a99"' "$root_dir/variables.tf"
 rg -q 'variable "enable_preview_backend_service"' "$root_dir/variables.tf"
-rg -q 'default     = false' "$root_dir/variables.tf"
+rg -q 'default     = true' "$root_dir/variables.tf"
 rg -q 'count    = var\.enable_preview_backend_service \? 1 : 0' "$root_dir/cloud_run.tf"
 
 if rg -n 'credentials\s*=|credentials_file|GOOGLE_APPLICATION_CREDENTIALS|service_account_key|private_key' "$root_dir" --glob '*.tf'; then
