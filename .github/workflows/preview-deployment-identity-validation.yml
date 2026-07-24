@@ -83,15 +83,22 @@ jobs:
                 .[0].Config.ExposedPorts["8080/tcp"] == {}
               ' >/dev/null
 
+          docker image inspect "${VALIDATION_IMAGE}" \
+            | jq '{id: .[0].Id, repoTags: .[0].RepoTags, workingDir: .[0].Config.WorkingDir, user: .[0].Config.User, entrypoint: .[0].Config.Entrypoint, cmd: .[0].Config.Cmd, architecture: .[0].Architecture}'
+
           container_id="$(docker create "${VALIDATION_IMAGE}")"
           rootfs="${RUNNER_TEMP}/preview-backend-rootfs"
           mkdir -p "${rootfs}"
-          cleanup_export() {
+          cleanup_inspection() {
             docker rm -f "${container_id}" >/dev/null 2>&1 || true
             rm -rf "${rootfs}"
           }
-          trap cleanup_export EXIT
-          docker export "${container_id}" | tar -xf - -C "${rootfs}"
+          trap cleanup_inspection EXIT
+
+          # Copy the stopped container filesystem, preserving the final image
+          # root rather than interpreting image layers or archive paths.
+          docker cp "${container_id}:/app" "${rootfs}/app"
+          find "${rootfs}/app" -maxdepth 1 -mindepth 1 -printf '%f\n' | sort
 
           test -f "${rootfs}/app/dist/index.build.js"
           test -f "${rootfs}/app/package.json"

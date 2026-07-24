@@ -1,0 +1,69 @@
+name: Preview image runtime validation
+
+on:
+  pull_request:
+    paths:
+      - "rentchain-api/Dockerfile"
+      - "rentchain-api/package.json"
+      - "rentchain-api/package-lock.json"
+      - ".github/workflows/preview-deployment-identity-validation.yml"
+      - ".github/workflows/preview-image-runtime-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build and inspect final runtime filesystem
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="rentchain-preview-runtime-validation:${GITHUB_SHA}"
+          docker buildx build --file rentchain-api/Dockerfile --platform linux/amd64 --tag "${image}" --load rentchain-api
+          docker image inspect "${image}" | jq -e '
+            .[0].Architecture == "amd64" and
+            .[0].Config.WorkingDir == "/app" and
+            .[0].Config.User != "" and
+            .[0].Config.User != "root" and
+            .[0].Config.Cmd == ["node", "dist/index.build.js"] and
+            .[0].Config.ExposedPorts["8080/tcp"] == {}
+          ' >/dev/null
+          container="$(docker create "${image}")"
+          rootfs="${RUNNER_TEMP}/preview-runtime-rootfs"
+          mkdir -p "${rootfs}"
+          trap 'docker rm -f "${container}" >/dev/null 2>&1 || true; rm -rf "${rootfs}"' EXIT
+          docker cp "${container}:/app" "${rootfs}/app"
+          test -f "${rootfs}/app/package.json"
+          test -f "${rootfs}/app/package-lock.json"
+          test -f "${rootfs}/app/dist/index.build.js"
+          test -d "${rootfs}/app/node_modules"
+          test ! -e "${rootfs}/app/src"
+          test ! -e "${rootfs}/app/tests"
+          test ! -e "${rootfs}/app/tsconfig.json"
+          test ! -e "${rootfs}/app/node_modules/typescript"
+          if find "${rootfs}/app" -type f \( -name '.env' -o -name '.env.*' -o -name '*.pem' -o -name '*.key' -o -name '*service-account*.json' -o -name 'credentials*.json' \) | grep -q .; then
+            echo 'Prohibited embedded file found' >&2
+            exit 1
+          fi
+          if rg --text -l -uuu -g '!node_modules/**' -e '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----' -e '"type"\s*:\s*"service_account"' -e '"private_key_id"\s*:' "${rootfs}/app" | grep -q .; then
+            echo 'Credential pattern found' >&2
+            exit 1
+          fi
+      - name: Smoke-test runtime health
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="rentchain-preview-runtime-validation:${GITHUB_SHA}"
+          name="preview-runtime-smoke-${GITHUB_RUN_ID}"
+          trap 'docker rm -f "${name}" >/dev/null 2>&1 || true' EXIT
+          docker run --detach --name "${name}" --publish 127.0.0.1::8080 --env NODE_ENV=development --env PORT=8080 --env FIRESTORE_EMULATOR_HOST=127.0.0.1:65535 --env ALLOW_LOCAL_PROD_FIRESTORE=false "${image}" >/dev/null
+          port="$(docker port "${name}" 8080/tcp | awk -F: 'NR == 1 { print $NF }')"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 2 "http://127.0.0.1:${port}/health/ready" | jq -e '.status == "ok" and .checks.db == "skipped"' >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent --show-error --max-time 2 "http://127.0.0.1:${port}/health" | jq -e '.ok == true' >/dev/null
