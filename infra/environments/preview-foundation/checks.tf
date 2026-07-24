@@ -121,6 +121,21 @@ check "b6_cloud_run_deployer_iam_boundary" {
   }
 }
 
+check "b6_preview_artifact_reader_boundary" {
+  assert {
+    condition = (
+      google_project_iam_custom_role.terraform_preview_artifact_reader.project == "rentchain-preview" &&
+      google_project_iam_custom_role.terraform_preview_artifact_reader.role_id == "terraformPreviewArtifactReader" &&
+      local.terraform_preview_artifact_reader_permissions == toset([
+        "artifactregistry.repositories.downloadArtifacts",
+      ]) &&
+      google_artifact_registry_repository_iam_member.terraform_preview_artifact_reader.repository == google_artifact_registry_repository.preview_backend.repository_id &&
+      google_artifact_registry_repository_iam_member.terraform_preview_artifact_reader.member == local.terraform_preview_artifact_reader_member
+    )
+    error_message = "Preview Terraform image access must remain a single-permission repository-scoped binding for the exact HCP apply identity."
+  }
+}
+
 check "b5_image_delivery_boundary" {
   assert {
     condition = local.github_preview_image_publisher_permissions == toset([

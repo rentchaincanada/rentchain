@@ -68,5 +68,5 @@ variable "monthly_planning_ceiling_cad" {
 variable "enable_preview_backend_service" {
   description = "Explicit deployment-phase gate for the reviewed Preview Cloud Run service. Keep false for IAM-first sequencing."
   type        = bool
-  default     = true
+  default     = false
 }

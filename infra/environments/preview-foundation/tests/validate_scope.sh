@@ -37,7 +37,7 @@ rg -q 'var\.project_number == "501298948635"' "$root_dir/variables.tf"
 rg -q 'var\.environment == "preview"' "$root_dir/variables.tf"
 rg -q 'var\.project_id != "project-0d9658de-af29-4dc0-a99"' "$root_dir/variables.tf"
 rg -q 'variable "enable_preview_backend_service"' "$root_dir/variables.tf"
-rg -q 'default     = true' "$root_dir/variables.tf"
+rg -q 'default     = false' "$root_dir/variables.tf"
 rg -q 'count    = var\.enable_preview_backend_service \? 1 : 0' "$root_dir/cloud_run.tf"
 
 if rg -n 'credentials\s*=|credentials_file|GOOGLE_APPLICATION_CREDENTIALS|service_account_key|private_key' "$root_dir" --glob '*.tf'; then
@@ -59,6 +59,15 @@ rg -q 'immutable_tags = true' "$root_dir/deployment_foundation.tf"
 rg -q 'keep_recent_tagged_count = 15' "$root_dir/deployment_foundation.tf"
 rg -q 'delete_untagged_after    = "604800s"' "$root_dir/deployment_foundation.tf"
 rg -q 'account_id   = "preview-backend-runtime"' "$root_dir/deployment_foundation.tf"
+
+rg -q 'role_id     = "terraformPreviewArtifactReader"' "$root_dir/image_delivery.tf"
+rg -q 'artifactregistry\.repositories\.downloadArtifacts' "$root_dir/image_delivery.tf"
+rg -q 'resource "google_artifact_registry_repository_iam_member" "terraform_preview_artifact_reader"' "$root_dir/image_delivery.tf"
+rg -q 'terraform_preview_artifact_reader_member = "serviceAccount:hcp-terraform-preview-apply@rentchain-preview\.iam\.gserviceaccount\.com"' "$root_dir/image_delivery.tf"
+if rg -n 'artifactregistry\.(repositories\.(uploadArtifacts|create|delete|setIamPolicy)|tags\.(create|delete|update))' "$root_dir/image_delivery.tf" | rg 'terraformPreviewArtifactReader|terraform_preview_artifact_reader'; then
+  echo "Terraform Preview artifact reader has write permissions" >&2
+  exit 1
+fi
 
 rg -q 'role               = "roles/iam\.serviceAccountUser"' "$root_dir/iam.tf"
 rg -q 'service_account_id = google_service_account\.preview_backend_runtime\.name' "$root_dir/iam.tf"
