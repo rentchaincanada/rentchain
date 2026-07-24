@@ -37,3 +37,15 @@ output "preview_deployment_foundation" {
   }
   sensitive = false
 }
+
+output "preview_backend_service" {
+  description = "Non-sensitive identifiers for the private Preview backend service foundation."
+  value = {
+    name         = google_cloud_run_v2_service.preview_backend.name
+    region       = google_cloud_run_v2_service.preview_backend.location
+    uri          = google_cloud_run_v2_service.preview_backend.uri
+    image_digest = local.preview_backend_image_digest
+    source_sha   = local.preview_backend_source_sha
+    ingress      = google_cloud_run_v2_service.preview_backend.ingress
+  }
+}
