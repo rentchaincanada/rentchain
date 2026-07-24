@@ -76,15 +76,16 @@ jobs:
               ;;
           esac
 
-          docker image inspect "${VALIDATION_IMAGE}" \
-            | jq -e '
-                .[0].Config.Entrypoint == null and
-                .[0].Config.Cmd == ["node", "dist/index.build.js"] and
-                .[0].Config.ExposedPorts["8080/tcp"] == {}
-              ' >/dev/null
-
-          docker image inspect "${VALIDATION_IMAGE}" \
-            | jq '{id: .[0].Id, repoTags: .[0].RepoTags, workingDir: .[0].Config.WorkingDir, user: .[0].Config.User, entrypoint: .[0].Config.Entrypoint, cmd: .[0].Config.Cmd, architecture: .[0].Architecture}'
+          image_inspect="$(docker image inspect "${VALIDATION_IMAGE}")"
+          working_dir="$(jq -r '.[0].Config.WorkingDir' <<<"${image_inspect}")"
+          entrypoint="$(jq -c '.[0].Config.Entrypoint' <<<"${image_inspect}")"
+          command="$(jq -c '.[0].Config.Cmd' <<<"${image_inspect}")"
+          ports="$(jq -c '.[0].Config.ExposedPorts' <<<"${image_inspect}")"
+          printf 'Image metadata: id=%s workingDir=%s user=%s entrypoint=%s cmd=%s ports=%s architecture=%s\n' \
+            "$(jq -r '.[0].Id' <<<"${image_inspect}")" "${working_dir}" "${runtime_user}" "${entrypoint}" "${command}" "${ports}" "${platform}"
+          [[ "${working_dir}" == /app ]] || { echo "expected WORKDIR /app, observed ${working_dir}" >&2; exit 1; }
+          [[ "${command}" == '["node","dist/index.build.js"]' ]] || { echo "expected CMD node dist/index.build.js, observed ${command}" >&2; exit 1; }
+          [[ "${ports}" == *'"8080/tcp"'* ]] || { echo "expected exposed port 8080/tcp, observed ${ports}" >&2; exit 1; }
 
           container_id="$(docker create "${VALIDATION_IMAGE}")"
           rootfs="${RUNNER_TEMP}/preview-backend-rootfs"
