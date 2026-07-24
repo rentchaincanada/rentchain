@@ -2,7 +2,7 @@ FROM node:20.20.2-slim AS build
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
@@ -12,7 +12,7 @@ FROM node:20.20.2-slim AS runtime
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /app/dist ./dist
