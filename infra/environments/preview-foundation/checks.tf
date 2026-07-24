@@ -129,7 +129,7 @@ check "b6_preview_artifact_reader_boundary" {
       local.terraform_preview_artifact_reader_permissions == toset([
         "artifactregistry.repositories.downloadArtifacts",
       ]) &&
-      google_artifact_registry_repository_iam_member.terraform_preview_artifact_reader.repository == google_artifact_registry_repository.preview_backend.repository_id &&
+      google_artifact_registry_repository_iam_member.terraform_preview_artifact_reader.repository == "projects/${var.project_id}/locations/${google_artifact_registry_repository.preview_backend.location}/repositories/${google_artifact_registry_repository.preview_backend.repository_id}" &&
       google_artifact_registry_repository_iam_member.terraform_preview_artifact_reader.member == local.terraform_preview_artifact_reader_member
     )
     error_message = "Preview Terraform image access must remain a single-permission repository-scoped binding for the exact HCP apply identity."
