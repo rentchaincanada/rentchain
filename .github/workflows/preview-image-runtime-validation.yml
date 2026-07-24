@@ -59,11 +59,24 @@ jobs:
           set -euo pipefail
           image="rentchain-preview-runtime-validation:${GITHUB_SHA}"
           name="preview-runtime-smoke-${GITHUB_RUN_ID}"
-          trap 'docker rm -f "${name}" >/dev/null 2>&1 || true' EXIT
+          dump_diagnostics() {
+            docker inspect "${name}" --format 'status={{.State.Status}} running={{.State.Running}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restart={{.RestartCount}}' 2>/dev/null || true
+            docker port "${name}" 8080/tcp 2>/dev/null || true
+            docker logs --tail 100 "${name}" 2>&1 || true
+            docker rm -f "${name}" >/dev/null 2>&1 || true
+          }
+          trap dump_diagnostics EXIT
           docker run --detach --name "${name}" --publish 127.0.0.1::8080 --env NODE_ENV=development --env PORT=8080 --env FIRESTORE_EMULATOR_HOST=127.0.0.1:65535 --env ALLOW_LOCAL_PROD_FIRESTORE=false "${image}" >/dev/null
           port="$(docker port "${name}" 8080/tcp | awk -F: 'NR == 1 { print $NF }')"
+          [[ "${port}" =~ ^[0-9]+$ ]]
+          ready=false
           for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error --max-time 2 "http://127.0.0.1:${port}/health/ready" | jq -e '.status == "ok" and .checks.db == "skipped"' >/dev/null; then break; fi
+            if ! docker inspect "${name}" --format '{{.State.Running}}' | grep -qx true; then
+              echo 'Container exited before readiness.' >&2
+              exit 1
+            fi
+            if curl --fail --silent --show-error --max-time 2 "http://127.0.0.1:${port}/health/ready" | jq -e '.status == "ok" and .checks.db == "skipped"' >/dev/null; then ready=true; break; fi
             sleep 1
           done
+          test "${ready}" = true
           curl --fail --silent --show-error --max-time 2 "http://127.0.0.1:${port}/health" | jq -e '.ok == true' >/dev/null
