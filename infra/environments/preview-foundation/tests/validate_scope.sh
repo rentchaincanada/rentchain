@@ -12,6 +12,7 @@ b4_apply_delta_file="$root_dir/tests/hcp_b4_apply_permission_delta.txt"
 expected_resources="$(cat <<'EOF'
 google_artifact_registry_repository
 google_artifact_registry_repository_iam_member
+google_cloud_run_v2_service
 google_iam_workload_identity_pool
 google_iam_workload_identity_pool_provider
 google_project_iam_custom_role
@@ -24,7 +25,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "11"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "15"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(artifactregistry|cloudresourcemanager|iam|run|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "5"
@@ -35,13 +36,16 @@ rg -q 'var\.project_id == "rentchain-preview"' "$root_dir/variables.tf"
 rg -q 'var\.project_number == "501298948635"' "$root_dir/variables.tf"
 rg -q 'var\.environment == "preview"' "$root_dir/variables.tf"
 rg -q 'var\.project_id != "project-0d9658de-af29-4dc0-a99"' "$root_dir/variables.tf"
+rg -q 'variable "enable_preview_backend_service"' "$root_dir/variables.tf"
+rg -q 'default     = false' "$root_dir/variables.tf"
+rg -q 'count    = var\.enable_preview_backend_service \? 1 : 0' "$root_dir/cloud_run.tf"
 
 if rg -n 'credentials\s*=|credentials_file|GOOGLE_APPLICATION_CREDENTIALS|service_account_key|private_key' "$root_dir" --glob '*.tf'; then
   echo "Static credential reference found" >&2
   exit 1
 fi
 
-if rg -n 'allUsers|allAuthenticatedUsers|google_cloud_run|google_storage_bucket|google_firestore|google_compute|google_container|google_cloudbuild' "$root_dir" --glob '*.tf'; then
+if rg -n 'allUsers|allAuthenticatedUsers|google_storage_bucket|google_firestore|google_compute|google_container|google_cloudbuild' "$root_dir" --glob '*.tf'; then
   echo "Public IAM or workload resource found" >&2
   exit 1
 fi
@@ -60,7 +64,7 @@ rg -q 'role               = "roles/iam\.serviceAccountUser"' "$root_dir/iam.tf"
 rg -q 'service_account_id = google_service_account\.preview_backend_runtime\.name' "$root_dir/iam.tf"
 rg -q 'member             = local\.hcp_terraform_apply_member' "$root_dir/iam.tf"
 
-if rg -n 'roles/iam\.serviceAccountUser' "$root_dir" --glob '*.tf' | rg -v '/iam\.tf:'; then
+if rg -n 'roles/iam\.serviceAccountUser' "$root_dir" --glob '*.tf' | rg -v '/(iam|checks)\.tf:'; then
   echo "Service Account User must remain limited to the B6 exact runtime binding" >&2
   exit 1
 fi
