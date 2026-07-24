@@ -81,11 +81,13 @@ check "b6_preview_backend_boundary" {
       local.preview_backend_service_name == "rentchain-preview-backend" &&
       local.preview_backend_image_digest == "northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend@sha256:3a7de2792511786d9f984de5f99ee19b5466ad8336d9ec4e307702c9dedd8cfd" &&
       local.preview_backend_source_sha == "d28c61991131e9a76874d5eb92adceac048f9417" &&
-      google_cloud_run_v2_service.preview_backend.project == "rentchain-preview" &&
-      google_cloud_run_v2_service.preview_backend.location == "northamerica-northeast1" &&
-      google_cloud_run_v2_service.preview_backend.ingress == "INGRESS_TRAFFIC_ALL" &&
-      google_cloud_run_v2_service.preview_backend.template[0].service_account == google_service_account.preview_backend_runtime.email &&
-      google_cloud_run_v2_service.preview_backend.template[0].containers[0].image == local.preview_backend_image_digest
+      !var.enable_preview_backend_service || (
+        google_cloud_run_v2_service.preview_backend[0].project == "rentchain-preview" &&
+        google_cloud_run_v2_service.preview_backend[0].location == "northamerica-northeast1" &&
+        google_cloud_run_v2_service.preview_backend[0].ingress == "INGRESS_TRAFFIC_ALL" &&
+        google_cloud_run_v2_service.preview_backend[0].template[0].service_account == google_service_account.preview_backend_runtime.email &&
+        google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].image == local.preview_backend_image_digest
+      )
     )
     error_message = "B6 Preview backend Cloud Run foundation changed outside the approved private digest-pinned design."
   }

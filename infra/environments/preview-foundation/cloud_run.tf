@@ -5,6 +5,7 @@ locals {
 }
 
 resource "google_cloud_run_v2_service" "preview_backend" {
+  count    = var.enable_preview_backend_service ? 1 : 0
   project  = var.project_id
   name     = local.preview_backend_service_name
   location = local.preview_deployment_region

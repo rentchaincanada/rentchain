@@ -64,3 +64,9 @@ variable "monthly_planning_ceiling_cad" {
     error_message = "monthly_planning_ceiling_cad must remain CAD 100."
   }
 }
+
+variable "enable_preview_backend_service" {
+  description = "Explicit deployment-phase gate for the reviewed Preview Cloud Run service. Keep false for IAM-first sequencing."
+  type        = bool
+  default     = false
+}
