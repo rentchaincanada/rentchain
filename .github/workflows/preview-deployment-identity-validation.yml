@@ -176,10 +176,11 @@ jobs:
           docker run --detach \
             --name "${container_name}" \
             --publish 127.0.0.1::8080 \
-            --env NODE_ENV=development \
+            --env APP_ENV=preview \
+            --env GOOGLE_CLOUD_PROJECT=rentchain-preview \
+            --env FIRESTORE_ENABLED=false \
+            --env NODE_ENV=production \
             --env PORT=8080 \
-            --env FIRESTORE_EMULATOR_HOST=127.0.0.1:65535 \
-            --env ALLOW_LOCAL_PROD_FIRESTORE=false \
             "${VALIDATION_IMAGE}" >/dev/null
 
           host_port="$(docker port "${container_name}" 8080/tcp | awk -F: 'NR == 1 { print $NF }')"
@@ -192,25 +193,34 @@ jobs:
               docker logs --tail 100 "${container_name}" >&2 || true
               exit 1
             fi
-            if curl --fail --silent --show-error \
-              --max-time 2 \
-              "http://127.0.0.1:${host_port}/health/ready" \
-              | jq -e '
-                  .status == "ok" and
-                  .service == "rentchain-api" and
-                  .checks.routes == "ok" and
-                  .checks.db == "skipped"
-                ' >/dev/null; then
+            ready_body="${RUNNER_TEMP}/preview-ready-${attempt}.json"
+            ready_status=""
+            ready_curl_exit=0
+            if ready_status="$(curl --silent --show-error --output "${ready_body}" --write-out '%{http_code}' --max-time 2 "http://127.0.0.1:${host_port}/health/ready")"; then :; else ready_curl_exit=$?; fi
+            if test "${ready_status}" = 503 && jq -e '
+                .status == "fail" and
+                .service == "rentchain-api" and
+                .environment == "preview" and
+                .mode == "foundation" and
+                .checks.routes == "ok" and
+                .checks.datastore == "deferred"
+              ' "${ready_body}" >/dev/null; then
               ready=true
               break
+            fi
+            if test "${attempt}" = 30; then
+              printf 'Readiness probe failed: attempt=%s/30 curl_exit=%s http_status=%s response_body=%s url=http://127.0.0.1:%s/health/ready\n' "${attempt}" "${ready_curl_exit}" "${ready_status:-none}" "$(test -s "${ready_body}" && echo present || echo absent)" "${host_port}" >&2
+              docker inspect "${container_name}" --format 'status={{.State.Status}} running={{.State.Running}} exit={{.State.ExitCode}}' >&2 || true
+              docker logs --tail 100 "${container_name}" >&2 || true
+              exit 1
             fi
             sleep 1
           done
           test "${ready}" = true
-          curl --fail --silent --show-error \
-            --max-time 2 \
-            "http://127.0.0.1:${host_port}/health" \
-            | jq -e '.ok == true' >/dev/null
+          health_body="${RUNNER_TEMP}/preview-health.json"
+          health_status="$(curl --silent --show-error --output "${health_body}" --write-out '%{http_code}' --max-time 2 "http://127.0.0.1:${host_port}/health")"
+          test "${health_status}" = 200
+          jq -e '.ok == true and .environment == "preview" and .project == "rentchain-preview"' "${health_body}" >/dev/null
           docker inspect "${container_name}" --format '{{.State.Running}}' | grep -qx true
           printf '%s\n' 'Smoke validation: process running, port 8080 bound, /health and /health/ready passed'
 
