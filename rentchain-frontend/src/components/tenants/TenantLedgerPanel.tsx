@@ -137,9 +137,9 @@ export const TenantLedgerPanel: React.FC<TenantLedgerPanelProps> = ({
         flexDirection: "column",
         gap: "0.9rem",
         boxShadow: "0 18px 40px rgba(15,23,42,0.8)",
-        height: "100%",
+        height: "auto",
         minHeight: "260px",
-        overflow: "hidden",
+        overflow: "visible",
       }}
     >
       {/* Header */}
@@ -215,7 +215,7 @@ export const TenantLedgerPanel: React.FC<TenantLedgerPanelProps> = ({
             "linear-gradient(135deg, rgba(15,23,42,0.92), rgba(15,23,42,0.98))",
           border: "1px solid rgba(30,64,175,0.5)",
           padding: "0.75rem 0.75rem 0.5rem",
-          overflow: "hidden",
+          overflow: "visible",
           display: "flex",
           flexDirection: "column",
           gap: "0.5rem",

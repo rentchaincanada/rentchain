@@ -31,6 +31,7 @@ function isNotFound(err: any): boolean {
 
 interface TenantLeasePanelProps {
   tenantId: string | null;
+  onLeaseEnded?: () => Promise<void> | void;
 }
 
 type TaskErrorState =
@@ -113,7 +114,7 @@ const AutomationMessageCard: React.FC<{
   </div>
 );
 
-export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) => {
+export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId, onLeaseEnded }) => {
   const [leases, setLeases] = useState<Lease[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -251,11 +252,14 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
   const handleEndLease = async (leaseId: string) => {
     try {
       setEndingLeaseId(leaseId);
+      setError(null);
       await endLease(leaseId, new Date().toISOString());
       await loadLeases();
+      await onLeaseEnded?.();
       setConfirmingLeaseId(null);
     } catch (err) {
       console.error("[TenantLeasePanel] Failed to end lease", err);
+      setError("Lease ending could not be reconciled. No partial update was kept; please retry.");
     } finally {
       setEndingLeaseId(null);
     }

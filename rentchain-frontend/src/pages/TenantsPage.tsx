@@ -172,7 +172,7 @@ function describeTenantLinkage(
   const activeTenancies = tenancies.filter((tenancy) => tenancy.status !== "inactive");
   const primaryProperty = tenant.propertyName || tenant.propertyId || "No property linked";
   const primaryUnit = tenant.unit || tenant.unitLabel || tenant.unitId || "No unit linked";
-  const currentLeaseId = String(currentLease?.id || tenant.currentLeaseId || "").trim();
+  const currentLeaseId = String(currentLease?.id || "").trim();
   const hasCurrentLeaseLink = Boolean(currentLeaseId);
   const leaseLabel = currentLeaseId
     ? [primaryProperty !== "No property linked" ? primaryProperty : null, primaryUnit !== "No unit linked" ? primaryUnit : null, "Lease"]
@@ -202,7 +202,7 @@ function getTenantCurrentLeaseId(
   tenant?: TenantApiModel | null,
   currentLease?: TenantLeaseSummary | null
 ): string {
-  return String(currentLease?.id || tenant?.currentLeaseId || "").trim();
+  return String(currentLease?.id || "").trim();
 }
 
 function buildTenantLeaseLink(
@@ -439,6 +439,12 @@ const loadTenants = useCallback(async () => {
       setLoading(false);
     }
   }, [authLoading, authStatus, canViewTenants, ready, showToast]);
+
+  const refreshAfterLeaseEnded = useCallback(async () => {
+    await loadTenants();
+    if (selectedTenantId) await refreshTenantTenancies(selectedTenantId);
+    setActivityRefreshKey((value) => value + 1);
+  }, [loadTenants, refreshTenantTenancies, selectedTenantId]);
 
   useEffect(() => {
     void loadTenants();
@@ -1203,7 +1209,10 @@ const loadTenants = useCallback(async () => {
               </Section>
 
               <Section style={tenantWorkspaceSectionStyle}>
-                <TenantLeasePanel tenantId={tenantExists ? selectedTenantId : null} />
+                <TenantLeasePanel
+                  tenantId={tenantExists ? selectedTenantId : null}
+                  onLeaseEnded={refreshAfterLeaseEnded}
+                />
               </Section>
 
               <Section style={tenantWorkspaceSectionStyle}>
