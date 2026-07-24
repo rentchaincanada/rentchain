@@ -1,4 +1,5 @@
 import { getPricingHealth } from "./planMatrix";
+import { assertRuntimeEnvironment, getRuntimeEnvironment } from "./runtimeEnvironment";
 
 type EnvRequirement =
   | { kind: "name"; name: string }
@@ -98,10 +99,16 @@ export function getEnvFlags() {
 }
 
 export function assertRequiredEnv(): void {
+  const runtime = assertRuntimeEnvironment();
+  if (runtime === "preview") {
+    if (process.env.FIRESTORE_ENABLED === "true") {
+      throw new Error("[boot] Preview Firestore requires a separately authorized datastore configuration.");
+    }
+    return;
+  }
   const missingHard = missingHardRequirements();
   const missingSoft = missingSoftRequirements();
-  const isProd =
-    String(process.env.NODE_ENV || "").trim().toLowerCase() === "production";
+  const isProd = getRuntimeEnvironment() === "production";
 
   if (missingHard.length > 0) {
     const message = `[boot] missing required env vars: ${missingHard.join(", ")}`;

@@ -66,17 +66,51 @@ jobs:
             docker rm -f "${name}" >/dev/null 2>&1 || true
           }
           trap dump_diagnostics EXIT
-          docker run --detach --name "${name}" --publish 127.0.0.1::8080 --env NODE_ENV=development --env PORT=8080 --env FIRESTORE_EMULATOR_HOST=127.0.0.1:65535 --env ALLOW_LOCAL_PROD_FIRESTORE=false "${image}" >/dev/null
+          docker run --detach --name "${name}" --publish 127.0.0.1::8080 --env APP_ENV=preview --env GOOGLE_CLOUD_PROJECT=rentchain-preview --env FIRESTORE_ENABLED=false --env NODE_ENV=production --env PORT=8080 "${image}" >/dev/null
           port="$(docker port "${name}" 8080/tcp | awk -F: 'NR == 1 { print $NF }')"
           [[ "${port}" =~ ^[0-9]+$ ]]
           ready=false
-          for attempt in $(seq 1 30); do
+          max_attempts=30
+          for attempt in $(seq 1 "${max_attempts}"); do
             if ! docker inspect "${name}" --format '{{.State.Running}}' | grep -qx true; then
               echo 'Container exited before readiness.' >&2
+              docker inspect "${name}" --format 'status={{.State.Status}} exit={{.State.ExitCode}}' >&2 || true
+              docker logs --tail 100 "${name}" >&2 || true
               exit 1
             fi
-            if curl --fail --silent --show-error --max-time 2 "http://127.0.0.1:${port}/health/ready" | jq -e '.status == "ok" and .checks.db == "skipped"' >/dev/null; then ready=true; break; fi
+            ready_body="${RUNNER_TEMP}/preview-ready.json"
+            ready_status=""
+            ready_curl_exit=0
+            if ready_status="$(curl --silent --show-error --output "${ready_body}" --write-out '%{http_code}' --max-time 2 "http://127.0.0.1:${port}/health/ready")"; then :; else ready_curl_exit=$?; fi
+            if test "${ready_status}" = 503 && jq -e '.status == "fail" and .service == "rentchain-api" and .environment == "preview" and .mode == "foundation" and .checks.routes == "ok" and .checks.datastore == "deferred"' "${ready_body}" >/dev/null; then ready=true; break; fi
+            if test "${attempt}" = "${max_attempts}"; then
+              echo "Readiness probe failed: attempt=${attempt}/${max_attempts} curl_exit=${ready_curl_exit} http_status=${ready_status:-none} response_body=$(test -s "${ready_body}" && echo present || echo absent) url=http://127.0.0.1:${port}/health/ready" >&2
+              docker inspect "${name}" --format 'status={{.State.Status}} running={{.State.Running}} exit={{.State.ExitCode}}' >&2 || true
+              docker logs --tail 100 "${name}" >&2 || true
+              exit 1
+            fi
             sleep 1
           done
           test "${ready}" = true
-          curl --fail --silent --show-error --max-time 2 "http://127.0.0.1:${port}/health" | jq -e '.ok == true' >/dev/null
+          health=false
+          for attempt in $(seq 1 "${max_attempts}"); do
+            if ! docker inspect "${name}" --format '{{.State.Running}}' | grep -qx true; then
+              echo 'Container exited before liveness.' >&2
+              docker inspect "${name}" --format 'status={{.State.Status}} exit={{.State.ExitCode}}' >&2 || true
+              docker logs --tail 100 "${name}" >&2 || true
+              exit 1
+            fi
+            health_body="${RUNNER_TEMP}/preview-health.json"
+            health_status=""
+            health_curl_exit=0
+            if health_status="$(curl --silent --show-error --output "${health_body}" --write-out '%{http_code}' --max-time 2 "http://127.0.0.1:${port}/health")"; then :; else health_curl_exit=$?; fi
+            if test "${health_status}" = 200 && jq -e '.ok == true' "${health_body}" >/dev/null; then health=true; break; fi
+            if test "${attempt}" = "${max_attempts}"; then
+              echo "Liveness probe failed: attempt=${attempt}/${max_attempts} curl_exit=${health_curl_exit} http_status=${health_status:-none} response_body=$(test -s "${health_body}" && echo present || echo absent) url=http://127.0.0.1:${port}/health" >&2
+              docker inspect "${name}" --format 'status={{.State.Status}} running={{.State.Running}} exit={{.State.ExitCode}}' >&2 || true
+              docker logs --tail 100 "${name}" >&2 || true
+              exit 1
+            fi
+            sleep 1
+          done
+          test "${health}" = true
