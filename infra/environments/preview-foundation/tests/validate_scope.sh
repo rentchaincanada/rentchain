@@ -56,8 +56,12 @@ rg -q 'keep_recent_tagged_count = 15' "$root_dir/deployment_foundation.tf"
 rg -q 'delete_untagged_after    = "604800s"' "$root_dir/deployment_foundation.tf"
 rg -q 'account_id   = "preview-backend-runtime"' "$root_dir/deployment_foundation.tf"
 
-if rg -n 'preview_backend_runtime.*(role|member|iam)|roles/iam\.serviceAccountUser' "$root_dir" --glob '*.tf'; then
-  echo "The future Preview runtime identity must remain role-less and non-delegable" >&2
+rg -q 'role               = "roles/iam\.serviceAccountUser"' "$root_dir/iam.tf"
+rg -q 'service_account_id = google_service_account\.preview_backend_runtime\.name' "$root_dir/iam.tf"
+rg -q 'member             = local\.hcp_terraform_apply_member' "$root_dir/iam.tf"
+
+if rg -n 'roles/iam\.serviceAccountUser' "$root_dir" --glob '*.tf' | rg -v '/iam\.tf:'; then
+  echo "Service Account User must remain limited to the B6 exact runtime binding" >&2
   exit 1
 fi
 
@@ -151,10 +155,22 @@ if rg -n 'project-0d9658de-af29-4dc0-a99|production' "$apply_permissions_file"; 
   exit 1
 fi
 
-if rg -n 'roles/(owner|editor|run\.admin|artifactregistry\.writer|cloudbuild\.builds\.editor|iam\.serviceAccountTokenCreator|iam\.serviceAccountUser|storage\.admin)|google_service_account_key|principalSet://.*/workloadIdentityPools/github-preview-deploy/\*' "$root_dir" --glob '*.tf'; then
+if rg -n 'roles/(owner|editor|run\.admin|artifactregistry\.writer|cloudbuild\.builds\.editor|iam\.serviceAccountTokenCreator|storage\.admin)|google_service_account_key|principalSet://.*/workloadIdentityPools/github-preview-deploy/\*' "$root_dir" --glob '*.tf'; then
   echo "Broad deployment permission, static key, or wildcard federation found" >&2
   exit 1
 fi
+
+expected_cloud_run_permissions="$(cat <<'EOF'
+run.locations.get
+run.operations.get
+run.services.create
+run.services.delete
+run.services.get
+run.services.update
+EOF
+)"
+actual_cloud_run_permissions="$(rg -No '"run\.[^"]+"' "$root_dir/iam.tf" | tr -d '"' | sort -u)"
+test "$actual_cloud_run_permissions" = "$expected_cloud_run_permissions"
 
 rg -q '^  workflow_dispatch:$' "$workflow_file"
 rg -q '^  contents: read$' "$workflow_file"
