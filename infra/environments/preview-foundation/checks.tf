@@ -121,6 +121,22 @@ check "b6_cloud_run_deployer_iam_boundary" {
   }
 }
 
+check "b6_cloud_run_plan_viewer_iam_boundary" {
+  assert {
+    condition = (
+      google_project_iam_custom_role.terraform_preview_cloud_run_viewer.project == "rentchain-preview" &&
+      google_project_iam_custom_role.terraform_preview_cloud_run_viewer.role_id == "hcpTerraformPreviewCloudRunViewer" &&
+      local.terraform_preview_cloud_run_viewer_permissions == toset([
+        "run.services.get",
+      ]) &&
+      google_project_iam_member.terraform_preview_cloud_run_viewer.project == "rentchain-preview" &&
+      google_project_iam_member.terraform_preview_cloud_run_viewer.member == local.hcp_terraform_plan_member &&
+      local.hcp_terraform_plan_member == "serviceAccount:hcp-terraform-preview@rentchain-preview.iam.gserviceaccount.com"
+    )
+    error_message = "The B6 plan viewer must remain a single-permission Preview-only binding for the exact HCP plan identity."
+  }
+}
+
 check "b6_preview_artifact_reader_boundary" {
   assert {
     condition = (

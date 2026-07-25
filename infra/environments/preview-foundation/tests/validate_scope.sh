@@ -73,6 +73,19 @@ rg -q 'role               = "roles/iam\.serviceAccountUser"' "$root_dir/iam.tf"
 rg -q 'service_account_id = google_service_account\.preview_backend_runtime\.name' "$root_dir/iam.tf"
 rg -q 'member             = local\.hcp_terraform_apply_member' "$root_dir/iam.tf"
 
+rg -q 'role_id     = "hcpTerraformPreviewCloudRunViewer"' "$root_dir/iam.tf"
+rg -q 'terraform_preview_cloud_run_viewer_permissions = toset' "$root_dir/iam.tf"
+rg -q '"run\.services\.get"' "$root_dir/iam.tf"
+rg -q 'resource "google_project_iam_member" "terraform_preview_cloud_run_viewer"' "$root_dir/iam.tf"
+rg -q 'member  = local\.hcp_terraform_plan_member' "$root_dir/iam.tf"
+rg -q 'hcp_terraform_plan_member  = "serviceAccount:hcp-terraform-preview@rentchain-preview\.iam\.gserviceaccount\.com"' "$root_dir/iam.tf"
+actual_cloud_run_viewer_permissions="$(
+  sed -n '/terraform_preview_cloud_run_viewer_permissions = toset(/,/])/p' "$root_dir/iam.tf" \
+    | rg -No '"[^"]+"' \
+    | tr -d '"'
+)"
+test "$actual_cloud_run_viewer_permissions" = "run.services.get"
+
 if rg -n 'roles/iam\.serviceAccountUser' "$root_dir" --glob '*.tf' | rg -v '/(iam|checks)\.tf:'; then
   echo "Service Account User must remain limited to the B6 exact runtime binding" >&2
   exit 1
