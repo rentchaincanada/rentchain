@@ -85,7 +85,7 @@ variable "b7_foundation_phase" {
 variable "b7_phase2_recovery_stage" {
   description = "B7 Phase 2 recovery gate: 1=custom-role updater bootstrap only, 2=resume manager update and Phase 2 resources."
   type        = number
-  default     = 1
+  default     = 2
 
   validation {
     condition     = contains([1, 2], var.b7_phase2_recovery_stage)
