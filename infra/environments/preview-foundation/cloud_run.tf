@@ -72,6 +72,9 @@ resource "google_cloud_run_v2_service" "preview_backend" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      scaling,
+    ]
   }
 
   depends_on = [
