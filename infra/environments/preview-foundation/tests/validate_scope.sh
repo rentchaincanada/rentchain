@@ -30,7 +30,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "26"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "30"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "8"
@@ -132,6 +132,58 @@ fi
 rg -q 'role               = "roles/iam\.serviceAccountUser"' "$root_dir/iam.tf"
 rg -q 'service_account_id = google_service_account\.preview_backend_runtime\.name' "$root_dir/iam.tf"
 rg -q 'member             = local\.hcp_terraform_apply_member' "$root_dir/iam.tf"
+
+rg -q 'role_id     = "hcpTerraformPreviewB7Reader"' "$root_dir/iam.tf"
+rg -q 'resource "google_project_iam_member" "hcp_terraform_preview_b7_reader"' "$root_dir/iam.tf"
+rg -q 'member  = local\.hcp_terraform_plan_member' "$root_dir/iam.tf"
+expected_b7_reader_permissions="$(cat <<'EOF'
+apikeys.keys.get
+apikeys.keys.getKeyString
+datastore.databases.getMetadata
+firebaseauth.configs.get
+EOF
+)"
+actual_b7_reader_permissions="$(
+  sed -n '/hcp_terraform_preview_b7_reader_permissions = toset(/,/])/p' "$root_dir/iam.tf" \
+    | rg -No '"[^"]+"' \
+    | tr -d '"' \
+    | sort -u
+)"
+test "$actual_b7_reader_permissions" = "$expected_b7_reader_permissions"
+
+rg -q 'role_id     = "terraformPreviewB7Manager"' "$root_dir/iam.tf"
+rg -q 'resource "google_project_iam_member" "terraform_preview_b7_manager"' "$root_dir/iam.tf"
+rg -q 'member  = local\.hcp_terraform_apply_member' "$root_dir/iam.tf"
+expected_b7_manager_permissions="$(cat <<'EOF'
+apikeys.keys.create
+apikeys.keys.get
+apikeys.keys.getKeyString
+datastore.databases.create
+datastore.databases.getMetadata
+firebaseauth.configs.create
+firebaseauth.configs.get
+firebaseauth.configs.update
+EOF
+)"
+actual_b7_manager_permissions="$(
+  sed -n '/terraform_preview_b7_manager_permissions = toset(/,/])/p' "$root_dir/iam.tf" \
+    | rg -No '"[^"]+"' \
+    | tr -d '"' \
+    | sort -u
+)"
+test "$actual_b7_manager_permissions" = "$expected_b7_manager_permissions"
+
+test "$(rg -No '^resource "google_project_iam_custom_role" "(hcp_terraform_preview_b7_reader|terraform_preview_b7_manager)"' "$root_dir/iam.tf" | wc -l | tr -d ' ')" = "2"
+test "$(rg -No '^resource "google_project_iam_member" "(hcp_terraform_preview_b7_reader|terraform_preview_b7_manager)"' "$root_dir/iam.tf" | wc -l | tr -d ' ')" = "2"
+if sed -n '/resource "google_project_iam_custom_role" "hcp_terraform_preview_b7_reader"/,/^}/p; /resource "google_project_iam_member" "hcp_terraform_preview_b7_reader"/,/^}/p; /resource "google_project_iam_custom_role" "terraform_preview_b7_manager"/,/^}/p; /resource "google_project_iam_member" "terraform_preview_b7_manager"/,/^}/p' "$root_dir/iam.tf" | rg -n 'count\s*=|for_each\s*='; then
+  echo "B7 bootstrap IAM resources must remain ungated in Phase 1" >&2
+  exit 1
+fi
+
+if printf '%s\n%s\n' "$actual_b7_reader_permissions" "$actual_b7_manager_permissions" | rg -n '(delete|users\.|token|run\.|storage\.|billing|secretmanager|firebase\.|identitytoolkit\.)'; then
+  echo "Forbidden permission found in B7 HCP bootstrap roles" >&2
+  exit 1
+fi
 
 rg -q 'role_id     = "hcpTerraformPreviewCloudRunViewer"' "$root_dir/iam.tf"
 rg -q 'terraform_preview_cloud_run_viewer_permissions = toset' "$root_dir/iam.tf"
@@ -247,15 +299,13 @@ apikeys.keys.get
 apikeys.keys.getKeyString
 datastore.databases.create
 datastore.databases.getMetadata
-datastore.operations.get
 firebaseauth.configs.create
 firebaseauth.configs.get
 firebaseauth.configs.update
-serviceusage.operations.get
 EOF
 )"
 test "$(sort -u "$b7_apply_delta_file")" = "$expected_b7_apply_delta"
-test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "10"
+test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "8"
 
 if rg -n '(delete|undelete|users\.(create|delete|update|sendEmail)|getSecret|getHashConfig|serviceAccountKeys|signBlob|signJwt|getAccessToken|generateAccessToken|run\.|storage\.|billing)' "$b7_plan_delta_file" "$b7_apply_delta_file"; then
   echo "Forbidden B7 HCP permission delta found" >&2

@@ -114,28 +114,32 @@ production API is added.
 
 The B7 speculative plan is not apply authorization.
 
-Before the first apply, separately authorize and add only the permissions in:
+Phase 1 creates two dedicated B7 custom roles rather than broadening the
+existing Cloud Run roles:
 
-- `tests/hcp_b7_apply_permission_delta.txt` to
-  `projects/rentchain-preview/roles/hcpTerraformPreviewApply`;
-- `tests/hcp_b7_plan_permission_delta.txt` to
-  `projects/rentchain-preview/roles/hcpTerraformPreviewPlanViewer`.
+- `hcpTerraformPreviewB7Reader` contains exactly the four permissions in
+  `tests/hcp_b7_plan_permission_delta.txt` and is bound only to
+  `hcp-terraform-preview@rentchain-preview.iam.gserviceaccount.com`;
+- `terraformPreviewB7Manager` contains exactly the eight permissions in
+  `tests/hcp_b7_apply_permission_delta.txt` and is bound only to
+  `hcp-terraform-preview-apply@rentchain-preview.iam.gserviceaccount.com`.
 
-The plan-phase read delta must exist before resources are applied so the first
-post-apply refresh cannot deadlock. The apply delta must exist before the
-corresponding staged resource creation. Do not substitute the apply identity for
-the plan identity and do not widen Workload Identity Federation.
+The HCP apply identity already has the governed IAM role-management and project
+policy permissions needed to create these roles and bindings. Do not substitute
+the apply identity for the plan identity and do not widen Workload Identity
+Federation.
 
 The repository variable `b7_foundation_phase` is a governed phase gate:
 
-1. default phase 1 enables only the three APIs;
+1. default phase 1 enables the three APIs and creates the two B7 HCP roles and
+   their exact bindings;
 2. phase 2 adds Firestore, Identity Platform, and the restricted API key;
 3. phase 3 adds the two exact runtime roles and bindings.
 
-The plan-phase read delta must be installed before phase 2 is applied. The
-apply-phase delta includes the exact long-running-operation reads needed while
-creating the database and API key. Existing IAM-management permissions cover
-phase 3.
+The Phase 1 apply installs the plan and apply permissions before Phase 2 is
+selected. A later Phase 2 plan can therefore refresh the governed resource
+types, and its apply identity can create them, without manual IAM mutation or
+import. Existing IAM-management permissions cover Phase 3.
 
 Cloud Run activation is deliberately absent from these phases. It requires a
 separately reviewed image built from the B7 runtime code, followed by the exact
@@ -144,8 +148,8 @@ environment changes to the older pinned image would be incompatible.
 
 Use separate Founder-authorized phases:
 
-1. API enablement;
-2. exact HCP read/apply custom-role deltas, then datastore/auth resources;
+1. API enablement plus exact B7 HCP read/apply roles and bindings;
+2. datastore/auth resources;
 3. runtime IAM;
 4. separately published runtime image and Cloud Run environment activation;
 5. normal plan-identity zero-drift verification.

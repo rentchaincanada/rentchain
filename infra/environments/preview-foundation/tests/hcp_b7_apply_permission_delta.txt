@@ -3,8 +3,6 @@ apikeys.keys.get
 apikeys.keys.getKeyString
 datastore.databases.create
 datastore.databases.getMetadata
-datastore.operations.get
 firebaseauth.configs.create
 firebaseauth.configs.get
 firebaseauth.configs.update
-serviceusage.operations.get

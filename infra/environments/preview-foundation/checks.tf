@@ -93,6 +93,42 @@ check "b7_preview_authentication_boundary" {
   }
 }
 
+check "b7_hcp_bootstrap_iam_boundary" {
+  assert {
+    condition = (
+      google_project_iam_custom_role.hcp_terraform_preview_b7_reader.project == "rentchain-preview" &&
+      google_project_iam_custom_role.hcp_terraform_preview_b7_reader.role_id == "hcpTerraformPreviewB7Reader" &&
+      local.hcp_terraform_preview_b7_reader_permissions == toset([
+        "apikeys.keys.get",
+        "apikeys.keys.getKeyString",
+        "datastore.databases.getMetadata",
+        "firebaseauth.configs.get",
+      ]) &&
+      google_project_iam_member.hcp_terraform_preview_b7_reader.member == local.hcp_terraform_plan_member
+    )
+    error_message = "The B7 plan reader must remain the exact four-permission role bound only to the HCP plan identity."
+  }
+
+  assert {
+    condition = (
+      google_project_iam_custom_role.terraform_preview_b7_manager.project == "rentchain-preview" &&
+      google_project_iam_custom_role.terraform_preview_b7_manager.role_id == "terraformPreviewB7Manager" &&
+      local.terraform_preview_b7_manager_permissions == toset([
+        "apikeys.keys.create",
+        "apikeys.keys.get",
+        "apikeys.keys.getKeyString",
+        "datastore.databases.create",
+        "datastore.databases.getMetadata",
+        "firebaseauth.configs.create",
+        "firebaseauth.configs.get",
+        "firebaseauth.configs.update",
+      ]) &&
+      google_project_iam_member.terraform_preview_b7_manager.member == local.hcp_terraform_apply_member
+    )
+    error_message = "The B7 apply manager must remain the exact eight-permission role bound only to the HCP apply identity."
+  }
+}
+
 check "b4_deployment_foundation_boundary" {
   assert {
     condition = (
