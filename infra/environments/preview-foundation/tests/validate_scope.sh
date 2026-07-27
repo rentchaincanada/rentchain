@@ -30,7 +30,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "30"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "32"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "8"
@@ -46,6 +46,8 @@ rg -q 'default     = true' "$root_dir/variables.tf"
 rg -q 'variable "b7_foundation_phase"' "$root_dir/variables.tf"
 rg -U -q 'variable "b7_foundation_phase" \{\n  description = "[^"]+"\n  type        = number\n  default     = 2' "$root_dir/variables.tf"
 grep -Fq 'condition     = contains([1, 2, 3], var.b7_foundation_phase)' "$root_dir/variables.tf"
+rg -U -q 'variable "b7_phase2_recovery_stage" \{\n  description = "[^"]+"\n  type        = number\n  default     = 1' "$root_dir/variables.tf"
+grep -Fq 'condition     = contains([1, 2], var.b7_phase2_recovery_stage)' "$root_dir/variables.tf"
 rg -q 'count    = var\.enable_preview_backend_service \? 1 : 0' "$root_dir/cloud_run.tf"
 rg -U -q 'lifecycle \{\n    prevent_destroy = true\n    ignore_changes = \[\n      scaling,\n    \]\n  \}' "$root_dir/cloud_run.tf"
 test "$(rg -No 'ignore_changes' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "1"
@@ -108,7 +110,8 @@ if rg -n 'FIRESTORE_DATABASE_ID|PREVIEW_AUTH_ENABLED|FIREBASE_PROJECT_ID|FIREBAS
   exit 1
 fi
 
-test "$(rg -No 'count = var\.b7_foundation_phase >= 2 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "3"
+test "$(rg -No 'count = var\.b7_foundation_phase >= 2 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "2"
 test "$(rg -No 'count = var\.b7_foundation_phase >= 3 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "4"
 
 test "$(rg -No '^resource "google_artifact_registry_repository"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "1"
@@ -155,34 +158,38 @@ test "$actual_b7_reader_permissions" = "$expected_b7_reader_permissions"
 rg -q 'role_id     = "terraformPreviewB7Manager"' "$root_dir/iam.tf"
 rg -q 'resource "google_project_iam_member" "terraform_preview_b7_manager"' "$root_dir/iam.tf"
 rg -q 'member  = local\.hcp_terraform_apply_member' "$root_dir/iam.tf"
-expected_b7_manager_permissions="$(cat <<'EOF'
+expected_b7_manager_base_permissions="$(cat <<'EOF'
 apikeys.keys.create
 apikeys.keys.get
 apikeys.keys.getKeyString
 datastore.databases.create
 datastore.databases.getMetadata
-firebase.projects.update
 firebaseauth.configs.create
 firebaseauth.configs.get
 firebaseauth.configs.update
 EOF
 )"
-actual_b7_manager_permissions="$(
-  sed -n '/terraform_preview_b7_manager_permissions = toset(/,/])/p' "$root_dir/iam.tf" \
+actual_b7_manager_base_permissions="$(
+  sed -n '/terraform_preview_b7_manager_base_permissions = toset(/,/])/p' "$root_dir/iam.tf" \
     | rg -No '"[^"]+"' \
     | tr -d '"' \
     | sort -u
 )"
-test "$actual_b7_manager_permissions" = "$expected_b7_manager_permissions"
+test "$actual_b7_manager_base_permissions" = "$expected_b7_manager_base_permissions"
+grep -Fq 'var.b7_phase2_recovery_stage >= 2 ? toset(["firebase.projects.update"]) : toset([])' "$root_dir/iam.tf"
 
-test "$(rg -No '^resource "google_project_iam_custom_role" "(hcp_terraform_preview_b7_reader|terraform_preview_b7_manager)"' "$root_dir/iam.tf" | wc -l | tr -d ' ')" = "2"
-test "$(rg -No '^resource "google_project_iam_member" "(hcp_terraform_preview_b7_reader|terraform_preview_b7_manager)"' "$root_dir/iam.tf" | wc -l | tr -d ' ')" = "2"
+rg -q 'role_id     = "terraformPreviewCustomRoleUpdater"' "$root_dir/iam.tf"
+test "$(sed -n '/terraform_preview_custom_role_updater_permissions = toset(/,/])/p' "$root_dir/iam.tf" | rg -No '"[^"]+"' | tr -d '"')" = "iam.roles.update"
+rg -q 'resource "google_project_iam_member" "terraform_preview_custom_role_updater"' "$root_dir/iam.tf"
+rg -q 'member  = local\.hcp_terraform_apply_member' "$root_dir/iam.tf"
+test "$(rg -No '^resource "google_project_iam_custom_role" "(hcp_terraform_preview_b7_reader|terraform_preview_b7_manager|terraform_preview_custom_role_updater)"' "$root_dir/iam.tf" | wc -l | tr -d ' ')" = "3"
+test "$(rg -No '^resource "google_project_iam_member" "(hcp_terraform_preview_b7_reader|terraform_preview_b7_manager|terraform_preview_custom_role_updater)"' "$root_dir/iam.tf" | wc -l | tr -d ' ')" = "3"
 if sed -n '/resource "google_project_iam_custom_role" "hcp_terraform_preview_b7_reader"/,/^}/p; /resource "google_project_iam_member" "hcp_terraform_preview_b7_reader"/,/^}/p; /resource "google_project_iam_custom_role" "terraform_preview_b7_manager"/,/^}/p; /resource "google_project_iam_member" "terraform_preview_b7_manager"/,/^}/p' "$root_dir/iam.tf" | rg -n 'count\s*=|for_each\s*='; then
   echo "B7 bootstrap IAM resources must remain ungated in Phase 1" >&2
   exit 1
 fi
 
-if printf '%s\n%s\n' "$actual_b7_reader_permissions" "$actual_b7_manager_permissions" | rg -n '(delete|users\.|token|run\.|storage\.|billing|secretmanager|firebase\.projects\.(delete|get)|identitytoolkit\.)'; then
+if printf '%s\n%s\n%s\n' "$actual_b7_reader_permissions" "$actual_b7_manager_base_permissions" "iam.roles.update" | rg -n '(delete|users\.|token|run\.|storage\.|billing|secretmanager|firebase\.projects\.(delete|get)|identitytoolkit\.)'; then
   echo "Forbidden permission found in B7 HCP bootstrap roles" >&2
   exit 1
 fi
@@ -301,6 +308,7 @@ apikeys.keys.get
 apikeys.keys.getKeyString
 datastore.databases.create
 datastore.databases.getMetadata
+firebase.projects.update
 firebaseauth.configs.create
 firebaseauth.configs.get
 firebaseauth.configs.update
