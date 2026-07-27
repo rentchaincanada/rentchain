@@ -119,13 +119,14 @@ check "b7_hcp_bootstrap_iam_boundary" {
         "apikeys.keys.getKeyString",
         "datastore.databases.create",
         "datastore.databases.getMetadata",
+        "firebase.projects.update",
         "firebaseauth.configs.create",
         "firebaseauth.configs.get",
         "firebaseauth.configs.update",
       ]) &&
       google_project_iam_member.terraform_preview_b7_manager.member == local.hcp_terraform_apply_member
     )
-    error_message = "The B7 apply manager must remain the exact eight-permission role bound only to the HCP apply identity."
+    error_message = "The B7 apply manager must remain the exact nine-permission role bound only to the HCP apply identity."
   }
 }
 

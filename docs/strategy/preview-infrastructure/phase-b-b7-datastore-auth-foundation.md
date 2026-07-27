@@ -120,9 +120,18 @@ existing Cloud Run roles:
 - `hcpTerraformPreviewB7Reader` contains exactly the four permissions in
   `tests/hcp_b7_plan_permission_delta.txt` and is bound only to
   `hcp-terraform-preview@rentchain-preview.iam.gserviceaccount.com`;
-- `terraformPreviewB7Manager` contains exactly the eight permissions in
+- `terraformPreviewB7Manager` contains exactly the nine permissions in
   `tests/hcp_b7_apply_permission_delta.txt` and is bound only to
   `hcp-terraform-preview-apply@rentchain-preview.iam.gserviceaccount.com`.
+
+The first Phase 2 apply partially succeeded: the protected Firestore database is
+recorded in Terraform state, while Identity Platform and the restricted API key
+remain absent. During Identity Platform initialization, the Google provider
+invokes Firebase `AddFirebase` before creating the Identity Platform
+configuration. Audit logs proved that `firebase.projects.update` was the sole
+denied prerequisite permission; `firebaseauth.configs.create` was already
+granted. The apply manager therefore includes that one additional permission.
+No manual Firebase project association or Terraform import was performed.
 
 The HCP apply identity already has the governed IAM role-management and project
 policy permissions needed to create these roles and bindings. Do not substitute

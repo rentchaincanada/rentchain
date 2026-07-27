@@ -28,6 +28,7 @@ locals {
     "apikeys.keys.getKeyString",
     "datastore.databases.create",
     "datastore.databases.getMetadata",
+    "firebase.projects.update",
     "firebaseauth.configs.create",
     "firebaseauth.configs.get",
     "firebaseauth.configs.update",
