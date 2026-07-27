@@ -44,6 +44,7 @@ rg -q 'var\.project_id != "project-0d9658de-af29-4dc0-a99"' "$root_dir/variables
 rg -q 'variable "enable_preview_backend_service"' "$root_dir/variables.tf"
 rg -q 'default     = true' "$root_dir/variables.tf"
 rg -q 'variable "b7_foundation_phase"' "$root_dir/variables.tf"
+rg -U -q 'variable "b7_foundation_phase" \{\n  description = "[^"]+"\n  type        = number\n  default     = 2' "$root_dir/variables.tf"
 grep -Fq 'condition     = contains([1, 2, 3], var.b7_foundation_phase)' "$root_dir/variables.tf"
 rg -q 'count    = var\.enable_preview_backend_service \? 1 : 0' "$root_dir/cloud_run.tf"
 rg -U -q 'lifecycle \{\n    prevent_destroy = true\n    ignore_changes = \[\n      scaling,\n    \]\n  \}' "$root_dir/cloud_run.tf"
