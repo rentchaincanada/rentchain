@@ -4,6 +4,15 @@ import healthRoutes from "../healthRoutes";
 
 const firebaseMock = vi.hoisted(() => ({
   listCollections: vi.fn(async () => []),
+  state: {
+    environment: "test",
+    mode: "emulator",
+    emulatorHost: "127.0.0.1:8080",
+    projectId: "project-0d9658de-af29-4dc0-a99",
+    databaseId: "(default)",
+    timestamp: "2026-06-03T00:00:00.000Z",
+    caller: "health-test",
+  },
 }));
 const originalNodeEnv = process.env.NODE_ENV;
 
@@ -11,14 +20,7 @@ vi.mock("../../firebase", () => ({
   db: {
     listCollections: firebaseMock.listCollections,
   },
-  initializationState: () => ({
-    environment: "test",
-    mode: "emulator",
-    emulatorHost: "127.0.0.1:8080",
-    projectId: "project-0d9658de-af29-4dc0-a99",
-    timestamp: "2026-06-03T00:00:00.000Z",
-    caller: "health-test",
-  }),
+  initializationState: () => ({ ...firebaseMock.state }),
 }));
 
 function buildApp() {
@@ -80,6 +82,20 @@ describe("healthRoutes", () => {
     delete process.env.VERCEL_GIT_COMMIT_SHA;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.FIREBASE_CONFIG;
+    delete process.env.APP_ENV;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.FIRESTORE_ENABLED;
+    delete process.env.FIRESTORE_DATABASE_ID;
+    delete process.env.PREVIEW_AUTH_ENABLED;
+    delete process.env.FIREBASE_PROJECT_ID;
+    delete process.env.FIREBASE_API_KEY;
+    Object.assign(firebaseMock.state, {
+      environment: "test",
+      mode: "emulator",
+      emulatorHost: "127.0.0.1:8080",
+      projectId: "project-0d9658de-af29-4dc0-a99",
+      databaseId: "(default)",
+    });
   });
 
   it("keeps /health reachable while redacting exact revision and commit values", async () => {
@@ -135,6 +151,96 @@ describe("healthRoutes", () => {
       status: "skipped",
       firebaseInitializationMode: "emulator",
       message: "No DB credentials configured",
+    });
+  });
+
+  it("reports datastore ready but keeps Preview unready until auth is operationally verified", async () => {
+    process.env.APP_ENV = "preview";
+    process.env.GOOGLE_CLOUD_PROJECT = "rentchain-preview";
+    process.env.FIRESTORE_ENABLED = "true";
+    process.env.FIRESTORE_DATABASE_ID = "(default)";
+    process.env.PREVIEW_AUTH_ENABLED = "true";
+    process.env.FIREBASE_PROJECT_ID = "rentchain-preview";
+    process.env.FIREBASE_API_KEY = "preview-only-key";
+    Object.assign(firebaseMock.state, {
+      environment: "preview",
+      mode: "preview-enabled",
+      emulatorHost: null,
+      projectId: "rentchain-preview",
+      databaseId: "(default)",
+    });
+
+    const ready = await invokeApp(buildApp(), "GET", "/health/ready");
+
+    expect(ready.status).toBe(503);
+    expect(ready.body).toMatchObject({
+      status: "fail",
+      checks: {
+        routes: "ok",
+        db: "ok",
+        datastore: "ready",
+        authentication: "configured",
+      },
+      environment: "preview",
+      mode: "datastore-auth-foundation",
+      databaseId: "(default)",
+    });
+    expect(firebaseMock.listCollections).toHaveBeenCalledOnce();
+    expect(JSON.stringify(ready.body)).not.toContain("preview-only-key");
+  });
+
+  it("does not report authentication ready from API-key presence alone", async () => {
+    process.env.APP_ENV = "preview";
+    process.env.GOOGLE_CLOUD_PROJECT = "rentchain-preview";
+    process.env.FIRESTORE_ENABLED = "true";
+    process.env.FIRESTORE_DATABASE_ID = "(default)";
+    process.env.PREVIEW_AUTH_ENABLED = "false";
+    process.env.FIREBASE_PROJECT_ID = "rentchain-preview";
+    process.env.FIREBASE_API_KEY = "preview-only-key";
+    Object.assign(firebaseMock.state, {
+      environment: "preview",
+      mode: "preview-enabled",
+      emulatorHost: null,
+      projectId: "rentchain-preview",
+      databaseId: "(default)",
+    });
+
+    const ready = await invokeApp(buildApp(), "GET", "/health/ready");
+
+    expect(ready.status).toBe(503);
+    expect(ready.body).toMatchObject({
+      checks: {
+        datastore: "ready",
+        authentication: "deferred",
+      },
+      mode: "datastore-auth-foundation",
+    });
+    expect(JSON.stringify(ready.body)).not.toContain("preview-only-key");
+  });
+
+  it("fails Preview readiness when the datastore probe fails", async () => {
+    process.env.APP_ENV = "preview";
+    process.env.GOOGLE_CLOUD_PROJECT = "rentchain-preview";
+    process.env.FIRESTORE_ENABLED = "true";
+    process.env.FIRESTORE_DATABASE_ID = "(default)";
+    process.env.PREVIEW_AUTH_ENABLED = "true";
+    process.env.FIREBASE_PROJECT_ID = "rentchain-preview";
+    process.env.FIREBASE_API_KEY = "preview-only-key";
+    Object.assign(firebaseMock.state, {
+      environment: "preview",
+      mode: "preview-enabled",
+      emulatorHost: null,
+      projectId: "rentchain-preview",
+      databaseId: "(default)",
+    });
+    firebaseMock.listCollections.mockRejectedValueOnce(new Error("permission denied"));
+
+    const ready = await invokeApp(buildApp(), "GET", "/health/ready");
+
+    expect(ready.status).toBe(503);
+    expect(ready.body).toMatchObject({
+      status: "fail",
+      checks: { routes: "ok", db: "fail" },
     });
   });
 });

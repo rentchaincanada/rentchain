@@ -1,8 +1,11 @@
 locals {
   approved_management_services = toset([
+    "apikeys.googleapis.com",
     "artifactregistry.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "firestore.googleapis.com",
     "iam.googleapis.com",
+    "identitytoolkit.googleapis.com",
     "run.googleapis.com",
     "serviceusage.googleapis.com",
   ])

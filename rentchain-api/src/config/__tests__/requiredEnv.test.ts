@@ -144,4 +144,36 @@ describe("requiredEnv provider-aware email requirements", () => {
     expect(flags.emailProvider).toBe("sendgrid");
     expect(flags.emailConfigured).toBe(true);
   });
+
+  it("accepts the exact isolated Preview datastore and authentication configuration", () => {
+    process.env = {
+      ...ENV_BACKUP,
+      APP_ENV: "preview",
+      NODE_ENV: "production",
+      GOOGLE_CLOUD_PROJECT: "rentchain-preview",
+      FIRESTORE_ENABLED: "true",
+      FIRESTORE_DATABASE_ID: "(default)",
+      PREVIEW_AUTH_ENABLED: "true",
+      FIREBASE_PROJECT_ID: "rentchain-preview",
+      FIREBASE_API_KEY: "preview-only-key",
+    };
+
+    expect(() => assertRequiredEnv()).not.toThrow();
+  });
+
+  it("rejects Preview authentication configured for production", () => {
+    process.env = {
+      ...ENV_BACKUP,
+      APP_ENV: "preview",
+      NODE_ENV: "production",
+      GOOGLE_CLOUD_PROJECT: "rentchain-preview",
+      FIRESTORE_ENABLED: "true",
+      FIRESTORE_DATABASE_ID: "(default)",
+      PREVIEW_AUTH_ENABLED: "true",
+      FIREBASE_PROJECT_ID: "project-0d9658de-af29-4dc0-a99",
+      FIREBASE_API_KEY: "production-key",
+    };
+
+    expect(() => assertRequiredEnv()).toThrow(/production Firebase project/);
+  });
 });

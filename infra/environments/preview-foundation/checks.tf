@@ -12,13 +12,84 @@ check "preview_project_identity" {
 check "management_api_boundary" {
   assert {
     condition = local.approved_management_services == toset([
+      "apikeys.googleapis.com",
       "artifactregistry.googleapis.com",
       "cloudresourcemanager.googleapis.com",
+      "firestore.googleapis.com",
       "iam.googleapis.com",
+      "identitytoolkit.googleapis.com",
       "run.googleapis.com",
       "serviceusage.googleapis.com",
     ])
     error_message = "The B4 Preview foundation API allowlist has changed."
+  }
+}
+
+check "b7_preview_datastore_boundary" {
+  assert {
+    condition = var.b7_foundation_phase < 2 ? true : (
+      google_firestore_database.preview[0].project == "rentchain-preview" &&
+      google_firestore_database.preview[0].name == "(default)" &&
+      google_firestore_database.preview[0].location_id == "northamerica-northeast1" &&
+      google_firestore_database.preview[0].type == "FIRESTORE_NATIVE" &&
+      google_firestore_database.preview[0].delete_protection_state == "DELETE_PROTECTION_ENABLED" &&
+      google_firestore_database.preview[0].deletion_policy == "ABANDON"
+    )
+    error_message = "B7 Firestore must remain the protected Native-mode default database in the isolated Montreal Preview project."
+  }
+
+  assert {
+    condition = local.preview_runtime_firestore_permissions == toset([
+      "datastore.databases.get",
+      "datastore.entities.create",
+      "datastore.entities.delete",
+      "datastore.entities.get",
+      "datastore.entities.list",
+      "datastore.entities.update",
+    ])
+    error_message = "B7 Preview runtime Firestore permissions changed outside the exact data-plane set."
+  }
+
+  assert {
+    condition = var.b7_foundation_phase < 3 ? true : (
+      google_project_iam_custom_role.preview_runtime_firestore[0].role_id == "previewBackendFirestoreRuntime" &&
+      google_project_iam_member.preview_runtime_firestore[0].member == google_service_account.preview_backend_runtime.member &&
+      google_project_iam_member.preview_runtime_firestore[0].condition[0].expression == "resource.name == 'projects/rentchain-preview/databases/(default)'"
+    )
+    error_message = "B7 Firestore access must remain bound only to the Preview runtime identity and default Preview database."
+  }
+}
+
+check "b7_preview_authentication_boundary" {
+  assert {
+    condition = var.b7_foundation_phase < 2 ? true : (
+      google_identity_platform_config.preview[0].project == "rentchain-preview" &&
+      local.preview_identity_authorized_domains == toset(["localhost"]) &&
+      google_identity_platform_config.preview[0].sign_in[0].email[0].enabled &&
+      google_identity_platform_config.preview[0].sign_in[0].email[0].password_required &&
+      !google_identity_platform_config.preview[0].sign_in[0].anonymous[0].enabled &&
+      !google_identity_platform_config.preview[0].sign_in[0].phone_number[0].enabled &&
+      google_identity_platform_config.preview[0].client[0].permissions[0].disabled_user_signup &&
+      google_identity_platform_config.preview[0].client[0].permissions[0].disabled_user_deletion
+    )
+    error_message = "B7 Preview authentication must remain isolated, password-only, and closed to public signup."
+  }
+
+  assert {
+    condition = var.b7_foundation_phase < 3 ? true : (
+      local.preview_runtime_auth_permissions == toset(["firebaseauth.users.get"]) &&
+      google_project_iam_custom_role.preview_runtime_auth_reader[0].role_id == "previewBackendAuthReader" &&
+      google_project_iam_member.preview_runtime_auth_reader[0].member == google_service_account.preview_backend_runtime.member
+    )
+    error_message = "B7 Preview authentication runtime access must remain a single user-read permission for the exact runtime identity."
+  }
+
+  assert {
+    condition = var.b7_foundation_phase < 2 ? true : (
+      google_apikeys_key.preview_backend_auth[0].project == "rentchain-preview" &&
+      google_apikeys_key.preview_backend_auth[0].restrictions[0].api_targets[0].service == "identitytoolkit.googleapis.com"
+    )
+    error_message = "The Preview backend API key must remain isolated and restricted to Identity Toolkit."
   }
 }
 
