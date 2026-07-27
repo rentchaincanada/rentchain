@@ -39,6 +39,9 @@ rg -q 'var\.project_id != "project-0d9658de-af29-4dc0-a99"' "$root_dir/variables
 rg -q 'variable "enable_preview_backend_service"' "$root_dir/variables.tf"
 rg -q 'default     = true' "$root_dir/variables.tf"
 rg -q 'count    = var\.enable_preview_backend_service \? 1 : 0' "$root_dir/cloud_run.tf"
+rg -U -q 'lifecycle \{\n    prevent_destroy = true\n    ignore_changes = \[\n      scaling,\n    \]\n  \}' "$root_dir/cloud_run.tf"
+test "$(rg -c 'ignore_changes' "$root_dir" --glob '*.tf')" = "1"
+rg -U -q 'template \{.*scaling \{\n      min_instance_count = 0\n      max_instance_count = 1\n    \}' "$root_dir/cloud_run.tf"
 
 if rg -n 'credentials\s*=|credentials_file|GOOGLE_APPLICATION_CREDENTIALS|service_account_key|private_key' "$root_dir" --glob '*.tf'; then
   echo "Static credential reference found" >&2
@@ -72,6 +75,19 @@ fi
 rg -q 'role               = "roles/iam\.serviceAccountUser"' "$root_dir/iam.tf"
 rg -q 'service_account_id = google_service_account\.preview_backend_runtime\.name' "$root_dir/iam.tf"
 rg -q 'member             = local\.hcp_terraform_apply_member' "$root_dir/iam.tf"
+
+rg -q 'role_id     = "hcpTerraformPreviewCloudRunViewer"' "$root_dir/iam.tf"
+rg -q 'terraform_preview_cloud_run_viewer_permissions = toset' "$root_dir/iam.tf"
+rg -q '"run\.services\.get"' "$root_dir/iam.tf"
+rg -q 'resource "google_project_iam_member" "terraform_preview_cloud_run_viewer"' "$root_dir/iam.tf"
+rg -q 'member  = local\.hcp_terraform_plan_member' "$root_dir/iam.tf"
+rg -q 'hcp_terraform_plan_member  = "serviceAccount:hcp-terraform-preview@rentchain-preview\.iam\.gserviceaccount\.com"' "$root_dir/iam.tf"
+actual_cloud_run_viewer_permissions="$(
+  sed -n '/terraform_preview_cloud_run_viewer_permissions = toset(/,/])/p' "$root_dir/iam.tf" \
+    | rg -No '"[^"]+"' \
+    | tr -d '"'
+)"
+test "$actual_cloud_run_viewer_permissions" = "run.services.get"
 
 if rg -n 'roles/iam\.serviceAccountUser' "$root_dir" --glob '*.tf' | rg -v '/(iam|checks)\.tf:'; then
   echo "Service Account User must remain limited to the B6 exact runtime binding" >&2

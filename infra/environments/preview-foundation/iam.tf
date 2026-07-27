@@ -1,5 +1,10 @@
 locals {
+  hcp_terraform_plan_member  = "serviceAccount:hcp-terraform-preview@rentchain-preview.iam.gserviceaccount.com"
   hcp_terraform_apply_member = "serviceAccount:hcp-terraform-preview-apply@rentchain-preview.iam.gserviceaccount.com"
+
+  terraform_preview_cloud_run_viewer_permissions = toset([
+    "run.services.get",
+  ])
 
   terraform_preview_cloud_run_deployer_permissions = toset([
     "run.locations.get",
@@ -9,6 +14,29 @@ locals {
     "run.services.get",
     "run.services.update",
   ])
+}
+
+resource "google_project_iam_custom_role" "terraform_preview_cloud_run_viewer" {
+  project     = var.project_id
+  role_id     = "hcpTerraformPreviewCloudRunViewer"
+  title       = "HCP Terraform Preview Cloud Run Viewer"
+  description = "Plan-phase read access for the managed Preview backend service."
+  permissions = local.terraform_preview_cloud_run_viewer_permissions
+  stage       = "GA"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_project_iam_member" "terraform_preview_cloud_run_viewer" {
+  project = var.project_id
+  role    = google_project_iam_custom_role.terraform_preview_cloud_run_viewer.name
+  member  = local.hcp_terraform_plan_member
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "google_project_iam_custom_role" "terraform_preview_cloud_run_deployer" {
