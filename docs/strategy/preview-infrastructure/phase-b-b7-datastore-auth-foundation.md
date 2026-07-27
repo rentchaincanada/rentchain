@@ -63,9 +63,9 @@ Identity Platform is configured in `rentchain-preview` with:
 The backend password-login path uses a Preview API key restricted to
 `identitytoolkit.googleapis.com`. A Firebase web API key identifies a client and
 is not a privileged server credential, but Terraform and HCP still treat its
-value as sensitive. It is injected directly into Cloud Run and is not output.
-Secret Manager is therefore not required. The API key remains in Terraform
-state, but it is not attached to Cloud Run in phase 1.
+value as sensitive. Phase 2 creates the key in Terraform state without exposing
+it through outputs or attaching it to Cloud Run. Delivery to Cloud Run requires
+a separately reviewed activation phase; Secret Manager remains absent.
 
 The runtime role `previewBackendAuthReader` contains only
 `firebaseauth.users.get`. The existing login path needs this permission to read
@@ -129,11 +129,13 @@ policy permissions needed to create these roles and bindings. Do not substitute
 the apply identity for the plan identity and do not widen Workload Identity
 Federation.
 
-The repository variable `b7_foundation_phase` is a governed phase gate:
+The repository variable `b7_foundation_phase` is a governed phase gate. Its
+default is advanced only through separately reviewed phase-transition PRs:
 
-1. default phase 1 enables the three APIs and creates the two B7 HCP roles and
-   their exact bindings;
-2. phase 2 adds Firestore, Identity Platform, and the restricted API key;
+1. phase 1 enables the three APIs and creates the two B7 HCP roles and their
+   exact bindings;
+2. the current default, phase 2, adds Firestore, Identity Platform, and the
+   restricted API key;
 3. phase 3 adds the two exact runtime roles and bindings.
 
 The Phase 1 apply installs the plan and apply permissions before Phase 2 is
