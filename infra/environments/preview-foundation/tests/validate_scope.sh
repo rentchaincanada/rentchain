@@ -161,6 +161,7 @@ apikeys.keys.get
 apikeys.keys.getKeyString
 datastore.databases.create
 datastore.databases.getMetadata
+firebase.projects.update
 firebaseauth.configs.create
 firebaseauth.configs.get
 firebaseauth.configs.update
@@ -181,7 +182,7 @@ if sed -n '/resource "google_project_iam_custom_role" "hcp_terraform_preview_b7_
   exit 1
 fi
 
-if printf '%s\n%s\n' "$actual_b7_reader_permissions" "$actual_b7_manager_permissions" | rg -n '(delete|users\.|token|run\.|storage\.|billing|secretmanager|firebase\.|identitytoolkit\.)'; then
+if printf '%s\n%s\n' "$actual_b7_reader_permissions" "$actual_b7_manager_permissions" | rg -n '(delete|users\.|token|run\.|storage\.|billing|secretmanager|firebase\.projects\.(delete|get)|identitytoolkit\.)'; then
   echo "Forbidden permission found in B7 HCP bootstrap roles" >&2
   exit 1
 fi
@@ -306,7 +307,7 @@ firebaseauth.configs.update
 EOF
 )"
 test "$(sort -u "$b7_apply_delta_file")" = "$expected_b7_apply_delta"
-test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "8"
+test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "9"
 
 if rg -n '(delete|undelete|users\.(create|delete|update|sendEmail)|getSecret|getHashConfig|serviceAccountKeys|signBlob|signJwt|getAccessToken|generateAccessToken|run\.|storage\.|billing)' "$b7_plan_delta_file" "$b7_apply_delta_file"; then
   echo "Forbidden B7 HCP permission delta found" >&2
