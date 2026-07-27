@@ -43,7 +43,7 @@ resource "google_firestore_database" "preview" {
 }
 
 resource "google_identity_platform_config" "preview" {
-  count = var.b7_foundation_phase >= 2 ? 1 : 0
+  count = var.b7_foundation_phase >= 2 && var.b7_phase2_recovery_stage >= 2 ? 1 : 0
 
   project = var.project_id
 
@@ -87,7 +87,7 @@ resource "google_identity_platform_config" "preview" {
 }
 
 resource "google_apikeys_key" "preview_backend_auth" {
-  count = var.b7_foundation_phase >= 2 ? 1 : 0
+  count = var.b7_foundation_phase >= 2 && var.b7_phase2_recovery_stage >= 2 ? 1 : 0
 
   project      = var.project_id
   name         = "preview-backend-auth"

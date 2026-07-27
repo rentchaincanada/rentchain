@@ -62,7 +62,7 @@ check "b7_preview_datastore_boundary" {
 
 check "b7_preview_authentication_boundary" {
   assert {
-    condition = var.b7_foundation_phase < 2 ? true : (
+    condition = var.b7_foundation_phase < 2 || var.b7_phase2_recovery_stage < 2 ? true : (
       google_identity_platform_config.preview[0].project == "rentchain-preview" &&
       local.preview_identity_authorized_domains == toset(["localhost"]) &&
       google_identity_platform_config.preview[0].sign_in[0].email[0].enabled &&
@@ -85,7 +85,7 @@ check "b7_preview_authentication_boundary" {
   }
 
   assert {
-    condition = var.b7_foundation_phase < 2 ? true : (
+    condition = var.b7_foundation_phase < 2 || var.b7_phase2_recovery_stage < 2 ? true : (
       google_apikeys_key.preview_backend_auth[0].project == "rentchain-preview" &&
       google_apikeys_key.preview_backend_auth[0].restrictions[0].api_targets[0].service == "identitytoolkit.googleapis.com"
     )
@@ -113,20 +113,33 @@ check "b7_hcp_bootstrap_iam_boundary" {
     condition = (
       google_project_iam_custom_role.terraform_preview_b7_manager.project == "rentchain-preview" &&
       google_project_iam_custom_role.terraform_preview_b7_manager.role_id == "terraformPreviewB7Manager" &&
-      local.terraform_preview_b7_manager_permissions == toset([
+      local.terraform_preview_b7_manager_base_permissions == toset([
         "apikeys.keys.create",
         "apikeys.keys.get",
         "apikeys.keys.getKeyString",
         "datastore.databases.create",
         "datastore.databases.getMetadata",
-        "firebase.projects.update",
         "firebaseauth.configs.create",
         "firebaseauth.configs.get",
         "firebaseauth.configs.update",
       ]) &&
+      local.terraform_preview_b7_manager_permissions == setunion(
+        local.terraform_preview_b7_manager_base_permissions,
+        var.b7_phase2_recovery_stage >= 2 ? toset(["firebase.projects.update"]) : toset([]),
+      ) &&
       google_project_iam_member.terraform_preview_b7_manager.member == local.hcp_terraform_apply_member
     )
-    error_message = "The B7 apply manager must remain the exact nine-permission role bound only to the HCP apply identity."
+    error_message = "The B7 apply manager must remain at eight permissions in recovery stage 1 and add only firebase.projects.update in stage 2."
+  }
+
+  assert {
+    condition = (
+      google_project_iam_custom_role.terraform_preview_custom_role_updater.project == "rentchain-preview" &&
+      google_project_iam_custom_role.terraform_preview_custom_role_updater.role_id == "terraformPreviewCustomRoleUpdater" &&
+      local.terraform_preview_custom_role_updater_permissions == toset(["iam.roles.update"]) &&
+      google_project_iam_member.terraform_preview_custom_role_updater.member == local.hcp_terraform_apply_member
+    )
+    error_message = "The B7 recovery updater must remain the exact one-permission project role bound only to the HCP apply identity."
   }
 }
 

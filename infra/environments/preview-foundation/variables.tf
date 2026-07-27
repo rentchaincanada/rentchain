@@ -81,3 +81,14 @@ variable "b7_foundation_phase" {
     error_message = "b7_foundation_phase must be exactly 1, 2, or 3."
   }
 }
+
+variable "b7_phase2_recovery_stage" {
+  description = "B7 Phase 2 recovery gate: 1=custom-role updater bootstrap only, 2=resume manager update and Phase 2 resources."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = contains([1, 2], var.b7_phase2_recovery_stage)
+    error_message = "b7_phase2_recovery_stage must be exactly 1 or 2."
+  }
+}

@@ -133,6 +133,16 @@ denied prerequisite permission; `firebaseauth.configs.create` was already
 granted. The apply manager therefore includes that one additional permission.
 No manual Firebase project association or Terraform import was performed.
 
+Phase 2 recovery uses a two-stage bootstrap because the HCP apply identity can
+create and bind project custom roles but cannot update an existing custom role.
+Recovery stage 1 creates `terraformPreviewCustomRoleUpdater`, containing only
+`iam.roles.update`, and binds it only to the HCP Preview apply identity. During
+that stage, `terraformPreviewB7Manager` retains its existing eight permissions,
+Firestore remains managed, and Identity Platform plus the API key are
+suppressed. Recovery stage 2 retains the updater role, adds only
+`firebase.projects.update` to the B7 manager, and resumes the two absent Phase 2
+resources. The recovery stage is a plan boundary, not apply authorization.
+
 The HCP apply identity already has the governed IAM role-management and project
 policy permissions needed to create these roles and bindings. Do not substitute
 the apply identity for the plan identity and do not widen Workload Identity
