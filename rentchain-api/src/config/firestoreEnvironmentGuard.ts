@@ -2,8 +2,9 @@ type FirestoreGuardEnv = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
 export type FirestoreEnvironmentGuardResult = {
   environment: string;
-  mode: "production" | "preview-disabled" | "emulator" | "local-prod-firestore-override";
+  mode: "production" | "preview-disabled" | "preview-enabled" | "emulator" | "local-prod-firestore-override";
   emulatorHost: string | null;
+  databaseId: string | null;
   localProductionFirestoreOverride: boolean;
   googleApplicationCredentialsPresent: boolean;
 };
@@ -30,14 +31,36 @@ export function assertSafeFirestoreEnvironment(
   const emulatorHost = envValue(env, "FIRESTORE_EMULATOR_HOST");
   const googleApplicationCredentials = envValue(env, "GOOGLE_APPLICATION_CREDENTIALS");
   const localProductionFirestoreOverride = isTrue(envValue(env, "ALLOW_LOCAL_PROD_FIRESTORE"));
+  const databaseId = envValue(env, "FIRESTORE_DATABASE_ID");
 
   if (environment === "preview" && !isTrue(envValue(env, "FIRESTORE_ENABLED"))) {
     return {
       environment,
       mode: "preview-disabled",
       emulatorHost: emulatorHost || null,
+      databaseId: databaseId || null,
       localProductionFirestoreOverride: false,
       googleApplicationCredentialsPresent: Boolean(googleApplicationCredentials),
+    };
+  }
+
+  if (environment === "preview") {
+    if (databaseId !== "(default)") {
+      throw new Error("[firestore-guard] Preview requires FIRESTORE_DATABASE_ID=(default).");
+    }
+    if (emulatorHost) {
+      throw new Error("[firestore-guard] Deployed Preview must not use FIRESTORE_EMULATOR_HOST.");
+    }
+    if (googleApplicationCredentials) {
+      throw new Error("[firestore-guard] Preview Cloud Run must use keyless Application Default Credentials.");
+    }
+    return {
+      environment,
+      mode: "preview-enabled",
+      emulatorHost: null,
+      databaseId,
+      localProductionFirestoreOverride: false,
+      googleApplicationCredentialsPresent: false,
     };
   }
 
@@ -46,6 +69,7 @@ export function assertSafeFirestoreEnvironment(
       environment,
       mode: "production",
       emulatorHost: emulatorHost || null,
+      databaseId: databaseId || "(default)",
       localProductionFirestoreOverride,
       googleApplicationCredentialsPresent: Boolean(googleApplicationCredentials),
     };
@@ -63,6 +87,7 @@ export function assertSafeFirestoreEnvironment(
       environment,
       mode: "local-prod-firestore-override",
       emulatorHost: emulatorHost || null,
+      databaseId: databaseId || "(default)",
       localProductionFirestoreOverride,
       googleApplicationCredentialsPresent: Boolean(googleApplicationCredentials),
     };
@@ -92,6 +117,7 @@ export function assertSafeFirestoreEnvironment(
     environment,
     mode: "emulator",
     emulatorHost,
+    databaseId: databaseId || "(default)",
     localProductionFirestoreOverride,
     googleApplicationCredentialsPresent: false,
   };

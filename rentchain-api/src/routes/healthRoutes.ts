@@ -3,6 +3,7 @@ import { getVersion } from "../version";
 import { db, initializationState } from "../firebase";
 import { safeDiagnosticBuildMetadata } from "../middleware/diagnosticSurfaceGuard";
 import { getRuntimeEnvironment, getConfiguredProjectId } from "../config/runtimeEnvironment";
+import { getPreviewFoundationConfig } from "../config/previewFoundationConfig";
 
 const router = express.Router();
 
@@ -30,6 +31,7 @@ router.get("/version", (_req, res) => {
 
 router.get("/ready", async (_req, res) => {
   const firebaseState = initializationState();
+  const previewFoundation = getPreviewFoundationConfig();
   const checks: Record<string, string> = {
     routes: "ok",
   };
@@ -38,7 +40,7 @@ router.get("/ready", async (_req, res) => {
     return res.status(503).json({
       status: "fail",
       service: "rentchain-api",
-      checks: { routes: "ok", datastore: "deferred" },
+      checks: { routes: "ok", datastore: "deferred", authentication: "deferred" },
       firebaseInitializationMode: firebaseState.mode,
       environment: getRuntimeEnvironment(),
       mode: "foundation",
@@ -46,8 +48,12 @@ router.get("/ready", async (_req, res) => {
     });
   }
 
-  const hasDbCreds = Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIREBASE_CONFIG);
-  if (!hasDbCreds) {
+  const mustProbeDatastore =
+    firebaseState.mode === "production" ||
+    firebaseState.mode === "preview-enabled" ||
+    Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIREBASE_CONFIG);
+
+  if (!mustProbeDatastore) {
     checks.db = "skipped";
   } else {
     try {
@@ -66,19 +72,43 @@ router.get("/ready", async (_req, res) => {
     }
   }
 
+  if (getRuntimeEnvironment() === "preview") {
+    checks.datastore = checks.db === "ok" ? "ready" : "fail";
+    checks.authentication = previewFoundation.authenticationConfigured ? "configured" : "deferred";
+
+    return res.status(503).json({
+      status: "fail",
+      service: "rentchain-api",
+      checks,
+      firebaseInitializationMode: firebaseState.mode,
+      environment: previewFoundation.environment,
+      mode: "datastore-auth-foundation",
+      databaseId: previewFoundation.databaseId || null,
+      message: previewFoundation.authenticationConfigured
+        ? "Preview authentication is configured but awaits operational token-boundary verification."
+        : "Preview authentication configuration is deferred.",
+    });
+  }
+
   res.json({
     status: "ok",
     service: "rentchain-api",
     checks,
     firebaseInitializationMode: firebaseState.mode,
+    environment: getRuntimeEnvironment(),
+    mode: firebaseState.mode,
+    databaseId: firebaseState.databaseId,
   });
 });
 
 // Optional: db detail endpoint; return skipped when not configured
 router.get("/db", async (_req, res) => {
   const firebaseState = initializationState();
-  const hasDbCreds = Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIREBASE_CONFIG);
-  if (!hasDbCreds) {
+  const mustProbeDatastore =
+    firebaseState.mode === "production" ||
+    firebaseState.mode === "preview-enabled" ||
+    Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIREBASE_CONFIG);
+  if (!mustProbeDatastore) {
     return res.json({
       status: "skipped",
       firebaseInitializationMode: firebaseState.mode,

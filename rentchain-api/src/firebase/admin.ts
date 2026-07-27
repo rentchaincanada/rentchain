@@ -2,11 +2,13 @@ import admin from "firebase-admin";
 import { assertSafeFirestoreEnvironment } from "../config/firestoreEnvironmentGuard";
 import { recordInitializationState } from "./initializationRegistry";
 import { assertRuntimeEnvironment, getConfiguredProjectId, PREVIEW_PROJECT, PRODUCTION_PROJECT } from "../config/runtimeEnvironment";
+import { getPreviewFoundationConfig } from "../config/previewFoundationConfig";
 
 const runtime = assertRuntimeEnvironment();
 export const PROJECT_ID = getConfiguredProjectId() || (runtime === "production" ? PRODUCTION_PROJECT : "");
 
 const guard = assertSafeFirestoreEnvironment();
+const previewFoundation = getPreviewFoundationConfig();
 
 let firestore: admin.firestore.Firestore;
 let db: admin.firestore.Firestore;
@@ -32,6 +34,13 @@ if (!admin.apps.length) {
 
 const firestoreInstance = admin.firestore();
 firestoreInstance.settings({ ignoreUndefinedProperties: true });
+
+if (runtime === "preview" && (
+  previewFoundation.projectId !== PREVIEW_PROJECT ||
+  previewFoundation.databaseId !== "(default)"
+)) {
+  throw new Error("[firebase] Preview Firestore initialization boundary is invalid.");
+}
 
 recordInitializationState({
   guard,

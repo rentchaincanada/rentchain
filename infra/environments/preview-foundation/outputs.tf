@@ -49,3 +49,16 @@ output "preview_backend_service" {
     ingress      = google_cloud_run_v2_service.preview_backend[0].ingress
   } : null
 }
+
+output "preview_datastore_auth_foundation" {
+  description = "Non-sensitive identifiers for the isolated B7 datastore and authentication foundation."
+  value = var.b7_foundation_phase >= 2 ? {
+    project_id              = var.project_id
+    database_id             = google_firestore_database.preview[0].name
+    firestore_location      = google_firestore_database.preview[0].location_id
+    authentication_project  = google_identity_platform_config.preview[0].project
+    authorized_domains      = sort(tolist(local.preview_identity_authorized_domains))
+    runtime_service_account = google_service_account.preview_backend_runtime.email
+  } : null
+  sensitive = false
+}

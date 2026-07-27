@@ -35,6 +35,7 @@ describe("firestoreEnvironmentGuard", () => {
       environment: "development",
       mode: "emulator",
       emulatorHost: "127.0.0.1:8080",
+      databaseId: "(default)",
       localProductionFirestoreOverride: false,
       googleApplicationCredentialsPresent: false,
     });
@@ -56,6 +57,7 @@ describe("firestoreEnvironmentGuard", () => {
       environment: "development",
       mode: "local-prod-firestore-override",
       emulatorHost: null,
+      databaseId: "(default)",
       localProductionFirestoreOverride: true,
       googleApplicationCredentialsPresent: true,
     });
@@ -74,6 +76,7 @@ describe("firestoreEnvironmentGuard", () => {
       environment: "production",
       mode: "production",
       emulatorHost: null,
+      databaseId: "(default)",
       localProductionFirestoreOverride: false,
       googleApplicationCredentialsPresent: true,
     });
@@ -91,5 +94,45 @@ describe("firestoreEnvironmentGuard", () => {
       mode: "preview-disabled",
       localProductionFirestoreOverride: false,
     });
+  });
+
+  it("enables only the explicit keyless Preview default database boundary", () => {
+    const result = assertSafeFirestoreEnvironment({
+      APP_ENV: "preview",
+      GOOGLE_CLOUD_PROJECT: "rentchain-preview",
+      FIRESTORE_ENABLED: "true",
+      FIRESTORE_DATABASE_ID: "(default)",
+    });
+
+    expect(result).toMatchObject({
+      environment: "preview",
+      mode: "preview-enabled",
+      databaseId: "(default)",
+      emulatorHost: null,
+      googleApplicationCredentialsPresent: false,
+    });
+  });
+
+  it("rejects a named Preview database", () => {
+    expect(() =>
+      assertSafeFirestoreEnvironment({
+        APP_ENV: "preview",
+        GOOGLE_CLOUD_PROJECT: "rentchain-preview",
+        FIRESTORE_ENABLED: "true",
+        FIRESTORE_DATABASE_ID: "preview",
+      })
+    ).toThrow(/FIRESTORE_DATABASE_ID=\(default\)/);
+  });
+
+  it("rejects static credentials in enabled Preview", () => {
+    expect(() =>
+      assertSafeFirestoreEnvironment({
+        APP_ENV: "preview",
+        GOOGLE_CLOUD_PROJECT: "rentchain-preview",
+        FIRESTORE_ENABLED: "true",
+        FIRESTORE_DATABASE_ID: "(default)",
+        GOOGLE_APPLICATION_CREDENTIALS: "/tmp/preview.json",
+      })
+    ).toThrow(/keyless Application Default Credentials/);
   });
 });

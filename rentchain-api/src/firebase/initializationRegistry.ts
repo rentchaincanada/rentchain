@@ -7,6 +7,7 @@ export type FirebaseInitializationState = {
   mode: FirebaseInitializationMode;
   emulatorHost: string | null;
   projectId: string;
+  databaseId: string | null;
   timestamp: string;
   caller: string;
 };
@@ -24,6 +25,7 @@ export function recordInitializationState(input: {
     mode: input.guard.mode,
     emulatorHost: input.guard.emulatorHost,
     projectId: input.projectId,
+    databaseId: input.guard.databaseId,
     timestamp: input.timestamp || new Date().toISOString(),
     caller: input.caller,
   };
@@ -37,6 +39,7 @@ export function initializationState(): FirebaseInitializationState {
     mode: "emulator",
     emulatorHost: String(process.env.FIRESTORE_EMULATOR_HOST || "").trim() || null,
     projectId: "",
+    databaseId: null,
     timestamp: new Date(0).toISOString(),
     caller: "firebase_initialization_not_recorded",
   };
