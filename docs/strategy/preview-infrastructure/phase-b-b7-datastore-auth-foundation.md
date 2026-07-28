@@ -144,10 +144,13 @@ Recovery stage 1 creates `terraformPreviewCustomRoleUpdater`, containing only
 `iam.roles.update`, and binds it only to the HCP Preview apply identity. During
 that stage, `terraformPreviewB7Manager` retains its existing nine permissions,
 Firestore remains managed, and Identity Platform plus the API key are
-suppressed. The current default, recovery stage 2, retains the updater role, adds
-only `firebase.projects.update` to the B7 manager, and resumes the two absent
-Phase 2 resources. The recovery stage is a plan boundary, not apply
-authorization.
+suppressed. The current default, recovery stage 2, retains the updater role and
+adds only `firebase.projects.update` to the B7 manager. A separate
+default-false `b7_identity_platform_activation` gate controls only Identity
+Platform, the restricted API key, and their non-sensitive output. This keeps the
+two resources suppressed while Firebase project read IAM is reviewed, without
+gating Firestore or either recovery IAM role. Both gates are plan boundaries,
+not apply authorization.
 
 The HCP apply identity already has the governed IAM role-management and project
 policy permissions needed to create these roles and bindings. Do not substitute

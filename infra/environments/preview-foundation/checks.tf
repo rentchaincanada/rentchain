@@ -62,7 +62,7 @@ check "b7_preview_datastore_boundary" {
 
 check "b7_preview_authentication_boundary" {
   assert {
-    condition = var.b7_foundation_phase < 2 || var.b7_phase2_recovery_stage < 2 ? true : (
+    condition = var.b7_foundation_phase < 2 || var.b7_phase2_recovery_stage < 2 || !var.b7_identity_platform_activation ? true : (
       google_identity_platform_config.preview[0].project == "rentchain-preview" &&
       local.preview_identity_authorized_domains == toset(["localhost"]) &&
       google_identity_platform_config.preview[0].sign_in[0].email[0].enabled &&
@@ -85,7 +85,7 @@ check "b7_preview_authentication_boundary" {
   }
 
   assert {
-    condition = var.b7_foundation_phase < 2 || var.b7_phase2_recovery_stage < 2 ? true : (
+    condition = var.b7_foundation_phase < 2 || var.b7_phase2_recovery_stage < 2 || !var.b7_identity_platform_activation ? true : (
       google_apikeys_key.preview_backend_auth[0].project == "rentchain-preview" &&
       google_apikeys_key.preview_backend_auth[0].restrictions[0].api_targets[0].service == "identitytoolkit.googleapis.com"
     )

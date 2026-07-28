@@ -48,6 +48,7 @@ rg -U -q 'variable "b7_foundation_phase" \{\n  description = "[^"]+"\n  type    
 grep -Fq 'condition     = contains([1, 2, 3], var.b7_foundation_phase)' "$root_dir/variables.tf"
 rg -U -q 'variable "b7_phase2_recovery_stage" \{\n  description = "[^"]+"\n  type        = number\n  default     = 2' "$root_dir/variables.tf"
 grep -Fq 'condition     = contains([1, 2], var.b7_phase2_recovery_stage)' "$root_dir/variables.tf"
+rg -U -q 'variable "b7_identity_platform_activation" \{\n  description = "[^"]+"\n  type        = bool\n  default     = false\n\}' "$root_dir/variables.tf"
 rg -q 'count    = var\.enable_preview_backend_service \? 1 : 0' "$root_dir/cloud_run.tf"
 rg -U -q 'lifecycle \{\n    prevent_destroy = true\n    ignore_changes = \[\n      scaling,\n    \]\n  \}' "$root_dir/cloud_run.tf"
 test "$(rg -No 'ignore_changes' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "1"
@@ -111,7 +112,12 @@ if rg -n 'FIRESTORE_DATABASE_ID|PREVIEW_AUTH_ENABLED|FIREBASE_PROJECT_ID|FIREBAS
 fi
 
 test "$(rg -No 'count = var\.b7_foundation_phase >= 2 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
-test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "2"
+test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_identity_platform_activation \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "2"
+grep -Fq 'value = var.b7_foundation_phase >= 2 && var.b7_phase2_recovery_stage >= 2 && var.b7_identity_platform_activation ? {' "$root_dir/outputs.tf"
+if rg -n 'b7_identity_platform_activation' "$root_dir/cloud_run.tf" "$root_dir/iam.tf"; then
+  echo "The B7 Identity Platform activation gate must not control Cloud Run or IAM" >&2
+  exit 1
+fi
 test "$(rg -No 'count = var\.b7_foundation_phase >= 3 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "4"
 
 test "$(rg -No '^resource "google_artifact_registry_repository"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "1"
