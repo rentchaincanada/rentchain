@@ -55,7 +55,7 @@ Identity Platform is configured in `rentchain-preview` with:
 - email/password enabled and password required;
 - anonymous and phone providers disabled;
 - duplicate emails disabled;
-- public user signup disabled;
+- client-side user signup enabled for the later governed email/password flow;
 - self-service user deletion disabled;
 - MFA disabled;
 - only `localhost` authorized until a separately reviewed frontend phase.
@@ -139,18 +139,18 @@ The active Firebase association for `rentchain-preview` is adopted through the
 short-project-ID import. The resource uses `prevent_destroy` and manages only
 the existing Firebase project association. It does not manage the
 Firebase-created Browser key, any Firebase app, Hosting, analytics, Identity
-Platform, or the restricted backend key. The default-false Identity Platform
-activation gate remains unchanged, so this ownership adoption does not activate
-authentication or produce the datastore/auth output.
+Platform, or the restricted backend key.
 
 The first Phase 2 apply partially succeeded: the protected Firestore database is
 recorded in Terraform state, while Identity Platform and the restricted API key
-remain absent. During Identity Platform initialization, the Google provider
-invokes Firebase `AddFirebase` before creating the Identity Platform
-configuration. Audit logs proved that `firebase.projects.update` was the sole
-denied prerequisite permission; `firebaseauth.configs.create` was already
-granted. The apply manager therefore includes that one additional permission.
-No manual Firebase project association or Terraform import was performed.
+remain absent. Firebase project ownership was subsequently adopted through the
+governed import above. The stable Google provider initializes Identity Platform
+by calling `POST projects/rentchain-preview/identityPlatform:initializeAuth`,
+then reconciles the configured fields. A successful speculative plan does not
+prove that this apply-time request will succeed: the prior
+`409 PROJECT_EXISTS` response may recur. A repeated 409 requires stopping and
+preserving the diagnostics; no automatic workaround or manual initialization is
+authorized.
 
 Phase 2 recovery uses a two-stage bootstrap because the HCP apply identity can
 create and bind project custom roles but cannot update an existing custom role.
@@ -159,12 +159,19 @@ Recovery stage 1 creates `terraformPreviewCustomRoleUpdater`, containing only
 that stage, `terraformPreviewB7Manager` retains its existing ten permissions,
 Firestore remains managed, and Identity Platform plus the API key are
 suppressed. The current default, recovery stage 2, retains the updater role and
-adds only `firebase.projects.update` to the B7 manager. A separate
-default-false `b7_identity_platform_activation` gate controls only Identity
-Platform, the restricted API key, and their non-sensitive output. This keeps the
-two resources suppressed while Firebase project read IAM is reviewed, without
-gating Firestore or either recovery IAM role. Both gates are plan boundaries,
-not apply authorization.
+adds only `firebase.projects.update` to the B7 manager.
+
+Identity Platform initialization and restricted API-key creation use independent
+governed gates. For the initialization stage,
+`b7_identity_platform_initialization` temporarily defaults to `true`, while
+`b7_restricted_api_key_activation` remains `false`. This permits only the
+Identity Platform configuration and keeps the Terraform-managed restricted key
+suppressed. The Identity Platform resource explicitly depends on the governed
+Firebase project resource as an ordering and documentation safeguard; that
+dependency is not a fix for the prior 409. After a successful apply and
+zero-drift verification, a separate stabilization mission must reassess or reset
+the temporary initialization default before API-key activation. Neither gate
+controls Firestore, recovery IAM, runtime IAM, or Cloud Run.
 
 The HCP apply identity already has the governed IAM role-management and project
 policy permissions needed to create these roles and bindings. Do not substitute

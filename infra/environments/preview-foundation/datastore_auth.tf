@@ -43,7 +43,7 @@ resource "google_firestore_database" "preview" {
 }
 
 resource "google_identity_platform_config" "preview" {
-  count = var.b7_foundation_phase >= 2 && var.b7_phase2_recovery_stage >= 2 && var.b7_identity_platform_activation ? 1 : 0
+  count = var.b7_foundation_phase >= 2 && var.b7_phase2_recovery_stage >= 2 && var.b7_identity_platform_initialization ? 1 : 0
 
   project = var.project_id
 
@@ -68,7 +68,7 @@ resource "google_identity_platform_config" "preview" {
 
   client {
     permissions {
-      disabled_user_signup   = true
+      disabled_user_signup   = false
       disabled_user_deletion = true
     }
   }
@@ -78,6 +78,7 @@ resource "google_identity_platform_config" "preview" {
   }
 
   depends_on = [
+    google_firebase_project.preview,
     google_project_service.approved_management["identitytoolkit.googleapis.com"],
   ]
 
@@ -87,7 +88,7 @@ resource "google_identity_platform_config" "preview" {
 }
 
 resource "google_apikeys_key" "preview_backend_auth" {
-  count = var.b7_foundation_phase >= 2 && var.b7_phase2_recovery_stage >= 2 && var.b7_identity_platform_activation ? 1 : 0
+  count = var.b7_foundation_phase >= 2 && var.b7_phase2_recovery_stage >= 2 && var.b7_restricted_api_key_activation ? 1 : 0
 
   project      = var.project_id
   name         = "preview-backend-auth"
