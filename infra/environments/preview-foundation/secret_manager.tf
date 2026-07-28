@@ -31,3 +31,12 @@ resource "google_secret_manager_secret_version" "preview_backend_identity_toolki
     create_before_destroy = true
   }
 }
+
+resource "google_secret_manager_secret_iam_member" "preview_backend_identity_toolkit_accessor" {
+  count = var.b7_foundation_phase >= 2 && var.b7_phase2_recovery_stage >= 2 && var.b7_restricted_api_key_activation ? 1 : 0
+
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.preview_backend_identity_toolkit[0].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = google_service_account.preview_backend_runtime.member
+}
