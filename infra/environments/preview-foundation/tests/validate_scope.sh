@@ -109,6 +109,8 @@ rg -q 'preview_identity_authorized_domains = toset' "$root_dir/datastore_auth.tf
 test "$(sed -n '/preview_identity_authorized_domains = toset(/,/])/p' "$root_dir/datastore_auth.tf" | rg -No '"[^"]+"' | tr -d '"')" = "localhost"
 rg -q 'disabled_user_signup   = false' "$root_dir/datastore_auth.tf"
 rg -q 'disabled_user_deletion = true' "$root_dir/datastore_auth.tf"
+rg -U -q 'multi_tenant \{\n    allow_tenants           = false\n    default_tenant_location = ""\n  \}' "$root_dir/datastore_auth.tf"
+test "$(rg -No 'multi_tenant \{' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
 rg -q 'role_id     = "previewBackendAuthReader"' "$root_dir/datastore_auth.tf"
 test "$(sed -n '/preview_runtime_auth_permissions = toset(/,/])/p' "$root_dir/datastore_auth.tf" | rg -No '"[^"]+"' | tr -d '"')" = "firebaseauth.users.get"
 rg -q 'service = "identitytoolkit.googleapis.com"' "$root_dir/datastore_auth.tf"

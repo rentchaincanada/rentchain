@@ -58,6 +58,7 @@ Identity Platform is configured in `rentchain-preview` with:
 - client-side user signup enabled for the later governed email/password flow;
 - self-service user deletion disabled;
 - MFA disabled;
+- multi-tenancy disabled with no default tenant location;
 - only `localhost` authorized until a separately reviewed frontend phase.
 
 The backend password-login path uses a Preview API key restricted to
