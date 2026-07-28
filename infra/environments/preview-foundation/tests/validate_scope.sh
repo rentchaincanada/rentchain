@@ -152,6 +152,7 @@ apikeys.keys.getKeyString
 datastore.databases.getMetadata
 firebase.projects.get
 firebaseauth.configs.get
+serviceusage.services.use
 EOF
 )"
 actual_b7_reader_permissions="$(
@@ -175,6 +176,7 @@ firebase.projects.get
 firebaseauth.configs.create
 firebaseauth.configs.get
 firebaseauth.configs.update
+serviceusage.services.use
 EOF
 )"
 actual_b7_manager_base_permissions="$(
@@ -199,6 +201,11 @@ fi
 
 if printf '%s\n%s\n%s\n' "$actual_b7_reader_permissions" "$actual_b7_manager_base_permissions" "iam.roles.update" | rg -n '(delete|users\.|token|run\.|storage\.|billing|secretmanager|firebase\.projects\.delete|identitytoolkit\.)'; then
   echo "Forbidden permission found in B7 HCP bootstrap roles" >&2
+  exit 1
+fi
+
+if rg -n 'roles/serviceusage\.serviceUsageConsumer' "$root_dir" --glob '*.tf'; then
+  echo "Predefined Service Usage role found in Preview foundation" >&2
   exit 1
 fi
 
@@ -306,10 +313,11 @@ apikeys.keys.getKeyString
 datastore.databases.getMetadata
 firebase.projects.get
 firebaseauth.configs.get
+serviceusage.services.use
 EOF
 )"
 test "$(sort -u "$b7_plan_delta_file")" = "$expected_b7_plan_delta"
-test "$(wc -l < "$b7_plan_delta_file" | tr -d ' ')" = "5"
+test "$(wc -l < "$b7_plan_delta_file" | tr -d ' ')" = "6"
 
 expected_b7_apply_delta="$(cat <<'EOF'
 apikeys.keys.create
@@ -322,10 +330,11 @@ firebase.projects.update
 firebaseauth.configs.create
 firebaseauth.configs.get
 firebaseauth.configs.update
+serviceusage.services.use
 EOF
 )"
 test "$(sort -u "$b7_apply_delta_file")" = "$expected_b7_apply_delta"
-test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "10"
+test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "11"
 
 if rg -n '(delete|undelete|users\.(create|delete|update|sendEmail)|getSecret|getHashConfig|serviceAccountKeys|signBlob|signJwt|getAccessToken|generateAccessToken|run\.|storage\.|billing)' "$b7_plan_delta_file" "$b7_apply_delta_file"; then
   echo "Forbidden B7 HCP permission delta found" >&2

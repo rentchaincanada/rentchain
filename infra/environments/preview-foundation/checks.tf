@@ -104,10 +104,11 @@ check "b7_hcp_bootstrap_iam_boundary" {
         "datastore.databases.getMetadata",
         "firebase.projects.get",
         "firebaseauth.configs.get",
+        "serviceusage.services.use",
       ]) &&
       google_project_iam_member.hcp_terraform_preview_b7_reader.member == local.hcp_terraform_plan_member
     )
-    error_message = "The B7 plan reader must remain the exact five-permission role bound only to the HCP plan identity."
+    error_message = "The B7 plan reader must remain the exact six-permission role bound only to the HCP plan identity."
   }
 
   assert {
@@ -124,6 +125,7 @@ check "b7_hcp_bootstrap_iam_boundary" {
         "firebaseauth.configs.create",
         "firebaseauth.configs.get",
         "firebaseauth.configs.update",
+        "serviceusage.services.use",
       ]) &&
       local.terraform_preview_b7_manager_permissions == setunion(
         local.terraform_preview_b7_manager_base_permissions,
@@ -131,7 +133,7 @@ check "b7_hcp_bootstrap_iam_boundary" {
       ) &&
       google_project_iam_member.terraform_preview_b7_manager.member == local.hcp_terraform_apply_member
     )
-    error_message = "The B7 apply manager must remain at nine permissions in recovery stage 1 and add only firebase.projects.update in stage 2."
+    error_message = "The B7 apply manager must remain at ten permissions in recovery stage 1 and add only firebase.projects.update in stage 2."
   }
 
   assert {

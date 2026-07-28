@@ -117,10 +117,10 @@ The B7 speculative plan is not apply authorization.
 Phase 1 creates two dedicated B7 custom roles rather than broadening the
 existing Cloud Run roles:
 
-- `hcpTerraformPreviewB7Reader` contains exactly the five permissions in
+- `hcpTerraformPreviewB7Reader` contains exactly the six permissions in
   `tests/hcp_b7_plan_permission_delta.txt` and is bound only to
   `hcp-terraform-preview@rentchain-preview.iam.gserviceaccount.com`;
-- `terraformPreviewB7Manager` contains exactly the ten permissions in
+- `terraformPreviewB7Manager` contains exactly the eleven permissions in
   `tests/hcp_b7_apply_permission_delta.txt` and is bound only to
   `hcp-terraform-preview-apply@rentchain-preview.iam.gserviceaccount.com`.
 
@@ -128,6 +128,11 @@ Both roles include `firebase.projects.get` so Terraform can refresh an existing
 Preview Firebase project association during planning, ownership import, and
 post-import lifecycle checks. This is read-only Firebase project metadata
 access; no broad Firebase role or project-delete permission is granted.
+Both roles also include exactly `serviceusage.services.use`, allowing the
+isolated Google provider quota project to be charged for Firebase project reads
+when `user_project_override = true`. This does not grant API enablement,
+disablement, service discovery, billing administration, or a predefined Service
+Usage role.
 
 The first Phase 2 apply partially succeeded: the protected Firestore database is
 recorded in Terraform state, while Identity Platform and the restricted API key
@@ -142,7 +147,7 @@ Phase 2 recovery uses a two-stage bootstrap because the HCP apply identity can
 create and bind project custom roles but cannot update an existing custom role.
 Recovery stage 1 creates `terraformPreviewCustomRoleUpdater`, containing only
 `iam.roles.update`, and binds it only to the HCP Preview apply identity. During
-that stage, `terraformPreviewB7Manager` retains its existing nine permissions,
+that stage, `terraformPreviewB7Manager` retains its existing ten permissions,
 Firestore remains managed, and Identity Platform plus the API key are
 suppressed. The current default, recovery stage 2, retains the updater role and
 adds only `firebase.projects.update` to the B7 manager. A separate
