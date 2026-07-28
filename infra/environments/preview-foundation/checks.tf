@@ -19,6 +19,7 @@ check "management_api_boundary" {
       "iam.googleapis.com",
       "identitytoolkit.googleapis.com",
       "run.googleapis.com",
+      "secretmanager.googleapis.com",
       "serviceusage.googleapis.com",
     ])
     error_message = "The B4 Preview foundation API allowlist has changed."
@@ -117,11 +118,14 @@ check "b7_hcp_bootstrap_iam_boundary" {
         "datastore.databases.getMetadata",
         "firebase.projects.get",
         "firebaseauth.configs.get",
+        "secretmanager.secrets.get",
+        "secretmanager.secrets.getIamPolicy",
+        "secretmanager.versions.get",
         "serviceusage.services.use",
       ]) &&
       google_project_iam_member.hcp_terraform_preview_b7_reader.member == local.hcp_terraform_plan_member
     )
-    error_message = "The B7 plan reader must remain the exact six-permission role bound only to the HCP plan identity."
+    error_message = "The B7 plan reader must remain the exact nine-permission role bound only to the HCP plan identity."
   }
 
   assert {
@@ -138,6 +142,12 @@ check "b7_hcp_bootstrap_iam_boundary" {
         "firebaseauth.configs.create",
         "firebaseauth.configs.get",
         "firebaseauth.configs.update",
+        "secretmanager.secrets.create",
+        "secretmanager.secrets.get",
+        "secretmanager.secrets.getIamPolicy",
+        "secretmanager.secrets.setIamPolicy",
+        "secretmanager.versions.add",
+        "secretmanager.versions.get",
         "serviceusage.services.use",
       ]) &&
       local.terraform_preview_b7_manager_permissions == setunion(
@@ -146,7 +156,7 @@ check "b7_hcp_bootstrap_iam_boundary" {
       ) &&
       google_project_iam_member.terraform_preview_b7_manager.member == local.hcp_terraform_apply_member
     )
-    error_message = "The B7 apply manager must remain at ten permissions in recovery stage 1 and add only firebase.projects.update in stage 2."
+    error_message = "The B7 apply manager must remain at sixteen permissions in recovery stage 1 and add only firebase.projects.update in stage 2."
   }
 
   assert {

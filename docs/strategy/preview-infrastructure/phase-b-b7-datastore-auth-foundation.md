@@ -107,9 +107,13 @@ ID, and redacted build-presence metadata.
 - `firestore.googleapis.com`
 - `identitytoolkit.googleapis.com`
 - `apikeys.googleapis.com`
+- `secretmanager.googleapis.com`
 
-No Firebase Management, Secret Manager, Firestore Rules, Cloud Run Jobs, or
-production API is added.
+Secret Manager is enabled only as a management-plane prerequisite for a later
+governed, write-only backend-key delivery stage. This stage creates no secret,
+secret version, runtime accessor binding, or Cloud Run secret reference. No
+Firebase Management, Firestore Rules, Cloud Run Jobs, or production API is
+added.
 
 ## Apply sequencing and bootstrap gate
 
@@ -118,12 +122,19 @@ The B7 speculative plan is not apply authorization.
 Phase 1 creates two dedicated B7 custom roles rather than broadening the
 existing Cloud Run roles:
 
-- `hcpTerraformPreviewB7Reader` contains exactly the six permissions in
+- `hcpTerraformPreviewB7Reader` contains exactly the nine permissions in
   `tests/hcp_b7_plan_permission_delta.txt` and is bound only to
   `hcp-terraform-preview@rentchain-preview.iam.gserviceaccount.com`;
-- `terraformPreviewB7Manager` contains exactly the eleven permissions in
+- `terraformPreviewB7Manager` contains exactly the seventeen permissions in
   `tests/hcp_b7_apply_permission_delta.txt` and is bound only to
   `hcp-terraform-preview-apply@rentchain-preview.iam.gserviceaccount.com`.
+
+The Secret Manager additions are limited to secret and secret-version metadata
+reads for the plan identity and secret creation, version creation, and
+secret-scoped IAM policy management for the apply identity. Neither role has
+`secretmanager.versions.access`, secret deletion, version disabling or
+destruction, list access, or a predefined Secret Manager role. The runtime
+identity receives no Secret Manager permission in this prerequisite stage.
 
 Both roles include `firebase.projects.get` so Terraform can refresh an existing
 Preview Firebase project association during planning, ownership import, and
@@ -157,10 +168,11 @@ Phase 2 recovery uses a two-stage bootstrap because the HCP apply identity can
 create and bind project custom roles but cannot update an existing custom role.
 Recovery stage 1 creates `terraformPreviewCustomRoleUpdater`, containing only
 `iam.roles.update`, and binds it only to the HCP Preview apply identity. During
-that stage, `terraformPreviewB7Manager` retains its existing ten permissions,
-Firestore remains managed, and Identity Platform plus the API key are
-suppressed. The current default, recovery stage 2, retains the updater role and
-adds only `firebase.projects.update` to the B7 manager.
+that stage, `terraformPreviewB7Manager` has sixteen permissions after the
+Secret Manager prerequisite additions, Firestore remains managed, and Identity
+Platform plus the API key are suppressed. The current default, recovery stage
+2, retains the updater role and adds only `firebase.projects.update`, producing
+the exact seventeen-permission B7 manager.
 
 Identity Platform initialization and restricted API-key creation use independent
 governed gates. For the initialization stage,

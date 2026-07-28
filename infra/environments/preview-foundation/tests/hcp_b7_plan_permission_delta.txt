@@ -3,4 +3,7 @@ apikeys.keys.getKeyString
 datastore.databases.getMetadata
 firebase.projects.get
 firebaseauth.configs.get
+secretmanager.secrets.get
+secretmanager.secrets.getIamPolicy
+secretmanager.versions.get
 serviceusage.services.use
