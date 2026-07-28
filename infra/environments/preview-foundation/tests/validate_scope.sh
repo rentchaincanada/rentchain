@@ -127,8 +127,15 @@ if rg -n 'firebaseauth\.users\.(create|delete|update|sendEmail)|datastore\.(data
 fi
 
 rg -U -q 'name  = "FIRESTORE_ENABLED"\n        value = "false"' "$root_dir/cloud_run.tf"
-if rg -n 'FIRESTORE_DATABASE_ID|PREVIEW_AUTH_ENABLED|FIREBASE_PROJECT_ID|FIREBASE_API_KEY|google_apikeys_key' "$root_dir/cloud_run.tf"; then
-  echo "B7 Cloud Run activation must remain deferred until the separately reviewed runtime-image phase" >&2
+test "$(rg -No 'name = "FIREBASE_API_KEY"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "1"
+rg -U -q 'env \{\n        name = "FIREBASE_API_KEY"\n\n        value_source \{\n          secret_key_ref \{\n            secret  = google_secret_manager_secret\.preview_backend_identity_toolkit\[0\]\.secret_id\n            version = "1"\n          \}\n        \}\n      \}' "$root_dir/cloud_run.tf"
+grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor,' "$root_dir/cloud_run.tf"
+if rg -n 'FIRESTORE_DATABASE_ID|PREVIEW_AUTH_ENABLED|FIREBASE_PROJECT_ID|google_apikeys_key|key_string|version\s*=\s*"latest"' "$root_dir/cloud_run.tf"; then
+  echo "B7 Cloud Run secret injection contains a prohibited activation field, direct key reference, or mutable secret version" >&2
+  exit 1
+fi
+if rg -U -n 'name = "FIREBASE_API_KEY"\n[[:space:]]+value[[:space:]]*=' "$root_dir/cloud_run.tf"; then
+  echo "B7 Cloud Run FIREBASE_API_KEY must not use a literal value" >&2
   exit 1
 fi
 
@@ -261,8 +268,12 @@ if rg -n '(^|[[:space:]])secret_data[[:space:]]*=' "$root_dir" --glob '*.tf'; th
   echo "Ordinary Secret Manager secret_data found; write-only delivery is required" >&2
   exit 1
 fi
-if rg -n 'google_project_iam_(member|binding).*secretmanager|FIREBASE_API_KEY' "$root_dir" --glob '*.tf'; then
-  echo "Project-wide Secret Manager IAM or Cloud Run secret injection found" >&2
+if rg -n 'google_project_iam_(member|binding).*secretmanager' "$root_dir" --glob '*.tf'; then
+  echo "Project-wide Secret Manager IAM found" >&2
+  exit 1
+fi
+if rg -n 'FIREBASE_API_KEY' "$root_dir" --glob '*.tf' | rg -v '/(cloud_run|checks)\.tf:'; then
+  echo "FIREBASE_API_KEY found outside the governed Cloud Run resource or its check" >&2
   exit 1
 fi
 
