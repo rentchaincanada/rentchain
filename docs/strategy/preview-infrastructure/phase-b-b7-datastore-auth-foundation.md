@@ -7,8 +7,8 @@ the isolated `rentchain-preview` project. The database location is
 `northamerica-northeast1`.
 
 This is a foundation-only change. It creates no user, document, fixture,
-production resource, frontend route, public Cloud Run binding, static
-credential, or Secret Manager secret.
+production resource, frontend route, public Cloud Run binding, or static
+credential.
 
 ## Datastore boundary
 
@@ -64,9 +64,12 @@ Identity Platform is configured in `rentchain-preview` with:
 The backend password-login path uses a Preview API key restricted to
 `identitytoolkit.googleapis.com`. A Firebase web API key identifies a client and
 is not a privileged server credential, but Terraform and HCP still treat its
-value as sensitive. Phase 2 creates the key in Terraform state without exposing
-it through outputs or attaching it to Cloud Run. Delivery to Cloud Run requires
-a separately reviewed activation phase; Secret Manager remains absent.
+value as sensitive. The governed backend-key stage creates the key in Terraform
+state without exposing it through outputs or attaching it to Cloud Run. Its
+value flows directly from the API Keys resource into a protected Secret Manager
+version through Terraform's write-only `secret_data_wo` argument. Ordinary
+`secret_data` is prohibited. Delivery from Secret Manager to Cloud Run requires
+a separately reviewed runtime activation phase.
 
 The runtime role `previewBackendAuthReader` contains only
 `firebaseauth.users.get`. The existing login path needs this permission to read
@@ -109,11 +112,13 @@ ID, and redacted build-presence metadata.
 - `apikeys.googleapis.com`
 - `secretmanager.googleapis.com`
 
-Secret Manager is enabled only as a management-plane prerequisite for a later
-governed, write-only backend-key delivery stage. This stage creates no secret,
-secret version, runtime accessor binding, or Cloud Run secret reference. No
-Firebase Management, Firestore Rules, Cloud Run Jobs, or production API is
-added.
+Secret Manager supports the governed write-only backend-key stage. That stage
+creates exactly `preview-backend-identity-toolkit-api-key` with automatic
+Google-managed replication, deletion protection, and Terraform
+`prevent_destroy`. Its one managed version uses `secret_data_wo`, write-only
+version `1`, deletion policy `DISABLE`, and `create_before_destroy`. It creates
+no runtime accessor binding or Cloud Run secret reference. No Firebase
+Management, Firestore Rules, Cloud Run Jobs, or production API is added.
 
 ## Apply sequencing and bootstrap gate
 
@@ -175,16 +180,14 @@ Platform plus the API key are suppressed. The current default, recovery stage
 the exact seventeen-permission B7 manager.
 
 Identity Platform initialization and restricted API-key creation use independent
-governed gates. For the initialization stage,
-`b7_identity_platform_initialization` temporarily defaults to `true`, while
-`b7_restricted_api_key_activation` remains `false`. This permits only the
-Identity Platform configuration and keeps the Terraform-managed restricted key
-suppressed. The Identity Platform resource explicitly depends on the governed
-Firebase project resource as an ordering and documentation safeguard; that
-dependency is not a fix for the prior 409. After a successful apply and
-zero-drift verification, a separate stabilization mission must reassess or reset
-the temporary initialization default before API-key activation. Neither gate
-controls Firestore, recovery IAM, runtime IAM, or Cloud Run.
+governed gates. `b7_identity_platform_initialization` remains active for the
+managed Identity Platform configuration. The current backend-key stage sets
+`b7_restricted_api_key_activation` to `true`, planning the restricted API key,
+protected Secret Manager secret, and write-only secret version together. The
+Identity Platform resource explicitly depends on the governed Firebase project
+resource as an ordering and documentation safeguard; that dependency is not a
+fix for the prior 409. Neither gate controls Firestore, recovery IAM, runtime
+IAM, or Cloud Run.
 
 The HCP apply identity already has the governed IAM role-management and project
 policy permissions needed to create these roles and bindings. Do not substitute

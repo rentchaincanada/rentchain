@@ -100,7 +100,7 @@ variable "b7_identity_platform_initialization" {
 }
 
 variable "b7_restricted_api_key_activation" {
-  description = "Governed activation for the Terraform-managed restricted Preview backend API key."
+  description = "Governed activation for the Terraform-managed restricted Preview backend API key and write-only Secret Manager delivery."
   type        = bool
-  default     = false
+  default     = true
 }

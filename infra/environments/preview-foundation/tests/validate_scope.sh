@@ -24,6 +24,8 @@ google_identity_platform_config
 google_project_iam_custom_role
 google_project_iam_member
 google_project_service
+google_secret_manager_secret
+google_secret_manager_secret_version
 google_service_account
 google_service_account_iam_member
 EOF
@@ -31,7 +33,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "33"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "35"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|secretmanager|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "9"
@@ -50,7 +52,7 @@ grep -Fq 'condition     = contains([1, 2, 3], var.b7_foundation_phase)' "$root_d
 rg -U -q 'variable "b7_phase2_recovery_stage" \{\n  description = "[^"]+"\n  type        = number\n  default     = 2' "$root_dir/variables.tf"
 grep -Fq 'condition     = contains([1, 2], var.b7_phase2_recovery_stage)' "$root_dir/variables.tf"
 rg -U -q 'variable "b7_identity_platform_initialization" \{\n  description = "Governed stage activation for initializing Preview Identity Platform\."\n  type        = bool\n  default     = true\n\}' "$root_dir/variables.tf"
-rg -U -q 'variable "b7_restricted_api_key_activation" \{\n  description = "Governed activation for the Terraform-managed restricted Preview backend API key\."\n  type        = bool\n  default     = false\n\}' "$root_dir/variables.tf"
+rg -U -q 'variable "b7_restricted_api_key_activation" \{\n  description = "Governed activation for the Terraform-managed restricted Preview backend API key and write-only Secret Manager delivery\."\n  type        = bool\n  default     = true\n\}' "$root_dir/variables.tf"
 rg -U -q 'google-beta = \{\n      source  = "hashicorp/google-beta"\n      version = "6\.50\.0"\n    \}' "$root_dir/versions.tf"
 rg -U -q 'provider "google-beta" \{\n  project               = var\.project_id\n  user_project_override = true\n\}' "$root_dir/providers.tf"
 rg -U -q 'resource "google_firebase_project" "preview" \{\n  provider = google-beta\n  project  = var\.project_id\n\n  lifecycle \{\n    prevent_destroy = true\n  \}\n\}' "$root_dir/firebase.tf"
@@ -114,6 +116,9 @@ test "$(rg -No 'multi_tenant \{' "$root_dir/datastore_auth.tf" | wc -l | tr -d '
 rg -q 'role_id     = "previewBackendAuthReader"' "$root_dir/datastore_auth.tf"
 test "$(sed -n '/preview_runtime_auth_permissions = toset(/,/])/p' "$root_dir/datastore_auth.tf" | rg -No '"[^"]+"' | tr -d '"')" = "firebaseauth.users.get"
 rg -q 'service = "identitytoolkit.googleapis.com"' "$root_dir/datastore_auth.tf"
+rg -q 'name         = "preview-backend-auth"' "$root_dir/datastore_auth.tf"
+rg -q 'display_name = "Preview Backend Identity Toolkit"' "$root_dir/datastore_auth.tf"
+rg -U -q '(?s)resource "google_apikeys_key" "preview_backend_auth" \{.*lifecycle \{\n    prevent_destroy = true\n  \}' "$root_dir/datastore_auth.tf"
 
 if rg -n 'firebaseauth\.users\.(create|delete|update|sendEmail)|datastore\.(databases\.(delete|update)|indexes\.|operations\.)|roles/(datastore|firebase|identityplatform)' "$root_dir/datastore_auth.tf"; then
   echo "B7 runtime IAM broadening or destructive datastore permission found" >&2
@@ -129,6 +134,7 @@ fi
 test "$(rg -No 'count = var\.b7_foundation_phase >= 2 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
 test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_identity_platform_initialization \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
 test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_restricted_api_key_activation \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_restricted_api_key_activation \? 1 : 0' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "2"
 grep -Fq 'value = var.b7_foundation_phase >= 2 && var.b7_phase2_recovery_stage >= 2 && var.b7_identity_platform_initialization ? {' "$root_dir/outputs.tf"
 rg -U -q '(?s)resource "google_identity_platform_config" "preview" \{.*depends_on = \[\n    google_firebase_project\.preview,\n    google_project_service\.approved_management\["identitytoolkit\.googleapis\.com"\],\n  \]' "$root_dir/datastore_auth.tf"
 if rg -n 'b7_identity_platform_initialization|b7_restricted_api_key_activation' "$root_dir/cloud_run.tf" "$root_dir/iam.tf"; then
@@ -235,8 +241,23 @@ if rg -n 'roles/secretmanager\.' "$root_dir" --glob '*.tf'; then
   exit 1
 fi
 
-if rg -n 'google_secret_manager_|FIREBASE_API_KEY' "$root_dir" --glob '*.tf'; then
-  echo "Secret resource, runtime binding, or Cloud Run secret injection found in Stage 1" >&2
+test "$(rg -No '^resource "google_secret_manager_secret"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_secret_manager_secret_version"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
+rg -q 'secret_id = "preview-backend-identity-toolkit-api-key"' "$root_dir/secret_manager.tf"
+rg -U -q 'replication \{\n    auto \{\}\n  \}' "$root_dir/secret_manager.tf"
+rg -q 'deletion_protection = true' "$root_dir/secret_manager.tf"
+rg -U -q '(?s)resource "google_secret_manager_secret" "preview_backend_identity_toolkit" \{.*lifecycle \{\n    prevent_destroy = true\n  \}' "$root_dir/secret_manager.tf"
+grep -Fq 'secret_data_wo         = google_apikeys_key.preview_backend_auth[0].key_string' "$root_dir/secret_manager.tf"
+rg -q 'secret_data_wo_version = 1' "$root_dir/secret_manager.tf"
+rg -q 'deletion_policy        = "DISABLE"' "$root_dir/secret_manager.tf"
+rg -U -q '(?s)resource "google_secret_manager_secret_version" "preview_backend_identity_toolkit" \{.*lifecycle \{\n    create_before_destroy = true\n  \}' "$root_dir/secret_manager.tf"
+test "$(rg -No 'secret_data_wo\s*=' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
+if rg -n '(^|[[:space:]])secret_data[[:space:]]*=' "$root_dir" --glob '*.tf'; then
+  echo "Ordinary Secret Manager secret_data found; write-only delivery is required" >&2
+  exit 1
+fi
+if rg -n 'google_secret_manager_secret_iam_|roles/secretmanager\.secretAccessor|FIREBASE_API_KEY' "$root_dir" --glob '*.tf'; then
+  echo "Runtime Secret Manager IAM or Cloud Run secret injection found" >&2
   exit 1
 fi
 
