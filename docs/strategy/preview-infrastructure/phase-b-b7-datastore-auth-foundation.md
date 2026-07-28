@@ -134,6 +134,15 @@ when `user_project_override = true`. This does not grant API enablement,
 disablement, service discovery, billing administration, or a predefined Service
 Usage role.
 
+The active Firebase association for `rentchain-preview` is adopted through the
+`google-beta` 6.50.0 `google_firebase_project` resource and one declarative
+short-project-ID import. The resource uses `prevent_destroy` and manages only
+the existing Firebase project association. It does not manage the
+Firebase-created Browser key, any Firebase app, Hosting, analytics, Identity
+Platform, or the restricted backend key. The default-false Identity Platform
+activation gate remains unchanged, so this ownership adoption does not activate
+authentication or produce the datastore/auth output.
+
 The first Phase 2 apply partially succeeded: the protected Firestore database is
 recorded in Terraform state, while Identity Platform and the restricted API key
 remain absent. During Identity Platform initialization, the Google provider

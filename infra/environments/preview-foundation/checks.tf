@@ -93,6 +93,16 @@ check "b7_preview_authentication_boundary" {
   }
 }
 
+check "b7_firebase_project_ownership_boundary" {
+  assert {
+    condition = (
+      google_firebase_project.preview.project == "rentchain-preview" &&
+      !var.b7_identity_platform_activation
+    )
+    error_message = "B7 Firebase ownership must remain limited to the existing Preview project while Identity Platform activation stays disabled."
+  }
+}
+
 check "b7_hcp_bootstrap_iam_boundary" {
   assert {
     condition = (
