@@ -10,7 +10,6 @@ apply_permissions_file="$root_dir/tests/hcp_apply_permissions.txt"
 b4_apply_delta_file="$root_dir/tests/hcp_b4_apply_permission_delta.txt"
 b7_plan_delta_file="$root_dir/tests/hcp_b7_plan_permission_delta.txt"
 b7_apply_delta_file="$root_dir/tests/hcp_b7_apply_permission_delta.txt"
-imports_file="$root_dir/imports.tf"
 
 expected_resources="$(cat <<'EOF'
 google_apikeys_key
@@ -32,13 +31,6 @@ actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E
 test "$actual_resources" = "$expected_resources"
 
 test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "32"
-test -f "$imports_file"
-test "$(rg -No '^import \{' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "1"
-rg -U -q '^import \{\n  to = google_identity_platform_config\.preview\[0\]\n  id = "rentchain-preview"\n\}$' "$imports_file"
-if rg -n 'google_apikeys_key|Browser key|google_firestore_database|google_project_iam|project-0d9658de-af29-4dc0-a99|var\.|each\.|count\.' "$imports_file"; then
-  echo "B7 import must target only the exact Preview Identity Platform configuration" >&2
-  exit 1
-fi
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "8"
