@@ -21,6 +21,7 @@ locals {
     "datastore.databases.getMetadata",
     "firebase.projects.get",
     "firebaseauth.configs.get",
+    "serviceusage.services.use",
   ])
 
   terraform_preview_b7_manager_base_permissions = toset([
@@ -33,6 +34,7 @@ locals {
     "firebaseauth.configs.create",
     "firebaseauth.configs.get",
     "firebaseauth.configs.update",
+    "serviceusage.services.use",
   ])
 
   terraform_preview_b7_manager_permissions = setunion(

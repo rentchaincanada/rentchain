@@ -8,3 +8,4 @@ firebase.projects.update
 firebaseauth.configs.create
 firebaseauth.configs.get
 firebaseauth.configs.update
+serviceusage.services.use
