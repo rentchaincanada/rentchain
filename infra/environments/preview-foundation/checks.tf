@@ -114,7 +114,7 @@ check "b7_backend_auth_secret_boundary" {
       google_secret_manager_secret.preview_backend_identity_toolkit[0].deletion_protection &&
       google_secret_manager_secret_version.preview_backend_identity_toolkit[0].secret_data_wo_version == 1 &&
       google_secret_manager_secret_version.preview_backend_identity_toolkit[0].deletion_policy == "DISABLE" &&
-      google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor[0].secret_id == google_secret_manager_secret.preview_backend_identity_toolkit[0].secret_id &&
+      google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor[0].secret_id == google_secret_manager_secret.preview_backend_identity_toolkit[0].id &&
       google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor[0].role == "roles/secretmanager.secretAccessor" &&
       google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor[0].member == google_service_account.preview_backend_runtime.member
     )

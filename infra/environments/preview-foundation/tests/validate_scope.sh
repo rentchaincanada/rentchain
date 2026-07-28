@@ -255,6 +255,7 @@ rg -q 'secret_data_wo_version = 1' "$root_dir/secret_manager.tf"
 rg -q 'deletion_policy        = "DISABLE"' "$root_dir/secret_manager.tf"
 rg -U -q '(?s)resource "google_secret_manager_secret_version" "preview_backend_identity_toolkit" \{.*lifecycle \{\n    create_before_destroy = true\n  \}' "$root_dir/secret_manager.tf"
 rg -U -q 'resource "google_secret_manager_secret_iam_member" "preview_backend_identity_toolkit_accessor" \{\n  count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_restricted_api_key_activation \? 1 : 0\n\n  project   = var\.project_id\n  secret_id = google_secret_manager_secret\.preview_backend_identity_toolkit\[0\]\.secret_id\n  role      = "roles/secretmanager\.secretAccessor"\n  member    = google_service_account\.preview_backend_runtime\.member\n\}' "$root_dir/secret_manager.tf"
+grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor[0].secret_id == google_secret_manager_secret.preview_backend_identity_toolkit[0].id' "$root_dir/checks.tf"
 test "$(rg -No 'secret_data_wo\s*=' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
 if rg -n '(^|[[:space:]])secret_data[[:space:]]*=' "$root_dir" --glob '*.tf'; then
   echo "Ordinary Secret Manager secret_data found; write-only delivery is required" >&2
