@@ -77,6 +77,11 @@ resource "google_identity_platform_config" "preview" {
     state = "DISABLED"
   }
 
+  multi_tenant {
+    allow_tenants           = false
+    default_tenant_location = ""
+  }
+
   depends_on = [
     google_firebase_project.preview,
     google_project_service.approved_management["identitytoolkit.googleapis.com"],
