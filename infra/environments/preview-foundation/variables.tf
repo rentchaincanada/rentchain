@@ -92,3 +92,9 @@ variable "b7_phase2_recovery_stage" {
     error_message = "b7_phase2_recovery_stage must be exactly 1 or 2."
   }
 }
+
+variable "b7_identity_platform_activation" {
+  description = "Governed activation gate for Preview Identity Platform and the restricted backend API key."
+  type        = bool
+  default     = false
+}

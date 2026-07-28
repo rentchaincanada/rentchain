@@ -48,6 +48,7 @@ rg -U -q 'variable "b7_foundation_phase" \{\n  description = "[^"]+"\n  type    
 grep -Fq 'condition     = contains([1, 2, 3], var.b7_foundation_phase)' "$root_dir/variables.tf"
 rg -U -q 'variable "b7_phase2_recovery_stage" \{\n  description = "[^"]+"\n  type        = number\n  default     = 2' "$root_dir/variables.tf"
 grep -Fq 'condition     = contains([1, 2], var.b7_phase2_recovery_stage)' "$root_dir/variables.tf"
+rg -U -q 'variable "b7_identity_platform_activation" \{\n  description = "[^"]+"\n  type        = bool\n  default     = false\n\}' "$root_dir/variables.tf"
 rg -q 'count    = var\.enable_preview_backend_service \? 1 : 0' "$root_dir/cloud_run.tf"
 rg -U -q 'lifecycle \{\n    prevent_destroy = true\n    ignore_changes = \[\n      scaling,\n    \]\n  \}' "$root_dir/cloud_run.tf"
 test "$(rg -No 'ignore_changes' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "1"
@@ -111,7 +112,12 @@ if rg -n 'FIRESTORE_DATABASE_ID|PREVIEW_AUTH_ENABLED|FIREBASE_PROJECT_ID|FIREBAS
 fi
 
 test "$(rg -No 'count = var\.b7_foundation_phase >= 2 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
-test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "2"
+test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_identity_platform_activation \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "2"
+grep -Fq 'value = var.b7_foundation_phase >= 2 && var.b7_phase2_recovery_stage >= 2 && var.b7_identity_platform_activation ? {' "$root_dir/outputs.tf"
+if rg -n 'b7_identity_platform_activation' "$root_dir/cloud_run.tf" "$root_dir/iam.tf"; then
+  echo "The B7 Identity Platform activation gate must not control Cloud Run or IAM" >&2
+  exit 1
+fi
 test "$(rg -No 'count = var\.b7_foundation_phase >= 3 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "4"
 
 test "$(rg -No '^resource "google_artifact_registry_repository"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "1"
@@ -144,6 +150,7 @@ expected_b7_reader_permissions="$(cat <<'EOF'
 apikeys.keys.get
 apikeys.keys.getKeyString
 datastore.databases.getMetadata
+firebase.projects.get
 firebaseauth.configs.get
 EOF
 )"
@@ -164,6 +171,7 @@ apikeys.keys.get
 apikeys.keys.getKeyString
 datastore.databases.create
 datastore.databases.getMetadata
+firebase.projects.get
 firebaseauth.configs.create
 firebaseauth.configs.get
 firebaseauth.configs.update
@@ -189,7 +197,7 @@ if sed -n '/resource "google_project_iam_custom_role" "hcp_terraform_preview_b7_
   exit 1
 fi
 
-if printf '%s\n%s\n%s\n' "$actual_b7_reader_permissions" "$actual_b7_manager_base_permissions" "iam.roles.update" | rg -n '(delete|users\.|token|run\.|storage\.|billing|secretmanager|firebase\.projects\.(delete|get)|identitytoolkit\.)'; then
+if printf '%s\n%s\n%s\n' "$actual_b7_reader_permissions" "$actual_b7_manager_base_permissions" "iam.roles.update" | rg -n '(delete|users\.|token|run\.|storage\.|billing|secretmanager|firebase\.projects\.delete|identitytoolkit\.)'; then
   echo "Forbidden permission found in B7 HCP bootstrap roles" >&2
   exit 1
 fi
@@ -296,11 +304,12 @@ expected_b7_plan_delta="$(cat <<'EOF'
 apikeys.keys.get
 apikeys.keys.getKeyString
 datastore.databases.getMetadata
+firebase.projects.get
 firebaseauth.configs.get
 EOF
 )"
 test "$(sort -u "$b7_plan_delta_file")" = "$expected_b7_plan_delta"
-test "$(wc -l < "$b7_plan_delta_file" | tr -d ' ')" = "4"
+test "$(wc -l < "$b7_plan_delta_file" | tr -d ' ')" = "5"
 
 expected_b7_apply_delta="$(cat <<'EOF'
 apikeys.keys.create
@@ -308,6 +317,7 @@ apikeys.keys.get
 apikeys.keys.getKeyString
 datastore.databases.create
 datastore.databases.getMetadata
+firebase.projects.get
 firebase.projects.update
 firebaseauth.configs.create
 firebaseauth.configs.get
@@ -315,7 +325,7 @@ firebaseauth.configs.update
 EOF
 )"
 test "$(sort -u "$b7_apply_delta_file")" = "$expected_b7_apply_delta"
-test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "9"
+test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "10"
 
 if rg -n '(delete|undelete|users\.(create|delete|update|sendEmail)|getSecret|getHashConfig|serviceAccountKeys|signBlob|signJwt|getAccessToken|generateAccessToken|run\.|storage\.|billing)' "$b7_plan_delta_file" "$b7_apply_delta_file"; then
   echo "Forbidden B7 HCP permission delta found" >&2

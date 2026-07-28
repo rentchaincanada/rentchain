@@ -1,4 +1,5 @@
 apikeys.keys.get
 apikeys.keys.getKeyString
 datastore.databases.getMetadata
+firebase.projects.get
 firebaseauth.configs.get
