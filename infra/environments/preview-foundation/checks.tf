@@ -100,10 +100,22 @@ check "b7_firebase_project_ownership_boundary" {
   assert {
     condition = (
       google_firebase_project.preview.project == "rentchain-preview" &&
-      var.b7_identity_platform_initialization &&
-      !var.b7_restricted_api_key_activation
+      var.b7_identity_platform_initialization
     )
-    error_message = "B7 Firebase ownership must remain limited to the existing Preview project while only Identity Platform initialization is active."
+    error_message = "B7 Firebase ownership must remain limited to the existing Preview project."
+  }
+}
+
+check "b7_backend_auth_secret_boundary" {
+  assert {
+    condition = var.b7_foundation_phase < 2 || var.b7_phase2_recovery_stage < 2 || !var.b7_restricted_api_key_activation ? true : (
+      google_secret_manager_secret.preview_backend_identity_toolkit[0].project == "rentchain-preview" &&
+      google_secret_manager_secret.preview_backend_identity_toolkit[0].secret_id == "preview-backend-identity-toolkit-api-key" &&
+      google_secret_manager_secret.preview_backend_identity_toolkit[0].deletion_protection &&
+      google_secret_manager_secret_version.preview_backend_identity_toolkit[0].secret_data_wo_version == 1 &&
+      google_secret_manager_secret_version.preview_backend_identity_toolkit[0].deletion_policy == "DISABLE"
+    )
+    error_message = "The Preview backend Identity Toolkit key must remain in the protected write-only Secret Manager boundary."
   }
 }
 
