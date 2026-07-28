@@ -68,11 +68,13 @@ value as sensitive. The governed backend-key stage creates the key in Terraform
 state without exposing it through outputs or attaching it to Cloud Run. Its
 value flows directly from the API Keys resource into a protected Secret Manager
 version through Terraform's write-only `secret_data_wo` argument. Ordinary
-`secret_data` is prohibited. Delivery from Secret Manager to Cloud Run requires
-a separately reviewed runtime activation phase. The runtime service account has
-only `roles/secretmanager.secretAccessor` on this exact secret; it has no
-project-wide Secret Manager role, secret creation permission, or IAM
-administration permission.
+`secret_data` is prohibited. The governed runtime-delivery stage injects
+`FIREBASE_API_KEY` into the Preview Cloud Run service from explicit Secret
+Manager version `1`; it does not expose a literal key or use the mutable
+`latest` alias. The runtime service account has only
+`roles/secretmanager.secretAccessor` on this exact secret; it has no project-wide
+Secret Manager role, secret creation permission, or IAM administration
+permission.
 
 The runtime role `previewBackendAuthReader` contains only
 `firebaseauth.users.get`. The existing login path needs this permission to read
@@ -122,8 +124,13 @@ Google-managed replication, deletion protection, and Terraform
 version `1`, deletion policy `DISABLE`, and `create_before_destroy`. The exact
 secret carries one `roles/secretmanager.secretAccessor` member for
 `preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com`. There is no
-project-wide Secret Manager binding or Cloud Run secret reference. No Firebase
-Management, Firestore Rules, Cloud Run Jobs, or production API is added.
+project-wide Secret Manager binding. Cloud Run references only explicit version
+`1`; no payload appears in Terraform output or Cloud Run's environment
+configuration display. Applying this change creates a new Preview service
+revision while the existing healthy revision remains the rollback target.
+Runtime login QA is separately authorized, and no production traffic is
+involved. No Firebase Management, Firestore Rules, Cloud Run Jobs, or production
+API is added.
 
 ## Apply sequencing and bootstrap gate
 

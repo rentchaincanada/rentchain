@@ -59,6 +59,17 @@ resource "google_cloud_run_v2_service" "preview_backend" {
       }
 
       env {
+        name = "FIREBASE_API_KEY"
+
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.preview_backend_identity_toolkit[0].secret_id
+            version = "1"
+          }
+        }
+      }
+
+      env {
         name  = "APP_GIT_SHA"
         value = local.preview_backend_source_sha
       }
@@ -79,5 +90,6 @@ resource "google_cloud_run_v2_service" "preview_backend" {
 
   depends_on = [
     google_project_service.approved_management["run.googleapis.com"],
+    google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor,
   ]
 }

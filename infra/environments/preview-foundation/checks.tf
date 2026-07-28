@@ -122,6 +122,30 @@ check "b7_backend_auth_secret_boundary" {
   }
 }
 
+check "b7_preview_backend_auth_secret_injection_boundary" {
+  assert {
+    condition = var.enable_preview_backend_service ? (
+      length([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "FIREBASE_API_KEY"
+      ]) == 1 &&
+      one([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "FIREBASE_API_KEY"
+      ]).value_source[0].secret_key_ref[0].secret == google_secret_manager_secret.preview_backend_identity_toolkit[0].secret_id &&
+      one([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "FIREBASE_API_KEY"
+      ]).value_source[0].secret_key_ref[0].version == "1" &&
+      one([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "FIRESTORE_ENABLED"
+      ]).value == "false"
+    ) : true
+    error_message = "The Preview backend must receive only explicit version 1 of the governed Identity Toolkit secret while Firestore remains disabled."
+  }
+}
+
 check "b7_hcp_bootstrap_iam_boundary" {
   assert {
     condition = (
