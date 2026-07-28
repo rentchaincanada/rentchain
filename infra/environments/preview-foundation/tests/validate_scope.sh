@@ -16,6 +16,7 @@ google_apikeys_key
 google_artifact_registry_repository
 google_artifact_registry_repository_iam_member
 google_cloud_run_v2_service
+google_firebase_project
 google_firestore_database
 google_iam_workload_identity_pool
 google_iam_workload_identity_pool_provider
@@ -30,7 +31,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "32"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "33"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "8"
@@ -49,6 +50,17 @@ grep -Fq 'condition     = contains([1, 2, 3], var.b7_foundation_phase)' "$root_d
 rg -U -q 'variable "b7_phase2_recovery_stage" \{\n  description = "[^"]+"\n  type        = number\n  default     = 2' "$root_dir/variables.tf"
 grep -Fq 'condition     = contains([1, 2], var.b7_phase2_recovery_stage)' "$root_dir/variables.tf"
 rg -U -q 'variable "b7_identity_platform_activation" \{\n  description = "[^"]+"\n  type        = bool\n  default     = false\n\}' "$root_dir/variables.tf"
+rg -U -q 'google-beta = \{\n      source  = "hashicorp/google-beta"\n      version = "6\.50\.0"\n    \}' "$root_dir/versions.tf"
+rg -U -q 'provider "google-beta" \{\n  project               = var\.project_id\n  user_project_override = true\n\}' "$root_dir/providers.tf"
+rg -U -q 'resource "google_firebase_project" "preview" \{\n  provider = google-beta\n  project  = var\.project_id\n\n  lifecycle \{\n    prevent_destroy = true\n  \}\n\}' "$root_dir/firebase.tf"
+rg -U -q 'import \{\n  to = google_firebase_project\.preview\n  id = "rentchain-preview"\n\}' "$root_dir/imports.tf"
+test "$(rg -No '^import \{' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "1"
+test "$(rg -No 'provider = google-beta' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_firebase_project"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "1"
+if rg -n 'google_firebase_(web|android|apple)_app|google_firebase_hosting|google_firebase_app_hosting|google_firebase_extensions|google_firebase_database' "$root_dir" --glob '*.tf'; then
+  echo "Firebase ownership scope includes an app, Hosting, extension, or database resource" >&2
+  exit 1
+fi
 rg -q 'count    = var\.enable_preview_backend_service \? 1 : 0' "$root_dir/cloud_run.tf"
 rg -U -q 'lifecycle \{\n    prevent_destroy = true\n    ignore_changes = \[\n      scaling,\n    \]\n  \}' "$root_dir/cloud_run.tf"
 test "$(rg -No 'ignore_changes' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "1"
