@@ -68,7 +68,7 @@ resource "google_identity_platform_config" "preview" {
 
   client {
     permissions {
-      disabled_user_signup   = true
+      disabled_user_signup   = false
       disabled_user_deletion = true
     }
   }

@@ -55,7 +55,7 @@ Identity Platform is configured in `rentchain-preview` with:
 - email/password enabled and password required;
 - anonymous and phone providers disabled;
 - duplicate emails disabled;
-- public user signup disabled;
+- client-side user signup enabled for the later governed email/password flow;
 - self-service user deletion disabled;
 - MFA disabled;
 - only `localhost` authorized until a separately reviewed frontend phase.

@@ -69,10 +69,10 @@ check "b7_preview_authentication_boundary" {
       google_identity_platform_config.preview[0].sign_in[0].email[0].password_required &&
       !google_identity_platform_config.preview[0].sign_in[0].anonymous[0].enabled &&
       !google_identity_platform_config.preview[0].sign_in[0].phone_number[0].enabled &&
-      google_identity_platform_config.preview[0].client[0].permissions[0].disabled_user_signup &&
+      !google_identity_platform_config.preview[0].client[0].permissions[0].disabled_user_signup &&
       google_identity_platform_config.preview[0].client[0].permissions[0].disabled_user_deletion
     )
-    error_message = "B7 Preview authentication must remain isolated, password-only, and closed to public signup."
+    error_message = "B7 Preview authentication must remain isolated, password-only, open to client signup, and closed to client deletion."
   }
 
   assert {
