@@ -93,8 +93,14 @@ variable "b7_phase2_recovery_stage" {
   }
 }
 
-variable "b7_identity_platform_activation" {
-  description = "Governed activation gate for Preview Identity Platform and the restricted backend API key."
+variable "b7_identity_platform_initialization" {
+  description = "Governed stage activation for initializing Preview Identity Platform."
+  type        = bool
+  default     = true
+}
+
+variable "b7_restricted_api_key_activation" {
+  description = "Governed activation for the Terraform-managed restricted Preview backend API key."
   type        = bool
   default     = false
 }

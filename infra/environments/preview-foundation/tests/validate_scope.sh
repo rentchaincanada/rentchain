@@ -49,7 +49,8 @@ rg -U -q 'variable "b7_foundation_phase" \{\n  description = "[^"]+"\n  type    
 grep -Fq 'condition     = contains([1, 2, 3], var.b7_foundation_phase)' "$root_dir/variables.tf"
 rg -U -q 'variable "b7_phase2_recovery_stage" \{\n  description = "[^"]+"\n  type        = number\n  default     = 2' "$root_dir/variables.tf"
 grep -Fq 'condition     = contains([1, 2], var.b7_phase2_recovery_stage)' "$root_dir/variables.tf"
-rg -U -q 'variable "b7_identity_platform_activation" \{\n  description = "[^"]+"\n  type        = bool\n  default     = false\n\}' "$root_dir/variables.tf"
+rg -U -q 'variable "b7_identity_platform_initialization" \{\n  description = "Governed stage activation for initializing Preview Identity Platform\."\n  type        = bool\n  default     = true\n\}' "$root_dir/variables.tf"
+rg -U -q 'variable "b7_restricted_api_key_activation" \{\n  description = "Governed activation for the Terraform-managed restricted Preview backend API key\."\n  type        = bool\n  default     = false\n\}' "$root_dir/variables.tf"
 rg -U -q 'google-beta = \{\n      source  = "hashicorp/google-beta"\n      version = "6\.50\.0"\n    \}' "$root_dir/versions.tf"
 rg -U -q 'provider "google-beta" \{\n  project               = var\.project_id\n  user_project_override = true\n\}' "$root_dir/providers.tf"
 rg -U -q 'resource "google_firebase_project" "preview" \{\n  provider = google-beta\n  project  = var\.project_id\n\n  lifecycle \{\n    prevent_destroy = true\n  \}\n\}' "$root_dir/firebase.tf"
@@ -124,10 +125,12 @@ if rg -n 'FIRESTORE_DATABASE_ID|PREVIEW_AUTH_ENABLED|FIREBASE_PROJECT_ID|FIREBAS
 fi
 
 test "$(rg -No 'count = var\.b7_foundation_phase >= 2 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
-test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_identity_platform_activation \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "2"
-grep -Fq 'value = var.b7_foundation_phase >= 2 && var.b7_phase2_recovery_stage >= 2 && var.b7_identity_platform_activation ? {' "$root_dir/outputs.tf"
-if rg -n 'b7_identity_platform_activation' "$root_dir/cloud_run.tf" "$root_dir/iam.tf"; then
-  echo "The B7 Identity Platform activation gate must not control Cloud Run or IAM" >&2
+test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_identity_platform_initialization \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_restricted_api_key_activation \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
+grep -Fq 'value = var.b7_foundation_phase >= 2 && var.b7_phase2_recovery_stage >= 2 && var.b7_identity_platform_initialization ? {' "$root_dir/outputs.tf"
+rg -U -q '(?s)resource "google_identity_platform_config" "preview" \{.*depends_on = \[\n    google_firebase_project\.preview,\n    google_project_service\.approved_management\["identitytoolkit\.googleapis\.com"\],\n  \]' "$root_dir/datastore_auth.tf"
+if rg -n 'b7_identity_platform_initialization|b7_restricted_api_key_activation' "$root_dir/cloud_run.tf" "$root_dir/iam.tf"; then
+  echo "The B7 authentication activation gates must not control Cloud Run or IAM" >&2
   exit 1
 fi
 test "$(rg -No 'count = var\.b7_foundation_phase >= 3 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "4"
