@@ -21,6 +21,9 @@ locals {
     "datastore.databases.getMetadata",
     "firebase.projects.get",
     "firebaseauth.configs.get",
+    "secretmanager.secrets.get",
+    "secretmanager.secrets.getIamPolicy",
+    "secretmanager.versions.get",
     "serviceusage.services.use",
   ])
 
@@ -34,6 +37,12 @@ locals {
     "firebaseauth.configs.create",
     "firebaseauth.configs.get",
     "firebaseauth.configs.update",
+    "secretmanager.secrets.create",
+    "secretmanager.secrets.get",
+    "secretmanager.secrets.getIamPolicy",
+    "secretmanager.secrets.setIamPolicy",
+    "secretmanager.versions.add",
+    "secretmanager.versions.get",
     "serviceusage.services.use",
   ])
 

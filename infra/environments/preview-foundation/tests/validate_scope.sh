@@ -34,7 +34,7 @@ test "$actual_resources" = "$expected_resources"
 test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "33"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
-test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "8"
+test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|secretmanager|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "9"
 
 rg -q 'organization = "Rentchain"' "$root_dir/versions.tf"
 rg -q 'name = "rentchain-preview-foundation"' "$root_dir/versions.tf"
@@ -169,6 +169,9 @@ apikeys.keys.getKeyString
 datastore.databases.getMetadata
 firebase.projects.get
 firebaseauth.configs.get
+secretmanager.secrets.get
+secretmanager.secrets.getIamPolicy
+secretmanager.versions.get
 serviceusage.services.use
 EOF
 )"
@@ -193,6 +196,12 @@ firebase.projects.get
 firebaseauth.configs.create
 firebaseauth.configs.get
 firebaseauth.configs.update
+secretmanager.secrets.create
+secretmanager.secrets.get
+secretmanager.secrets.getIamPolicy
+secretmanager.secrets.setIamPolicy
+secretmanager.versions.add
+secretmanager.versions.get
 serviceusage.services.use
 EOF
 )"
@@ -216,8 +225,18 @@ if sed -n '/resource "google_project_iam_custom_role" "hcp_terraform_preview_b7_
   exit 1
 fi
 
-if printf '%s\n%s\n%s\n' "$actual_b7_reader_permissions" "$actual_b7_manager_base_permissions" "iam.roles.update" | rg -n '(delete|users\.|token|run\.|storage\.|billing|secretmanager|firebase\.projects\.delete|identitytoolkit\.)'; then
+if printf '%s\n%s\n%s\n' "$actual_b7_reader_permissions" "$actual_b7_manager_base_permissions" "iam.roles.update" | rg -n '(delete|users\.|token|run\.|storage\.|billing|secretmanager\.versions\.(access|disable|destroy|list)|secretmanager\.secrets\.(delete|list)|firebase\.projects\.delete|identitytoolkit\.)'; then
   echo "Forbidden permission found in B7 HCP bootstrap roles" >&2
+  exit 1
+fi
+
+if rg -n 'roles/secretmanager\.' "$root_dir" --glob '*.tf'; then
+  echo "Predefined Secret Manager role found in Preview foundation Stage 1" >&2
+  exit 1
+fi
+
+if rg -n 'google_secret_manager_|FIREBASE_API_KEY' "$root_dir" --glob '*.tf'; then
+  echo "Secret resource, runtime binding, or Cloud Run secret injection found in Stage 1" >&2
   exit 1
 fi
 
@@ -330,11 +349,14 @@ apikeys.keys.getKeyString
 datastore.databases.getMetadata
 firebase.projects.get
 firebaseauth.configs.get
+secretmanager.secrets.get
+secretmanager.secrets.getIamPolicy
+secretmanager.versions.get
 serviceusage.services.use
 EOF
 )"
 test "$(sort -u "$b7_plan_delta_file")" = "$expected_b7_plan_delta"
-test "$(wc -l < "$b7_plan_delta_file" | tr -d ' ')" = "6"
+test "$(wc -l < "$b7_plan_delta_file" | tr -d ' ')" = "9"
 
 expected_b7_apply_delta="$(cat <<'EOF'
 apikeys.keys.create
@@ -347,13 +369,19 @@ firebase.projects.update
 firebaseauth.configs.create
 firebaseauth.configs.get
 firebaseauth.configs.update
+secretmanager.secrets.create
+secretmanager.secrets.get
+secretmanager.secrets.getIamPolicy
+secretmanager.secrets.setIamPolicy
+secretmanager.versions.add
+secretmanager.versions.get
 serviceusage.services.use
 EOF
 )"
 test "$(sort -u "$b7_apply_delta_file")" = "$expected_b7_apply_delta"
-test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "11"
+test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "17"
 
-if rg -n '(delete|undelete|users\.(create|delete|update|sendEmail)|getSecret|getHashConfig|serviceAccountKeys|signBlob|signJwt|getAccessToken|generateAccessToken|run\.|storage\.|billing)' "$b7_plan_delta_file" "$b7_apply_delta_file"; then
+if rg -n '(delete|undelete|users\.(create|delete|update|sendEmail)|getSecret|getHashConfig|serviceAccountKeys|signBlob|signJwt|getAccessToken|generateAccessToken|run\.|storage\.|billing|secretmanager\.versions\.(access|disable|destroy|list)|secretmanager\.secrets\.(delete|list))' "$b7_plan_delta_file" "$b7_apply_delta_file"; then
   echo "Forbidden B7 HCP permission delta found" >&2
   exit 1
 fi
