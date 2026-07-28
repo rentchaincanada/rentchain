@@ -34,7 +34,7 @@ test "$actual_resources" = "$expected_resources"
 test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "32"
 test -f "$imports_file"
 test "$(rg -No '^import \{' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "1"
-rg -U -q '^import \{\n  to = google_identity_platform_config\.preview\[0\]\n  id = "projects/rentchain-preview/config"\n\}$' "$imports_file"
+rg -U -q '^import \{\n  to = google_identity_platform_config\.preview\[0\]\n  id = "rentchain-preview"\n\}$' "$imports_file"
 if rg -n 'google_apikeys_key|Browser key|google_firestore_database|google_project_iam|project-0d9658de-af29-4dc0-a99|var\.|each\.|count\.' "$imports_file"; then
   echo "B7 import must target only the exact Preview Identity Platform configuration" >&2
   exit 1
