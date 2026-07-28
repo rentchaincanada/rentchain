@@ -25,6 +25,7 @@ google_project_iam_custom_role
 google_project_iam_member
 google_project_service
 google_secret_manager_secret
+google_secret_manager_secret_iam_member
 google_secret_manager_secret_version
 google_service_account
 google_service_account_iam_member
@@ -33,7 +34,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "35"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "36"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|secretmanager|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "9"
@@ -134,7 +135,7 @@ fi
 test "$(rg -No 'count = var\.b7_foundation_phase >= 2 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
 test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_identity_platform_initialization \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
 test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_restricted_api_key_activation \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
-test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_restricted_api_key_activation \? 1 : 0' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "2"
+test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_restricted_api_key_activation \? 1 : 0' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "3"
 grep -Fq 'value = var.b7_foundation_phase >= 2 && var.b7_phase2_recovery_stage >= 2 && var.b7_identity_platform_initialization ? {' "$root_dir/outputs.tf"
 rg -U -q '(?s)resource "google_identity_platform_config" "preview" \{.*depends_on = \[\n    google_firebase_project\.preview,\n    google_project_service\.approved_management\["identitytoolkit\.googleapis\.com"\],\n  \]' "$root_dir/datastore_auth.tf"
 if rg -n 'b7_identity_platform_initialization|b7_restricted_api_key_activation' "$root_dir/cloud_run.tf" "$root_dir/iam.tf"; then
@@ -236,12 +237,14 @@ if printf '%s\n%s\n%s\n' "$actual_b7_reader_permissions" "$actual_b7_manager_bas
   exit 1
 fi
 
-if rg -n 'roles/secretmanager\.' "$root_dir" --glob '*.tf'; then
-  echo "Predefined Secret Manager role found in Preview foundation Stage 1" >&2
+test "$(rg -No 'roles/secretmanager\.[A-Za-z]+' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "2"
+if rg -n 'roles/secretmanager\.' "$root_dir" --glob '*.tf' | rg -v '(secret_manager|checks)\.tf:.*roles/secretmanager\.secretAccessor'; then
+  echo "Secret Manager predefined role found outside the exact secret-level runtime accessor" >&2
   exit 1
 fi
 
 test "$(rg -No '^resource "google_secret_manager_secret"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_secret_manager_secret_iam_member"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
 test "$(rg -No '^resource "google_secret_manager_secret_version"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
 rg -q 'secret_id = "preview-backend-identity-toolkit-api-key"' "$root_dir/secret_manager.tf"
 rg -U -q 'replication \{\n    auto \{\}\n  \}' "$root_dir/secret_manager.tf"
@@ -251,13 +254,14 @@ grep -Fq 'secret_data_wo         = google_apikeys_key.preview_backend_auth[0].ke
 rg -q 'secret_data_wo_version = 1' "$root_dir/secret_manager.tf"
 rg -q 'deletion_policy        = "DISABLE"' "$root_dir/secret_manager.tf"
 rg -U -q '(?s)resource "google_secret_manager_secret_version" "preview_backend_identity_toolkit" \{.*lifecycle \{\n    create_before_destroy = true\n  \}' "$root_dir/secret_manager.tf"
+rg -U -q 'resource "google_secret_manager_secret_iam_member" "preview_backend_identity_toolkit_accessor" \{\n  count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_restricted_api_key_activation \? 1 : 0\n\n  project   = var\.project_id\n  secret_id = google_secret_manager_secret\.preview_backend_identity_toolkit\[0\]\.secret_id\n  role      = "roles/secretmanager\.secretAccessor"\n  member    = google_service_account\.preview_backend_runtime\.member\n\}' "$root_dir/secret_manager.tf"
 test "$(rg -No 'secret_data_wo\s*=' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
 if rg -n '(^|[[:space:]])secret_data[[:space:]]*=' "$root_dir" --glob '*.tf'; then
   echo "Ordinary Secret Manager secret_data found; write-only delivery is required" >&2
   exit 1
 fi
-if rg -n 'google_secret_manager_secret_iam_|roles/secretmanager\.secretAccessor|FIREBASE_API_KEY' "$root_dir" --glob '*.tf'; then
-  echo "Runtime Secret Manager IAM or Cloud Run secret injection found" >&2
+if rg -n 'google_project_iam_(member|binding).*secretmanager|FIREBASE_API_KEY' "$root_dir" --glob '*.tf'; then
+  echo "Project-wide Secret Manager IAM or Cloud Run secret injection found" >&2
   exit 1
 fi
 

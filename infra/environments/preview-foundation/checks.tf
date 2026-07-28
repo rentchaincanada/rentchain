@@ -113,9 +113,12 @@ check "b7_backend_auth_secret_boundary" {
       google_secret_manager_secret.preview_backend_identity_toolkit[0].secret_id == "preview-backend-identity-toolkit-api-key" &&
       google_secret_manager_secret.preview_backend_identity_toolkit[0].deletion_protection &&
       google_secret_manager_secret_version.preview_backend_identity_toolkit[0].secret_data_wo_version == 1 &&
-      google_secret_manager_secret_version.preview_backend_identity_toolkit[0].deletion_policy == "DISABLE"
+      google_secret_manager_secret_version.preview_backend_identity_toolkit[0].deletion_policy == "DISABLE" &&
+      google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor[0].secret_id == google_secret_manager_secret.preview_backend_identity_toolkit[0].secret_id &&
+      google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor[0].role == "roles/secretmanager.secretAccessor" &&
+      google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor[0].member == google_service_account.preview_backend_runtime.member
     )
-    error_message = "The Preview backend Identity Toolkit key must remain in the protected write-only Secret Manager boundary."
+    error_message = "The Preview backend Identity Toolkit key and runtime accessor must remain in the exact protected secret-level boundary."
   }
 }
 

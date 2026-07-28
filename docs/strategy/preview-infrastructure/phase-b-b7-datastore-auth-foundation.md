@@ -69,7 +69,10 @@ state without exposing it through outputs or attaching it to Cloud Run. Its
 value flows directly from the API Keys resource into a protected Secret Manager
 version through Terraform's write-only `secret_data_wo` argument. Ordinary
 `secret_data` is prohibited. Delivery from Secret Manager to Cloud Run requires
-a separately reviewed runtime activation phase.
+a separately reviewed runtime activation phase. The runtime service account has
+only `roles/secretmanager.secretAccessor` on this exact secret; it has no
+project-wide Secret Manager role, secret creation permission, or IAM
+administration permission.
 
 The runtime role `previewBackendAuthReader` contains only
 `firebaseauth.users.get`. The existing login path needs this permission to read
@@ -116,8 +119,10 @@ Secret Manager supports the governed write-only backend-key stage. That stage
 creates exactly `preview-backend-identity-toolkit-api-key` with automatic
 Google-managed replication, deletion protection, and Terraform
 `prevent_destroy`. Its one managed version uses `secret_data_wo`, write-only
-version `1`, deletion policy `DISABLE`, and `create_before_destroy`. It creates
-no runtime accessor binding or Cloud Run secret reference. No Firebase
+version `1`, deletion policy `DISABLE`, and `create_before_destroy`. The exact
+secret carries one `roles/secretmanager.secretAccessor` member for
+`preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com`. There is no
+project-wide Secret Manager binding or Cloud Run secret reference. No Firebase
 Management, Firestore Rules, Cloud Run Jobs, or production API is added.
 
 ## Apply sequencing and bootstrap gate
