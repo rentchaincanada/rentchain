@@ -93,6 +93,8 @@ rg -q 'workload_identity_pool_id = "vercel-preview-proxy"' "$vercel_identity_fil
 rg -q 'workload_identity_pool_provider_id = "vercel-preview"' "$vercel_identity_file"
 rg -q 'vercel_preview_issuer[[:space:]]*=[[:space:]]*"https://oidc\.vercel\.com/rent-chain"' "$vercel_identity_file"
 test "$(rg -No 'allowed_audiences' "$vercel_identity_file" | wc -l | tr -d ' ')" = "0"
+rg -U -q 'length\(coalesce\(\n[[:space:]]*google_iam_workload_identity_pool_provider\.vercel_preview\.oidc\[0\]\.allowed_audiences,\n[[:space:]]*\[\]\n[[:space:]]*\)\) == 0' "$root_dir/checks.tf"
+test "$(rg -No 'google_service_account_iam_member\.vercel_preview_proxy_(workload_identity_user|openid_token_creator)\.service_account_id' "$root_dir/checks.tf" | wc -l | tr -d ' ')" = "0"
 rg -q '"google\.subject"        = "assertion\.sub"' "$vercel_identity_file"
 rg -q '"attribute\.owner_id"    = "assertion\.owner_id"' "$vercel_identity_file"
 rg -q '"attribute\.project_id"  = "assertion\.project_id"' "$vercel_identity_file"

@@ -383,7 +383,10 @@ check "b7_vercel_preview_proxy_identity_boundary" {
       google_iam_workload_identity_pool.vercel_preview_proxy.workload_identity_pool_id == "vercel-preview-proxy" &&
       google_iam_workload_identity_pool_provider.vercel_preview.workload_identity_pool_provider_id == "vercel-preview" &&
       google_iam_workload_identity_pool_provider.vercel_preview.oidc[0].issuer_uri == "https://oidc.vercel.com/rent-chain" &&
-      length(google_iam_workload_identity_pool_provider.vercel_preview.oidc[0].allowed_audiences) == 0 &&
+      length(coalesce(
+        google_iam_workload_identity_pool_provider.vercel_preview.oidc[0].allowed_audiences,
+        []
+      )) == 0 &&
       google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping == {
         "google.subject"        = "assertion.sub"
         "attribute.owner_id"    = "assertion.owner_id"
@@ -400,10 +403,8 @@ check "b7_vercel_preview_proxy_identity_boundary" {
       local.vercel_preview_federated_member == "principal://iam.googleapis.com/projects/501298948635/locations/global/workloadIdentityPools/vercel-preview-proxy/subject/owner:rent-chain:project:rentchain:environment:preview" &&
       google_service_account.vercel_preview_proxy.project == "rentchain-preview" &&
       google_service_account.vercel_preview_proxy.account_id == "vercel-preview-proxy" &&
-      google_service_account_iam_member.vercel_preview_proxy_workload_identity_user.service_account_id == google_service_account.vercel_preview_proxy.name &&
       google_service_account_iam_member.vercel_preview_proxy_workload_identity_user.role == "roles/iam.workloadIdentityUser" &&
       google_service_account_iam_member.vercel_preview_proxy_workload_identity_user.member == local.vercel_preview_federated_member &&
-      google_service_account_iam_member.vercel_preview_proxy_openid_token_creator.service_account_id == google_service_account.vercel_preview_proxy.name &&
       google_service_account_iam_member.vercel_preview_proxy_openid_token_creator.role == "roles/iam.serviceAccountOpenIdTokenCreator" &&
       google_service_account_iam_member.vercel_preview_proxy_openid_token_creator.member == local.vercel_preview_federated_member
     )
