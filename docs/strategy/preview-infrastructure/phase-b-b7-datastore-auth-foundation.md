@@ -274,3 +274,25 @@ Teardown is separately authorized and ordered:
 6. explicitly disable database deletion protection, then delete the database.
 
 Never copy data or identities to production during setup or teardown.
+
+## Preview-to-product execution handoff
+
+The B7 Vercel Preview OIDC identity foundation is complete. At repository
+`main` commit `966b0a08b805eda5378acc29f17cf4c577cc3995`, Terraform state
+contains exactly 46 managed resources, the latest main-branch HCP result has
+0 add, 0 change, 0 destroy, and 0 actions, Cloud Run remains private, and
+production remains untouched.
+
+Foundation completion does not authorize direct browser access to Cloud Run or
+held-product-PR validation. The active dependency order is:
+
+Vercel OIDC identity foundation
+→ Vercel server-side proxy
+→ Preview-only frontend routing
+→ authenticated Preview runtime validation
+→ PR #1453 reconciliation QA and merge
+→ PR #1435 messaging QA and merge
+→ later Operational Credits or other product work
+
+The complete staged requirements and hold rules are recorded in
+[Preview-to-Product Execution Roadmap v1](./preview-to-product-execution-roadmap-v1.md).
