@@ -183,6 +183,10 @@ apikeys.keys.getKeyString
 datastore.databases.getMetadata
 firebase.projects.get
 firebaseauth.configs.get
+iam.serviceAccounts.get
+iam.serviceAccounts.getIamPolicy
+iam.workloadIdentityPoolProviders.get
+iam.workloadIdentityPools.get
 secretmanager.secrets.get
 secretmanager.secrets.getIamPolicy
 secretmanager.versions.get
@@ -293,7 +297,12 @@ actual_cloud_run_viewer_permissions="$(
     | rg -No '"[^"]+"' \
     | tr -d '"'
 )"
-test "$actual_cloud_run_viewer_permissions" = "run.services.get"
+expected_cloud_run_viewer_permissions="$(cat <<'EOF'
+run.services.get
+run.services.getIamPolicy
+EOF
+)"
+test "$actual_cloud_run_viewer_permissions" = "$expected_cloud_run_viewer_permissions"
 
 if rg -n 'roles/iam\.serviceAccountUser' "$root_dir" --glob '*.tf' | rg -v '/(iam|checks)\.tf:'; then
   echo "Service Account User must remain limited to the B6 exact runtime binding" >&2
@@ -386,6 +395,10 @@ apikeys.keys.getKeyString
 datastore.databases.getMetadata
 firebase.projects.get
 firebaseauth.configs.get
+iam.serviceAccounts.get
+iam.serviceAccounts.getIamPolicy
+iam.workloadIdentityPoolProviders.get
+iam.workloadIdentityPools.get
 secretmanager.secrets.get
 secretmanager.secrets.getIamPolicy
 secretmanager.versions.get
@@ -393,7 +406,7 @@ serviceusage.services.use
 EOF
 )"
 test "$(sort -u "$b7_plan_delta_file")" = "$expected_b7_plan_delta"
-test "$(wc -l < "$b7_plan_delta_file" | tr -d ' ')" = "9"
+test "$(wc -l < "$b7_plan_delta_file" | tr -d ' ')" = "13"
 
 expected_b7_apply_delta="$(cat <<'EOF'
 apikeys.keys.create
@@ -444,6 +457,8 @@ run.operations.get
 run.services.create
 run.services.delete
 run.services.get
+run.services.getIamPolicy
+run.services.setIamPolicy
 run.services.update
 EOF
 )"

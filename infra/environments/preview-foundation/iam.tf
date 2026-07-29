@@ -4,6 +4,7 @@ locals {
 
   terraform_preview_cloud_run_viewer_permissions = toset([
     "run.services.get",
+    "run.services.getIamPolicy",
   ])
 
   terraform_preview_cloud_run_deployer_permissions = toset([
@@ -12,6 +13,8 @@ locals {
     "run.services.create",
     "run.services.delete",
     "run.services.get",
+    "run.services.getIamPolicy",
+    "run.services.setIamPolicy",
     "run.services.update",
   ])
 
@@ -21,6 +24,10 @@ locals {
     "datastore.databases.getMetadata",
     "firebase.projects.get",
     "firebaseauth.configs.get",
+    "iam.serviceAccounts.get",
+    "iam.serviceAccounts.getIamPolicy",
+    "iam.workloadIdentityPoolProviders.get",
+    "iam.workloadIdentityPools.get",
     "secretmanager.secrets.get",
     "secretmanager.secrets.getIamPolicy",
     "secretmanager.versions.get",
