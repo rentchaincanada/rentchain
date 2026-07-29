@@ -383,12 +383,11 @@ check "b7_vercel_preview_proxy_identity_boundary" {
       google_iam_workload_identity_pool.vercel_preview_proxy.workload_identity_pool_id == "vercel-preview-proxy" &&
       google_iam_workload_identity_pool_provider.vercel_preview.workload_identity_pool_provider_id == "vercel-preview" &&
       google_iam_workload_identity_pool_provider.vercel_preview.oidc[0].issuer_uri == "https://oidc.vercel.com/rent-chain" &&
-      google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping == {
-        "google.subject"        = "assertion.sub"
-        "attribute.owner_id"    = "assertion.owner_id"
-        "attribute.project_id"  = "assertion.project_id"
-        "attribute.environment" = "assertion.environment"
-      } &&
+      length(google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping) == 4 &&
+      google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping["google.subject"] == "assertion.sub" &&
+      google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping["attribute.owner_id"] == "assertion.owner_id" &&
+      google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping["attribute.project_id"] == "assertion.project_id" &&
+      google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping["attribute.environment"] == "assertion.environment" &&
       local.vercel_preview_provider_condition == "assertion.owner_id == 'team_NMg7i76JKz4ZwSJ07GYmZZYx' && assertion.project_id == 'prj_YN5ecHjXdwE3cp76pivyAf2BKX5I' && assertion.environment == 'preview' && assertion.sub == 'owner:rent-chain:project:rentchain:environment:preview'"
     )
     error_message = "The Vercel Preview pool, provider, issuer, mappings, or exact trust condition changed."
