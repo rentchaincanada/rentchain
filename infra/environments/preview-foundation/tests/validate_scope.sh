@@ -94,6 +94,7 @@ rg -q 'workload_identity_pool_provider_id = "vercel-preview"' "$vercel_identity_
 rg -q 'vercel_preview_issuer[[:space:]]*=[[:space:]]*"https://oidc\.vercel\.com/rent-chain"' "$vercel_identity_file"
 test "$(rg -No 'allowed_audiences' "$vercel_identity_file" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No 'google_service_account_iam_member\.vercel_preview_proxy_(workload_identity_user|openid_token_creator)\.service_account_id' "$root_dir/checks.tf" | wc -l | tr -d ' ')" = "0"
+rg -U -q 'basename\(\n        google_cloud_run_v2_service_iam_member\.vercel_preview_proxy_invoker\.name\n      \) == "rentchain-preview-backend"' "$root_dir/checks.tf"
 grep -Fq 'length(google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping) == 4' "$root_dir/checks.tf"
 grep -Fq 'attribute_mapping["google.subject"] == "assertion.sub"' "$root_dir/checks.tf"
 grep -Fq 'attribute_mapping["attribute.owner_id"] == "assertion.owner_id"' "$root_dir/checks.tf"

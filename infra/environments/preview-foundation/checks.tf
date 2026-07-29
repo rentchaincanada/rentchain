@@ -410,7 +410,9 @@ check "b7_vercel_preview_proxy_identity_boundary" {
     condition = (
       google_cloud_run_v2_service_iam_member.vercel_preview_proxy_invoker.project == "rentchain-preview" &&
       google_cloud_run_v2_service_iam_member.vercel_preview_proxy_invoker.location == "northamerica-northeast1" &&
-      google_cloud_run_v2_service_iam_member.vercel_preview_proxy_invoker.name == "rentchain-preview-backend" &&
+      basename(
+        google_cloud_run_v2_service_iam_member.vercel_preview_proxy_invoker.name
+      ) == "rentchain-preview-backend" &&
       google_cloud_run_v2_service_iam_member.vercel_preview_proxy_invoker.role == "roles/run.invoker" &&
       google_cloud_run_v2_service_iam_member.vercel_preview_proxy_invoker.member == "serviceAccount:vercel-preview-proxy@rentchain-preview.iam.gserviceaccount.com"
     )
