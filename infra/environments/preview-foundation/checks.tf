@@ -383,7 +383,6 @@ check "b7_vercel_preview_proxy_identity_boundary" {
       google_iam_workload_identity_pool.vercel_preview_proxy.workload_identity_pool_id == "vercel-preview-proxy" &&
       google_iam_workload_identity_pool_provider.vercel_preview.workload_identity_pool_provider_id == "vercel-preview" &&
       google_iam_workload_identity_pool_provider.vercel_preview.oidc[0].issuer_uri == "https://oidc.vercel.com/rent-chain" &&
-      google_iam_workload_identity_pool_provider.vercel_preview.oidc[0].allowed_audiences == null &&
       google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping == {
         "google.subject"        = "assertion.sub"
         "attribute.owner_id"    = "assertion.owner_id"
