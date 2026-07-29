@@ -16,6 +16,7 @@ google_apikeys_key
 google_artifact_registry_repository
 google_artifact_registry_repository_iam_member
 google_cloud_run_v2_service
+google_cloud_run_v2_service_iam_member
 google_firebase_project
 google_firestore_database
 google_iam_workload_identity_pool
@@ -34,7 +35,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "36"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "42"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|secretmanager|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "9"
@@ -77,6 +78,40 @@ fi
 
 if rg -n 'allUsers|allAuthenticatedUsers|google_storage_bucket|google_firestore_(document|field|index)|google_compute|google_container|google_cloudbuild' "$root_dir" --glob '*.tf'; then
   echo "Public IAM or workload resource found" >&2
+  exit 1
+fi
+
+vercel_identity_file="$root_dir/vercel_preview_identity.tf"
+test "$(rg -No '^resource "' "$vercel_identity_file" | wc -l | tr -d ' ')" = "6"
+test "$(rg -No '^resource "google_iam_workload_identity_pool" "vercel_preview_proxy"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_iam_workload_identity_pool_provider" "vercel_preview"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_service_account" "vercel_preview_proxy"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_service_account_iam_member" "vercel_preview_proxy_(workload_identity_user|openid_token_creator)"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "2"
+test "$(rg -No '^resource "google_cloud_run_v2_service_iam_member" "vercel_preview_proxy_invoker"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
+
+rg -q 'workload_identity_pool_id = "vercel-preview-proxy"' "$vercel_identity_file"
+rg -q 'workload_identity_pool_provider_id = "vercel-preview"' "$vercel_identity_file"
+rg -q 'vercel_preview_issuer[[:space:]]*=[[:space:]]*"https://oidc\.vercel\.com/rent-chain"' "$vercel_identity_file"
+test "$(rg -No 'allowed_audiences' "$vercel_identity_file" | wc -l | tr -d ' ')" = "0"
+rg -q '"google\.subject"        = "assertion\.sub"' "$vercel_identity_file"
+rg -q '"attribute\.owner_id"    = "assertion\.owner_id"' "$vercel_identity_file"
+rg -q '"attribute\.project_id"  = "assertion\.project_id"' "$vercel_identity_file"
+rg -q '"attribute\.environment" = "assertion\.environment"' "$vercel_identity_file"
+rg -q 'vercel_preview_owner_id[[:space:]]*=[[:space:]]*"team_NMg7i76JKz4ZwSJ07GYmZZYx"' "$vercel_identity_file"
+rg -q 'vercel_preview_project_id[[:space:]]*=[[:space:]]*"prj_YN5ecHjXdwE3cp76pivyAf2BKX5I"' "$vercel_identity_file"
+grep -Fq "assertion.owner_id == '\${local.vercel_preview_owner_id}'" "$vercel_identity_file"
+grep -Fq "assertion.project_id == '\${local.vercel_preview_project_id}'" "$vercel_identity_file"
+rg -q 'assertion\.environment ==.*preview' "$vercel_identity_file"
+rg -q 'vercel_preview_subject[[:space:]]*=[[:space:]]*"owner:rent-chain:project:rentchain:environment:preview"' "$vercel_identity_file"
+grep -Fq "assertion.sub == '\${local.vercel_preview_subject}'" "$vercel_identity_file"
+grep -Fq 'principal://iam.googleapis.com/projects/${var.project_number}/locations/global/workloadIdentityPools/vercel-preview-proxy/subject/${local.vercel_preview_subject}' "$vercel_identity_file"
+rg -q 'role               = "roles/iam\.workloadIdentityUser"' "$vercel_identity_file"
+rg -q 'role               = "roles/iam\.serviceAccountOpenIdTokenCreator"' "$vercel_identity_file"
+rg -q 'role     = "roles/run\.invoker"' "$vercel_identity_file"
+rg -q 'member   = google_service_account\.vercel_preview_proxy\.member' "$vercel_identity_file"
+
+if rg -n 'principalSet://|roles/iam\.(serviceAccountTokenCreator|serviceAccountUser)|google_service_account_key|google_project_iam_(member|binding)|allUsers|allAuthenticatedUsers|project-0d9658de-af29-4dc0-a99' "$vercel_identity_file"; then
+  echo "Broad federation, token, project IAM, public, static-key, or production scope found in Vercel Preview identity" >&2
   exit 1
 fi
 

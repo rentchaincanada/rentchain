@@ -62,3 +62,17 @@ output "preview_datastore_auth_foundation" {
   } : null
   sensitive = false
 }
+
+output "vercel_preview_proxy_identity" {
+  description = "Non-sensitive identifiers and audiences for the isolated Vercel Preview proxy identity."
+  value = {
+    workload_identity_pool     = google_iam_workload_identity_pool.vercel_preview_proxy.name
+    workload_identity_provider = google_iam_workload_identity_pool_provider.vercel_preview.name
+    provider_audience          = local.vercel_preview_provider_audience
+    sts_audience               = local.vercel_preview_sts_audience
+    service_account_email      = google_service_account.vercel_preview_proxy.email
+    cloud_run_service_uri      = google_cloud_run_v2_service.preview_backend[0].uri
+    expected_subject           = local.vercel_preview_subject
+  }
+  sensitive = false
+}
