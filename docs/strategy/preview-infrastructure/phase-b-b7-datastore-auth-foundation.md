@@ -139,7 +139,7 @@ The B7 speculative plan is not apply authorization.
 Phase 1 creates two dedicated B7 custom roles rather than broadening the
 existing Cloud Run roles:
 
-- `hcpTerraformPreviewB7Reader` contains exactly the nine permissions in
+- `hcpTerraformPreviewB7Reader` contains exactly the thirteen permissions in
   `tests/hcp_b7_plan_permission_delta.txt` and is bound only to
   `hcp-terraform-preview@rentchain-preview.iam.gserviceaccount.com`;
 - `terraformPreviewB7Manager` contains exactly the seventeen permissions in
@@ -162,6 +162,17 @@ isolated Google provider quota project to be charged for Firebase project reads
 when `user_project_override = true`. This does not grant API enablement,
 disablement, service discovery, billing administration, or a predefined Service
 Usage role.
+
+The B7 plan reader additionally has only the four metadata reads required to
+refresh a separately governed Vercel Preview identity foundation:
+`iam.workloadIdentityPools.get`, `iam.workloadIdentityPoolProviders.get`,
+`iam.serviceAccounts.get`, and `iam.serviceAccounts.getIamPolicy`. The existing
+Cloud Run plan viewer adds only `run.services.getIamPolicy`, while the existing
+Cloud Run deployer adds only `run.services.getIamPolicy` and
+`run.services.setIamPolicy`. These permissions prepare a future service-level
+Invoker binding plan; this prerequisite adds no Workload Identity resource,
+service account, federation member, token-generation role, Invoker binding, or
+Cloud Run service change.
 
 The active Firebase association for `rentchain-preview` is adopted through the
 `google-beta` 6.50.0 `google_firebase_project` resource and one declarative

@@ -157,6 +157,10 @@ check "b7_hcp_bootstrap_iam_boundary" {
         "datastore.databases.getMetadata",
         "firebase.projects.get",
         "firebaseauth.configs.get",
+        "iam.serviceAccounts.get",
+        "iam.serviceAccounts.getIamPolicy",
+        "iam.workloadIdentityPoolProviders.get",
+        "iam.workloadIdentityPools.get",
         "secretmanager.secrets.get",
         "secretmanager.secrets.getIamPolicy",
         "secretmanager.versions.get",
@@ -164,7 +168,7 @@ check "b7_hcp_bootstrap_iam_boundary" {
       ]) &&
       google_project_iam_member.hcp_terraform_preview_b7_reader.member == local.hcp_terraform_plan_member
     )
-    error_message = "The B7 plan reader must remain the exact nine-permission role bound only to the HCP plan identity."
+    error_message = "The B7 plan reader must remain the exact thirteen-permission role bound only to the HCP plan identity."
   }
 
   assert {
@@ -291,10 +295,12 @@ check "b6_cloud_run_deployer_iam_boundary" {
         "run.services.create",
         "run.services.delete",
         "run.services.get",
+        "run.services.getIamPolicy",
+        "run.services.setIamPolicy",
         "run.services.update",
       ])
     )
-    error_message = "The B6 Cloud Run deployer role must remain Preview-scoped and lifecycle-only."
+    error_message = "The Cloud Run deployer role must remain Preview-scoped with only the governed service lifecycle and IAM-policy permissions."
   }
 
   assert {
@@ -315,12 +321,13 @@ check "b6_cloud_run_plan_viewer_iam_boundary" {
       google_project_iam_custom_role.terraform_preview_cloud_run_viewer.role_id == "hcpTerraformPreviewCloudRunViewer" &&
       local.terraform_preview_cloud_run_viewer_permissions == toset([
         "run.services.get",
+        "run.services.getIamPolicy",
       ]) &&
       google_project_iam_member.terraform_preview_cloud_run_viewer.project == "rentchain-preview" &&
       google_project_iam_member.terraform_preview_cloud_run_viewer.member == local.hcp_terraform_plan_member &&
       local.hcp_terraform_plan_member == "serviceAccount:hcp-terraform-preview@rentchain-preview.iam.gserviceaccount.com"
     )
-    error_message = "The B6 plan viewer must remain a single-permission Preview-only binding for the exact HCP plan identity."
+    error_message = "The Cloud Run plan viewer must remain an exact two-permission Preview-only binding for the HCP plan identity."
   }
 }
 
