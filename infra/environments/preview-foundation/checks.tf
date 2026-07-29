@@ -375,3 +375,45 @@ check "b5_image_delivery_boundary" {
     error_message = "The B5 repository-scoped image-publisher binding has changed."
   }
 }
+
+check "b7_vercel_preview_proxy_identity_boundary" {
+  assert {
+    condition = (
+      google_iam_workload_identity_pool.vercel_preview_proxy.project == "rentchain-preview" &&
+      google_iam_workload_identity_pool.vercel_preview_proxy.workload_identity_pool_id == "vercel-preview-proxy" &&
+      google_iam_workload_identity_pool_provider.vercel_preview.workload_identity_pool_provider_id == "vercel-preview" &&
+      google_iam_workload_identity_pool_provider.vercel_preview.oidc[0].issuer_uri == "https://oidc.vercel.com/rent-chain" &&
+      length(google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping) == 4 &&
+      google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping["google.subject"] == "assertion.sub" &&
+      google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping["attribute.owner_id"] == "assertion.owner_id" &&
+      google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping["attribute.project_id"] == "assertion.project_id" &&
+      google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping["attribute.environment"] == "assertion.environment" &&
+      local.vercel_preview_provider_condition == "assertion.owner_id == 'team_NMg7i76JKz4ZwSJ07GYmZZYx' && assertion.project_id == 'prj_YN5ecHjXdwE3cp76pivyAf2BKX5I' && assertion.environment == 'preview' && assertion.sub == 'owner:rent-chain:project:rentchain:environment:preview'"
+    )
+    error_message = "The Vercel Preview pool, provider, issuer, mappings, or exact trust condition changed."
+  }
+
+  assert {
+    condition = (
+      local.vercel_preview_federated_member == "principal://iam.googleapis.com/projects/501298948635/locations/global/workloadIdentityPools/vercel-preview-proxy/subject/owner:rent-chain:project:rentchain:environment:preview" &&
+      google_service_account.vercel_preview_proxy.project == "rentchain-preview" &&
+      google_service_account.vercel_preview_proxy.account_id == "vercel-preview-proxy" &&
+      google_service_account_iam_member.vercel_preview_proxy_workload_identity_user.role == "roles/iam.workloadIdentityUser" &&
+      google_service_account_iam_member.vercel_preview_proxy_workload_identity_user.member == local.vercel_preview_federated_member &&
+      google_service_account_iam_member.vercel_preview_proxy_openid_token_creator.role == "roles/iam.serviceAccountOpenIdTokenCreator" &&
+      google_service_account_iam_member.vercel_preview_proxy_openid_token_creator.member == local.vercel_preview_federated_member
+    )
+    error_message = "The Vercel Preview proxy service account or its exact-subject federation bindings changed."
+  }
+
+  assert {
+    condition = (
+      google_cloud_run_v2_service_iam_member.vercel_preview_proxy_invoker.project == "rentchain-preview" &&
+      google_cloud_run_v2_service_iam_member.vercel_preview_proxy_invoker.location == "northamerica-northeast1" &&
+      google_cloud_run_v2_service_iam_member.vercel_preview_proxy_invoker.name == "rentchain-preview-backend" &&
+      google_cloud_run_v2_service_iam_member.vercel_preview_proxy_invoker.role == "roles/run.invoker" &&
+      google_cloud_run_v2_service_iam_member.vercel_preview_proxy_invoker.member == "serviceAccount:vercel-preview-proxy@rentchain-preview.iam.gserviceaccount.com"
+    )
+    error_message = "Run Invoker must remain service-scoped to the private Preview backend and dedicated Vercel proxy identity."
+  }
+}

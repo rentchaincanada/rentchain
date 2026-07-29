@@ -174,6 +174,18 @@ Invoker binding plan; this prerequisite adds no Workload Identity resource,
 service account, federation member, token-generation role, Invoker binding, or
 Cloud Run service change.
 
+The separately governed private-routing identity foundation uses its own
+`vercel-preview-proxy` Workload Identity pool and `vercel-preview` provider.
+Trust is limited to the RentChain Vercel team issuer, immutable owner and
+project IDs, the Preview environment, and the exact Preview subject. That exact
+subject receives only service-account-level Workload Identity User and OpenID
+token creation on
+`vercel-preview-proxy@rentchain-preview.iam.gserviceaccount.com`. The service
+account receives `roles/run.invoker` only on `rentchain-preview-backend`; no
+project-wide Run role, public member, service-account key, Vercel Function,
+routing setting, deployment, or production access is introduced in this
+identity-only stage.
+
 The active Firebase association for `rentchain-preview` is adopted through the
 `google-beta` 6.50.0 `google_firebase_project` resource and one declarative
 short-project-ID import. The resource uses `prevent_destroy` and manages only
