@@ -16,6 +16,7 @@ import { API_BASE_URL } from "./api/config";
 import { AuthDebugOverlay } from "./components/debug/AuthDebugOverlay";
 import { getAuthToken } from "./lib/authToken";
 import MaintenancePage from "./pages/MaintenancePage";
+import { installPreviewFetchGuard } from "./runtime/previewFetchGuard";
 
 const App = React.lazy(() => import("./App"));
 
@@ -30,47 +31,20 @@ if (typeof window !== "undefined" && window.location.hostname === "rentchain.ai"
   window.location.replace(target.toString());
 }
 
-const originalFetch = window.fetch.bind(window);
 // Legacy global (DO NOT REMOVE until all fetch() calls are migrated)
 (window as any).API_BASE_URL = API_BASE_URL;
 (window as any).__tenantFlag = import.meta.env.VITE_TENANT_PORTAL_ENABLED;
 
-window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-  const initHeaders = new Headers(
-    init?.headers ||
-      (input instanceof Request ? input.headers : undefined) ||
-      undefined
-  );
-  const clientHeader = initHeaders.get("x-api-client");
-  const marked = clientHeader === "web";
-
-  const token = getAuthToken();
-  const url =
-    typeof input === "string" || input instanceof URL ? input.toString() : input.url;
-
-  if (import.meta.env.DEV && !marked && url.includes("/api/")) {
+installPreviewFetchGuard(window, {
+  getAuthToken,
+  apiBaseUrl: API_BASE_URL,
+  browserOrigin: window.location.origin,
+  deployEnv: String(import.meta.env.VITE_DEPLOY_ENV || ""),
+  isDevelopment: import.meta.env.DEV,
+  reportDirectApiFetch: (url) => {
     console.error("🚫 Direct fetch() forbidden for /api. Use apiFetch/apiJson.", url);
-  }
-
-  const shouldAttachAuth =
-    !!token &&
-    (url.startsWith("http") ? url.startsWith(API_BASE_URL) : true);
-
-  if (!shouldAttachAuth) {
-    return originalFetch(input, init);
-  }
-
-  const headers = initHeaders;
-
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  return originalFetch(input, {
-    ...init,
-    headers,
-  });
-};
+  },
+});
 
 const MAINTENANCE_MODE = String(import.meta.env.VITE_MAINTENANCE_MODE || "false").trim().toLowerCase() === "true";
 const MAINTENANCE_ADMIN_BYPASS =

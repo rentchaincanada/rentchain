@@ -1,15 +1,37 @@
-import { getApiBaseUrl } from "../api/baseUrl";
+import {
+  getApiBaseUrlForRequest,
+  PREVIEW_API_BASE_URL,
+} from "../api/baseUrl";
 import { clearAuthToken, getAuthToken, setAuthToken } from "./authToken";
 import { getFirebaseIdToken, warnIfFirebaseDomainMismatch } from "./firebaseAuthToken";
 import { maybeDispatchUpgradePrompt } from "./upgradePrompt";
 
 let warnedMisconfig = false;
 
+export function isAuthorizedPreviewProxyUrl(url: string): boolean {
+  return (
+    url === PREVIEW_API_BASE_URL ||
+    url.startsWith(`${PREVIEW_API_BASE_URL}/`) ||
+    url.startsWith(`${PREVIEW_API_BASE_URL}?`)
+  );
+}
+
+export function isAccidentalSameOriginApiUrl(url: string): boolean {
+  return url.startsWith("/api/") && !isAuthorizedPreviewProxyUrl(url);
+}
+
 export { getAuthToken, setAuthToken, clearAuthToken };
 
-export function resolveApiUrl(input: string) {
+export function resolveApiUrl(input: string, method = "GET") {
   const sRaw = String(input || "").trim();
-  const base = (getApiBaseUrl() || "").replace(/\/$/, "");
+  if (
+    sRaw === PREVIEW_API_BASE_URL ||
+    sRaw.startsWith(`${PREVIEW_API_BASE_URL}/`) ||
+    sRaw.startsWith(`${PREVIEW_API_BASE_URL}?`)
+  ) {
+    throw new Error("Preview proxy paths must be resolved from backend API paths");
+  }
+  const base = (getApiBaseUrlForRequest(sRaw, method) || "").replace(/\/$/, "");
 
   if (!sRaw) return base;
   if (/^https?:\/\//i.test(sRaw)) return sRaw;
@@ -18,14 +40,15 @@ export function resolveApiUrl(input: string) {
   const path = pathPart.startsWith("/") ? pathPart : `/${pathPart}`;
   const stripApi = path.startsWith("/api/") ? path.slice(4) : path;
   const normalized = stripApi.startsWith("/") ? stripApi : `/${stripApi}`;
-  const url = `${base}/api${normalized}${queryPart ? `?${queryPart}` : ""}`;
+  const apiPath = `/api${normalized}${queryPart ? `?${queryPart}` : ""}`;
+  const url = `${base}${apiPath}`;
 
   if (
     import.meta.env.DEV &&
     !warnedMisconfig &&
     typeof window !== "undefined" &&
     window.location.host.includes("rentchain.ai") &&
-    url.startsWith("https://www.rentchain.ai/api/")
+    isAccidentalSameOriginApiUrl(url)
   ) {
     warnedMisconfig = true;
     console.warn(
@@ -48,7 +71,7 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
     p = `/api${stripApi.startsWith("/") ? "" : "/"}${stripApi}`;
   }
 
-  const url = resolveApiUrl(p);
+  const url = resolveApiUrl(p, init.method || "GET");
 
   const normalizedPath = (() => {
     try {

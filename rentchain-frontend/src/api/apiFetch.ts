@@ -1,8 +1,13 @@
-import { API_BASE_URL } from "./config";
 import { clearAuthToken, clearTenantToken, getAuthToken, getTenantToken } from "../lib/authToken";
 import { getFirebaseIdToken, warnIfFirebaseDomainMismatch } from "../lib/firebaseAuthToken";
 import { maybeDispatchUpgradePrompt } from "../lib/upgradePrompt";
 import { isPublicRoutePath } from "../lib/publicRoute";
+import { resolveApiUrl } from "../lib/apiClient";
+import {
+  PreviewApiRouteUnavailableError,
+  PREVIEW_API_BASE_URL,
+  getApiBaseUrl,
+} from "./baseUrl";
 
 type Jsonish = Record<string, any>;
 export type ApiFetchInit = Omit<RequestInit, "body"> & {
@@ -32,35 +37,18 @@ export async function apiFetch<T = any>(
   path: string,
   init: ApiFetchInit = {}
 ): Promise<T> {
+  const method = String(init.method || "GET").trim().toUpperCase();
+  const normalizedInput = path
+    .replace(/^\/api\/api\//, "/api/")
+    .replace(/^api\/api\//, "api/");
+  if (
+    getApiBaseUrl() === PREVIEW_API_BASE_URL &&
+    normalizedInput !== path
+  ) {
+    throw new PreviewApiRouteUnavailableError(path, method);
+  }
+  const url = resolveApiUrl(normalizedInput, method);
   warnIfFirebaseDomainMismatch();
-  if (!API_BASE_URL) {
-    throw new Error("API_BASE_URL is not configured");
-  }
-  const base = API_BASE_URL.replace(/\/$/, "").replace(/\/api$/i, "");
-  if (!(apiFetch as any)._loggedBase) {
-    console.log("[apiFetch] API base:", base);
-    (apiFetch as any)._loggedBase = true;
-  }
-
-  const normalizedPath = (() => {
-    if (path.startsWith("http")) return path;
-    let p = path;
-    if (p.startsWith("/api/api/")) {
-      p = p.replace("/api/api/", "/api/");
-    } else if (p.startsWith("api/api/")) {
-      p = p.replace("api/api/", "api/");
-    }
-    if (p.startsWith("/api/")) {
-      return `${base}${p}`;
-    }
-    if (p.startsWith("api/")) {
-      return `${base}/${p}`;
-    }
-    if (p.startsWith("/")) {
-      return `${base}/api${p}`;
-    }
-    return `${base}/api/${p}`;
-  })();
 
   let pathForMatch = path;
   try {
@@ -76,8 +64,6 @@ export async function apiFetch<T = any>(
   const rawToken = explicitToken || (isTenantPath ? getTenantToken() : getAuthToken());
   const token = typeof rawToken === "string" ? rawToken.trim() : rawToken;
   const effectiveToken = token || firebaseToken;
-
-  const url = normalizedPath;
 
   const { allowStatuses, allow404, suppressToasts, token: _ignoredToken, ...fetchInit } = init;
 

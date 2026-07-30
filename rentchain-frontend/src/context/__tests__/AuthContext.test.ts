@@ -6,6 +6,9 @@ import { TOKEN_KEY } from "../../lib/authToken";
 
 vi.mock("../../api/baseUrl", () => ({
   getApiBaseUrl: () => "https://rentchain.test",
+  getApiBaseUrlForPath: () => "https://rentchain.test",
+  getApiBaseUrlForRequest: () => "https://rentchain.test",
+  PREVIEW_API_BASE_URL: "/api/preview-backend",
 }));
 
 vi.mock("../../lib/firebaseAuthToken", () => ({

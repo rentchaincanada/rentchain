@@ -18,6 +18,7 @@ export async function apiFetch<T>(
 ): Promise<T> {
   warnIfFirebaseDomainMismatch();
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const url = resolveApiUrl(normalizedPath, opts.method || "GET");
   const isTenantPath = isTenantApiPath(normalizedPath);
   const firebaseToken = !isTenantPath ? await getFirebaseIdToken() : null;
   const explicitToken = (opts as any)?.token;
@@ -46,7 +47,7 @@ export async function apiFetch<T>(
     }
   }
 
-  const res = await fetch(resolveApiUrl(normalizedPath), {
+  const res = await fetch(url, {
     ...opts,
     headers,
     credentials: "include",
@@ -85,7 +86,8 @@ export async function apiGetJson<T>(
 ): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
   const allow = opts.allowStatuses ?? [404, 501];
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const res = await fetch(resolveApiUrl(normalizedPath), {
+  const url = resolveApiUrl(normalizedPath, "GET");
+  const res = await fetch(url, {
     method: "GET",
     signal: opts.signal,
     headers: {
