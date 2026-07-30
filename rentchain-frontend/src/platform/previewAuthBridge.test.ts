@@ -62,7 +62,7 @@ describe("preview auth bridge", () => {
     const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: String(url), init });
       if (requests.length === 1) return jsonResponse({ access_token: "federated-token" });
-      if (requests.length === 2) return jsonResponse({ token: "google-id-token" });
+      if (requests.length === 2) return jsonResponse({ token: "header.google-id-token.signature" });
       return jsonResponse({
         ok: true,
         service: "bounded-oidc-hello",
@@ -105,7 +105,9 @@ describe("preview auth bridge", () => {
         includeEmail: false,
       }),
     );
-    expect(requests[2].init?.headers).toEqual({ Authorization: "Bearer google-id-token" });
+    expect(requests[2].init?.headers).toEqual({
+      Authorization: "Bearer header.google-id-token.signature",
+    });
     expect(JSON.stringify(result)).not.toContain("vercel-token");
     expect(JSON.stringify(result)).not.toContain("federated-token");
     expect(JSON.stringify(result)).not.toContain("google-id-token");
@@ -116,7 +118,9 @@ describe("preview auth bridge", () => {
     const fetchImpl = async (_url: string | URL | Request, init?: RequestInit) => {
       requests.push({ init });
       if (requests.length === 1) return jsonResponse({ access_token: "federated-token" });
-      if (requests.length === 2) return jsonResponse({ token: "wrong-audience-id-token" });
+      if (requests.length === 2) {
+        return jsonResponse({ token: "header.wrong-audience-id-token.signature" });
+      }
       return jsonResponse({}, 403);
     };
 
@@ -183,6 +187,40 @@ describe("preview auth bridge", () => {
     });
   });
 
+  it("rejects malformed STS metadata and non-JWT Google ID tokens", async () => {
+    await expect(
+      runPreviewAuthBridge({
+        config,
+        vercelOidcToken: "vercel-token",
+        fetchImpl: (async () =>
+          jsonResponse({
+            access_token: "federated-token",
+            token_type: "MAC",
+            expires_in: 3600,
+          })) as typeof fetch,
+      }),
+    ).rejects.toMatchObject({ code: "STS_TOKEN_TYPE_INVALID" });
+
+    let requestCount = 0;
+    await expect(
+      runPreviewAuthBridge({
+        config,
+        vercelOidcToken: "vercel-token",
+        fetchImpl: (async () => {
+          requestCount += 1;
+          if (requestCount === 1) {
+            return jsonResponse({
+              access_token: "federated-token",
+              token_type: "Bearer",
+              expires_in: 3600,
+            });
+          }
+          return jsonResponse({ token: "not-a-jwt" });
+        }) as typeof fetch,
+      }),
+    ).rejects.toMatchObject({ code: "IAM_ID_TOKEN_INVALID" });
+  });
+
   it("rejects incomplete configuration without echoing values", () => {
     expect(() => readPreviewAuthConfig({ GCP_PROJECT_NUMBER: "1089948756798" })).toThrow(
       new PreviewAuthBridgeError("CONFIG_MISSING_WORKLOADIDENTITYPOOLID", 500),
@@ -194,7 +232,7 @@ describe("preview auth bridge", () => {
     const fetchImpl = async () => {
       requestCount += 1;
       if (requestCount === 1) return jsonResponse({ access_token: "federated-token" });
-      if (requestCount === 2) return jsonResponse({ token: "google-id-token" });
+      if (requestCount === 2) return jsonResponse({ token: "header.google-id-token.signature" });
       return jsonResponse({
         ok: true,
         service: "bounded-oidc-hello",
