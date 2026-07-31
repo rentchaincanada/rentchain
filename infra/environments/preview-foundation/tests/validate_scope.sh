@@ -49,7 +49,7 @@ rg -q 'var\.project_id != "project-0d9658de-af29-4dc0-a99"' "$root_dir/variables
 rg -q 'variable "enable_preview_backend_service"' "$root_dir/variables.tf"
 rg -q 'default     = true' "$root_dir/variables.tf"
 rg -q 'variable "b7_foundation_phase"' "$root_dir/variables.tf"
-rg -U -q 'variable "b7_foundation_phase" \{\n  description = "[^"]+"\n  type        = number\n  default     = 2' "$root_dir/variables.tf"
+rg -U -q 'variable "b7_foundation_phase" \{\n  description = "[^"]+"\n  type        = number\n  default     = 3' "$root_dir/variables.tf"
 grep -Fq 'condition     = contains([1, 2, 3], var.b7_foundation_phase)' "$root_dir/variables.tf"
 rg -U -q 'variable "b7_phase2_recovery_stage" \{\n  description = "[^"]+"\n  type        = number\n  default     = 2' "$root_dir/variables.tf"
 grep -Fq 'condition     = contains([1, 2], var.b7_phase2_recovery_stage)' "$root_dir/variables.tf"
@@ -134,11 +134,8 @@ grep -Fq "resource.name == 'projects/\${var.project_id}/databases/\${local.previ
 
 expected_runtime_firestore_permissions="$(cat <<'EOF'
 datastore.databases.get
-datastore.entities.create
-datastore.entities.delete
 datastore.entities.get
 datastore.entities.list
-datastore.entities.update
 EOF
 )"
 actual_runtime_firestore_permissions="$(
@@ -166,7 +163,7 @@ rg -q 'name         = "preview-backend-auth"' "$root_dir/datastore_auth.tf"
 rg -q 'display_name = "Preview Backend Identity Toolkit"' "$root_dir/datastore_auth.tf"
 rg -U -q '(?s)resource "google_apikeys_key" "preview_backend_auth" \{.*lifecycle \{\n    prevent_destroy = true\n  \}' "$root_dir/datastore_auth.tf"
 
-if rg -n 'firebaseauth\.users\.(create|delete|update|sendEmail)|datastore\.(databases\.(delete|update)|indexes\.|operations\.)|roles/(datastore|firebase|identityplatform)' "$root_dir/datastore_auth.tf"; then
+if rg -n 'firebaseauth\.users\.(create|delete|update|sendEmail)|datastore\.(databases\.(delete|update)|entities\.(create|delete|update)|indexes\.|operations\.)|roles/(datastore|firebase|identityplatform)' "$root_dir/datastore_auth.tf"; then
   echo "B7 runtime IAM broadening or destructive datastore permission found" >&2
   exit 1
 fi
@@ -194,7 +191,7 @@ if rg -n 'b7_identity_platform_initialization|b7_restricted_api_key_activation' 
   echo "The B7 authentication activation gates must not control Cloud Run or IAM" >&2
   exit 1
 fi
-test "$(rg -No 'count = var\.b7_foundation_phase >= 3 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "4"
+test "$(rg -No 'count = var\.b7_foundation_phase >= 3 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "2"
 
 test "$(rg -No '^resource "google_artifact_registry_repository"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "1"
 rg -q 'project       = var\.project_id' "$root_dir/deployment_foundation.tf"
