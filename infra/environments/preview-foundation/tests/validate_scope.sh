@@ -159,6 +159,8 @@ rg -U -q 'multi_tenant \{\n    allow_tenants           = false\n    default_tena
 test "$(rg -No 'multi_tenant \{' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
 rg -q 'role_id     = "previewBackendAuthReader"' "$root_dir/datastore_auth.tf"
 test "$(sed -n '/preview_runtime_auth_permissions = toset(/,/])/p' "$root_dir/datastore_auth.tf" | rg -No '"[^"]+"' | tr -d '"')" = "firebaseauth.users.get"
+test "$(sed -n '/resource "google_project_iam_custom_role" "preview_runtime_auth_reader"/,/^}/p' "$root_dir/datastore_auth.tf" | rg -No 'count = var\.b7_foundation_phase >= 2 \? 1 : 0' | wc -l | tr -d ' ')" = "1"
+test "$(sed -n '/resource "google_project_iam_member" "preview_runtime_auth_reader"/,/^}/p' "$root_dir/datastore_auth.tf" | rg -No 'count = var\.b7_foundation_phase >= 2 \? 1 : 0' | wc -l | tr -d ' ')" = "1"
 rg -q 'service = "identitytoolkit.googleapis.com"' "$root_dir/datastore_auth.tf"
 rg -q 'name         = "preview-backend-auth"' "$root_dir/datastore_auth.tf"
 rg -q 'display_name = "Preview Backend Identity Toolkit"' "$root_dir/datastore_auth.tf"
@@ -182,7 +184,7 @@ if rg -U -n 'name = "FIREBASE_API_KEY"\n[[:space:]]+value[[:space:]]*=' "$root_d
   exit 1
 fi
 
-test "$(rg -No 'count = var\.b7_foundation_phase >= 2 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No 'count = var\.b7_foundation_phase >= 2 \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "3"
 test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_identity_platform_initialization \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
 test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_restricted_api_key_activation \? 1 : 0' "$root_dir/datastore_auth.tf" | wc -l | tr -d ' ')" = "1"
 test "$(rg -No 'count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_restricted_api_key_activation \? 1 : 0' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "3"

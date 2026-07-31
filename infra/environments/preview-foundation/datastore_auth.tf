@@ -150,7 +150,7 @@ resource "google_project_iam_member" "preview_runtime_firestore" {
 }
 
 resource "google_project_iam_custom_role" "preview_runtime_auth_reader" {
-  count = var.b7_foundation_phase >= 3 ? 1 : 0
+  count = var.b7_foundation_phase >= 2 ? 1 : 0
 
   project     = var.project_id
   role_id     = "previewBackendAuthReader"
@@ -165,7 +165,7 @@ resource "google_project_iam_custom_role" "preview_runtime_auth_reader" {
 }
 
 resource "google_project_iam_member" "preview_runtime_auth_reader" {
-  count = var.b7_foundation_phase >= 3 ? 1 : 0
+  count = var.b7_foundation_phase >= 2 ? 1 : 0
 
   project = var.project_id
   role    = google_project_iam_custom_role.preview_runtime_auth_reader[0].name

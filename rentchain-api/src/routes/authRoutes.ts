@@ -74,12 +74,13 @@ function jsonError(res: any, status: number, error: string, code?: string, detai
 }
 
 function loginError(res: any, status: number, code: string, detail?: string) {
-  return res.status(status).json({
+  const payload: Record<string, unknown> = {
     ok: false,
     code,
     error: status === 401 ? "UNAUTHORIZED" : "LOGIN_FAILED",
-    detail,
-  });
+  };
+  if (detail !== undefined) payload.detail = detail;
+  return res.status(status).json(payload);
 }
 
 function maskEmail(value: string): string {
@@ -1915,22 +1916,21 @@ router.post("/login", rateLimitAuth, async (req, res) => {
     });
   } catch (err: any) {
     try {
-      const msg = String(err?.message || "");
       const code = String(err?.code || "");
       if (code === "FIREBASE_API_KEY_NOT_CONFIGURED") {
         return loginError(res, 500, "FIREBASE_API_KEY_MISSING");
       }
       if (code === "EMAIL_NOT_VERIFIED") {
-        return loginError(res, 403, "EMAIL_NOT_VERIFIED", "Email verification required");
+        return loginError(res, 403, "EMAIL_NOT_VERIFIED");
       }
-      const looksLikeAuthFailure =
-        code.includes("auth/") ||
-        code === "UNAUTHORIZED" ||
-        code === "INVALID_CREDENTIALS" ||
-        /invalid|expired|revoked|credential|password|token|unauthorized/i.test(msg);
+      const looksLikeAuthFailure = [
+        "UNAUTHORIZED",
+        "INVALID_CREDENTIALS",
+        "auth/user-not-found",
+      ].includes(code);
 
       if (looksLikeAuthFailure) {
-        return loginError(res, 401, "UNAUTHORIZED", msg || code || undefined);
+        return loginError(res, 401, "UNAUTHORIZED");
       }
     } catch {
       // fall through to generic error

@@ -79,7 +79,7 @@ check "b7_preview_authentication_boundary" {
   }
 
   assert {
-    condition = var.b7_foundation_phase < 3 ? true : (
+    condition = var.b7_foundation_phase < 2 ? true : (
       local.preview_runtime_auth_permissions == toset(["firebaseauth.users.get"]) &&
       google_project_iam_custom_role.preview_runtime_auth_reader[0].role_id == "previewBackendAuthReader" &&
       google_project_iam_member.preview_runtime_auth_reader[0].member == google_service_account.preview_backend_runtime.member
