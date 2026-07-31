@@ -74,7 +74,7 @@ variable "enable_preview_backend_service" {
 variable "b7_foundation_phase" {
   description = "Governed B7 phase gate: 1=APIs only, 2=datastore/auth resources, 3=runtime IAM. Cloud Run activation is separately reviewed."
   type        = number
-  default     = 2
+  default     = 3
 
   validation {
     condition     = contains([1, 2, 3], var.b7_foundation_phase)
