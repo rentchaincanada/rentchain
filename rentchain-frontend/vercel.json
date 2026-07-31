@@ -81,6 +81,15 @@
       "permanent": true
     }
   ],
+  "routes": [
+    {
+      "src": "^/api/preview-backend/(.*)$",
+      "dest": "/api/preview-backend/[...path]?path=$1"
+    },
+    {
+      "handle": "filesystem"
+    }
+  ],
   "rewrites": [
     {
       "source": "/health",
