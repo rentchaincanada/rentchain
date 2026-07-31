@@ -334,6 +334,7 @@ describe("auth login property manager company profiles", () => {
     });
     expect(missing.status).toBe(401);
     expect(missing.body.code).toBe("INVALID_CREDENTIALS");
+    expect(missing.body).not.toHaveProperty("detail");
     expect(getUserMock).not.toHaveBeenCalled();
 
     signInWithPasswordMock.mockResolvedValueOnce({
@@ -352,6 +353,67 @@ describe("auth login property manager company profiles", () => {
     });
     expect(unverified.status).toBe(403);
     expect(unverified.body.code).toBe("EMAIL_NOT_VERIFIED");
+    expect(unverified.body).not.toHaveProperty("detail");
+  });
+
+  it.each([
+    {
+      code: "auth/insufficient-permission",
+      message: "application-default credential has insufficient permission: sensitive context",
+    },
+    {
+      code: "app/invalid-credential",
+      message: "credential initialization failed with sensitive context",
+    },
+    {
+      code: "PERMISSION_DENIED",
+      message: "PERMISSION_DENIED: sensitive provider payload",
+    },
+  ])("returns a sanitized 500 for Firebase Admin infrastructure failure $code", async ({ code, message }) => {
+    signInWithPasswordMock.mockResolvedValue({
+      uid: "sensitive-firebase-uid",
+      email: "private.user@example.com",
+    });
+    getUserMock.mockRejectedValueOnce(Object.assign(new Error(message), { code }));
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const authRouter = (await import("../authRoutes")).default;
+
+    const response = await invokeRouter(authRouter, {
+      method: "POST",
+      url: "/login",
+      body: { email: "private.user@example.com", password: "secretpass" },
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      ok: false,
+      code: "INTERNAL",
+      error: "Login failed",
+      step: "firebase_signin",
+      errCode: code,
+      requestId: expect.any(String),
+    });
+    expect(response.body).not.toHaveProperty("detail");
+
+    const serializedResponse = JSON.stringify(response.body);
+    const serializedLog = JSON.stringify(errorLog.mock.calls);
+    for (const sensitiveValue of [
+      message,
+      "sensitive context",
+      "sensitive provider payload",
+      "private.user@example.com",
+      "sensitive-firebase-uid",
+      "secretpass",
+    ]) {
+      expect(serializedResponse).not.toContain(sensitiveValue);
+      expect(serializedLog).not.toContain(sensitiveValue);
+    }
+    expect(errorLog).toHaveBeenCalledWith("[auth/login] failed", {
+      requestId: response.body.requestId,
+      step: "firebase_signin",
+      status: 500,
+      code,
+    });
   });
 
   it("sanitizes unexpected login failure logs without changing the response", async () => {
