@@ -320,6 +320,75 @@ describe("auth login property manager company profiles", () => {
       email: "owner@example.com",
       role: "landlord",
     });
+    expect(getUserMock).toHaveBeenCalledWith("landlord-user-1");
+  });
+
+  it("keeps missing and unverified Firebase users on their controlled login paths", async () => {
+    const authRouter = (await import("../authRoutes")).default;
+
+    signInWithPasswordMock.mockResolvedValueOnce(null);
+    const missing = await invokeRouter(authRouter, {
+      method: "POST",
+      url: "/login",
+      body: { email: "missing@example.com", password: "secretpass" },
+    });
+    expect(missing.status).toBe(401);
+    expect(missing.body.code).toBe("INVALID_CREDENTIALS");
+    expect(getUserMock).not.toHaveBeenCalled();
+
+    signInWithPasswordMock.mockResolvedValueOnce({
+      uid: "unverified-user-1",
+      email: "unverified@example.com",
+    });
+    getUserMock.mockResolvedValueOnce({
+      uid: "unverified-user-1",
+      email: "unverified@example.com",
+      emailVerified: false,
+    });
+    const unverified = await invokeRouter(authRouter, {
+      method: "POST",
+      url: "/login",
+      body: { email: "unverified@example.com", password: "secretpass" },
+    });
+    expect(unverified.status).toBe(403);
+    expect(unverified.body.code).toBe("EMAIL_NOT_VERIFIED");
+  });
+
+  it("sanitizes unexpected login failure logs without changing the response", async () => {
+    signInWithPasswordMock.mockResolvedValue({
+      uid: "firebase-user-1",
+      email: "private.user@example.com",
+    });
+    getUserMock.mockRejectedValueOnce(
+      Object.assign(new Error("sensitive provider response"), { code: "app/no-app\ninternal" })
+    );
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const authRouter = (await import("../authRoutes")).default;
+
+    const response = await invokeRouter(authRouter, {
+      method: "POST",
+      url: "/login",
+      body: { email: "private.user@example.com", password: "secretpass" },
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      code: "INTERNAL",
+      step: "firebase_signin",
+      errCode: "app/no-app_internal",
+    });
+    expect(response.body).not.toHaveProperty("detail");
+    expect(errorLog).toHaveBeenCalledWith("[auth/login] failed", {
+      requestId: response.body.requestId,
+      step: "firebase_signin",
+      status: 500,
+      code: "app/no-app_internal",
+    });
+    const serializedLog = JSON.stringify(errorLog.mock.calls);
+    expect(serializedLog).not.toContain("private.user@example.com");
+    expect(serializedLog).not.toContain("secretpass");
+    expect(serializedLog).not.toContain("sensitive provider response");
+    expect(JSON.stringify(response.body)).not.toContain("sensitive provider response");
   });
 
   it("keeps existing delegate and contractor login branches safe", async () => {

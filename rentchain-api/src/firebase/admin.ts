@@ -10,6 +10,13 @@ export const PROJECT_ID = getConfiguredProjectId() || (runtime === "production" 
 const guard = assertSafeFirestoreEnvironment();
 const previewFoundation = getPreviewFoundationConfig();
 
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+    projectId: PROJECT_ID,
+  });
+}
+
 let firestore: admin.firestore.Firestore;
 let db: admin.firestore.Firestore;
 const FieldValue = admin.firestore.FieldValue;
@@ -24,33 +31,24 @@ if (runtime === "preview" && guard.mode === "preview-disabled") {
   firestore = unavailable;
   db = unavailable;
 } else {
+  const firestoreInstance = admin.firestore();
+  firestoreInstance.settings({ ignoreUndefinedProperties: true });
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
+  if (runtime === "preview" && (
+    previewFoundation.projectId !== PREVIEW_PROJECT ||
+    previewFoundation.databaseId !== "(default)"
+  )) {
+    throw new Error("[firebase] Preview Firestore initialization boundary is invalid.");
+  }
+
+  recordInitializationState({
+    guard,
     projectId: PROJECT_ID,
+    caller: "rentchain-api/src/firebase/admin.ts",
   });
-}
 
-const firestoreInstance = admin.firestore();
-firestoreInstance.settings({ ignoreUndefinedProperties: true });
-
-if (runtime === "preview" && (
-  previewFoundation.projectId !== PREVIEW_PROJECT ||
-  previewFoundation.databaseId !== "(default)"
-)) {
-  throw new Error("[firebase] Preview Firestore initialization boundary is invalid.");
-}
-
-recordInitializationState({
-  guard,
-  projectId: PROJECT_ID,
-  caller: "rentchain-api/src/firebase/admin.ts",
-});
-
-firestore = firestoreInstance;
-db = firestoreInstance;
-
+  firestore = firestoreInstance;
+  db = firestoreInstance;
 }
 
 export { firestore, db, FieldValue };

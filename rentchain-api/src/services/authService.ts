@@ -1,4 +1,5 @@
 // src/services/authService.ts
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import admin from "firebase-admin";
 import { JWT_EXPIRES_IN, JWT_SECRET } from "../config/authConfig";
@@ -24,7 +25,7 @@ export async function validateLandlordCredentials(
   email: string,
   password: string
 ): Promise<LandlordUser | null> {
-  console.log("[auth/validate] start", { email });
+  console.log("[auth/validate] start", { emailHash: emailHash(email) });
 
   const fb = await signInWithPassword(email, password);
 
@@ -34,8 +35,7 @@ export async function validateLandlordCredentials(
   }
 
   console.log("[auth/validate] firebase ok", {
-    uid: fb.uid,
-    email: fb.email,
+    uidPresent: Boolean(fb.uid),
   });
 
   try {
@@ -50,7 +50,7 @@ export async function validateLandlordCredentials(
 
     if (!snap.exists) {
       console.log("[auth/validate] landlord doc missing — creating", {
-        uid: fb.uid,
+        uidPresent: Boolean(fb.uid),
       });
 
       const createdAt = new Date().toISOString();
@@ -77,7 +77,9 @@ export async function validateLandlordCredentials(
       plan: data?.plan || "screening",
     };
   } catch (err: any) {
-    console.error("[auth/validate] firestore error", err?.message || err);
+    console.error("[auth/validate] failed", {
+      code: stableAuthErrorCode(err),
+    });
     return null;
   }
 }
@@ -106,6 +108,29 @@ export function generateJwtForLandlord(
 
 const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
 
+function emailHash(email: string): string {
+  return crypto.createHash("sha256").update(String(email || "").trim().toLowerCase()).digest("hex").slice(0, 12);
+}
+
+function stableIdentityToolkitErrorCode(payload: unknown): string {
+  const value =
+    payload && typeof payload === "object"
+      ? String((payload as any)?.error?.message || (payload as any)?.error?.status || "")
+      : "";
+  const stableCode = value.trim().split(/[\s:]+/, 1)[0] || "";
+  const normalized = stableCode.toUpperCase().replace(/[^A-Z0-9_-]/g, "_").slice(0, 80);
+  return normalized || "IDENTITY_TOOLKIT_REQUEST_FAILED";
+}
+
+function stableAuthErrorCode(error: unknown): string {
+  const value =
+    error && typeof error === "object"
+      ? String((error as any)?.code || "")
+      : "";
+  const normalized = value.trim().replace(/[^A-Za-z0-9_/-]/g, "_").slice(0, 80);
+  return normalized || "AUTH_VALIDATION_FAILED";
+}
+
 export async function signInWithPassword(
   email: string,
   password: string
@@ -128,8 +153,8 @@ export async function signInWithPassword(
       (await res.json().catch(async () => ({ raw: await res.text().catch(() => "") }))) || {};
     console.warn("[auth] firebase signInWithPassword failed", {
       status: res.status,
-      email,
-      error: errJson,
+      code: stableIdentityToolkitErrorCode(errJson),
+      emailHash: emailHash(email),
     });
     return null;
   }
