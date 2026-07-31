@@ -90,6 +90,10 @@ function maskEmail(value: string): string {
   return `${local.slice(0, 2)}***@${domain}`;
 }
 
+function sanitizeAuthErrorCode(value: unknown): string {
+  return String(value || "INTERNAL").replace(/[^A-Za-z0-9_/-]/g, "_").slice(0, 80);
+}
+
 function tokenFingerprint(value: string): string {
   const token = String(value || "").trim();
   if (!token) return "none";
@@ -1709,9 +1713,9 @@ router.post("/login", rateLimitAuth, async (req, res) => {
       AUTH_LOGIN_ENABLED: process.env.AUTH_LOGIN_ENABLED,
       PASSWORD_LOGIN_ENABLED: process.env.PASSWORD_LOGIN_ENABLED,
     });
-    console.log("[auth/login] hit", { email, passwordLoginEnabled });
+    console.log("[auth/login] hit", { email: maskEmail(email), passwordLoginEnabled });
     console.log("[auth/login] request", {
-      email,
+      email: maskEmail(email),
       passwordLoginEnabled,
       envPasswordEnabled: process.env.PASSWORD_LOGIN_ENABLED,
     });
@@ -1935,10 +1939,8 @@ router.post("/login", rateLimitAuth, async (req, res) => {
     console.error("[auth/login] failed", {
       requestId,
       step,
-      message: err?.message,
-      code: err?.code,
-      stack: err?.stack,
-      email: (req as any)?.body?.email,
+      status: 500,
+      code: sanitizeAuthErrorCode(err?.code),
     });
     return res.status(500).json({
       ok: false,
@@ -1946,8 +1948,7 @@ router.post("/login", rateLimitAuth, async (req, res) => {
       error: "Login failed",
       requestId,
       step,
-      detail: String(err?.message || ""),
-      errCode: String(err?.code || ""),
+      errCode: sanitizeAuthErrorCode(err?.code),
     });
   }
 });
