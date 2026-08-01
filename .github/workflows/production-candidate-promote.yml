@@ -1,0 +1,131 @@
+name: Production backend candidate promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full 40-character source SHA for the verified candidate
+        required: true
+        type: string
+      image_uri:
+        description: Verified immutable Production image URI at digest
+        required: true
+        type: string
+      candidate_revision:
+        description: Exact zero-traffic candidate revision
+        required: true
+        type: string
+      candidate_evidence_run_id:
+        description: Successful Production candidate workflow run ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+jobs:
+  promote-verified-candidate:
+    if: github.repository == 'rentchaincanada/rentchain' && github.event_name == 'workflow_dispatch'
+    environment: production-promotion
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      IMAGE_URI: ${{ inputs.image_uri }}
+      CANDIDATE_REVISION: ${{ inputs.candidate_revision }}
+      EVIDENCE_RUN_ID: ${{ inputs.candidate_evidence_run_id }}
+      PROJECT_ID: project-0d9658de-af29-4dc0-a99
+      REGION: us-central1
+      SERVICE: rentchain-landlord-api
+    steps:
+      - name: Check out protected main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/heads/main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate promotion inputs and source ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/production-deployment/validate-release-inputs.sh \
+            promotion "${SOURCE_SHA}" "${IMAGE_URI}" "${PROJECT_ID}" "${REGION}" "${SERVICE}"
+          [[ "${CANDIDATE_REVISION}" =~ ^rentchain-landlord-api-candidate-[0-9a-f]{12}$ ]]
+          [[ "${EVIDENCE_RUN_ID}" =~ ^[0-9]+$ ]]
+          git cat-file -e "${SOURCE_SHA}^{commit}"
+          git merge-base --is-ancestor "${SOURCE_SHA}" origin/main
+
+      - name: Require successful candidate workflow run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${EVIDENCE_RUN_ID}")"
+          test "$(jq -r '.name' <<<"${evidence}")" = "Production backend candidate deploy"
+          test "$(jq -r '.event' <<<"${evidence}")" = "workflow_dispatch"
+          test "$(jq -r '.conclusion' <<<"${evidence}")" = "success"
+          test "$(jq -r '.head_branch' <<<"${evidence}")" = "main"
+
+      - name: Download candidate evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: production-candidate-evidence
+          path: candidate-evidence
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.candidate_evidence_run_id }}
+
+      - name: Validate candidate evidence binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="candidate-evidence/candidate-evidence.json"
+          test "$(jq -r '.sourceSha' "${evidence}")" = "${SOURCE_SHA}"
+          test "$(jq -r '.imageUri' "${evidence}")" = "${IMAGE_URI}"
+          test "$(jq -r '.candidateRevision' "${evidence}")" = "${CANDIDATE_REVISION}"
+          test "$(jq -r '.project' "${evidence}")" = "${PROJECT_ID}"
+          test "$(jq -r '.region' "${evidence}")" = "${REGION}"
+          test "$(jq -r '.service' "${evidence}")" = "${SERVICE}"
+          jq -e '.ready == true and .trafficPercent == 0 and .healthVerification == "cloud-run-internal-http-probes" and .promotionPerformed == false' "${evidence}" >/dev/null
+
+      - name: Authenticate with the protected Production promotion identity
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.PRODUCTION_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PRODUCTION_PROMOTION_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Reverify candidate and current traffic baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          revision_json="${RUNNER_TEMP}/candidate-revision.json"
+          service_json="${RUNNER_TEMP}/production-service.json"
+          gcloud run revisions describe "${CANDIDATE_REVISION}" \
+            --project="${PROJECT_ID}" --region="${REGION}" --format=json > "${revision_json}"
+          gcloud run services describe "${SERVICE}" \
+            --project="${PROJECT_ID}" --region="${REGION}" --format=json > "${service_json}"
+          test "$(jq -r '.spec.containers[0].image' "${revision_json}")" = "${IMAGE_URI}"
+          jq -e '.status.conditions[] | select(.type == "Ready" and .status == "True")' "${revision_json}" >/dev/null
+          test "$(jq --arg revision "${CANDIDATE_REVISION}" '[.status.traffic[]? | select(.revisionName == $revision and ((.percent // 0) > 0))] | length' "${service_json}")" = "0"
+          jq -e --arg revision "${CANDIDATE_REVISION}" '.status.latestReadyRevisionName != $revision' "${service_json}" >/dev/null
+          printf 'previous_ready_revision=%s\n' "$(jq -r '.status.latestReadyRevisionName' "${service_json}")" >> "${GITHUB_OUTPUT}"
+
+      - name: Promote the separately approved candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run services update-traffic "${SERVICE}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --to-revisions="${CANDIDATE_REVISION}=100" \
+            --quiet
+          printf 'promoted_revision=%s\n' "${CANDIDATE_REVISION}"
+          printf 'rollback_revision=%s\n' "${{ steps.baseline.outputs.previous_ready_revision }}"
