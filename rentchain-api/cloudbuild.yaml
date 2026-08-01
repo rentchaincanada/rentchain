@@ -1,77 +1,61 @@
 substitutions:
   _REGION: us-central1
-  _SERVICE: rentchain-landlord-api
   _REPO: rentchain-api
   _IMAGE: rentchain-landlord-api
-  _IMAGE_TAG: "${SHORT_SHA}"
 
 options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
-  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    entrypoint: "bash"
-    args:
-      - "-lc"
-      - |
-        set -euxo pipefail
-        echo "==== ENV (first 120) ===="
-        env | sort | sed -n '1,120p'
-        echo "==== PWD/FILES ===="
-        pwd
-        ls -la
-        echo "==== ROOT ===="
-        ls -la /workspace
-        echo "==== API DIR ===="
-        ls -la /workspace/rentchain-api
-
-  - name: "node:20"
+  - name: "node:20.20.2"
+    id: "validate-backend"
     dir: "rentchain-api"
     entrypoint: "bash"
     args:
       - "-lc"
       - |
-        set -euxo pipefail
+        set -euo pipefail
         npm ci
         npm run build
 
-  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        if [ -z "${_IMAGE_TAG}" ]; then
-          echo "ERROR: _IMAGE_TAG is empty. Provide --substitutions=_IMAGE_TAG=xxxx"
-          exit 1
-        fi
-        echo "Using _IMAGE_TAG=${_IMAGE_TAG}"
-
   - name: "gcr.io/cloud-builders/docker"
-    args:
-      [
-        "build",
-        "-f",
-        "rentchain-api/Dockerfile",
-        "-t",
-        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${_IMAGE_TAG}",
-        "rentchain-api"
-      ]
-
-  - name: "gcr.io/cloud-builders/docker"
-    args:
-      [
-        "push",
-        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${_IMAGE_TAG}"
-      ]
-
-  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "build-candidate"
     entrypoint: "bash"
     args:
       - "-lc"
       - |
-        set -euxo pipefail
-        gcloud run deploy "${_SERVICE}" \
-          --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${_IMAGE_TAG}" \
-          --region "${_REGION}" \
-          --platform managed \
-          --allow-unauthenticated
+        set -euo pipefail
+        [[ "${COMMIT_SHA}" =~ ^[0-9a-f]{40}$ ]]
+        image="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:sha-${COMMIT_SHA}"
+        docker build \
+          --file rentchain-api/Dockerfile \
+          --tag "${image}" \
+          rentchain-api
+
+        test "$(docker image inspect "${image}" --format '{{.Config.User}}')" = "node"
+        test "$(docker image inspect "${image}" --format '{{.Os}}/{{.Architecture}}')" = "linux/amd64"
+        test "$(docker image inspect "${image}" --format '{{json .Config.Cmd}}')" = '["node","dist/index.build.js"]'
+        docker image inspect "${image}" --format '{{json .Config.ExposedPorts}}' | grep -Fq '8080/tcp'
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-candidate"
+    entrypoint: "bash"
+    args:
+      - "-lc"
+      - |
+        set -euo pipefail
+        image="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:sha-${COMMIT_SHA}"
+        push_log="$(mktemp)"
+        docker push "${image}" 2>&1 | tee "${push_log}"
+        digest="$(sed -nE 's/^.*digest: (sha256:[0-9a-f]{64}).*$/\1/p' "${push_log}" | tail -n 1)"
+        [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+        printf 'Production candidate built only; deployment requires a separate protected workflow.\n'
+        printf 'source_sha=%s\n' "${COMMIT_SHA}"
+        printf 'image=%s\n' "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}"
+        printf 'tag=sha-%s\n' "${COMMIT_SHA}"
+        printf 'digest=%s\n' "${digest}"
+        printf 'build_id=%s\n' "${BUILD_ID}"
+        printf 'architecture=linux/amd64\n'
+
+images:
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:sha-${COMMIT_SHA}"

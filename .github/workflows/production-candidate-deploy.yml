@@ -1,0 +1,173 @@
+name: Production backend candidate deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full 40-character source SHA reachable from main
+        required: true
+        type: string
+      image_uri:
+        description: Immutable Production image URI ending in @sha256:<digest>
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+jobs:
+  deploy-zero-traffic-candidate:
+    if: github.repository == 'rentchaincanada/rentchain' && github.event_name == 'workflow_dispatch'
+    environment: production-candidate
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      IMAGE_URI: ${{ inputs.image_uri }}
+      PROJECT_ID: project-0d9658de-af29-4dc0-a99
+      REGION: us-central1
+      SERVICE: rentchain-landlord-api
+    steps:
+      - name: Check out protected main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/heads/main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate release inputs and source ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/production-deployment/validate-release-inputs.sh \
+            candidate "${SOURCE_SHA}" "${IMAGE_URI}" "${PROJECT_ID}" "${REGION}" "${SERVICE}"
+          git cat-file -e "${SOURCE_SHA}^{commit}"
+          git merge-base --is-ancestor "${SOURCE_SHA}" origin/main
+          git checkout --detach "${SOURCE_SHA}"
+          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
+          test -z "$(git status --porcelain)"
+
+      - name: Authenticate with the protected Production deployment identity
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.PRODUCTION_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PRODUCTION_DEPLOY_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Verify immutable artifact provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest="${IMAGE_URI##*@}"
+          repository="${IMAGE_URI%@*}"
+          gcloud artifacts docker images describe "${IMAGE_URI}" \
+            --project="${PROJECT_ID}" \
+            --format='value(image_summary.digest)' | grep -Fx "${digest}"
+          tag_version="$(gcloud artifacts docker tags list "${repository}" \
+            --project="${PROJECT_ID}" \
+            --filter="tag:sha-${SOURCE_SHA}" \
+            --format='value(version)' | tail -n 1)"
+          [[ "${tag_version}" == *"/versions/${digest}" ]]
+
+      - name: Validate governed Production service contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          service_json="${RUNNER_TEMP}/production-service.json"
+          contract_json="${RUNNER_TEMP}/production-contract.json"
+          gcloud run services describe "${SERVICE}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --format=json > "${service_json}"
+          jq -f scripts/production-deployment/validate-service-contract.jq \
+            "${service_json}" > "${contract_json}"
+          jq '{missingNames,missingSecretRefs,projectConfigured,baseUrlConfigured,elitePriceConfigured,emailConfigured,startupReadyProbe,livenessHealthProbe,ok}' \
+            "${contract_json}"
+          jq -e '.ok == true' "${contract_json}" >/dev/null
+
+      - name: Deploy immutable candidate with zero traffic
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          before_service="${RUNNER_TEMP}/service-before.json"
+          after_service="${RUNNER_TEMP}/service-after.json"
+          gcloud run services describe "${SERVICE}" --project="${PROJECT_ID}" --region="${REGION}" --format=json > "${before_service}"
+          before_ready="$(jq -r '.status.latestReadyRevisionName' "${before_service}")"
+          before_traffic="$(jq -cS --arg ready "${before_ready}" '[.status.traffic[]? | if .latestRevision then .revisionName = $ready else . end | del(.latestRevision,.url)] | sort_by(.revisionName,.tag)' "${before_service}")"
+          jq -S -f scripts/production-deployment/governed-template.jq "${before_service}" > "${RUNNER_TEMP}/governed-template-before.json"
+          before_ingress="$(jq -r '.metadata.annotations["run.googleapis.com/ingress"] // ""' "${before_service}")"
+          suffix="candidate-${SOURCE_SHA:0:12}"
+          gcloud run deploy "${SERVICE}" \
+            --image="${IMAGE_URI}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --revision-suffix="${suffix}" \
+            --no-traffic \
+            --quiet
+          revision="${SERVICE}-${suffix}"
+          gcloud run services describe "${SERVICE}" --project="${PROJECT_ID}" --region="${REGION}" --format=json > "${after_service}"
+          after_ready="$(jq -r '.status.latestReadyRevisionName' "${after_service}")"
+          after_traffic="$(jq -cS --arg ready "${after_ready}" '[.status.traffic[]? | if .latestRevision then .revisionName = $ready else . end | del(.latestRevision,.url)] | sort_by(.revisionName,.tag)' "${after_service}")"
+          test "${after_traffic}" = "${before_traffic}"
+          test "$(jq -r '.metadata.annotations["run.googleapis.com/ingress"] // ""' "${after_service}")" = "${before_ingress}"
+          printf 'revision=%s\n' "${revision}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify internal health probes and zero-traffic readiness
+        shell: bash
+        env:
+          CANDIDATE_REVISION: ${{ steps.deploy.outputs.revision }}
+        run: |
+          set -euo pipefail
+          revision_json="${RUNNER_TEMP}/candidate-revision.json"
+          for attempt in $(seq 1 60); do
+            gcloud run revisions describe "${CANDIDATE_REVISION}" \
+              --project="${PROJECT_ID}" --region="${REGION}" --format=json > "${revision_json}"
+            if jq -e '.status.conditions[] | select(.type == "Ready" and .status == "True")' "${revision_json}" >/dev/null; then
+              break
+            fi
+            test "${attempt}" != 60
+            sleep 5
+          done
+          test "$(jq -r '.spec.containers[0].image' "${revision_json}")" = "${IMAGE_URI}"
+          test "$(jq -r '.spec.containers[0].startupProbe.httpGet.path' "${revision_json}")" = "/health/ready"
+          test "$(jq -r '.spec.containers[0].livenessProbe.httpGet.path' "${revision_json}")" = "/health"
+          jq -S -f scripts/production-deployment/governed-template.jq "${revision_json}" > "${RUNNER_TEMP}/governed-template-candidate.json"
+          cmp "${RUNNER_TEMP}/governed-template-before.json" "${RUNNER_TEMP}/governed-template-candidate.json"
+          traffic_refs="$(gcloud run services describe "${SERVICE}" --project="${PROJECT_ID}" --region="${REGION}" --format=json | jq --arg revision "${CANDIDATE_REVISION}" '[.status.traffic[]? | select(.revisionName == $revision and ((.percent // 0) > 0))] | length')"
+          test "${traffic_refs}" = "0"
+          printf 'candidate_revision=%s\n' "${CANDIDATE_REVISION}"
+          printf 'candidate_digest=%s\n' "${IMAGE_URI##*@}"
+          printf 'candidate_ready=true\n'
+          printf 'candidate_traffic_percent=0\n'
+          printf 'health_verification=cloud-run-internal-http-probes\n'
+          printf 'promotion=not_performed\n'
+
+      - name: Record governed candidate evidence
+        shell: bash
+        env:
+          CANDIDATE_REVISION: ${{ steps.deploy.outputs.revision }}
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg source_sha "${SOURCE_SHA}" \
+            --arg image_uri "${IMAGE_URI}" \
+            --arg revision "${CANDIDATE_REVISION}" \
+            --arg project "${PROJECT_ID}" \
+            --arg region "${REGION}" \
+            --arg service "${SERVICE}" \
+            '{sourceSha:$source_sha,imageUri:$image_uri,candidateRevision:$revision,project:$project,region:$region,service:$service,ready:true,trafficPercent:0,healthVerification:"cloud-run-internal-http-probes",promotionPerformed:false}' \
+            > candidate-evidence.json
+
+      - name: Upload candidate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-candidate-evidence
+          path: candidate-evidence.json
+          if-no-files-found: error
+          retention-days: 30
