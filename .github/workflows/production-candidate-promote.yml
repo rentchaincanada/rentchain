@@ -1,43 +1,49 @@
-name: Production backend candidate promotion
+name: Prepare Production promotion evidence only
 
 on:
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Full 40-character source SHA for the verified candidate
+        description: Full 40-character source SHA for the approved candidate
         required: true
         type: string
       image_uri:
-        description: Verified immutable Production image URI at digest
+        description: Immutable image URI verified by the human administrator
         required: true
         type: string
       candidate_revision:
-        description: Exact zero-traffic candidate revision
+        description: Exact ready zero-traffic candidate revision
         required: true
         type: string
-      candidate_evidence_run_id:
-        description: Successful Production candidate workflow run ID
+      candidate_preparation_run_id:
+        description: Successful candidate-preparation workflow run ID
+        required: true
+        type: string
+      human_candidate_evidence_json:
+        description: Non-secret compact JSON recorded by the human administrator after candidate verification
         required: true
         type: string
 
 permissions:
   contents: read
   actions: read
-  id-token: write
 
 jobs:
-  promote-verified-candidate:
+  prepare-promotion-evidence:
     if: github.repository == 'rentchaincanada/rentchain' && github.event_name == 'workflow_dispatch'
-    environment: production-promotion
     runs-on: ubuntu-latest
     env:
       SOURCE_SHA: ${{ inputs.source_sha }}
       IMAGE_URI: ${{ inputs.image_uri }}
       CANDIDATE_REVISION: ${{ inputs.candidate_revision }}
-      EVIDENCE_RUN_ID: ${{ inputs.candidate_evidence_run_id }}
+      PREPARATION_RUN_ID: ${{ inputs.candidate_preparation_run_id }}
+      HUMAN_CANDIDATE_EVIDENCE: ${{ inputs.human_candidate_evidence_json }}
       PROJECT_ID: project-0d9658de-af29-4dc0-a99
       REGION: us-central1
       SERVICE: rentchain-landlord-api
+      REQUEST_ID: promotion-${{ github.run_id }}-${{ github.run_attempt }}
+      RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      RUN_ACTOR: ${{ github.actor }}
     steps:
       - name: Check out protected main
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -46,86 +52,84 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate promotion inputs and source ancestry
+      - name: Validate promotion request and source ancestry
         shell: bash
         run: |
           set -euo pipefail
           bash scripts/production-deployment/validate-release-inputs.sh \
             promotion "${SOURCE_SHA}" "${IMAGE_URI}" "${PROJECT_ID}" "${REGION}" "${SERVICE}"
           [[ "${CANDIDATE_REVISION}" =~ ^rentchain-landlord-api-candidate-[0-9a-f]{12}$ ]]
-          [[ "${EVIDENCE_RUN_ID}" =~ ^[0-9]+$ ]]
+          [[ "${PREPARATION_RUN_ID}" =~ ^[0-9]+$ ]]
           git cat-file -e "${SOURCE_SHA}^{commit}"
           git merge-base --is-ancestor "${SOURCE_SHA}" origin/main
 
-      - name: Require successful candidate workflow run
+      - name: Require successful candidate preparation run
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          evidence="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${EVIDENCE_RUN_ID}")"
-          test "$(jq -r '.name' <<<"${evidence}")" = "Production backend candidate deploy"
-          test "$(jq -r '.event' <<<"${evidence}")" = "workflow_dispatch"
-          test "$(jq -r '.conclusion' <<<"${evidence}")" = "success"
-          test "$(jq -r '.head_branch' <<<"${evidence}")" = "main"
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PREPARATION_RUN_ID}")"
+          test "$(jq -r '.name' <<<"${run_json}")" = "Prepare Production candidate evidence only"
+          test "$(jq -r '.event' <<<"${run_json}")" = "workflow_dispatch"
+          test "$(jq -r '.conclusion' <<<"${run_json}")" = "success"
+          test "$(jq -r '.head_branch' <<<"${run_json}")" = "main"
 
-      - name: Download candidate evidence
+      - name: Download candidate request evidence
         uses: actions/download-artifact@v4
         with:
-          name: production-candidate-evidence
-          path: candidate-evidence
+          name: production-candidate-request
+          path: candidate-request
           github-token: ${{ github.token }}
-          run-id: ${{ inputs.candidate_evidence_run_id }}
+          run-id: ${{ inputs.candidate_preparation_run_id }}
 
-      - name: Validate candidate evidence binding
+      - name: Validate candidate and human-admin evidence binding
         shell: bash
         run: |
           set -euo pipefail
-          evidence="candidate-evidence/candidate-evidence.json"
-          test "$(jq -r '.sourceSha' "${evidence}")" = "${SOURCE_SHA}"
-          test "$(jq -r '.imageUri' "${evidence}")" = "${IMAGE_URI}"
-          test "$(jq -r '.candidateRevision' "${evidence}")" = "${CANDIDATE_REVISION}"
-          test "$(jq -r '.project' "${evidence}")" = "${PROJECT_ID}"
-          test "$(jq -r '.region' "${evidence}")" = "${REGION}"
-          test "$(jq -r '.service' "${evidence}")" = "${SERVICE}"
-          jq -e '.ready == true and .trafficPercent == 0 and .healthVerification == "cloud-run-internal-http-probes" and .promotionPerformed == false' "${evidence}" >/dev/null
+          printf '%s' "${HUMAN_CANDIDATE_EVIDENCE}" > human-candidate-evidence.json
+          jq -e . human-candidate-evidence.json >/dev/null
+          request=candidate-request/candidate-request.json
+          test "$(jq -r '.sourceSha' "${request}")" = "${SOURCE_SHA}"
+          test "$(jq -r '.imageUri' "${request}")" = "${IMAGE_URI}"
+          test "$(jq -r '.sourceSha' human-candidate-evidence.json)" = "${SOURCE_SHA}"
+          test "$(jq -r '.imageUri' human-candidate-evidence.json)" = "${IMAGE_URI}"
+          test "$(jq -r '.candidateRevision' human-candidate-evidence.json)" = "${CANDIDATE_REVISION}"
+          test "$(jq -r '.candidateRequestId' human-candidate-evidence.json)" = "$(jq -r '.candidateRequestId' "${request}")"
+          jq -e '.ready == true and .trafficPercent == 0 and (.previousReadyRevision | type == "string" and length > 0)' human-candidate-evidence.json >/dev/null
 
-      - name: Authenticate with the protected Production promotion identity
-        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+      - name: Prepare inert promotion request evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/production-deployment/prepare-human-promotion.sh \
+            candidate-request/candidate-request.json \
+            human-candidate-evidence.json \
+            "${REQUEST_ID}" \
+            "${RUN_URL}" \
+            "${RUN_ACTOR}" \
+            promotion-request.json
+          jq -e '.status == "prepared" and .trafficMutationPerformed == false' promotion-request.json >/dev/null
+
+      - name: Record promotion preparation summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '## Production promotion request prepared'
+            echo
+            echo '**NO TRAFFIC MUTATION PERFORMED**'
+            echo
+            echo 'This workflow cannot authenticate to Google Cloud and cannot change traffic.'
+            echo 'A separate Founder promotion authorization and interactive human-admin execution are required.'
+            echo
+            jq -r '"Request: `\(.promotionRequestId)`\n\nCandidate: `\(.candidateRevision)`\n\nImage: `\(.imageUri)`"' promotion-request.json
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload non-secret promotion request evidence
+        uses: actions/upload-artifact@v4
         with:
-          workload_identity_provider: ${{ vars.PRODUCTION_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.PRODUCTION_PROMOTION_SERVICE_ACCOUNT }}
-          create_credentials_file: true
-          export_environment_variables: true
-
-      - name: Set up Google Cloud CLI
-        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
-
-      - name: Reverify candidate and current traffic baseline
-        id: baseline
-        shell: bash
-        run: |
-          set -euo pipefail
-          revision_json="${RUNNER_TEMP}/candidate-revision.json"
-          service_json="${RUNNER_TEMP}/production-service.json"
-          gcloud run revisions describe "${CANDIDATE_REVISION}" \
-            --project="${PROJECT_ID}" --region="${REGION}" --format=json > "${revision_json}"
-          gcloud run services describe "${SERVICE}" \
-            --project="${PROJECT_ID}" --region="${REGION}" --format=json > "${service_json}"
-          test "$(jq -r '.spec.containers[0].image' "${revision_json}")" = "${IMAGE_URI}"
-          jq -e '.status.conditions[] | select(.type == "Ready" and .status == "True")' "${revision_json}" >/dev/null
-          test "$(jq --arg revision "${CANDIDATE_REVISION}" '[.status.traffic[]? | select(.revisionName == $revision and ((.percent // 0) > 0))] | length' "${service_json}")" = "0"
-          jq -e --arg revision "${CANDIDATE_REVISION}" '.status.latestReadyRevisionName != $revision' "${service_json}" >/dev/null
-          printf 'previous_ready_revision=%s\n' "$(jq -r '.status.latestReadyRevisionName' "${service_json}")" >> "${GITHUB_OUTPUT}"
-
-      - name: Promote the separately approved candidate
-        shell: bash
-        run: |
-          set -euo pipefail
-          gcloud run services update-traffic "${SERVICE}" \
-            --project="${PROJECT_ID}" \
-            --region="${REGION}" \
-            --to-revisions="${CANDIDATE_REVISION}=100" \
-            --quiet
-          printf 'promoted_revision=%s\n' "${CANDIDATE_REVISION}"
-          printf 'rollback_revision=%s\n' "${{ steps.baseline.outputs.previous_ready_revision }}"
+          name: production-promotion-request
+          path: promotion-request.json
+          if-no-files-found: error
+          retention-days: 30

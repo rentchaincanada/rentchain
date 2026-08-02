@@ -18,16 +18,18 @@ test "$(rg -n 'gcloud run deploy|update-traffic|--allow-unauthenticated|--no-tra
 grep -Fq 'sha-${COMMIT_SHA}' "${build}"
 grep -Fq 'docker push' "${build}"
 grep -Fq 'workflow_dispatch:' "${candidate}"
-grep -Fq 'environment: production-candidate' "${candidate}"
-grep -Fq -- '--no-traffic' "${candidate}"
+test "$(rg -n 'environment:|id-token: write|google-github-actions/auth' "${candidate}" | wc -l | tr -d ' ')" = "0"
+grep -Fq 'NO CLOUD MUTATION PERFORMED' "${candidate}"
+grep -Fq 'prepare-human-candidate.sh' "${candidate}"
 test "$(rg -n 'update-traffic' "${candidate}" | wc -l | tr -d ' ')" = "0"
 grep -Fq 'workflow_dispatch:' "${promotion}"
-grep -Fq 'environment: production-promotion' "${promotion}"
-grep -Fq 'Require successful candidate workflow run' "${promotion}"
-grep -Fq 'Validate candidate evidence binding' "${promotion}"
-grep -Fq 'production-candidate-evidence' "${candidate}"
-grep -Fq 'production-candidate-evidence' "${promotion}"
-grep -Fq 'update-traffic' "${promotion}"
+test "$(rg -n 'environment:|id-token: write|google-github-actions/auth' "${promotion}" | wc -l | tr -d ' ')" = "0"
+grep -Fq 'Require successful candidate preparation run' "${promotion}"
+grep -Fq 'Validate candidate and human-admin evidence binding' "${promotion}"
+grep -Fq 'production-candidate-request' "${candidate}"
+grep -Fq 'production-candidate-request' "${promotion}"
+grep -Fq 'NO TRAFFIC MUTATION PERFORMED' "${promotion}"
+test "$(rg -n 'update-traffic' "${promotion}" | wc -l | tr -d ' ')" = "0"
 test "$(rg -n 'gcloud run deploy' "${promotion}" | wc -l | tr -d ' ')" = "0"
 
 sha="0123456789abcdef0123456789abcdef01234567"
@@ -97,8 +99,8 @@ if jq -f "${template}" "${malformed_service}" >/dev/null 2>&1; then exit 1; fi
 printf '%s\n' '{"spec":{"containers":null}}' > "${unrecognized_resource}"
 if jq -f "${template}" "${unrecognized_resource}" >/dev/null 2>&1; then exit 1; fi
 
-grep -Fq 'candidate_traffic_percent=0' "${candidate}"
-grep -Fq 'health_verification=cloud-run-internal-http-probes' "${candidate}"
-grep -Fq 'promotion=not_performed' "${candidate}"
+grep -Fq 'cloudMutationPerformed == false' "${candidate}"
+grep -Fq 'trafficMutationPerformed == false' "${promotion}"
+grep -Fq 'cannot authenticate to Google Cloud and cannot deploy' "${candidate}"
 
 printf '%s\n' 'Production deployment governance validation passed (32 boundaries).'

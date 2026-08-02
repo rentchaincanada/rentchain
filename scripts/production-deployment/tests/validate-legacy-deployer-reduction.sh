@@ -25,10 +25,11 @@ if rg -n 'gcloud run|update-traffic|terraform apply|set-iam-policy|add-iam-polic
   exit 1
 fi
 
-# Candidate and promotion workflows must remain identity-name indirections and
-# must not silently fall back to the legacy account.
-grep -Fq '${{ vars.PRODUCTION_DEPLOY_SERVICE_ACCOUNT }}' "${workflows}/production-candidate-deploy.yml"
-grep -Fq '${{ vars.PRODUCTION_PROMOTION_SERVICE_ACCOUNT }}' "${workflows}/production-candidate-promote.yml"
+# Human-admin pilot workflows must hold no Google identity and must not silently
+# fall back to the legacy account.
+test "$(rg -n 'google-github-actions/auth|id-token: write|PRODUCTION_(DEPLOY|PROMOTION)_SERVICE_ACCOUNT|PRODUCTION_WORKLOAD_IDENTITY_PROVIDER' "${workflows}/production-candidate-deploy.yml" "${workflows}/production-candidate-promote.yml" | wc -l | tr -d ' ')" = '0'
+grep -Fq 'NO CLOUD MUTATION PERFORMED' "${workflows}/production-candidate-deploy.yml"
+grep -Fq 'NO TRAFFIC MUTATION PERFORMED' "${workflows}/production-candidate-promote.yml"
 test "$(rg -n "${legacy}" "${workflows}" | wc -l | tr -d ' ')" = '0'
 
 # The external removal is explicit, complete, and preserves the account.

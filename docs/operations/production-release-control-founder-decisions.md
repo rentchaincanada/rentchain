@@ -1,9 +1,9 @@
 # Production release-control Founder decisions
 
-Status: decision package only. No live release-control resources described here have been created.
+Status: decisions recorded; implementation is limited to the human-admin pilot. No automated Production mutation identity is authorized.
 
-Branch: `feat/production-release-identities-environments-v1`  
-Pinned base: `9bf99199ac7bf1d92a5b70fa91b25c3e18b35dc4`
+Implementation branch: `feat/production-human-admin-release-pilot-v1`
+Pinned base: `39177387ba3ee11992e0ddfc84c615a2678bc801`
 
 ## Executive finding
 
@@ -17,9 +17,9 @@ Recommended long-term architecture: Option C, a privileged release broker, under
 
 ## Evidence and permission matrix
 
-### Candidate workflow
+### Pre-pilot candidate workflow audit
 
-The ordered operations in `.github/workflows/production-candidate-deploy.yml` are:
+Before the approved human-admin pilot change, the ordered operations in `.github/workflows/production-candidate-deploy.yml` were:
 
 | Step | Command or mechanism | Resource | Permission or authority | Mutation |
 | --- | --- | --- | --- | --- |
@@ -34,11 +34,11 @@ The ordered operations in `.github/workflows/production-candidate-deploy.yml` ar
 | 9 | Internal Cloud Run startup/readiness and liveness probes | Candidate instance | Platform probe mechanism, not a public workflow HTTP invocation | No workflow-originated request |
 | 10 | `actions/upload-artifact` | GitHub Actions artifact | GitHub run-scoped artifact authority | GitHub evidence write only |
 
-The workflow contains no automatic traffic-promotion command. Its sole Cloud Run mutation is a digest-pinned `gcloud run deploy` using `--no-traffic`, followed by comparisons intended to prove traffic and governed template fields were preserved.
+The pre-pilot workflow contained no automatic traffic-promotion command. Its sole Cloud Run mutation was a digest-pinned `gcloud run deploy` using `--no-traffic`. The human-admin pilot workflow now prepares inert evidence only and has no Google authentication or cloud API call.
 
-### Promotion workflow
+### Pre-pilot promotion workflow audit
 
-The ordered operations in `.github/workflows/production-candidate-promote.yml` are:
+Before the approved human-admin pilot change, the ordered operations in `.github/workflows/production-candidate-promote.yml` were:
 
 | Step | Command or mechanism | Resource | Permission or authority | Mutation |
 | --- | --- | --- | --- | --- |
@@ -50,7 +50,7 @@ The ordered operations in `.github/workflows/production-candidate-promote.yml` a
 | 6 | `gcloud run services describe` | `rentchain-landlord-api` | `run.services.get` | No |
 | 7 | `gcloud run services update-traffic --to-revisions=<candidate>=100` | `rentchain-landlord-api` | `run.services.update` and operation reads while polling | Yes, changes traffic |
 
-There is no build, Artifact Registry write, `gcloud run deploy`, or explicit runtime-service-account `actAs` step in the promotion workflow. The absence of an explicit step is not an IAM guarantee; the identity's effective policies are authoritative.
+The pre-pilot promotion workflow contained no build, Artifact Registry write, `gcloud run deploy`, or explicit runtime-service-account `actAs` step, but it did execute the shared-permission traffic update. The human-admin pilot workflow now validates candidate and administrator evidence and prepares inert promotion and rollback templates without Google authentication or traffic mutation.
 
 ### Published Google role evidence
 
@@ -145,7 +145,7 @@ Assumed authority: `run.services.update`, required reads, and no runtime-service
 | C — Privileged release broker | GitHub invokes typed broker actions; broker validates exact candidate-only or promotion-only transitions | Broker compromise is high impact; implementation bugs become authorization bugs | Highest build, hardening, availability, and on-call burden; strongest audit surface | Too much machinery for first pilot | Recommended mature architecture |
 | D — Human-admin execution | Workflows produce evidence; separately authenticated human performs one reviewed command | Human error, credential concentration, delay, and manual consistency risk | Lowest automation complexity; higher repeated operational burden | Recommended controlled pilot | Transitional, not ideal at scale |
 
-No static GCP credential secret is proposed. GitHub OIDC/WIF is the only proposed future machine-authentication mechanism. The legacy Cloud Build deployer must not be reused; its zero-authority state remains a deliberate boundary.
+No static GCP credential secret is proposed. GitHub has no Production mutation identity during the pilot. Any later machine authentication requires a separately approved architecture and may use OIDC/WIF only after its authority is proven. The legacy Cloud Build deployer must not be reused; its zero-authority state remains a deliberate boundary.
 
 ## Reviewer governance models
 
@@ -157,11 +157,11 @@ No static GCP credential secret is proposed. GitHub OIDC/WIF is the only propose
 
 Eligible categories, without assigning people or teams: Founder/owner, technical operator, independent approver, and emergency approver. The Founder-provided read-only GitHub snapshot identified two collaborators: `rentchaincanada` with admin access and `Boulos001` with write access; no repository teams were returned. These identities are evidence about operational feasibility only and are not reviewer assignments.
 
-## GitHub environment capability and proposed settings
+## GitHub environment capability and deferred automated settings
 
 The Founder-provided read-only GitHub snapshot confirmed the existing environments `Preview`, `Preview – rentchain`, `Preview – rentchain-status`, `Production`, `Production – rentchain`, and `Production – rentchain-status`. The governed environments `production-candidate` and `production-promotion` remain absent. Repository Actions variables and secret metadata were both empty, so `PRODUCTION_WORKLOAD_IDENTITY_PROVIDER`, `PRODUCTION_DEPLOY_SERVICE_ACCOUNT`, and `PRODUCTION_PROMOTION_SERVICE_ACCOUNT` remain absent. No environment, variable, or secret was created or changed. GitHub's environment API represents required reviewers, prevent-self-review, wait timers, deployment branch policies, variables, and secrets; availability and limits depend on repository visibility and plan.
 
-Proposed settings, not executed:
+Potential automated-release settings, deferred and not part of the human-admin pilot:
 
 - Create each environment only after a Founder selects a reviewer model.
 - Set `prevent_self_review: true` where the repository plan supports it.
@@ -184,12 +184,12 @@ Illustrative API shapes only; these are not commands and must not be submitted b
 
 If custom branch policies are selected instead, create a single `main` policy after the environment exists. Environment variables and secrets use their dedicated repository-environment endpoints. Exact payload IDs must come from a fresh read-only collaborator/team query.
 
-## Explicit Founder decisions required
+## Founder decisions recorded
 
-1. Accept workflow/process controls despite shared `run.services.update`?
-2. Require a separately authorized runtime proof of promotion-without-`actAs`?
-3. Choose reviewer governance Model 1, 2, or 3.
-4. Require a privileged release broker now, later, or never.
+1. Process controls are accepted for the temporary human-admin pilot only; they are not IAM-enforced field-level separation.
+2. An isolated runtime proof without `actAs` is required before automated promoter authority, but is deferred during the manual pilot.
+3. Reviewer Model 3 is selected for the pilot with self-review prohibited, separate candidate and promotion evidence review, mandatory sunset criteria, and transition target Model 1.
+4. The privileged release broker is deferred and retained as the preferred long-term architecture.
 
 ## Boundaries and deferred work
 
@@ -200,8 +200,8 @@ If custom branch policies are selected instead, create a single `main` policy af
 - Preview remained at `rentchain-preview-backend-00003-42c`, image digest `sha256:270adb21de2b271eb468b28b1a591a3f27544aae162f1f028ad74c7bfd30960f`, 100% traffic, `FIRESTORE_ENABLED=false`, and direct `/health` HTTP 403.
 - No IAM, WIF, GitHub environment, variable, secret, Cloud Run, traffic, Artifact Registry, Cloud Build, Terraform, Preview, Vercel, Identity Platform, or Firebase mutation was performed.
 - No build, deployment, traffic promotion, test service, speculative plan, or Terraform apply was run.
-- No Terraform resource was added and no workflow was modified.
+- No Terraform resource was added. Pilot workflows are repository-only evidence preparation and contain no cloud authentication or mutation path.
 - `production-candidate` and `production-promotion` were not created.
 - Production PR #1453 and PR #1435 remain out of scope and must not be modified.
 - The Preview apply and seed remain paused and out of scope.
-- Implementation must wait for all four Founder decisions and a new authorization.
+- Any automated Production mutation implementation still requires a new Founder authorization.
