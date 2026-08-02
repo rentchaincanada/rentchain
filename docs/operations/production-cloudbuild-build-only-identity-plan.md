@@ -2,7 +2,7 @@
 
 ## Current boundary
 
-External trigger `07c21dce-42db-4d5f-89d4-616534f27e4f` uses `rentchain-cloudbuild-deployer@project-0d9658de-af29-4dc0-a99.iam.gserviceaccount.com`. Its project roles include Cloud Run Admin, Cloud Build Editor, project-wide Artifact Registry Writer, project-wide Service Account User, Storage Admin, Logs Writer, and Service Usage Consumer. Those grants substantially exceed the corrected automatic pipeline, which validates the backend, builds one image, pushes it to the existing `rentchain-api` repository, writes Cloud Logging entries, and stops.
+External trigger `07c21dce-42db-4d5f-89d4-616534f27e4f` uses `rentchain-cloudbuild-builder@project-0d9658de-af29-4dc0-a99.iam.gserviceaccount.com`. The retired automatic-path identity, `rentchain-cloudbuild-deployer@project-0d9658de-af29-4dc0-a99.iam.gserviceaccount.com`, retains historical project grants pending the separately governed reduction in `production-cloudbuild-legacy-deployer-reduction.md`. Those grants substantially exceed the corrected automatic pipeline, which validates the backend, builds one image, pushes it to the existing `rentchain-api` repository, writes Cloud Logging entries, and stops.
 
 The trigger is externally managed. Production HCP workspace `rentchain` (`ws-1dXGdYNdZhQh3RpV`) manages an older `rentchain-api` repository in `northamerica-northeast1`, while the corrected build uses a distinct existing `rentchain-api` repository in `us-central1`. The target repository and trigger are not in HCP state. This change manages only a new IAM member on the exact `us-central1` repository plus the new identity, custom role, and logging member; it does not import or take ownership of either repository, the external trigger, or the existing deployer.
 
@@ -48,8 +48,8 @@ The build-only identity receives no Cloud Run, traffic, IAM administration, trig
 5. Verify no Cloud Run revision, traffic, IAM, Secret Manager, Terraform, Firebase, Firestore, Identity Platform, or Vercel mutation.
 6. Separately authorize updating only the external trigger service-account field to the new account. Keep `^main$`, `rentchain-api/**`, and `rentchain-api/cloudbuild.yaml` unchanged.
 7. Verify one main-triggered build and the unchanged Production service revision/traffic baseline.
-8. If the test or trigger build fails, restore the trigger service-account field to `rentchain-cloudbuild-deployer@project-0d9658de-af29-4dc0-a99.iam.gserviceaccount.com`. Do not delete the new identity automatically.
-9. Retain the old deployer until all other dependencies are reviewed. Remove its obsolete automatic-build rights only through a separate subtractive IAM change; do not assume it is unused by legacy operations.
+8. If a future builder-identity regression occurs, disable or pause the automatic trigger and stop for Founder review. Do not restore the broadly privileged legacy identity as an automatic-path rollback.
+9. Retain the old deployer account, without assuming its historical grants are still required, until the separately governed subtractive IAM review is complete.
 
 The trigger operator must already have `iam.serviceAccounts.actAs` on the new account when performing the separately authorized switch. This plan does not add a persistent impersonation binding and does not modify the trigger.
 
@@ -88,17 +88,7 @@ gcloud builds triggers describe \
   --format='value(serviceAccount)'
 ```
 
-If the governed test fails, separately authorize rollback of only the trigger identity:
-
-```bash
-gcloud builds triggers update github \
-  07c21dce-42db-4d5f-89d4-616534f27e4f \
-  --project=project-0d9658de-af29-4dc0-a99 \
-  --region=us-central1 \
-  --service-account=projects/project-0d9658de-af29-4dc0-a99/serviceAccounts/rentchain-cloudbuild-deployer@project-0d9658de-af29-4dc0-a99.iam.gserviceaccount.com
-```
-
-Do not delete the new account or remove old deployer rights as part of rollback.
+If the governed path fails, pause the automatic trigger and investigate the builder identity. Reintroducing the legacy deployer is not an approved rollback because it would restore deploy-capable authority to the automatic build path.
 
 ## Evidence and audit
 
