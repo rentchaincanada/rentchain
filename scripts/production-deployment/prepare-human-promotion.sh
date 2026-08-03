@@ -40,6 +40,13 @@ verified_human_evidence="$(
       (.ready | type == "boolean" and . == true) and
       (.trafficPercent | type == "number" and . == 0) and
       (.templateParity | type == "boolean" and . == true) and
+      (.candidateInstanceStarted | type == "boolean" and . == true) and
+      (.candidateSmokeMethod | type == "string" and length > 0) and
+      (.candidateSmokeHttpStatus | type == "number" and . == 200) and
+      (.candidateSmokePath == "/health") and
+      (.candidateSmokeDigestVerified | type == "boolean" and . == true) and
+      (.candidateStartupLogObserved | type == "boolean" and . == true) and
+      (.candidateStartupError == null) and
       (.servingTrafficPercent | type == "number" and . == 100) and
       (.productionHealthHttpStatus | type == "number" and . == 200)
     ) then {
@@ -52,6 +59,13 @@ verified_human_evidence="$(
       candidateReady: .ready,
       candidateTrafficPercent: .trafficPercent,
       templateParityPassed: .templateParity,
+      candidateInstanceStarted,
+      candidateSmokeMethod,
+      candidateSmokeHttpStatus,
+      candidateSmokePath,
+      candidateSmokeDigestVerified,
+      candidateStartupLogObserved,
+      candidateStartupError,
       currentServingRevision: .servingRevisionAfterDeployment,
       currentServingTrafficPercent: .servingTrafficPercent,
       productionHealthStatus: .productionHealthHttpStatus
@@ -89,6 +103,6 @@ jq -n \
   --arg run_url "${run_url}" \
   --arg actor "${actor}" \
   --argjson human "${verified_human_evidence}" \
-  '{schemaVersion:1,status:"prepared",promotionRequestId:$request_id,candidateRequestId:$candidate_request_id,sourceSha:$source_sha,imageUri:$image_uri,digest:$human.digest,candidateRevision:$candidate_revision,previousReadyRevision:$previous_ready_revision,candidateReady:$human.candidateReady,candidateTrafficPercent:$human.candidateTrafficPercent,templateParityPassed:$human.templateParityPassed,currentServingRevision:$human.currentServingRevision,currentServingTrafficPercent:$human.currentServingTrafficPercent,productionHealthStatus:$human.productionHealthStatus,project:$project,region:$region,service:$service,proposedHumanAdminTrafficCommand:$command,rollbackCommandTemplate:$rollback,prePromotionChecklist:["separate Founder promotion authorization","interactive administrator authentication","candidate evidence linkage verified","candidate revision ready at approved digest","candidate remains at zero traffic","current Production traffic and health recorded"],requiredPostPromotionEvidence:["administratorIdentity","promotionAuthorization","trafficCommand","trafficResult","healthResult","rollbackStatus","approverIdentity","incidentNotes"],preparedAt:$timestamp,workflowRunUrl:$run_url,workflowActor:$actor,noMutationStatement:"NO TRAFFIC MUTATION PERFORMED",trafficMutationPerformed:false}' > "${output_json}"
+  '{schemaVersion:2,status:"prepared",promotionRequestId:$request_id,candidateRequestId:$candidate_request_id,sourceSha:$source_sha,imageUri:$image_uri,digest:$human.digest,candidateRevision:$candidate_revision,previousReadyRevision:$previous_ready_revision,candidateReady:$human.candidateReady,candidateTrafficPercent:$human.candidateTrafficPercent,templateParityPassed:$human.templateParityPassed,candidateInstanceStarted:$human.candidateInstanceStarted,candidateSmokeMethod:$human.candidateSmokeMethod,candidateSmokeHttpStatus:$human.candidateSmokeHttpStatus,candidateSmokePath:$human.candidateSmokePath,candidateSmokeDigestVerified:$human.candidateSmokeDigestVerified,candidateStartupLogObserved:$human.candidateStartupLogObserved,candidateStartupError:$human.candidateStartupError,currentServingRevision:$human.currentServingRevision,currentServingTrafficPercent:$human.currentServingTrafficPercent,productionHealthStatus:$human.productionHealthStatus,project:$project,region:$region,service:$service,proposedHumanAdminTrafficCommand:$command,rollbackCommandTemplate:$rollback,prePromotionChecklist:["separate Founder promotion authorization","interactive administrator authentication","candidate evidence linkage verified","candidate revision ready at approved digest","candidate instance startup and exact-digest health smoke verified","candidate startup logs verified","candidate remains at zero traffic","current Production traffic and health recorded"],requiredPostPromotionEvidence:["administratorIdentity","promotionAuthorization","trafficCommand","trafficCommandExitCode","authoritativeTrafficState","authoritativeHealthState","rollbackCommandExitCode","rollbackAuthoritativeTrafficState","rollbackAuthoritativeHealthState","approverIdentity","incidentNotes"],preparedAt:$timestamp,workflowRunUrl:$run_url,workflowActor:$actor,noMutationStatement:"NO TRAFFIC MUTATION PERFORMED",trafficMutationPerformed:false}' > "${output_json}"
 
 printf 'promotion request written to %s; NO TRAFFIC MUTATION PERFORMED\n' "${output_json}"

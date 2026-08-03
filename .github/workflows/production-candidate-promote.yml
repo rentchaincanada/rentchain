@@ -108,6 +108,12 @@ jobs:
             .candidateReady == true and
             .candidateTrafficPercent == 0 and
             .templateParityPassed == true and
+            .candidateInstanceStarted == true and
+            .candidateSmokeHttpStatus == 200 and
+            .candidateSmokePath == "/health" and
+            .candidateSmokeDigestVerified == true and
+            .candidateStartupLogObserved == true and
+            .candidateStartupError == null and
             .currentServingTrafficPercent == 100 and
             .productionHealthStatus == 200 and
             .trafficMutationPerformed == false
