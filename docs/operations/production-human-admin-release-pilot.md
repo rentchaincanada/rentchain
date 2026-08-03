@@ -42,6 +42,10 @@ The earlier reference containing `/rentchain-api/rentchain-api@sha256:...` was i
 
 ## Candidate startup incident and correction
 
+### Rejected replacement digest: fatal startup exited successfully
+
+Cloud Build `5bb65876-f98e-4522-ac30-fd5d1976a3b6` published digest `sha256:ac1fdfb6bfe64473098db631a3daf54c4e9e950ac649fc10408f1f81259b3f7c`. Exact-image testing proved that missing or incorrect Production project configuration logged the expected fatal error but exited with status `0`, so the runtime contract failed and no private smoke service was deployed. This digest is ineligible for smoke, candidate deployment, or promotion and must not be retagged or overwritten. A corrected replacement image must be built only from a later merged SHA under separate authorization.
+
 Candidate `rentchain-landlord-api-candidate-0757e284c323` failed during the separately authorized promotion attempt on `2026-08-03`. Its process exited before listening on port 8080 with `Production requires GOOGLE_CLOUD_PROJECT to be explicitly configured.` The healthy revision `rentchain-landlord-api-01967-djh` remained at 100% traffic, the failed candidate returned to zero traffic, and the completed Production release counter remains zero. No promotion retry is authorized.
 
 The runtime guard is intentionally fail closed. Production must explicitly receive the non-secret configuration `GOOGLE_CLOUD_PROJECT=project-0d9658de-af29-4dc0-a99`. Root Terraform is not the authoritative owner for this correction: it still models an obsolete Montréal service and image with no live environment configuration. Applying that model could reintroduce unrelated service drift. Until full Terraform reconciliation is separately approved, the reviewed human-admin candidate command uses the additive `--update-env-vars` operation for this one value. It must never use `--set-env-vars`, `--clear-env-vars`, or `--env-vars-file`, because those operations replace or clear existing environment configuration.

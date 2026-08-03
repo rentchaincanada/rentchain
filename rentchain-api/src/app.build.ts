@@ -204,13 +204,6 @@ import riskAgentRoutes from "./routes/riskAgentRoutes";
 import decisionRoutes from "./routes/decisionRoutes";
 import attestationRoutes from "./routes/attestationRoutes";
 
-process.on("unhandledRejection", (reason) => {
-  console.error("[FATAL] unhandledRejection", reason);
-});
-process.on("uncaughtException", (err) => {
-  console.error("[FATAL] uncaughtException", err);
-});
-
 export const app = express();
 
 const pricingHealth = getPricingHealth();

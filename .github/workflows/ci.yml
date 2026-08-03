@@ -41,6 +41,9 @@ jobs:
       - name: Install backend dependencies
         run: npm ci
 
+      - name: Validate fatal startup exit semantics
+        run: npm run test:single -- src/process/__tests__/fatalStartup.test.ts
+
       - name: Build backend
         run: npm run build
 
