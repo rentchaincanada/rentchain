@@ -72,10 +72,49 @@ digest="$(printf 'a%.0s' $(seq 1 64))"
 image="us-central1-docker.pkg.dev/project-0d9658de-af29-4dc0-a99/rentchain-api/rentchain-landlord-api@sha256:${digest}"
 bash "${candidate_script}" "${sha}" "${image}" "sha-${sha}" project-0d9658de-af29-4dc0-a99 us-central1 rentchain-landlord-api candidate-123-1 https://github.com/rentchaincanada/rentchain/actions/runs/123 operator "${tmp}/candidate.json" >/dev/null
 jq -e '.cloudMutationPerformed == false and .status == "prepared"' "${tmp}/candidate.json" >/dev/null
-jq -n --arg sha "${sha}" --arg image "${image}" '{candidateRequestId:"candidate-123-1",sourceSha:$sha,imageUri:$image,candidateRevision:"rentchain-landlord-api-candidate-0123456789ab",previousReadyRevision:"rentchain-landlord-api-01967-djh",ready:true,trafficPercent:0}' > "${tmp}/human.json"
+jq -n --arg sha "${sha}" --arg image "${image}" --arg digest "sha256:${digest}" '{candidateRequestId:"candidate-123-1",sourceSha:$sha,imageUri:$image,approvedDigest:$digest,candidateRevision:"rentchain-landlord-api-candidate-0123456789ab",previousReadyRevision:"rentchain-landlord-api-01967-djh",servingRevisionAfterDeployment:"rentchain-landlord-api-01967-djh",ready:true,trafficPercent:0,templateParity:true,servingTrafficPercent:100,productionHealthHttpStatus:200}' > "${tmp}/human.json"
 bash "${promotion_script}" "${tmp}/candidate.json" "${tmp}/human.json" promotion-456-1 https://github.com/rentchaincanada/rentchain/actions/runs/456 operator "${tmp}/promotion.json" >/dev/null
 jq -e '.trafficMutationPerformed == false and .status == "prepared"' "${tmp}/promotion.json" >/dev/null
 check "preparation scripts produce non-mutating evidence" test -s "${tmp}/promotion.json"
 
-test "${pass}" -ge 30
+expect_promotion_failure() {
+  local evidence="$1"
+  ! bash "${promotion_script}" "${tmp}/candidate.json" "${evidence}" promotion-invalid-1 https://github.com/rentchaincanada/rentchain/actions/runs/999 operator "${tmp}/invalid-promotion.json" >/dev/null 2>&1
+}
+
+check "promotion artifact records Boolean candidate readiness" bash -c "jq -e '.candidateReady == true and (.candidateReady | type) == \"boolean\"' '${tmp}/promotion.json' >/dev/null"
+check "promotion artifact records integer zero candidate traffic" bash -c "jq -e '.candidateTrafficPercent == 0 and (.candidateTrafficPercent | type) == \"number\"' '${tmp}/promotion.json' >/dev/null"
+check "promotion artifact records Boolean template parity" bash -c "jq -e '.templateParityPassed == true and (.templateParityPassed | type) == \"boolean\"' '${tmp}/promotion.json' >/dev/null"
+check "promotion artifact records integer serving traffic" bash -c "jq -e '.currentServingTrafficPercent == 100 and (.currentServingTrafficPercent | type) == \"number\"' '${tmp}/promotion.json' >/dev/null"
+check "promotion artifact records integer Production health" bash -c "jq -e '.productionHealthStatus == 200 and (.productionHealthStatus | type) == \"number\"' '${tmp}/promotion.json' >/dev/null"
+check "promotion artifact records serving revision and immutable digest" bash -c "jq -e '.currentServingRevision == \"rentchain-landlord-api-01967-djh\" and (.digest | test(\"^sha256:[0-9a-f]{64}$\"))' '${tmp}/promotion.json' >/dev/null"
+
+jq '.ready = false' "${tmp}/human.json" > "${tmp}/invalid-ready.json"
+check "invalid candidate readiness fails closed" expect_promotion_failure "${tmp}/invalid-ready.json"
+jq '.trafficPercent = 1' "${tmp}/human.json" > "${tmp}/invalid-candidate-traffic.json"
+check "nonzero candidate traffic fails closed" expect_promotion_failure "${tmp}/invalid-candidate-traffic.json"
+jq '.templateParity = false' "${tmp}/human.json" > "${tmp}/invalid-template-parity.json"
+check "failed template parity fails closed" expect_promotion_failure "${tmp}/invalid-template-parity.json"
+jq '.productionHealthHttpStatus = 503' "${tmp}/human.json" > "${tmp}/invalid-health.json"
+check "non-200 Production health fails closed" expect_promotion_failure "${tmp}/invalid-health.json"
+jq 'del(.servingTrafficPercent)' "${tmp}/human.json" > "${tmp}/missing-serving-traffic.json"
+check "missing serving traffic fails closed" expect_promotion_failure "${tmp}/missing-serving-traffic.json"
+
+check "promotion artifact remains linked to exact candidate request" bash -c "jq -e '.candidateRequestId == \"candidate-123-1\" and .candidateRevision == \"rentchain-landlord-api-candidate-0123456789ab\"' '${tmp}/promotion.json' >/dev/null"
+check "promotion command remains revision pinned" contains "${tmp}/promotion.json" '--to-revisions=rentchain-landlord-api-candidate-0123456789ab=100'
+check "rollback command remains serving-revision pinned" contains "${tmp}/promotion.json" '--to-revisions=rentchain-landlord-api-01967-djh=100'
+check "corrected artifact records no traffic mutation" bash -c "jq -e '.trafficMutationPerformed == false and .noMutationStatement == \"NO TRAFFIC MUTATION PERFORMED\"' '${tmp}/promotion.json' >/dev/null"
+check "corrected workflow still executes no traffic update" not_contains "${promotion}" "gcloud run services update-traffic"
+check "corrected workflow executes no Cloud Run deploy" not_contains "${promotion}" "gcloud run deploy"
+check "corrected workflow has no Google authentication" not_contains "${promotion}" "google-github-actions/auth"
+check "corrected workflow has no OIDC write permission" not_contains "${promotion}" "id-token: write"
+check "corrected workflow has no environment binding" not_contains "${promotion}" "environment:"
+check "corrected workflow has no WIF or service-account variable" bash -c "! grep -Eq 'PRODUCTION_(WORKLOAD_IDENTITY_PROVIDER|DEPLOY|PROMOTION)_SERVICE_ACCOUNT' '${promotion}'"
+check "corrected scripts contain no eval" bash -c "! grep -Eq '(^|[[:space:]])eval([[:space:]]|$)' '${promotion_script}'"
+check "corrected scripts expose no apply or execute mode" bash -c "! grep -Eq -- '--(apply|execute)' '${promotion_script}'"
+check "generated promotion fixture contains no credential material" bash -c "! grep -Eq 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|Bearer [A-Za-z0-9._-]{20,}|gho_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+|private_key|access_token|refresh_token|password|secretValue' '${tmp}/promotion.json'"
+jq 'del(.candidateReady,.candidateTrafficPercent,.templateParityPassed,.currentServingTrafficPercent,.productionHealthStatus)' "${tmp}/promotion.json" > "${tmp}/prior-schema.json"
+check "prior failed promotion artifact fails corrected contract" bash -c "! jq -e '.candidateReady == true and .candidateTrafficPercent == 0 and .templateParityPassed == true and .currentServingTrafficPercent == 100 and .productionHealthStatus == 200' '${tmp}/prior-schema.json' >/dev/null"
+
+test "${pass}" -eq 66
 printf 'Human-admin Production pilot validation passed (%d boundaries).\n' "${pass}"
