@@ -5,11 +5,28 @@ on:
     inputs:
       source_sha:
         description: Full 40-character commit SHA at the current main head
-        required: true
+        required: false
+        type: string
+      pr_number:
+        description: Authorized same-repository PR number; leave empty for the existing main path
+        required: false
+        type: string
+      expected_head_sha:
+        description: Authorized full PR head SHA; leave empty for the existing main path
+        required: false
+        type: string
+      expected_base_sha:
+        description: Authorized full PR base SHA; leave empty for the existing main path
+        required: false
+        type: string
+      authorization_reference:
+        description: Founder authorization evidence reference; leave empty for the existing main path
+        required: false
         type: string
 
 permissions:
   contents: read
+  pull-requests: read
   id-token: write
 
 jobs:
@@ -21,8 +38,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IMAGE: northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend
-      SOURCE_SHA: ${{ inputs.source_sha }}
-      VALIDATION_IMAGE: rentchain-preview-backend-validation:${{ inputs.source_sha }}
+      PROJECT_ID: rentchain-preview
+      MAIN_SOURCE_SHA: ${{ inputs.source_sha }}
+      PR_NUMBER: ${{ inputs.pr_number }}
+      EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+      EXPECTED_BASE_SHA: ${{ inputs.expected_base_sha }}
+      AUTHORIZATION_REFERENCE: ${{ inputs.authorization_reference }}
     steps:
       - name: Check out protected main for source authorization
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -31,6 +52,51 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Validate the authorization mode
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_WORKFLOW_REF}" = "rentchaincanada/rentchain/.github/workflows/preview-deployment-identity-validation.yml@refs/heads/main"
+          if test -n "${MAIN_SOURCE_SHA}"; then
+            test -z "${PR_NUMBER}${EXPECTED_HEAD_SHA}${EXPECTED_BASE_SHA}${AUTHORIZATION_REFERENCE}"
+            [[ "${MAIN_SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+            test "${MAIN_SOURCE_SHA}" = "${WORKFLOW_SHA}"
+            printf 'MODE=main\nSOURCE_SHA=%s\nIMAGE_TAG=sha-%s\nVALIDATION_IMAGE=rentchain-preview-backend-validation:%s\n' \
+              "${MAIN_SOURCE_SHA}" "${MAIN_SOURCE_SHA}" "${MAIN_SOURCE_SHA}" >> "${GITHUB_ENV}"
+          else
+            test -n "${PR_NUMBER}"
+            test -n "${EXPECTED_HEAD_SHA}"
+            test -n "${EXPECTED_BASE_SHA}"
+            test -n "${AUTHORIZATION_REFERENCE}"
+            [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]]
+            [[ "${EXPECTED_HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]]
+            [[ "${EXPECTED_BASE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+            printf 'MODE=pr\n' >> "${GITHUB_ENV}"
+          fi
+
+      - name: Verify current PR metadata before source checkout
+        if: env.MODE == 'pr'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          metadata="${RUNNER_TEMP}/authorized-pr.json"
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" > "${metadata}"
+          result="$(node scripts/preview-deployment/validate-pr-head-request.mjs \
+            "${metadata}" \
+            "${PR_NUMBER}" \
+            "${EXPECTED_HEAD_SHA}" \
+            "${EXPECTED_BASE_SHA}" \
+            "${AUTHORIZATION_REFERENCE}")"
+          test "$(jq -r '.sourceSha' <<<"${result}")" = "${EXPECTED_HEAD_SHA}"
+          printf 'SOURCE_SHA=%s\nIMAGE_TAG=%s\nVALIDATION_IMAGE=rentchain-preview-backend-validation:%s\n' \
+            "$(jq -r '.sourceSha' <<<"${result}")" \
+            "$(jq -r '.imageTag' <<<"${result}")" \
+            "$(jq -r '.sourceSha' <<<"${result}")" >> "${GITHUB_ENV}"
+
       - name: Validate and check out the authorized source
         env:
           WORKFLOW_SHA: ${{ github.sha }}
@@ -38,13 +104,31 @@ jobs:
         run: |
           set -euo pipefail
           [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]
-          test "${SOURCE_SHA}" = "${WORKFLOW_SHA}"
+          git fetch --no-tags origin "${SOURCE_SHA}"
           git cat-file -e "${SOURCE_SHA}^{commit}"
-          git merge-base --is-ancestor "${SOURCE_SHA}" "${WORKFLOW_SHA}"
+          if test "${MODE}" = main; then
+            test "${SOURCE_SHA}" = "${WORKFLOW_SHA}"
+            git merge-base --is-ancestor "${SOURCE_SHA}" "${WORKFLOW_SHA}"
+          else
+            git cat-file -e "${EXPECTED_BASE_SHA}^{commit}"
+            git merge-base --is-ancestor "${EXPECTED_BASE_SHA}" "${SOURCE_SHA}"
+            git merge-base --is-ancestor "${EXPECTED_BASE_SHA}" "${WORKFLOW_SHA}"
+            git diff --quiet "${WORKFLOW_SHA}" "${SOURCE_SHA}" -- rentchain-api/Dockerfile rentchain-api/package.json rentchain-api/package-lock.json
+          fi
           git checkout --detach "${SOURCE_SHA}"
           checked_out_sha="$(git rev-parse HEAD)"
           test "${checked_out_sha}" = "${SOURCE_SHA}"
           printf 'Checked out source: %s\n' "${checked_out_sha}"
+
+      - name: Reverify authorized PR head before build
+        if: env.MODE == 'pr'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          current_head="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha')"
+          test "${current_head}" = "${SOURCE_SHA}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -224,6 +308,24 @@ jobs:
           docker inspect "${container_name}" --format '{{.State.Running}}' | grep -qx true
           printf '%s\n' 'Smoke validation: process running, port 8080 bound, /health and /health/ready passed'
 
+      - name: Reverify authorized PR immediately before Google authentication
+        if: env.MODE == 'pr'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          trusted_validator="${RUNNER_TEMP}/validate-pr-head-request.mjs"
+          metadata="${RUNNER_TEMP}/authorized-pr-pre-auth.json"
+          git show "${GITHUB_SHA}:scripts/preview-deployment/validate-pr-head-request.mjs" > "${trusted_validator}"
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" > "${metadata}"
+          node "${trusted_validator}" \
+            "${metadata}" \
+            "${PR_NUMBER}" \
+            "${EXPECTED_HEAD_SHA}" \
+            "${EXPECTED_BASE_SHA}" \
+            "${AUTHORIZATION_REFERENCE}" >/dev/null
+
       - name: Authenticate to the isolated Preview project
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
@@ -248,7 +350,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          image_tag="sha-${SOURCE_SHA}"
+          if test "${MODE}" = pr; then
+            image_tag="pr-${PR_NUMBER}-sha-${SOURCE_SHA}"
+          else
+            image_tag="sha-${SOURCE_SHA}"
+          fi
+          test "${image_tag}" = "${IMAGE_TAG}"
           remote_image="${IMAGE}:${image_tag}"
           push_log="${RUNNER_TEMP}/preview-backend-push.log"
           docker tag "${VALIDATION_IMAGE}" "${remote_image}"
@@ -258,6 +365,7 @@ jobs:
           printf 'image=%s\n' "${IMAGE}" >> "${GITHUB_OUTPUT}"
           printf 'tag=%s\n' "${image_tag}" >> "${GITHUB_OUTPUT}"
           printf 'digest=%s\n' "${digest}" >> "${GITHUB_OUTPUT}"
+          printf 'immutable_reference=%s@%s\n' "${IMAGE}" "${digest}" >> "${GITHUB_OUTPUT}"
 
       - name: Inspect the uploaded immutable artifact
         shell: bash
@@ -276,6 +384,8 @@ jobs:
           printf 'Initiating actor: %s\n' "${GITHUB_ACTOR}"
           printf 'Source repository: %s\n' "${GITHUB_REPOSITORY}"
           printf 'Workflow ref: %s\n' "${GITHUB_WORKFLOW_REF}"
+          printf 'Authorization reference: %s\n' "${AUTHORIZATION_REFERENCE:-main-head-image-delivery}"
+          printf 'Immutable reference: %s\n' "${{ steps.image.outputs.immutable_reference }}"
           printf '%s\n' 'OIDC subject: repo:rentchaincanada/rentchain:ref:refs/heads/main'
           printf '%s\n' 'Google identity: github-preview-deploy@rentchain-preview.iam.gserviceaccount.com'
           printf '%s\n' 'Target platform: linux/amd64'
