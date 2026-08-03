@@ -24,12 +24,12 @@ not_contains() { ! grep -Fq -- "$2" "$1"; }
 
 check "candidate remains workflow_dispatch" contains "${CANDIDATE}" "workflow_dispatch:"
 check "promotion remains workflow_dispatch" contains "${PROMOTION}" "workflow_dispatch:"
-check "candidate environment is exact" contains "${CANDIDATE}" "environment: production-candidate"
-check "promotion environment is exact" contains "${PROMOTION}" "environment: production-promotion"
+check "candidate environment remains absent" not_contains "${CANDIDATE}" "environment:"
+check "promotion environment remains absent" not_contains "${PROMOTION}" "environment:"
 check "candidate and promoter identities remain conceptually separate" bash -c \
   "grep -Fq 'rentchain-prod-candidate' '${DOC}' && grep -Fq 'rentchain-prod-promoter' '${DOC}'"
-check "candidate deploys with no traffic" contains "${CANDIDATE}" "--no-traffic"
-check "promotion requires candidate evidence" contains "${PROMOTION}" "Require successful candidate workflow run"
+check "candidate prepares an inert no-traffic command" contains "${ROOT}/scripts/production-deployment/prepare-human-candidate.sh" "--no-traffic"
+check "promotion requires candidate evidence" contains "${PROMOTION}" "Require successful candidate preparation run"
 check "both paths document run.services.update" bash -c \
   "test \"\$(grep -o 'run.services.update' '${DOC}' | wc -l | tr -d ' ')\" -ge 2"
 check "documentation rejects false IAM field separation" contains "${DOC}" \
@@ -54,7 +54,7 @@ check "no Terraform resource is added" contains "${DOC}" "No Terraform resource 
 check "protected PRs remain out of scope" contains "${DOC}" \
   "Production PR #1453 and PR #1435 remain out of scope"
 check "four Founder decisions are explicitly enumerated" bash -c \
-  "sed -n '/## Explicit Founder decisions required/,/## Boundaries/p' '${DOC}' | grep -Eq '^1\\.' && sed -n '/## Explicit Founder decisions required/,/## Boundaries/p' '${DOC}' | grep -Eq '^2\\.' && sed -n '/## Explicit Founder decisions required/,/## Boundaries/p' '${DOC}' | grep -Eq '^3\\.' && sed -n '/## Explicit Founder decisions required/,/## Boundaries/p' '${DOC}' | grep -Eq '^4\\.'"
+  "sed -n '/## Founder decisions recorded/,/## Boundaries/p' '${DOC}' | grep -Eq '^1\\.' && sed -n '/## Founder decisions recorded/,/## Boundaries/p' '${DOC}' | grep -Eq '^2\\.' && sed -n '/## Founder decisions recorded/,/## Boundaries/p' '${DOC}' | grep -Eq '^3\\.' && sed -n '/## Founder decisions recorded/,/## Boundaries/p' '${DOC}' | grep -Eq '^4\\.'"
 
 test "${pass}" -eq 20
 printf 'release-control decision guard passed (%d boundaries)\n' "${pass}"
