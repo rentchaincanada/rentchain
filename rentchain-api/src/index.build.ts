@@ -1,6 +1,7 @@
 console.log("[BOOT] index.build starting");
-process.on("uncaughtException", (e) => console.error("[FATAL] uncaughtException", e));
-process.on("unhandledRejection", (e) => console.error("[FATAL] unhandledRejection", e));
+import { installFatalStartupHandlers } from "./process/fatalStartup";
+
+installFatalStartupHandlers();
 
 import { app } from "./app.build";
 import { assertRequiredEnv } from "./config/requiredEnv";

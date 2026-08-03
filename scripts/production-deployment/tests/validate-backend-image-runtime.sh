@@ -27,6 +27,7 @@ else
 fi
 
 common_env=(
+  --platform linux/amd64
   --env APP_ENV=production
   --env NODE_ENV=production
   --env PORT=8080
@@ -45,10 +46,18 @@ common_env=(
   --env EMAIL_FROM=runtime@runtime.test.invalid
 )
 
-docker run --name "${missing_name}" "${common_env[@]}" "${image}" >"${tmp}/missing-project.log" 2>&1 || true
+set +e
+docker run --name "${missing_name}" "${common_env[@]}" "${image}" >"${tmp}/missing-project.log" 2>&1
+missing_status=$?
+set -e
+test "${missing_status}" -ne 0
 grep -Fq 'Production requires GOOGLE_CLOUD_PROJECT to be explicitly configured.' "${tmp}/missing-project.log"
 
-docker run --name "${wrong_name}" "${common_env[@]}" --env GOOGLE_CLOUD_PROJECT=rentchain-preview "${image}" >"${tmp}/wrong-project.log" 2>&1 || true
+set +e
+docker run --name "${wrong_name}" "${common_env[@]}" --env GOOGLE_CLOUD_PROJECT=rentchain-preview "${image}" >"${tmp}/wrong-project.log" 2>&1
+wrong_status=$?
+set -e
+test "${wrong_status}" -ne 0
 grep -Fq 'Production must target the approved production project.' "${tmp}/wrong-project.log"
 
 docker run --detach --name "${name}" --publish 127.0.0.1::8080 "${common_env[@]}" --env GOOGLE_CLOUD_PROJECT="${project}" "${image}" >/dev/null

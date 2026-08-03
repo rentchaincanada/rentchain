@@ -877,7 +877,7 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(sendReview).toHaveTextContent("Jane Tenant");
     expect(sendReview).toHaveTextContent("Tenant recipient reviewed");
     expect(sendReview).toHaveTextContent("Needs review");
-    const sendButton = screen.getByRole("button", { name: "Send renewal email" });
+    const sendButton = await screen.findByRole("button", { name: "Send renewal email" });
     expect(sendButton).toBeDisabled();
     fireEvent.click(sendButton);
     expect(mocks.saveRenewalNoticeDraftSnapshot).not.toHaveBeenCalled();

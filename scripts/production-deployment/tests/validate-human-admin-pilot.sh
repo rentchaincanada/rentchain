@@ -8,6 +8,8 @@ candidate_script="${root}/scripts/production-deployment/prepare-human-candidate.
 promotion_script="${root}/scripts/production-deployment/prepare-human-promotion.sh"
 runbook="${root}/docs/operations/production-human-admin-release-pilot.md"
 decisions="${root}/docs/operations/production-release-control-founder-decisions.md"
+runtime_contract="${root}/scripts/production-deployment/tests/validate-backend-image-runtime.sh"
+fatal_handler="${root}/rentchain-api/src/process/fatalStartup.ts"
 
 pass=0
 check() {
@@ -137,5 +139,13 @@ check "generated promotion fixture contains no credential material" bash -c "! g
 jq 'del(.candidateReady,.candidateTrafficPercent,.templateParityPassed,.candidateInstanceStarted,.candidateSmokeMethod,.candidateSmokeHttpStatus,.candidateSmokePath,.candidateSmokeDigestVerified,.candidateStartupLogObserved,.candidateStartupError,.currentServingTrafficPercent,.productionHealthStatus)' "${tmp}/promotion.json" > "${tmp}/prior-schema.json"
 check "prior failed promotion artifact fails corrected contract" bash -c "! jq -e '.candidateReady == true and .candidateTrafficPercent == 0 and .templateParityPassed == true and .currentServingTrafficPercent == 100 and .productionHealthStatus == 200' '${tmp}/prior-schema.json' >/dev/null"
 
-test "${pass}" -eq 80
+check "fatal startup sets a nonzero exit status" contains "${fatal_handler}" "processLike.exitCode = 1"
+check "missing project rejects a zero exit" contains "${runtime_contract}" 'test "${missing_status}" -ne 0'
+check "incorrect project rejects a zero exit" contains "${runtime_contract}" 'test "${wrong_status}" -ne 0'
+check "successful startup still requires HTTP 200" contains "${runtime_contract}" 'test "${status}" = 200'
+check "runtime contract uses amd64 explicitly" contains "${runtime_contract}" "--platform linux/amd64"
+check "rejected digest remains ineligible" contains "${runbook}" "ineligible for smoke, candidate deployment, or promotion"
+check "runtime correction introduces no deploy command" not_contains "${runtime_contract}" "gcloud run deploy"
+
+test "${pass}" -eq 87
 printf 'Human-admin Production pilot validation passed (%d boundaries).\n' "${pass}"
