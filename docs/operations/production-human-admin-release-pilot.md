@@ -1,6 +1,44 @@
 # Production human-admin release pilot
 
-Status: repository preparation only. The pilot is not activated by merging this document. Every candidate deployment and promotion command requires fresh Founder authorization.
+Status: Active — dry rehearsal phase. Activation does not authorize a candidate deployment, promotion preparation, traffic change, or rollback.
+
+## Activation record
+
+| Field | Activated value |
+| --- | --- |
+| Activation date | `2026-08-02` |
+| Completed Production releases | `0` |
+| Technical operator | `Boulos001` |
+| Founder approver | `rentchaincanada` |
+| Reviewer model | Model 3 |
+| Self-review | Prohibited |
+| First authorized action | Candidate-preparation dry rehearsal |
+| Production candidate deployment | Not authorized |
+| Promotion preparation | Not authorized |
+| Traffic promotion | Not authorized |
+
+The dry rehearsal does not count as a completed Production release, so the release counter remains zero. Pilot activation does not authorize any mutation command. Every real candidate deployment requires a new, explicit Founder authorization, and every real promotion requires a second, separate Founder authorization.
+
+The pilot expires at the earliest of:
+
+- five completed Production releases;
+- `2026-10-31`;
+- activation of automated Production releases;
+- sufficient independent reviewers for Reviewer Model 1;
+- Founder cancellation.
+
+### Approved dry-rehearsal evidence
+
+| Field | Approved value |
+| --- | --- |
+| Source SHA | `0757e284c32341df4bb9b464a32c4e13815bca83` |
+| Immutable tag | `sha-0757e284c32341df4bb9b464a32c4e13815bca83` |
+| Artifact Registry repository | `rentchain-api` |
+| Artifact Registry package | `rentchain-landlord-api` |
+| Immutable digest | `sha256:b06be8a74101998e43aecdd0e18f60ffaf518b0cbe8501b1bbde6d3a29af085f` |
+| Complete immutable image reference | `us-central1-docker.pkg.dev/project-0d9658de-af29-4dc0-a99/rentchain-api/rentchain-landlord-api@sha256:b06be8a74101998e43aecdd0e18f60ffaf518b0cbe8501b1bbde6d3a29af085f` |
+
+The earlier reference containing `/rentchain-api/rentchain-api@sha256:...` was incorrect and must not be used. Build `9eca674c-6164-44f1-b519-7bdbff3fd1f6` and Artifact Registry evidence proved that the immutable package is `rentchain-landlord-api`. This approval authorizes only one evidence-preparation rehearsal. It does not authorize creation of a candidate revision or execution of the generated deployment command.
 
 ## Governance
 
