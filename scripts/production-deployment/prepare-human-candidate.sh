@@ -27,7 +27,7 @@ test "${expected_tag}" = "sha-${source_sha}"
 test -n "${actor}"
 
 suffix="candidate-${source_sha:0:12}"
-command_template="gcloud run deploy ${service} --image=${image_uri} --project=${project} --region=${region} --revision-suffix=${suffix} --no-traffic --quiet"
+command_template="gcloud run deploy ${service} --image=${image_uri} --project=${project} --region=${region} --revision-suffix=${suffix} --update-env-vars=GOOGLE_CLOUD_PROJECT=${project} --no-traffic --quiet"
 
 jq -n \
   --arg request_id "${request_id}" \
@@ -41,6 +41,6 @@ jq -n \
   --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --arg run_url "${run_url}" \
   --arg actor "${actor}" \
-  '{schemaVersion:1,status:"prepared",candidateRequestId:$request_id,sourceSha:$source_sha,imageUri:$image_uri,expectedTag:$expected_tag,project:$project,region:$region,service:$service,proposedHumanAdminCommand:$command,preflightChecklist:["fresh Founder candidate authorization","interactive administrator authentication","source SHA on main","build provenance and immutable digest verified","active trigger and builder identity verified","Production baseline and health recorded","no active deployment"],requiredPostDeploymentEvidence:["administratorIdentity","candidateRevision","candidateTimestamp","zeroTrafficProof","readinessProof","revisionDigestProof","templateParityProof","serviceHealthResult"],preparedAt:$timestamp,workflowRunUrl:$run_url,workflowActor:$actor,cloudMutationPerformed:false}' > "${output_json}"
+  '{schemaVersion:2,status:"prepared",candidateRequestId:$request_id,sourceSha:$source_sha,imageUri:$image_uri,expectedTag:$expected_tag,project:$project,region:$region,service:$service,requiredProjectConfiguration:{name:"GOOGLE_CLOUD_PROJECT",value:$project,updateSemantics:"preserve-existing"},proposedHumanAdminCommand:$command,preflightChecklist:["fresh Founder candidate authorization","interactive administrator authentication","source SHA on main","build provenance and immutable digest verified","active trigger and builder identity verified","Production baseline and health recorded","existing environment and secret references recorded","no active deployment"],requiredPostDeploymentEvidence:["administratorIdentity","candidateRevision","candidateTimestamp","zeroTrafficProof","readinessProof","revisionDigestProof","templateParityProof","projectConfigurationProof","candidateInstanceStarted","candidateSmokeMethod","candidateSmokeHttpStatus","candidateSmokePath","candidateSmokeDigestVerified","candidateStartupLogObserved","candidateStartupError","serviceHealthResult"],preparedAt:$timestamp,workflowRunUrl:$run_url,workflowActor:$actor,cloudMutationPerformed:false}' > "${output_json}"
 
 printf 'candidate request written to %s; NO CLOUD MUTATION PERFORMED\n' "${output_json}"

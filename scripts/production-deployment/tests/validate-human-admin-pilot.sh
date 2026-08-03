@@ -72,7 +72,12 @@ digest="$(printf 'a%.0s' $(seq 1 64))"
 image="us-central1-docker.pkg.dev/project-0d9658de-af29-4dc0-a99/rentchain-api/rentchain-landlord-api@sha256:${digest}"
 bash "${candidate_script}" "${sha}" "${image}" "sha-${sha}" project-0d9658de-af29-4dc0-a99 us-central1 rentchain-landlord-api candidate-123-1 https://github.com/rentchaincanada/rentchain/actions/runs/123 operator "${tmp}/candidate.json" >/dev/null
 jq -e '.cloudMutationPerformed == false and .status == "prepared"' "${tmp}/candidate.json" >/dev/null
-jq -n --arg sha "${sha}" --arg image "${image}" --arg digest "sha256:${digest}" '{candidateRequestId:"candidate-123-1",sourceSha:$sha,imageUri:$image,approvedDigest:$digest,candidateRevision:"rentchain-landlord-api-candidate-0123456789ab",previousReadyRevision:"rentchain-landlord-api-01967-djh",servingRevisionAfterDeployment:"rentchain-landlord-api-01967-djh",ready:true,trafficPercent:0,templateParity:true,servingTrafficPercent:100,productionHealthHttpStatus:200}' > "${tmp}/human.json"
+check "candidate command adds the explicit Production project" contains "${tmp}/candidate.json" '--update-env-vars=GOOGLE_CLOUD_PROJECT=project-0d9658de-af29-4dc0-a99'
+check "candidate command does not replace all environment variables" not_contains "${tmp}/candidate.json" '--set-env-vars'
+check "candidate command does not clear environment variables" not_contains "${tmp}/candidate.json" '--clear-env-vars'
+check "candidate command does not replace environment variables from a file" not_contains "${tmp}/candidate.json" '--env-vars-file'
+check "candidate artifact records preserve-existing update semantics" bash -c "jq -e '.requiredProjectConfiguration == {name:\"GOOGLE_CLOUD_PROJECT\",value:\"project-0d9658de-af29-4dc0-a99\",updateSemantics:\"preserve-existing\"}' '${tmp}/candidate.json' >/dev/null"
+jq -n --arg sha "${sha}" --arg image "${image}" --arg digest "sha256:${digest}" '{candidateRequestId:"candidate-123-1",sourceSha:$sha,imageUri:$image,approvedDigest:$digest,candidateRevision:"rentchain-landlord-api-candidate-0123456789ab",previousReadyRevision:"rentchain-landlord-api-01967-djh",servingRevisionAfterDeployment:"rentchain-landlord-api-01967-djh",ready:true,trafficPercent:0,templateParity:true,candidateInstanceStarted:true,candidateSmokeMethod:"dedicated-private-smoke-service",candidateSmokeHttpStatus:200,candidateSmokePath:"/health",candidateSmokeDigestVerified:true,candidateStartupLogObserved:true,candidateStartupError:null,servingTrafficPercent:100,productionHealthHttpStatus:200}' > "${tmp}/human.json"
 bash "${promotion_script}" "${tmp}/candidate.json" "${tmp}/human.json" promotion-456-1 https://github.com/rentchaincanada/rentchain/actions/runs/456 operator "${tmp}/promotion.json" >/dev/null
 jq -e '.trafficMutationPerformed == false and .status == "prepared"' "${tmp}/promotion.json" >/dev/null
 check "preparation scripts produce non-mutating evidence" test -s "${tmp}/promotion.json"
@@ -88,6 +93,7 @@ check "promotion artifact records Boolean template parity" bash -c "jq -e '.temp
 check "promotion artifact records integer serving traffic" bash -c "jq -e '.currentServingTrafficPercent == 100 and (.currentServingTrafficPercent | type) == \"number\"' '${tmp}/promotion.json' >/dev/null"
 check "promotion artifact records integer Production health" bash -c "jq -e '.productionHealthStatus == 200 and (.productionHealthStatus | type) == \"number\"' '${tmp}/promotion.json' >/dev/null"
 check "promotion artifact records serving revision and immutable digest" bash -c "jq -e '.currentServingRevision == \"rentchain-landlord-api-01967-djh\" and (.digest | test(\"^sha256:[0-9a-f]{64}$\"))' '${tmp}/promotion.json' >/dev/null"
+check "promotion artifact records successful immutable-image smoke evidence" bash -c "jq -e '.candidateInstanceStarted == true and .candidateSmokeMethod == \"dedicated-private-smoke-service\" and .candidateSmokeHttpStatus == 200 and .candidateSmokePath == \"/health\" and .candidateSmokeDigestVerified == true and .candidateStartupLogObserved == true and .candidateStartupError == null' '${tmp}/promotion.json' >/dev/null"
 
 jq '.ready = false' "${tmp}/human.json" > "${tmp}/invalid-ready.json"
 check "invalid candidate readiness fails closed" expect_promotion_failure "${tmp}/invalid-ready.json"
@@ -99,10 +105,25 @@ jq '.productionHealthHttpStatus = 503' "${tmp}/human.json" > "${tmp}/invalid-hea
 check "non-200 Production health fails closed" expect_promotion_failure "${tmp}/invalid-health.json"
 jq 'del(.servingTrafficPercent)' "${tmp}/human.json" > "${tmp}/missing-serving-traffic.json"
 check "missing serving traffic fails closed" expect_promotion_failure "${tmp}/missing-serving-traffic.json"
+jq '.candidateInstanceStarted = false' "${tmp}/human.json" > "${tmp}/candidate-not-started.json"
+check "candidate smoke without a started instance fails closed" expect_promotion_failure "${tmp}/candidate-not-started.json"
+jq 'del(.candidateSmokeMethod)' "${tmp}/human.json" > "${tmp}/missing-smoke-method.json"
+check "missing candidate smoke method fails closed" expect_promotion_failure "${tmp}/missing-smoke-method.json"
+jq '.candidateSmokeHttpStatus = 503' "${tmp}/human.json" > "${tmp}/failed-smoke-health.json"
+check "non-200 candidate smoke fails closed" expect_promotion_failure "${tmp}/failed-smoke-health.json"
+jq '.candidateSmokePath = "/health/ready"' "${tmp}/human.json" > "${tmp}/wrong-smoke-path.json"
+check "wrong candidate smoke path fails closed" expect_promotion_failure "${tmp}/wrong-smoke-path.json"
+jq '.candidateSmokeDigestVerified = false' "${tmp}/human.json" > "${tmp}/unverified-smoke-digest.json"
+check "unverified candidate smoke digest fails closed" expect_promotion_failure "${tmp}/unverified-smoke-digest.json"
+jq '.candidateStartupLogObserved = false' "${tmp}/human.json" > "${tmp}/missing-startup-log.json"
+check "missing candidate startup log evidence fails closed" expect_promotion_failure "${tmp}/missing-startup-log.json"
+jq '.candidateStartupError = "startup failed"' "${tmp}/human.json" > "${tmp}/startup-error.json"
+check "candidate startup error fails closed" expect_promotion_failure "${tmp}/startup-error.json"
 
 check "promotion artifact remains linked to exact candidate request" bash -c "jq -e '.candidateRequestId == \"candidate-123-1\" and .candidateRevision == \"rentchain-landlord-api-candidate-0123456789ab\"' '${tmp}/promotion.json' >/dev/null"
 check "promotion command remains revision pinned" contains "${tmp}/promotion.json" '--to-revisions=rentchain-landlord-api-candidate-0123456789ab=100'
 check "rollback command remains serving-revision pinned" contains "${tmp}/promotion.json" '--to-revisions=rentchain-landlord-api-01967-djh=100'
+check "rollback evidence separates command exits from authoritative state" bash -c "jq -e '.requiredPostPromotionEvidence | index(\"trafficCommandExitCode\") and index(\"authoritativeTrafficState\") and index(\"authoritativeHealthState\") and index(\"rollbackCommandExitCode\") and index(\"rollbackAuthoritativeTrafficState\") and index(\"rollbackAuthoritativeHealthState\")' '${tmp}/promotion.json' >/dev/null"
 check "corrected artifact records no traffic mutation" bash -c "jq -e '.trafficMutationPerformed == false and .noMutationStatement == \"NO TRAFFIC MUTATION PERFORMED\"' '${tmp}/promotion.json' >/dev/null"
 check "corrected workflow still executes no traffic update" not_contains "${promotion}" "gcloud run services update-traffic"
 check "corrected workflow executes no Cloud Run deploy" not_contains "${promotion}" "gcloud run deploy"
@@ -113,8 +134,8 @@ check "corrected workflow has no WIF or service-account variable" bash -c "! gre
 check "corrected scripts contain no eval" bash -c "! grep -Eq '(^|[[:space:]])eval([[:space:]]|$)' '${promotion_script}'"
 check "corrected scripts expose no apply or execute mode" bash -c "! grep -Eq -- '--(apply|execute)' '${promotion_script}'"
 check "generated promotion fixture contains no credential material" bash -c "! grep -Eq 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|Bearer [A-Za-z0-9._-]{20,}|gho_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+|private_key|access_token|refresh_token|password|secretValue' '${tmp}/promotion.json'"
-jq 'del(.candidateReady,.candidateTrafficPercent,.templateParityPassed,.currentServingTrafficPercent,.productionHealthStatus)' "${tmp}/promotion.json" > "${tmp}/prior-schema.json"
+jq 'del(.candidateReady,.candidateTrafficPercent,.templateParityPassed,.candidateInstanceStarted,.candidateSmokeMethod,.candidateSmokeHttpStatus,.candidateSmokePath,.candidateSmokeDigestVerified,.candidateStartupLogObserved,.candidateStartupError,.currentServingTrafficPercent,.productionHealthStatus)' "${tmp}/promotion.json" > "${tmp}/prior-schema.json"
 check "prior failed promotion artifact fails corrected contract" bash -c "! jq -e '.candidateReady == true and .candidateTrafficPercent == 0 and .templateParityPassed == true and .currentServingTrafficPercent == 100 and .productionHealthStatus == 200' '${tmp}/prior-schema.json' >/dev/null"
 
-test "${pass}" -eq 66
+test "${pass}" -eq 80
 printf 'Human-admin Production pilot validation passed (%d boundaries).\n' "${pass}"

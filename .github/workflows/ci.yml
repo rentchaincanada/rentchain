@@ -44,6 +44,10 @@ jobs:
       - name: Build backend
         run: npm run build
 
+      - name: Validate backend image runtime contract
+        working-directory: .
+        run: bash scripts/production-deployment/tests/validate-backend-image-runtime.sh
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
