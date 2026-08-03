@@ -441,6 +441,40 @@ async function endFirestoreLeaseAtomically(leaseId: string, lease: any, endDate:
     // Fall back before issuing any transaction writes in that case.
     if (unitDocs.length === 1 && !unitDocs[0].ref) throw new Error("lease_end_transaction_double_unsupported");
 
+    if (unitDocs.length > 1) throw new Error("lease_end_standalone_unit_ambiguous");
+
+    const standaloneUnit = unitDocs.length === 1 ? unitDocs[0].data() || {} : null;
+    const embeddedUnit = matchingEmbedded[0].unit || {};
+    const currentUnitRecords = [embeddedUnit, standaloneUnit].filter(Boolean);
+    const hasConflictingLeaseLink = currentUnitRecords.some((unit: any) =>
+      [unit.leaseId, unit.currentLeaseId].some((value) => {
+        const currentLeaseId = String(value || "").trim();
+        return Boolean(currentLeaseId) && currentLeaseId !== leaseId;
+      })
+    );
+    const hasConflictingTenantLink = currentUnitRecords.some((unit: any) =>
+      [unit.tenantId, unit.currentTenantId].some((value) => {
+        const currentTenantId = String(value || "").trim();
+        return Boolean(currentTenantId) && (!tenantId || currentTenantId !== tenantId);
+      })
+    );
+    const tenantCurrentLeaseId = tenantSnap?.exists
+      ? String((tenantSnap.data() || {}).currentLeaseId || "").trim()
+      : "";
+
+    if (
+      hasConflictingLeaseLink ||
+      hasConflictingTenantLink ||
+      (tenantCurrentLeaseId && tenantCurrentLeaseId !== leaseId)
+    ) {
+      throw new Error("lease_end_current_linkage_mismatch");
+    }
+
+    // A repeated request is idempotent only after proving that it cannot clear
+    // a replacement lease or tenancy. Do not fabricate another end transition
+    // or rewrite any occupancy projection for an already-ended lease.
+    if (normalizeStatus((leaseSnap.data() || {}).status) === "ended") return;
+
     const nextEmbeddedUnits = embeddedUnits.map((unit: any, index: number) =>
       index === matchingEmbedded[0].index
         ? { ...unit, status: "vacant", occupancyStatus: "vacant", tenantId: null, currentTenantId: null, leaseId: null, currentLeaseId: null, occupancySource: "lease_end", occupancyUpdatedAt: nowIso, updatedAt: nowIso }
@@ -448,7 +482,6 @@ async function endFirestoreLeaseAtomically(leaseId: string, lease: any, endDate:
     );
     transaction.set(propertyRef, { units: nextEmbeddedUnits, updatedAt: nowIso }, { merge: true });
 
-    if (unitDocs.length > 1) throw new Error("lease_end_standalone_unit_ambiguous");
     if (unitDocs.length === 1) {
       transaction.set(unitDocs[0].ref, { status: "vacant", occupancyStatus: "vacant", tenantId: null, currentTenantId: null, leaseId: null, currentLeaseId: null, occupancySource: "lease_end", occupancyUpdatedAt: nowIso, updatedAt: nowIso }, { merge: true });
     }
