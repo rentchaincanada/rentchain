@@ -754,7 +754,7 @@ describe("LeaseLedgerPage", () => {
     expect(
       screen.getByText("Obligation status is financial truth from payments and reconciliation. Decision workflow actions do not change these values.")
     ).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Financial status" })).toBeInTheDocument();
+    expect(await screen.findByRole("columnheader", { name: "Financial status" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Financial signal" })).toBeInTheDocument();
     expect(screen.getByLabelText("Payment obligation cards")).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Status" })).not.toBeInTheDocument();

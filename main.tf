@@ -2,7 +2,7 @@
 
 resource "google_storage_bucket" "reports" {
   name          = "${var.project_id}-reports-bucket"
-  location      = "NORTHAMERICA-NORTHEAST1"  // Montréal region (Canada)
+  location      = "NORTHAMERICA-NORTHEAST1" // Montréal region (Canada)
   storage_class = "STANDARD"
 
   uniform_bucket_level_access = true
@@ -24,7 +24,7 @@ resource "google_storage_bucket" "audit_logs" {
       type = "Delete"
     }
     condition {
-      age = 365  # keep audit logs for 1 year
+      age = 365 # keep audit logs for 1 year
     }
   }
 }
