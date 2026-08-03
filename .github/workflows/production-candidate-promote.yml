@@ -88,15 +88,9 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "${HUMAN_CANDIDATE_EVIDENCE}" > human-candidate-evidence.json
-          jq -e . human-candidate-evidence.json >/dev/null
           request=candidate-request/candidate-request.json
           test "$(jq -r '.sourceSha' "${request}")" = "${SOURCE_SHA}"
           test "$(jq -r '.imageUri' "${request}")" = "${IMAGE_URI}"
-          test "$(jq -r '.sourceSha' human-candidate-evidence.json)" = "${SOURCE_SHA}"
-          test "$(jq -r '.imageUri' human-candidate-evidence.json)" = "${IMAGE_URI}"
-          test "$(jq -r '.candidateRevision' human-candidate-evidence.json)" = "${CANDIDATE_REVISION}"
-          test "$(jq -r '.candidateRequestId' human-candidate-evidence.json)" = "$(jq -r '.candidateRequestId' "${request}")"
-          jq -e '.ready == true and .trafficPercent == 0 and (.previousReadyRevision | type == "string" and length > 0)' human-candidate-evidence.json >/dev/null
 
       - name: Prepare inert promotion request evidence
         shell: bash
@@ -109,7 +103,16 @@ jobs:
             "${RUN_URL}" \
             "${RUN_ACTOR}" \
             promotion-request.json
-          jq -e '.status == "prepared" and .trafficMutationPerformed == false' promotion-request.json >/dev/null
+          jq -e '
+            .status == "prepared" and
+            .candidateReady == true and
+            .candidateTrafficPercent == 0 and
+            .templateParityPassed == true and
+            .currentServingTrafficPercent == 100 and
+            .productionHealthStatus == 200 and
+            .trafficMutationPerformed == false
+          ' promotion-request.json >/dev/null
+          test "$(jq -r '.candidateRevision' promotion-request.json)" = "${CANDIDATE_REVISION}"
 
       - name: Record promotion preparation summary
         shell: bash
