@@ -2304,6 +2304,87 @@ describe("leaseRoutes GET /active", () => {
     expect((await fakeDb.collection("tenants").doc("tenant-old").get()).data()).toEqual(beforeTenant);
   });
 
+  it("rejects ambiguous standalone unit aliases before attempting any lease-end write", async () => {
+    seedDoc("properties", "prop-ambiguous", {
+      landlordId: "landlord-1",
+      units: [{
+        id: "unit-logical",
+        unitNumber: "QA-E",
+        status: "occupied",
+        occupancyStatus: "occupied",
+        tenantId: "tenant-ambiguous",
+        currentTenantId: "tenant-ambiguous",
+        leaseId: "lease-ambiguous",
+        currentLeaseId: "lease-ambiguous",
+      }],
+    });
+    seedDoc("leases", "lease-ambiguous", {
+      landlordId: "landlord-1",
+      propertyId: "prop-ambiguous",
+      tenantId: "tenant-ambiguous",
+      unitId: "unit-logical",
+      unitNumber: "QA-E",
+      status: "active",
+      endDate: null,
+    });
+    seedDoc("tenants", "tenant-ambiguous", {
+      landlordId: "landlord-1",
+      currentLeaseId: "lease-ambiguous",
+    });
+    seedDoc("units", "unit-ambiguous-1", {
+      id: "unit-ambiguous-1",
+      unitId: "unit-logical",
+      unitNumber: "QA-E-1",
+      landlordId: "landlord-1",
+      propertyId: "prop-ambiguous",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "tenant-ambiguous",
+      leaseId: "lease-ambiguous",
+      currentLeaseId: "lease-ambiguous",
+    });
+    seedDoc("units", "unit-ambiguous-2", {
+      id: "unit-ambiguous-2",
+      unitId: "unit-logical",
+      unitNumber: "QA-E-2",
+      landlordId: "landlord-1",
+      propertyId: "prop-ambiguous",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "tenant-ambiguous",
+      leaseId: "lease-ambiguous",
+      currentLeaseId: "lease-ambiguous",
+    });
+
+    const beforeProperty = structuredClone((await fakeDb.collection("properties").doc("prop-ambiguous").get()).data());
+    const beforeLease = structuredClone((await fakeDb.collection("leases").doc("lease-ambiguous").get()).data());
+    const beforeTenant = structuredClone((await fakeDb.collection("tenants").doc("tenant-ambiguous").get()).data());
+    const beforeUnit1 = structuredClone((await fakeDb.collection("units").doc("unit-ambiguous-1").get()).data());
+    const beforeUnit2 = structuredClone((await fakeDb.collection("units").doc("unit-ambiguous-2").get()).data());
+    const transactionSet = vi.fn();
+    vi.spyOn(fakeDb, "runTransaction").mockImplementationOnce(async (callback: any) =>
+      callback({
+        get: async (ref: any) => ref.get(),
+        set: async (ref: any, value: any, options?: any) => {
+          transactionSet(ref, value, options);
+          return ref.set(value, options);
+        },
+      })
+    );
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-ambiguous/end", body: {} });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ ok: false, error: "lease_end_occupancy_reconciliation_failed" });
+    expect(transactionSet).not.toHaveBeenCalled();
+    expect((await fakeDb.collection("properties").doc("prop-ambiguous").get()).data()).toEqual(beforeProperty);
+    expect((await fakeDb.collection("leases").doc("lease-ambiguous").get()).data()).toEqual(beforeLease);
+    expect((await fakeDb.collection("tenants").doc("tenant-ambiguous").get()).data()).toEqual(beforeTenant);
+    expect((await fakeDb.collection("units").doc("unit-ambiguous-1").get()).data()).toEqual(beforeUnit1);
+    expect((await fakeDb.collection("units").doc("unit-ambiguous-2").get()).data()).toEqual(beforeUnit2);
+  });
+
   it("does not commit lease end when atomic occupancy reconciliation fails", async () => {
     seedDoc("properties", "prop-rollback", {
       landlordId: "landlord-1",

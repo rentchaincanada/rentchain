@@ -302,6 +302,14 @@ function normalizeUnitReference(value: any): string {
   return String(value || "").trim().toLowerCase();
 }
 
+function matchesUnitReference(unit: any, reference: string, documentId?: string): boolean {
+  const normalizedReference = normalizeUnitReference(reference);
+  if (!normalizedReference) return false;
+
+  return [unit?.id, unit?.unitId, documentId, unit?.unitNumber, unit?.label, unit?.unit]
+    .some((candidate) => normalizeUnitReference(candidate) === normalizedReference);
+}
+
 function normalizeUnitMatchToken(value: any): string {
   const raw = String(value || "").trim().toLowerCase();
   if (!raw) return "";
@@ -429,13 +437,12 @@ async function endFirestoreLeaseAtomically(leaseId: string, lease: any, endDate:
     const embeddedUnits = Array.isArray(propertyData.units) ? propertyData.units : [];
     const matchingEmbedded = embeddedUnits
       .map((unit: any, index: number) => ({ unit, index }))
-      .filter(({ unit }: any) => normalizeUnitReference(unit?.id || unit?.unitId || unit?.unitNumber || unit?.label || unit?.unit) === normalizeUnitReference(unitReference));
+      .filter(({ unit }: any) => matchesUnitReference(unit, unitReference));
     if (matchingEmbedded.length !== 1) throw new Error("lease_end_unit_not_found_or_ambiguous");
 
     const unitDocs = (unitSnap?.docs || []).filter((doc: any) => {
       const data = doc.data() || {};
-      return normalizeUnitReference(data.id || data.unitId || doc.id) === normalizeUnitReference(unitReference) ||
-        normalizeUnitReference(data.unitNumber || data.label || data.unit) === normalizeUnitReference(unitReference);
+      return matchesUnitReference(data, unitReference, doc.id);
     });
     // Test doubles may return plain documents without transaction references.
     // Fall back before issuing any transaction writes in that case.
