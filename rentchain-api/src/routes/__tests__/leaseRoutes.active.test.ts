@@ -35,7 +35,7 @@ const { fakeDb, listDocs, resetFakeDb, seedDoc } = vi.hoisted(() => {
         const col = ensureCollection(name);
         const docs = Array.from(col.values())
           .filter((doc) => matches(doc, filters))
-          .map((doc) => ({ id: doc.id, exists: true, data: () => doc.data }));
+          .map((doc) => ({ id: doc.id, exists: true, data: () => doc.data, ref: makeDoc(name, doc.id) }));
         return { docs, empty: docs.length === 0, forEach: (fn: any) => docs.forEach(fn), size: docs.length };
       },
       doc: (id?: string) => makeDoc(name, id),
@@ -2089,7 +2089,15 @@ describe("leaseRoutes GET /active", () => {
       landlordId: "landlord-1",
       name: "Harbour View",
       units: [
-        { id: "unit-1", unitNumber: "101", status: "occupied" },
+        {
+          id: "unit-1",
+          unitNumber: "101",
+          status: "occupied",
+          tenantId: "tenant-1",
+          currentTenantId: "tenant-1",
+          leaseId: "lease-1",
+          currentLeaseId: "lease-1",
+        },
         { id: "unit-2", unitNumber: "102", status: "occupied" },
       ],
     });
@@ -2140,6 +2148,278 @@ describe("leaseRoutes GET /active", () => {
         currentLeaseId: null,
         occupancySource: "lease_end",
       })
+    );
+  });
+
+  it("treats an already-ended lease as an idempotent no-op when no replacement linkage exists", async () => {
+    seedDoc("properties", "prop-ended", {
+      landlordId: "landlord-1",
+      units: [{ id: "unit-ended", unitNumber: "301", status: "vacant", leaseId: null, currentLeaseId: null }],
+    });
+    seedDoc("leases", "lease-ended", {
+      landlordId: "landlord-1",
+      propertyId: "prop-ended",
+      tenantId: "tenant-ended",
+      unitId: "unit-ended",
+      unitNumber: "301",
+      status: "ended",
+      endDate: "2026-07-01T00:00:00.000Z",
+    });
+    seedDoc("units", "unit-ended", {
+      landlordId: "landlord-1",
+      propertyId: "prop-ended",
+      unitNumber: "301",
+      status: "vacant",
+      occupancyStatus: "vacant",
+      leaseId: null,
+      currentLeaseId: null,
+    });
+
+    const beforeProperty = structuredClone((await fakeDb.collection("properties").doc("prop-ended").get()).data());
+    const beforeUnit = structuredClone((await fakeDb.collection("units").doc("unit-ended").get()).data());
+    const beforeLease = structuredClone((await fakeDb.collection("leases").doc("lease-ended").get()).data());
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-ended/end", body: {} });
+
+    expect(res.status).toBe(200);
+    expect((await fakeDb.collection("properties").doc("prop-ended").get()).data()).toEqual(beforeProperty);
+    expect((await fakeDb.collection("units").doc("unit-ended").get()).data()).toEqual(beforeUnit);
+    expect((await fakeDb.collection("leases").doc("lease-ended").get()).data()).toEqual(beforeLease);
+  });
+
+  it("rejects a repeated end when the standalone unit is linked to a replacement lease", async () => {
+    seedDoc("properties", "prop-replaced", {
+      landlordId: "landlord-1",
+      units: [{
+        id: "unit-replaced",
+        unitNumber: "302",
+        status: "occupied",
+        tenantId: "tenant-old",
+        currentTenantId: "tenant-old",
+        leaseId: "lease-old",
+        currentLeaseId: "lease-old",
+      }],
+    });
+    seedDoc("leases", "lease-old", {
+      landlordId: "landlord-1",
+      propertyId: "prop-replaced",
+      tenantId: "tenant-old",
+      unitId: "unit-replaced",
+      unitNumber: "302",
+      status: "active",
+      endDate: null,
+    });
+    seedDoc("tenants", "tenant-old", { landlordId: "landlord-1", currentLeaseId: "lease-old" });
+    seedDoc("units", "unit-replaced", {
+      landlordId: "landlord-1",
+      propertyId: "prop-replaced",
+      unitNumber: "302",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "tenant-old",
+      currentTenantId: "tenant-old",
+      leaseId: "lease-old",
+      currentLeaseId: "lease-old",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const first = await invokeRouter(router, { method: "POST", url: "/lease-old/end", body: {} });
+    expect(first.status).toBe(200);
+
+    seedDoc("leases", "lease-replacement", { landlordId: "landlord-1", status: "active" });
+    seedDoc("tenants", "tenant-old", { landlordId: "landlord-1", currentLeaseId: "lease-replacement" });
+    seedDoc("units", "unit-replaced", {
+      landlordId: "landlord-1",
+      propertyId: "prop-replaced",
+      unitNumber: "302",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "tenant-new",
+      currentTenantId: "tenant-new",
+      leaseId: "lease-replacement",
+      currentLeaseId: "lease-replacement",
+    });
+
+    const beforeProperty = structuredClone((await fakeDb.collection("properties").doc("prop-replaced").get()).data());
+    const beforeUnit = structuredClone((await fakeDb.collection("units").doc("unit-replaced").get()).data());
+    const beforeLease = structuredClone((await fakeDb.collection("leases").doc("lease-old").get()).data());
+    const beforeTenant = structuredClone((await fakeDb.collection("tenants").doc("tenant-old").get()).data());
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-old/end", body: {} });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ ok: false, error: "lease_end_occupancy_reconciliation_failed" });
+    expect((await fakeDb.collection("properties").doc("prop-replaced").get()).data()).toEqual(beforeProperty);
+    expect((await fakeDb.collection("units").doc("unit-replaced").get()).data()).toEqual(beforeUnit);
+    expect((await fakeDb.collection("leases").doc("lease-old").get()).data()).toEqual(beforeLease);
+    expect((await fakeDb.collection("tenants").doc("tenant-old").get()).data()).toEqual(beforeTenant);
+    expect((await fakeDb.collection("leases").doc("lease-replacement").get()).data()).toEqual({
+      landlordId: "landlord-1",
+      status: "active",
+    });
+  });
+
+  it("rejects lease end when the embedded property unit is linked to a replacement lease", async () => {
+    seedDoc("properties", "prop-embedded-replaced", {
+      landlordId: "landlord-1",
+      units: [{
+        id: "unit-embedded-replaced",
+        unitNumber: "303",
+        status: "occupied",
+        tenantId: "tenant-new",
+        currentTenantId: "tenant-new",
+        leaseId: "lease-replacement",
+        currentLeaseId: "lease-replacement",
+      }],
+    });
+    seedDoc("leases", "lease-stale", {
+      landlordId: "landlord-1",
+      propertyId: "prop-embedded-replaced",
+      tenantId: "tenant-old",
+      unitId: "unit-embedded-replaced",
+      unitNumber: "303",
+      status: "active",
+      endDate: null,
+    });
+    seedDoc("units", "unit-embedded-replaced", {
+      landlordId: "landlord-1",
+      propertyId: "prop-embedded-replaced",
+      unitNumber: "303",
+      status: "occupied",
+      occupancyStatus: "occupied",
+    });
+    seedDoc("tenants", "tenant-old", { landlordId: "landlord-1", currentLeaseId: "lease-stale" });
+
+    const beforeProperty = structuredClone((await fakeDb.collection("properties").doc("prop-embedded-replaced").get()).data());
+    const beforeUnit = structuredClone((await fakeDb.collection("units").doc("unit-embedded-replaced").get()).data());
+    const beforeLease = structuredClone((await fakeDb.collection("leases").doc("lease-stale").get()).data());
+    const beforeTenant = structuredClone((await fakeDb.collection("tenants").doc("tenant-old").get()).data());
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-stale/end", body: {} });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ ok: false, error: "lease_end_occupancy_reconciliation_failed" });
+    expect((await fakeDb.collection("properties").doc("prop-embedded-replaced").get()).data()).toEqual(beforeProperty);
+    expect((await fakeDb.collection("units").doc("unit-embedded-replaced").get()).data()).toEqual(beforeUnit);
+    expect((await fakeDb.collection("leases").doc("lease-stale").get()).data()).toEqual(beforeLease);
+    expect((await fakeDb.collection("tenants").doc("tenant-old").get()).data()).toEqual(beforeTenant);
+  });
+
+  it("rejects ambiguous standalone unit aliases before attempting any lease-end write", async () => {
+    seedDoc("properties", "prop-ambiguous", {
+      landlordId: "landlord-1",
+      units: [{
+        id: "unit-logical",
+        unitNumber: "QA-E",
+        status: "occupied",
+        occupancyStatus: "occupied",
+        tenantId: "tenant-ambiguous",
+        currentTenantId: "tenant-ambiguous",
+        leaseId: "lease-ambiguous",
+        currentLeaseId: "lease-ambiguous",
+      }],
+    });
+    seedDoc("leases", "lease-ambiguous", {
+      landlordId: "landlord-1",
+      propertyId: "prop-ambiguous",
+      tenantId: "tenant-ambiguous",
+      unitId: "unit-logical",
+      unitNumber: "QA-E",
+      status: "active",
+      endDate: null,
+    });
+    seedDoc("tenants", "tenant-ambiguous", {
+      landlordId: "landlord-1",
+      currentLeaseId: "lease-ambiguous",
+    });
+    seedDoc("units", "unit-ambiguous-1", {
+      id: "unit-ambiguous-1",
+      unitId: "unit-logical",
+      unitNumber: "QA-E-1",
+      landlordId: "landlord-1",
+      propertyId: "prop-ambiguous",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "tenant-ambiguous",
+      leaseId: "lease-ambiguous",
+      currentLeaseId: "lease-ambiguous",
+    });
+    seedDoc("units", "unit-ambiguous-2", {
+      id: "unit-ambiguous-2",
+      unitId: "unit-logical",
+      unitNumber: "QA-E-2",
+      landlordId: "landlord-1",
+      propertyId: "prop-ambiguous",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "tenant-ambiguous",
+      leaseId: "lease-ambiguous",
+      currentLeaseId: "lease-ambiguous",
+    });
+
+    const beforeProperty = structuredClone((await fakeDb.collection("properties").doc("prop-ambiguous").get()).data());
+    const beforeLease = structuredClone((await fakeDb.collection("leases").doc("lease-ambiguous").get()).data());
+    const beforeTenant = structuredClone((await fakeDb.collection("tenants").doc("tenant-ambiguous").get()).data());
+    const beforeUnit1 = structuredClone((await fakeDb.collection("units").doc("unit-ambiguous-1").get()).data());
+    const beforeUnit2 = structuredClone((await fakeDb.collection("units").doc("unit-ambiguous-2").get()).data());
+    const transactionSet = vi.fn();
+    vi.spyOn(fakeDb, "runTransaction").mockImplementationOnce(async (callback: any) =>
+      callback({
+        get: async (ref: any) => ref.get(),
+        set: async (ref: any, value: any, options?: any) => {
+          transactionSet(ref, value, options);
+          return ref.set(value, options);
+        },
+      })
+    );
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-ambiguous/end", body: {} });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ ok: false, error: "lease_end_occupancy_reconciliation_failed" });
+    expect(transactionSet).not.toHaveBeenCalled();
+    expect((await fakeDb.collection("properties").doc("prop-ambiguous").get()).data()).toEqual(beforeProperty);
+    expect((await fakeDb.collection("leases").doc("lease-ambiguous").get()).data()).toEqual(beforeLease);
+    expect((await fakeDb.collection("tenants").doc("tenant-ambiguous").get()).data()).toEqual(beforeTenant);
+    expect((await fakeDb.collection("units").doc("unit-ambiguous-1").get()).data()).toEqual(beforeUnit1);
+    expect((await fakeDb.collection("units").doc("unit-ambiguous-2").get()).data()).toEqual(beforeUnit2);
+  });
+
+  it("does not commit lease end when atomic occupancy reconciliation fails", async () => {
+    seedDoc("properties", "prop-rollback", {
+      landlordId: "landlord-1",
+      units: [{ id: "unit-rollback", unitNumber: "201", status: "occupied" }],
+    });
+    seedDoc("leases", "lease-rollback", {
+      landlordId: "landlord-1",
+      propertyId: "prop-rollback",
+      tenantId: "tenant-rollback",
+      unitId: "unit-rollback",
+      unitNumber: "201",
+      status: "active",
+      endDate: null,
+    });
+    seedDoc("units", "unit-rollback", {
+      landlordId: "landlord-1",
+      propertyId: "prop-rollback",
+      unitNumber: "201",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "tenant-rollback",
+      leaseId: "lease-rollback",
+    });
+    vi.spyOn(fakeDb, "runTransaction").mockRejectedValueOnce(new Error("synthetic transaction failure"));
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-rollback/end", body: {} });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ ok: false, error: "lease_end_occupancy_reconciliation_failed" });
+    expect((await fakeDb.collection("leases").doc("lease-rollback").get()).data()).toEqual(
+      expect.objectContaining({ status: "active", endDate: null })
+    );
+    expect((await fakeDb.collection("units").doc("unit-rollback").get()).data()).toEqual(
+      expect.objectContaining({ status: "occupied", leaseId: "lease-rollback" })
     );
   });
 

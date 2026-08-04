@@ -1,5 +1,9 @@
 .rc-tenants-grid {
   display: block;
+  box-sizing: border-box;
+  height: min(760px, calc(100vh - 220px));
+  max-height: calc(100vh - 220px);
+  overflow: hidden;
   min-height: 0;
 }
 
@@ -7,6 +11,8 @@
   position: relative;
   z-index: 0;
   box-sizing: border-box;
+  min-height: 0;
+  height: calc(100vh - var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height, 120px)));
   padding: 20px;
   border: 1px solid rgba(91, 70, 48, 0.16);
   border-radius: 18px;
@@ -15,6 +21,24 @@
     linear-gradient(180deg, #fbf6ed 0%, #f7f1e7 100%);
   box-shadow: 0 12px 28px rgba(59, 44, 28, 0.1);
   scroll-margin-top: calc(var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height, 120px)) + 24px);
+}
+
+@media (min-width: 769px) {
+  .rc-tenants-page {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .rc-tenants-page > .rc-tenants-header {
+    flex: 0 0 auto;
+  }
+
+  .rc-tenants-page > .rc-tenants-grid {
+    flex: 1 1 auto;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+  }
 }
 
 .rc-tenants-header {
@@ -52,6 +76,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -82,6 +107,12 @@
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  width: 100%;
+  box-sizing: border-box;
   padding-bottom: 12px;
 }
 
@@ -90,6 +121,43 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Top-level profile sections must occupy their natural height inside the
+ * independently scrolling detail pane; otherwise flex-shrink collapses one
+ * section underneath the next when the pane is bounded. */
+.rc-tenants-detail > * {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  height: auto;
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  position: static;
+  transform: none;
+}
+
+/* Desktop split panes own their scroll independently; the search/title stay fixed. */
+@media (min-width: 769px) {
+  .rc-tenants-grid .rc-master-detail--desktop {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .rc-tenants-grid .rc-master-detail-master {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .rc-tenants-grid .rc-master-detail-detail {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
 }
 
 .rc-tenants-list-item {
@@ -97,11 +165,47 @@
   border-color: rgba(91, 70, 48, 0.18) !important;
   box-shadow: 0 6px 14px rgba(59, 44, 28, 0.06);
   min-height: 44px;
+  height: auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  overflow: visible;
   transition:
     background-color 0.16s ease,
     border-color 0.16s ease,
     box-shadow 0.16s ease,
     transform 0.16s ease;
+}
+
+.rc-tenant-profile-content {
+  height: auto;
+  min-height: max-content;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  overflow: visible;
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  position: static;
+}
+
+.rc-tenant-profile-content > * {
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  position: static;
+  overflow: visible;
+}
+
+.rc-tenant-profile-content > * > * {
+  min-width: 0;
 }
 
 .rc-tenants-list-item:hover {
@@ -161,6 +265,25 @@
 }
 
 @media (max-width: 768px) {
+  .rc-tenants-page {
+    height: auto;
+    min-height: 0;
+  }
+
+  .rc-tenants-grid {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .rc-tenants-detail {
+    overflow: visible;
+  }
+
+  .rc-tenant-profile-content {
+    min-height: 0;
+  }
+
   .rc-tenants-page {
     padding: 14px;
     border-radius: 14px;

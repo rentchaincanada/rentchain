@@ -77,10 +77,12 @@ vi.mock("../components/tenants/TenantPaymentsPanel", () => ({
 
 vi.mock("../components/layout/ResponsiveMasterDetail", () => ({
   ResponsiveMasterDetail: ({ master, detail, searchSlot }: ResponsiveMasterDetailProps) => (
-    <div>
-      {searchSlot}
-      {master}
-      {detail}
+    <div className="rc-master-detail rc-master-detail--desktop">
+      <div className="rc-master-detail-master">
+        {searchSlot}
+        {master}
+      </div>
+      <div className="rc-master-detail-detail">{detail}</div>
     </div>
   ),
 }));
@@ -152,6 +154,23 @@ describe("TenantsPage", () => {
       expect.objectContaining({ fallbackPath: "/pricing" })
     );
     expect(mocks.inviteTenantModalMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps tenant list and detail in separate desktop scroll regions", async () => {
+    mocks.fetchTenantsMock.mockResolvedValue([
+      { id: "tenant-1", name: "Tenant One", tenancies: [] },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    const master = await screen.findByText("Tenant One");
+    expect(master.closest(".rc-master-detail-master")).toBeInTheDocument();
+    expect(document.querySelector(".rc-master-detail-detail")).toBeInTheDocument();
+    expect(document.querySelector(".rc-tenants-list-scroll")).toBeInTheDocument();
   });
 
   it("fails closed when cached invite capability is true but the authenticated plan is free", async () => {
@@ -263,6 +282,21 @@ describe("TenantsPage", () => {
     mocks.fetchTenantTenanciesMock.mockResolvedValue([
       { id: "tenancy-1", tenantId: "tenant-1", status: "active", unitLabel: "Unit 4" },
     ]);
+    mocks.useTenantDetailMock.mockReturnValue({
+      loading: false,
+      error: null,
+      bundle: {
+        tenant: { id: "tenant-1", fullName: "Taylor Tenant" },
+        currentLease: {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyName: "Main Street",
+          unit: "Unit 4",
+          status: "active",
+        },
+        unit: { id: "unit-4", unitNumber: "Unit 4", status: "occupied" },
+      },
+    });
 
     render(
       <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>

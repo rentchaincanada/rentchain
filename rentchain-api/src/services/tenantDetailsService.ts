@@ -461,7 +461,10 @@ async function loadCurrentLeaseSnapshot(tenant: TenantRecord | null, landlordId?
 
     const currentEntries = Array.from(candidates.entries()).filter(([, raw]) => {
       const landlordMatch = !landlordId || String((raw as any)?.landlordId || "").trim() === String(landlordId);
-      return landlordMatch && isTenantProfileLeaseCandidate(raw);
+      const tenantMatch = Array.isArray((raw as any)?.tenantIds)
+        ? (raw as any).tenantIds.map((value: any) => String(value || "").trim()).includes(tenantId)
+        : String((raw as any)?.tenantId || (raw as any)?.primaryTenantId || "").trim() === tenantId;
+      return landlordMatch && tenantMatch && isTenantProfileLeaseCandidate(raw);
     });
     if (!currentEntries.length) return null;
 
@@ -701,6 +704,7 @@ async function loadApplicationRawById(applicationId: string | null | undefined) 
 
 async function hydrateTenantDisplayFields(tenant: TenantRecord, landlordId?: string | null): Promise<TenantRecord> {
   const hydrated: TenantRecord = { ...tenant };
+  const canonicalLease = await loadCurrentLeaseSnapshot(hydrated, landlordId);
   const property = await loadPropertyRecord(hydrated.propertyId || null);
   const unit = await loadUnitRecord(
     hydrated.propertyId || null,
@@ -720,10 +724,24 @@ async function hydrateTenantDisplayFields(tenant: TenantRecord, landlordId?: str
   );
   if (resolvedUnitLabel) hydrated.unit = resolvedUnitLabel;
 
+  if (canonicalLease) {
+    hydrated.currentLeaseId = canonicalLease.id;
+    hydrated.leaseStart = canonicalLease.leaseStartDate || null;
+    hydrated.leaseEnd = canonicalLease.leaseEndDate || null;
+    hydrated.monthlyRent = canonicalLease.currentRent ?? null;
+  } else {
+    hydrated.currentLeaseId = null;
+    hydrated.leaseStart = null;
+    hydrated.leaseEnd = null;
+    hydrated.monthlyRent = null;
+  }
+
   hydrated.lifecycle = deriveTenantLifecycle({
     tenantStatus: hydrated.status,
     applicationId: hydrated.applicationId,
-    currentLeaseId: hydrated.currentLeaseId,
+    leaseStatus: canonicalLease?.status || null,
+    currentLeaseId: canonicalLease?.id || null,
+    leaseId: canonicalLease?.id || null,
     source: hydrated.source,
     hiddenFromActiveLists: hydrated.hiddenFromActiveLists,
   });
@@ -788,23 +806,6 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
         signedDocumentExpiresInSeconds: signedDocumentLink?.signedDocumentExpiresInSeconds ?? null,
         signedDocumentSource: signedDocumentLink?.signedDocumentSource || null,
       }
-    : tenant
-    ? {
-        tenantId: tenant.id,
-        propertyId: tenant.propertyId || null,
-        propertyName: property?.name || tenant.propertyName || "Unknown Property",
-        unitId: tenant.unitId || null,
-        unit: pickString(
-          unit?.unitNumber,
-          unit?.label,
-          unit?.name,
-          normalizeIdentityString(tenant.unit) !== normalizeIdentityString(tenant.unitId) ? tenant.unit : null
-        ) || "N/A",
-        leaseStart: tenant.leaseStart ?? null,
-        leaseEnd: tenant.leaseEnd ?? null,
-        monthlyRent: Number(tenant.monthlyRent ?? 0),
-        status: tenant.status ?? null,
-      }
     : null;
 
   if (tenant && lease) {
@@ -821,9 +822,9 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     tenantStatus: tenant?.status,
     applicantStatus: (applicationRaw as any)?.status,
     screeningStatus: (applicationRaw as any)?.screeningStatus,
-    leaseStatus: lease?.status || (currentLeaseRaw as any)?.status,
+    leaseStatus: lease?.status || null,
     occupancyStatus: currentTenancy?.status || unit?.occupancyStatus || unit?.status,
-    currentLeaseId: tenant?.currentLeaseId || lease?.id,
+    currentLeaseId: lease?.id || null,
     leaseId: lease?.id,
     applicationId: tenant?.applicationId || (applicationRaw as any)?.id,
     tenantId: tenant?.id,
@@ -869,12 +870,12 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
         leaseId: currentLeaseRecord?.id || lease?.id || null,
         startDate: lease?.leaseStart || (currentLeaseRaw as any)?.startDate || (currentLeaseRaw as any)?.leaseStart,
         monthlyRent: lease?.monthlyRent ?? (currentLeaseRaw as any)?.monthlyRent ?? null,
-        status: lease?.status || (currentLeaseRaw as any)?.status,
+        status: lease?.status || null,
         raw: currentLeaseRaw,
       })
     : null;
   const stateCoherence = deriveLeaseOccupancyCoherence({
-    leaseStatus: lease?.status || (currentLeaseRaw as any)?.status,
+    leaseStatus: lease?.status || null,
     leaseExecutionStatus:
       leaseExecution?.executionStatus ||
       (currentLeaseRaw as any)?.leaseExecution?.executionStatus ||
