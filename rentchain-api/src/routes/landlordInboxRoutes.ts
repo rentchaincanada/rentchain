@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
+import { createHash } from "node:crypto";
 import { db } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireLandlord } from "../middleware/requireLandlord";
-import { loadLandlordAnalyticsSnapshot } from "../services/landlord/landlordAnalyticsSnapshot";
 import {
   deriveLandlordUnifiedInbox,
   buildLandlordConversationInboxRecords,
@@ -19,7 +19,20 @@ const DEFAULT_LIMIT = 20;
 const READ_STATES_COLLECTION = "unifiedInboxReadStates";
 const MAX_LANDLORD_CONVERSATIONS = 100;
 const MAX_MESSAGES_PER_CONVERSATION = 20;
+const MAX_READ_STATES = 100;
 const TRUNCATION_SENTINEL = 1;
+const OMITTED_UNSAFE_PROJECTIONS = [
+  "leases",
+  "maintenanceRequests",
+  "rentalApplications",
+  "workOrders",
+  "properties",
+  "units",
+  "events",
+  "canonicalEvents",
+  "financialTransactions",
+  "screeningOrders",
+] as const;
 
 export type LandlordInboxRequest = {
   limit: number;
@@ -73,6 +86,10 @@ function readStateDocId(landlordId: string, recordId: string) {
 
 function hasLandlordScope(record: any, landlordId: string) {
   return [record?.landlordId, record?.ownerId, record?.userId].some((value) => asString(value, 240) === landlordId);
+}
+
+function landlordScopeFingerprint(landlordId: string) {
+  return createHash("sha256").update(landlordId).digest("hex").slice(0, 12);
 }
 
 function docPropertyId(record: any) {
@@ -158,11 +175,6 @@ function validateQuery(query: any): ValidationResult {
   };
 }
 
-async function loadCollection(name: string) {
-  const snap = await db.collection(name).get().catch(() => ({ docs: [] } as any));
-  return (snap?.docs || []).map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }));
-}
-
 async function loadLandlordConversations(landlordId: string) {
   const snap = await db
     .collection("conversations")
@@ -175,7 +187,11 @@ async function loadLandlordConversations(landlordId: string) {
   const docs = snap.docs || [];
   if (docs.length > MAX_LANDLORD_CONVERSATIONS) {
     console.warn("[landlord-inbox] owned conversation limit reached", {
+      code: "UNIFIED_INBOX_SCOPE_LIMIT_REACHED",
+      collection: "conversations",
       limit: MAX_LANDLORD_CONVERSATIONS,
+      observedCappedCount: docs.length,
+      landlordScope: landlordScopeFingerprint(landlordId),
     });
   }
   return docs
@@ -213,17 +229,37 @@ async function loadRecentMessagesForOwnedConversations(
   const limitedConversationCount = batches.filter((batch) => batch.limitReached).length;
   if (limitedConversationCount) {
     console.warn("[landlord-inbox] per-conversation message limit reached", {
+      code: "UNIFIED_INBOX_SCOPE_LIMIT_REACHED",
+      collection: "messages",
       conversationCount: limitedConversationCount,
       limit: MAX_MESSAGES_PER_CONVERSATION,
+      observedCappedCount: MAX_MESSAGES_PER_CONVERSATION + TRUNCATION_SENTINEL,
     });
   }
   return batches.flatMap((batch) => batch.messages);
 }
 
 async function loadReadStatesByRecordId(landlordId: string) {
-  const records = await loadCollection(READ_STATES_COLLECTION);
+  const snap = await db
+    .collection(READ_STATES_COLLECTION)
+    .where("landlordId", "==", landlordId)
+    .limit(MAX_READ_STATES + TRUNCATION_SENTINEL)
+    .get()
+    .catch(() => null);
+  if (!snap) return new Map<string, string>();
+  const docs = snap.docs || [];
+  if (docs.length > MAX_READ_STATES) {
+    console.warn("[landlord-inbox] read-state limit reached", {
+      code: "UNIFIED_INBOX_SCOPE_LIMIT_REACHED",
+      collection: READ_STATES_COLLECTION,
+      limit: MAX_READ_STATES,
+      observedCappedCount: docs.length,
+      landlordScope: landlordScopeFingerprint(landlordId),
+    });
+  }
   const entries: Array<[string, string]> = [];
-  for (const record of records) {
+  for (const doc of docs.slice(0, MAX_READ_STATES)) {
+    const record = { id: doc.id, ...((doc.data() as any) || {}) };
     const recordId = asString(record?.recordId, 240);
     const readAt = asString(record?.readAt, 120);
     if (asString(record?.landlordId, 240) === landlordId && isSafeInboxRecordId(recordId) && readAt) {
@@ -244,14 +280,6 @@ async function resolvePropertyScope(landlordId: string, propertyId: string | nul
     return { ok: false as const, status: 403, error: "PROPERTY_FORBIDDEN", message: "Property is not available" };
   }
   return { ok: true as const };
-}
-
-function filterScopedRecords(records: any[], landlordId: string, propertyId: string | null) {
-  return records.filter((record) => {
-    if (!hasLandlordScope(record, landlordId)) return false;
-    if (!propertyId) return true;
-    return docPropertyId(record) === propertyId;
-  });
 }
 
 function matchesDateRange(item: UnifiedInboxEvent, request: LandlordInboxRequest) {
@@ -280,31 +308,19 @@ function applyPersistedReadStates(items: UnifiedInboxEvent[], readStatesByRecord
 }
 
 async function deriveScopedLandlordInbox(landlordId: string, request: LandlordInboxRequest) {
-  const [snapshot, leases, maintenanceRequests, conversations] = await Promise.all([
-    loadLandlordAnalyticsSnapshot({
-      landlordId,
-      propertyId: request.propertyId || undefined,
-    }),
-    loadCollection("leases"),
-    loadCollection("maintenanceRequests"),
-    loadLandlordConversations(landlordId),
-  ]);
+  console.warn("[landlord-inbox] governed projections omitted", {
+    code: "UNIFIED_INBOX_PROJECTIONS_OMITTED",
+    collections: OMITTED_UNSAFE_PROJECTIONS,
+    reason: "BOUNDED_CANONICAL_OWNERSHIP_QUERY_UNAVAILABLE",
+  });
+  const conversations = await loadLandlordConversations(landlordId);
   const messages = await loadRecentMessagesForOwnedConversations(conversations, request.propertyId);
 
-  const analyticsDecisions = Array.isArray(snapshot?.decisions?.items) ? snapshot.decisions.items : [];
   const safePage = await deriveLandlordUnifiedInbox(landlordId, {
-    applicationItems: filterScopedRecords(
-      analyticsDecisions.filter((item: any) => asString(item?.decisionType, 120) !== "start_screening_checkout"),
-      landlordId,
-      request.propertyId
-    ),
-    screeningItems: filterScopedRecords(
-      analyticsDecisions.filter((item: any) => asString(item?.decisionType, 120) === "start_screening_checkout"),
-      landlordId,
-      request.propertyId
-    ),
-    leaseItems: filterScopedRecords(leases, landlordId, request.propertyId),
-    maintenanceRequests: filterScopedRecords(maintenanceRequests, landlordId, request.propertyId),
+    applicationItems: [],
+    screeningItems: [],
+    leaseItems: [],
+    maintenanceRequests: [],
     messages: buildLandlordConversationInboxRecords({
       landlordId,
       propertyId: request.propertyId,
@@ -393,7 +409,7 @@ router.post("/inbox/:recordId/read", requireAuth, requireLandlord, async (req: R
       const conversation = conversationDoc?.exists
         ? { id: conversationDoc.id, ...((conversationDoc.data() as any) || {}) }
         : null;
-      if (!conversation || !hasLandlordScope(conversation, landlordId)) {
+      if (!conversation || asString(conversation.landlordId, 240) !== landlordId) {
         return res.status(404).json({ ok: false, error: "INBOX_RECORD_NOT_FOUND", message: "Inbox record not found" });
       }
       await db.collection("conversations").doc(conversationId).set({ lastReadAtLandlord: readAt }, { merge: true });

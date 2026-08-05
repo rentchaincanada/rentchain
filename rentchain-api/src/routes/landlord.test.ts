@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 
 const { fakeDb, queryCalls, resetFakeDb, seedDoc } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
@@ -306,13 +307,9 @@ describe("landlord unified inbox route", () => {
     expect(res.body.ok).toBe(true);
     expect(res.body.limit).toBe(3);
     expect(res.body.offset).toBe(0);
-    expect(res.body.total).toBe(5);
-    expect(res.body.items).toHaveLength(3);
-    expect(res.body.items.map((item: any) => item.sourceKind)).toEqual([
-      "landlord.maintenance",
-      "landlord.screening",
-      "landlord.application",
-    ]);
+    expect(res.body.total).toBe(1);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items.map((item: any) => item.sourceKind)).toEqual(["landlord.message"]);
     expectSafeResponse(res.body);
   });
 
@@ -336,10 +333,7 @@ describe("landlord unified inbox route", () => {
         routeKind: "messages_workspace",
       },
     });
-    expect(loadLandlordAnalyticsSnapshot).toHaveBeenCalledWith({
-      landlordId: "landlord-1",
-      propertyId: "prop-1",
-    });
+    expect(loadLandlordAnalyticsSnapshot).not.toHaveBeenCalled();
     expectSafeResponse(res.body);
   });
 
@@ -397,13 +391,24 @@ describe("landlord unified inbox route", () => {
   it("does not expose another landlord conversation or its child messages", async () => {
     seedDoc("conversations", "conversation_other", {
       landlordId: "landlord-2",
+      propertyId: "prop-1",
       lastMessageAt: "2026-06-09T16:00:00.000Z",
     });
     seedDoc("messages", "message_other", {
       conversationId: "conversation_other",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
       senderRole: "tenant",
       body: "Other landlord private message",
       createdAt: "2026-06-09T16:00:00.000Z",
+    });
+    seedDoc("messages", "message_orphan", {
+      conversationId: "missing-conversation",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      senderRole: "tenant",
+      body: "Orphaned private message",
+      createdAt: "2026-06-09T17:00:00.000Z",
     });
     const router = (await import("./landlordInboxRoutes")).default;
     const res = await invokeRouter(router, {
@@ -413,6 +418,7 @@ describe("landlord unified inbox route", () => {
 
     expect(res.body.total).toBe(1);
     expect(JSON.stringify(res.body)).not.toContain("Other landlord private message");
+    expect(JSON.stringify(res.body)).not.toContain("Orphaned private message");
     const messageQueries = queryCalls.filter((query) => query.collection === "messages");
     expect(messageQueries).toEqual([{
       collection: "messages",
@@ -450,8 +456,8 @@ describe("landlord unified inbox route", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body.total).toBe(96);
-    expect(res.body.items).toHaveLength(96);
+    expect(res.body.total).toBe(100);
+    expect(res.body.items).toHaveLength(100);
     const conversationQuery = queryCalls.find((query) => query.collection === "conversations");
     expect(conversationQuery).toMatchObject({
       filters: [{ field: "landlordId", operator: "==", value: "landlord-1" }],
@@ -462,12 +468,125 @@ describe("landlord unified inbox route", () => {
     expect(messageQueries).toHaveLength(100);
     expect(messageQueries.every((query) => query.limit === 21)).toBe(true);
     expect(messageQueries.every((query) => query.filters[0]?.field === "conversationId")).toBe(true);
-    expect(warn).toHaveBeenCalledWith("[landlord-inbox] owned conversation limit reached", { limit: 100 });
+    expect(warn).toHaveBeenCalledWith("[landlord-inbox] owned conversation limit reached", {
+      code: "UNIFIED_INBOX_SCOPE_LIMIT_REACHED",
+      collection: "conversations",
+      limit: 100,
+      observedCappedCount: 101,
+      landlordScope: expect.stringMatching(/^[a-f0-9]{12}$/),
+    });
     expect(warn).toHaveBeenCalledWith("[landlord-inbox] per-conversation message limit reached", {
+      code: "UNIFIED_INBOX_SCOPE_LIMIT_REACHED",
+      collection: "messages",
       conversationCount: 99,
       limit: 20,
+      observedCappedCount: 21,
     });
     warn.mockRestore();
+  });
+
+  it("uses only bounded server-scoped collection queries on the inbox request path", async () => {
+    seedDoc("unifiedInboxReadStates", "owned-read-state", {
+      landlordId: "landlord-1",
+      recordId: "inbox_v1_owned",
+      readAt: "2026-06-09T12:00:00.000Z",
+    });
+    seedDoc("unifiedInboxReadStates", "other-read-state", {
+      landlordId: "landlord-2",
+      recordId: "inbox_v1_other",
+      readAt: "2026-06-09T12:00:00.000Z",
+    });
+    const router = (await import("./landlordInboxRoutes")).default;
+    const res = await invokeRouter(router, {
+      url: "/inbox",
+      user: { id: "landlord-1", landlordId: "landlord-1", role: "landlord" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(queryCalls.map((query) => query.collection).sort()).toEqual([
+      "conversations",
+      "messages",
+      "unifiedInboxReadStates",
+    ]);
+    expect(queryCalls.every((query) => query.filters.length > 0)).toBe(true);
+    expect(queryCalls.every((query) => query.limit !== null && query.limit! > 0)).toBe(true);
+    expect(queryCalls.find((query) => query.collection === "unifiedInboxReadStates")).toEqual({
+      collection: "unifiedInboxReadStates",
+      filters: [{ field: "landlordId", operator: "==", value: "landlord-1" }],
+      orderBy: [],
+      limit: 101,
+    });
+  });
+
+  it.each([
+    { count: 99, warns: false },
+    { count: 100, warns: false },
+    { count: 101, warns: true },
+  ])("enforces the read-state boundary at $count records", async ({ count, warns }) => {
+    for (let index = 0; index < count; index += 1) {
+      seedDoc("unifiedInboxReadStates", `state-${String(index).padStart(3, "0")}`, {
+        landlordId: "landlord-1",
+        recordId: `inbox_v1_state_${index}`,
+        readAt: "2026-06-09T12:00:00.000Z",
+      });
+    }
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const router = (await import("./landlordInboxRoutes")).default;
+    const res = await invokeRouter(router, {
+      url: "/inbox",
+      user: { id: "landlord-1", landlordId: "landlord-1", role: "landlord" },
+    });
+
+    expect(res.status).toBe(200);
+    const readStateQuery = queryCalls.find((query) => query.collection === "unifiedInboxReadStates");
+    expect(readStateQuery?.limit).toBe(101);
+    const limitWarnings = warn.mock.calls.filter(([message]) => message === "[landlord-inbox] read-state limit reached");
+    expect(limitWarnings).toHaveLength(warns ? 1 : 0);
+    if (warns) {
+      expect(limitWarnings[0]?.[1]).toEqual({
+        code: "UNIFIED_INBOX_SCOPE_LIMIT_REACHED",
+        collection: "unifiedInboxReadStates",
+        limit: 100,
+        observedCappedCount: 101,
+        landlordScope: expect.stringMatching(/^[a-f0-9]{12}$/),
+      });
+    }
+    warn.mockRestore();
+  });
+
+  it("omits unsafe legacy projections with a structured governed warning", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const router = (await import("./landlordInboxRoutes")).default;
+    await invokeRouter(router, {
+      url: "/inbox",
+      user: { id: "landlord-1", landlordId: "landlord-1", role: "landlord" },
+    });
+
+    expect(loadLandlordAnalyticsSnapshot).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith("[landlord-inbox] governed projections omitted", {
+      code: "UNIFIED_INBOX_PROJECTIONS_OMITTED",
+      collections: [
+        "leases",
+        "maintenanceRequests",
+        "rentalApplications",
+        "workOrders",
+        "properties",
+        "units",
+        "events",
+        "canonicalEvents",
+        "financialTransactions",
+        "screeningOrders",
+      ],
+      reason: "BOUNDED_CANONICAL_OWNERSHIP_QUERY_UNAVAILABLE",
+    });
+    warn.mockRestore();
+  });
+
+  it("contains no unrestricted collection loader or analytics snapshot dependency", () => {
+    const source = readFileSync(new URL("./landlordInboxRoutes.ts", import.meta.url), "utf8");
+    expect(source).not.toContain("loadLandlordAnalyticsSnapshot");
+    expect(source).not.toContain("async function loadCollection");
+    expect(source).not.toMatch(/\.collection\([^)]*\)\s*\.get\(/);
   });
 
   it("registers the read-state route expected by the /api/landlord mount", async () => {
