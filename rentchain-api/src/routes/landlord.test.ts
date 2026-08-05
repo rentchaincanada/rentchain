@@ -1,19 +1,48 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
+const { fakeDb, queryCalls, resetFakeDb, seedDoc } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
+  const queryCalls: Array<{
+    collection: string;
+    filters: Array<{ field: string; operator: string; value: unknown }>;
+    orderBy: Array<{ field: string; direction: string }>;
+    limit: number | null;
+  }> = [];
 
   function ensureCollection(name: string) {
     if (!store.has(name)) store.set(name, new Map());
     return store.get(name)!;
   }
 
-  function makeQuery(name: string, filters: Array<{ field: string; value: unknown }> = []) {
+  function timestamp(value: unknown) {
+    if (typeof value === "number") return value;
+    if (typeof value === "string") return Date.parse(value) || 0;
+    if (value && typeof (value as any).toMillis === "function") return (value as any).toMillis();
+    return 0;
+  }
+
+  function makeQuery(
+    name: string,
+    filters: Array<{ field: string; operator: string; value: unknown }> = [],
+    orders: Array<{ field: string; direction: string }> = [],
+    queryLimit: number | null = null
+  ) {
     return {
       get: async () => {
-        const docs = Array.from(ensureCollection(name).values()).filter((doc) =>
-          filters.every((filter) => doc.data?.[filter.field] === filter.value)
-        ).map((doc) => ({
+        queryCalls.push({ collection: name, filters, orderBy: orders, limit: queryLimit });
+        const rows = Array.from(ensureCollection(name).values()).filter((doc) =>
+          filters.every((filter) => filter.operator === "==" && doc.data?.[filter.field] === filter.value)
+        );
+        rows.sort((left, right) => {
+          for (const order of orders) {
+            const leftValue = timestamp(left.data?.[order.field]);
+            const rightValue = timestamp(right.data?.[order.field]);
+            const comparison = leftValue - rightValue;
+            if (comparison) return order.direction === "desc" ? -comparison : comparison;
+          }
+          return String(left.id).localeCompare(String(right.id));
+        });
+        const docs = rows.slice(0, queryLimit ?? rows.length).map((doc) => ({
           id: doc.id,
           exists: true,
           data: () => doc.data,
@@ -21,8 +50,11 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
         return { docs, empty: docs.length === 0, size: docs.length };
       },
       doc: (id: string) => makeDoc(name, id),
-      where: (field: string, _operator: string, value: unknown) =>
-        makeQuery(name, [...filters, { field, value }]),
+      where: (field: string, operator: string, value: unknown) =>
+        makeQuery(name, [...filters, { field, operator, value }], orders, queryLimit),
+      orderBy: (field: string, direction = "asc") =>
+        makeQuery(name, filters, [...orders, { field, direction }], queryLimit),
+      limit: (value: number) => makeQuery(name, filters, orders, value),
     };
   }
 
@@ -42,7 +74,11 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
   }
 
   return {
-    resetFakeDb: () => store.clear(),
+    queryCalls,
+    resetFakeDb: () => {
+      store.clear();
+      queryCalls.length = 0;
+    },
     seedDoc: (collection: string, id: string, data: any) => ensureCollection(collection).set(id, { id, data }),
     fakeDb: {
       collection: (name: string) => ({
@@ -377,6 +413,61 @@ describe("landlord unified inbox route", () => {
 
     expect(res.body.total).toBe(1);
     expect(JSON.stringify(res.body)).not.toContain("Other landlord private message");
+    const messageQueries = queryCalls.filter((query) => query.collection === "messages");
+    expect(messageQueries).toEqual([{
+      collection: "messages",
+      filters: [{ field: "conversationId", operator: "==", value: "conversation_raw_1" }],
+      orderBy: [{ field: "createdAt", direction: "desc" }],
+      limit: 21,
+    }]);
+    expect(queryCalls).not.toContainEqual(expect.objectContaining({
+      collection: "messages",
+      filters: [],
+    }));
+  });
+
+  it("bounds owned conversations and message candidates with deterministic truncation", async () => {
+    for (let index = 0; index < 101; index += 1) {
+      const conversationId = `bounded-${String(index).padStart(3, "0")}`;
+      seedDoc("conversations", conversationId, {
+        landlordId: "landlord-1",
+        lastMessageAt: 10_000 - index,
+      });
+      for (let messageIndex = 0; messageIndex < 22; messageIndex += 1) {
+        seedDoc("messages", `${conversationId}-message-${String(messageIndex).padStart(2, "0")}`, {
+          conversationId,
+          senderRole: "tenant",
+          body: `Message ${messageIndex}`,
+          createdAt: 10_000 - messageIndex,
+        });
+      }
+    }
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const router = (await import("./landlordInboxRoutes")).default;
+    const res = await invokeRouter(router, {
+      url: "/inbox?source=message&limit=100",
+      user: { id: "landlord-1", landlordId: "landlord-1", role: "landlord" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(96);
+    expect(res.body.items).toHaveLength(96);
+    const conversationQuery = queryCalls.find((query) => query.collection === "conversations");
+    expect(conversationQuery).toMatchObject({
+      filters: [{ field: "landlordId", operator: "==", value: "landlord-1" }],
+      orderBy: [{ field: "lastMessageAt", direction: "desc" }],
+      limit: 101,
+    });
+    const messageQueries = queryCalls.filter((query) => query.collection === "messages");
+    expect(messageQueries).toHaveLength(100);
+    expect(messageQueries.every((query) => query.limit === 21)).toBe(true);
+    expect(messageQueries.every((query) => query.filters[0]?.field === "conversationId")).toBe(true);
+    expect(warn).toHaveBeenCalledWith("[landlord-inbox] owned conversation limit reached", { limit: 100 });
+    expect(warn).toHaveBeenCalledWith("[landlord-inbox] per-conversation message limit reached", {
+      conversationCount: 99,
+      limit: 20,
+    });
+    warn.mockRestore();
   });
 
   it("registers the read-state route expected by the /api/landlord mount", async () => {

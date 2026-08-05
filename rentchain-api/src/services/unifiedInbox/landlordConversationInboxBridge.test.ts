@@ -68,4 +68,22 @@ describe("landlord conversation inbox bridge", () => {
       readAt: "1970-01-01T00:00:02.000Z",
     });
   });
+
+  it("uses message id as a deterministic tie-breaker and excludes malformed or orphaned messages", () => {
+    const records = buildLandlordConversationInboxRecords({
+      landlordId: "landlord-1",
+      conversations: [{ id: "conversation-1", landlordId: "landlord-1", lastMessageAt: 1000 }],
+      messages: [
+        { id: "message-a", conversationId: "conversation-1", senderRole: "tenant", body: "A", createdAtMs: 1000 },
+        { id: "message-b", conversationId: "conversation-1", senderRole: "tenant", body: "B", createdAtMs: 1000 },
+        { id: "orphan", conversationId: "missing", senderRole: "tenant", body: "Private", createdAtMs: 2000 },
+        { id: "malformed", senderRole: "tenant", body: "Malformed", createdAtMs: 3000 },
+      ],
+    });
+
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ body: "B", createdAt: "1970-01-01T00:00:01.000Z" });
+    expect(JSON.stringify(records)).not.toContain("Private");
+    expect(JSON.stringify(records)).not.toContain("Malformed");
+  });
 });

@@ -45,7 +45,7 @@ function latestTenantMessage(messages: MessageRecord[]) {
     .filter((message) => stringValue(message.senderRole, 40).toLowerCase() === "tenant")
     .map((message) => ({ message, at: millis(message.createdAt ?? message.createdAtMs) }))
     .filter((entry): entry is { message: MessageRecord; at: number } => entry.at != null)
-    .sort((left, right) => right.at - left.at)[0] || null;
+    .sort((left, right) => right.at - left.at || stringValue(right.message.id).localeCompare(stringValue(left.message.id)))[0] || null;
 }
 
 /**

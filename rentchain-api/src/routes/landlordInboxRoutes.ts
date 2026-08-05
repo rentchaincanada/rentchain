@@ -17,6 +17,9 @@ const router = Router();
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
 const READ_STATES_COLLECTION = "unifiedInboxReadStates";
+const MAX_LANDLORD_CONVERSATIONS = 100;
+const MAX_MESSAGES_PER_CONVERSATION = 20;
+const TRUNCATION_SENTINEL = 1;
 
 export type LandlordInboxRequest = {
   limit: number;
@@ -161,9 +164,60 @@ async function loadCollection(name: string) {
 }
 
 async function loadLandlordConversations(landlordId: string) {
-  const snap = await db.collection("conversations").where("landlordId", "==", landlordId).get().catch(() => null);
+  const snap = await db
+    .collection("conversations")
+    .where("landlordId", "==", landlordId)
+    .orderBy("lastMessageAt", "desc")
+    .limit(MAX_LANDLORD_CONVERSATIONS + TRUNCATION_SENTINEL)
+    .get()
+    .catch(() => null);
   if (!snap) return [];
-  return (snap.docs || []).map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }));
+  const docs = snap.docs || [];
+  if (docs.length > MAX_LANDLORD_CONVERSATIONS) {
+    console.warn("[landlord-inbox] owned conversation limit reached", {
+      limit: MAX_LANDLORD_CONVERSATIONS,
+    });
+  }
+  return docs
+    .slice(0, MAX_LANDLORD_CONVERSATIONS)
+    .map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }));
+}
+
+async function loadRecentMessagesForOwnedConversations(
+  conversations: Array<Record<string, unknown>>,
+  propertyId: string | null
+) {
+  const scopedConversations = propertyId
+    ? conversations.filter((conversation) => docPropertyId(conversation) === propertyId)
+    : conversations;
+  const batches = await Promise.all(
+    scopedConversations.map(async (conversation) => {
+      const conversationId = asString(conversation.id, 240);
+      if (!conversationId) return { messages: [], limitReached: false };
+      const snap = await db
+        .collection("messages")
+        .where("conversationId", "==", conversationId)
+        .orderBy("createdAt", "desc")
+        .limit(MAX_MESSAGES_PER_CONVERSATION + TRUNCATION_SENTINEL)
+        .get()
+        .catch(() => null);
+      const docs = snap?.docs || [];
+      return {
+        messages: docs
+          .slice(0, MAX_MESSAGES_PER_CONVERSATION)
+          .map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) })),
+        limitReached: docs.length > MAX_MESSAGES_PER_CONVERSATION,
+      };
+    })
+  );
+  const limitedConversationCount = batches.filter((batch) => batch.limitReached).length;
+  if (limitedConversationCount) {
+    console.warn("[landlord-inbox] per-conversation message limit reached", {
+      conversationCount: limitedConversationCount,
+      limit: MAX_MESSAGES_PER_CONVERSATION,
+    });
+  }
+  return batches.flatMap((batch) => batch.messages);
 }
 
 async function loadReadStatesByRecordId(landlordId: string) {
@@ -226,7 +280,7 @@ function applyPersistedReadStates(items: UnifiedInboxEvent[], readStatesByRecord
 }
 
 async function deriveScopedLandlordInbox(landlordId: string, request: LandlordInboxRequest) {
-  const [snapshot, leases, maintenanceRequests, conversations, messages] = await Promise.all([
+  const [snapshot, leases, maintenanceRequests, conversations] = await Promise.all([
     loadLandlordAnalyticsSnapshot({
       landlordId,
       propertyId: request.propertyId || undefined,
@@ -234,8 +288,8 @@ async function deriveScopedLandlordInbox(landlordId: string, request: LandlordIn
     loadCollection("leases"),
     loadCollection("maintenanceRequests"),
     loadLandlordConversations(landlordId),
-    loadCollection("messages"),
   ]);
+  const messages = await loadRecentMessagesForOwnedConversations(conversations, request.propertyId);
 
   const analyticsDecisions = Array.isArray(snapshot?.decisions?.items) ? snapshot.decisions.items : [];
   const safePage = await deriveLandlordUnifiedInbox(landlordId, {
