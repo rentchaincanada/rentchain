@@ -1,12 +1,23 @@
 .rc-messages-page {
-  min-height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: calc(
+    100dvh -
+    var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height, 120px)) -
+    var(--rc-landlord-sticky-shell-gap, 20px) -
+    24px
+  );
+  min-height: 480px;
   padding: 20px 24px;
   overflow-x: hidden;
 }
 
 .rc-messages-grid {
-  display: block;
-  min-height: 480px;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .rc-messages-list,
@@ -22,7 +33,9 @@
 .rc-messages-list {
   display: flex;
   flex-direction: column;
+  flex: 1;
   gap: 10px;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -33,7 +46,12 @@
 }
 
 .rc-messages-list-item {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  height: auto;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   text-align: left;
   border-radius: 14px;
   padding: 12px;
@@ -47,7 +65,7 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 10px;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .rc-messages-avatar {
@@ -73,11 +91,13 @@
 .rc-messages-list-item-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+  min-width: 0;
 }
 
 .rc-messages-list-item-title {
+  flex: 1 1 auto;
   font-weight: 600;
   font-size: 0.98rem;
   color: #0f172a;
@@ -120,6 +140,7 @@
 }
 
 .rc-messages-unread-dot {
+  flex: 0 0 auto;
   width: 10px;
   height: 10px;
   border-radius: 999px;
@@ -130,6 +151,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  height: 100%;
+  overflow: hidden;
 }
 
 .rc-messages-thread-header {
@@ -148,6 +171,8 @@
 .rc-messages-thread-title {
   font-size: 0.98rem;
   color: #0f172a;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .rc-messages-back {
@@ -171,6 +196,7 @@
 
 .rc-messages-bubble {
   max-width: 75%;
+  min-width: 0;
   border-radius: 20px;
   padding: 10px 12px;
   display: flex;
@@ -203,9 +229,13 @@
   background: #ffffff;
   position: sticky;
   bottom: 0;
+  min-width: 0;
 }
 
 .rc-messages-composer-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   min-height: 56px;
   border-radius: 12px;
   border: 1px solid rgba(148, 163, 184, 0.35);
@@ -223,10 +253,14 @@
 
 @media (max-width: 768px) {
   .rc-messages-page {
+    display: block;
+    height: auto;
+    min-height: 0;
     padding: 12px 16px;
   }
 
   .rc-messages-grid {
+    overflow: visible;
     min-height: auto;
   }
 
@@ -238,6 +272,15 @@
   .rc-messages-thread-header {
     position: sticky;
     top: 0;
+  }
+
+  .rc-messages-thread {
+    height: auto;
+    overflow: visible;
+  }
+
+  .rc-messages-thread-body {
+    overflow-y: visible;
   }
 
   .rc-messages-composer {

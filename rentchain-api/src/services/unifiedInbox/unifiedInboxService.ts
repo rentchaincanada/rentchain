@@ -219,6 +219,15 @@ function buildLandlordSourceAction(item: UnifiedInboxEvent): UnifiedInboxSourceA
     };
   }
 
+  if (item.sourceKind === "landlord.message" && item.sourceEntityId) {
+    return {
+      href: `/messages?threadId=${encodeURIComponent(item.sourceEntityId)}`,
+      label: "Open conversation",
+      helper: "Open the supported Messages workspace to read and reply.",
+      routeKind: "messages_workspace",
+    };
+  }
+
   if (item.sourceKind === "landlord.work_order") {
     return {
       href: "/work-orders",

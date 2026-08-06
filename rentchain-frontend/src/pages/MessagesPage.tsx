@@ -374,7 +374,7 @@ export default function MessagesPage() {
           ctaLabel="Upgrade to Starter"
         />
       ) : (
-      <div className="rc-messages-grid">
+      <div className="rc-messages-grid" data-testid="messages-layout">
         <ResponsiveMasterDetail
           masterTitle="Conversations"
           hasSelection={Boolean(selectedId)}
@@ -405,7 +405,10 @@ export default function MessagesPage() {
             ) : null
           }
           master={
-            <div className="rc-messages-list">
+            <div
+              className="rc-messages-list"
+              data-testid="messages-conversation-scroll"
+            >
               {loadingList ? (
                 <div style={{ color: text.muted }}>Loading…</div>
               ) : conversations.length === 0 ? (
@@ -464,7 +467,7 @@ export default function MessagesPage() {
             </div>
           }
           detail={
-            <div className="rc-messages-thread">
+            <div className="rc-messages-thread" data-testid="messages-detail-panel">
               {selectedConversation ? (
                 <>
                   <div className="rc-messages-thread-header">
@@ -472,7 +475,10 @@ export default function MessagesPage() {
                       <ConversationHeaderTitle conversation={selectedConversation} />
                     </div>
                   </div>
-                  <div className="rc-messages-thread-body">
+                  <div
+                    className="rc-messages-thread-body"
+                    data-testid="messages-detail-scroll"
+                  >
                     {loadingThread ? (
                       <div style={{ color: text.muted }}>Loading messages…</div>
                     ) : messages.length === 0 ? (
@@ -506,7 +512,7 @@ export default function MessagesPage() {
                         })
                     )}
                   </div>
-                  <div className="rc-messages-composer">
+                  <div className="rc-messages-composer" data-testid="messages-composer">
                     <textarea
                       value={composer}
                       onChange={(e) => setComposer(e.target.value)}

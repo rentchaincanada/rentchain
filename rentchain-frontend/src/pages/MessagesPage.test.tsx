@@ -1,6 +1,8 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import MessagesPage from "./MessagesPage";
 
 const mocks = vi.hoisted(() => ({
@@ -400,6 +402,109 @@ describe("MessagesPage", () => {
     expect(screen.getByText("Hello there")).toBeInTheDocument();
     expect(screen.queryByText("Loading messages…")).not.toBeInTheDocument();
     expect(screen.getAllByText("Taylor Tenant • Harbour View / Unit 2A").length).toBeGreaterThan(0);
+  });
+
+  it("exposes distinct bounded scroll regions while keeping the composer in the detail panel", async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+
+    await flushAsync();
+
+    const list = screen.getByTestId("messages-conversation-scroll");
+    const detailPanel = screen.getByTestId("messages-detail-panel");
+    const detailScroll = screen.getByTestId("messages-detail-scroll");
+    const composer = screen.getByTestId("messages-composer");
+
+    expect(list).toHaveClass("rc-messages-list");
+    expect(detailPanel).toContainElement(detailScroll);
+    expect(detailPanel).toContainElement(composer);
+    expect(container.querySelector(".rc-messages-list-item")).toBeInTheDocument();
+  });
+
+  it("keeps long tenant and property labels in the selectable conversation card structure", async () => {
+    mocks.fetchLandlordConversationsMock.mockResolvedValue([
+      {
+        id: "conv-long",
+        tenantId: "tenant-long",
+        tenantDisplayName: "QA Tenant With An Intentionally Extremely Long Display Name That Must Stay Inside The Conversation Card",
+        propertyDisplayLabel: "QA Harbour Property With A Deliberately Long Responsive Layout Verification Label",
+        unitDisplayLabel: "Unit 9999 With Extended Context",
+        hasUnread: false,
+      },
+      {
+        id: "conv-short",
+        tenantId: "tenant-short",
+        tenantDisplayName: "Short Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "2A",
+        hasUnread: true,
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <MessagesPage />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+    await flushAsync();
+
+    const title = screen
+      .getByTestId("messages-conversation-scroll")
+      .querySelector(".rc-messages-list-item-title") as HTMLElement;
+    expect(title).toHaveTextContent(/QA Tenant With An Intentionally Extremely Long Display Name/);
+    const card = title.closest(".rc-messages-list-item");
+    expect(card).toContainElement(title.closest(".rc-messages-list-item-title"));
+    const meta = card?.querySelector(".rc-messages-list-item-meta") as HTMLElement;
+    expect(meta).toHaveTextContent(/QA Harbour Property With A Deliberately Long/);
+    expect(card).toContainElement(meta);
+    expect(card?.getAttribute("style")).toContain("background");
+
+    const shortCard = screen.getByText("Short Tenant").closest(".rc-messages-list-item");
+    expect(shortCard?.querySelector(".rc-messages-unread-dot")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Short Tenant"));
+    expect(screen.getByTestId("location")).toHaveTextContent("/messages?threadId=conv-short");
+  });
+
+  it("retains the local width and independent-scroll CSS contracts", () => {
+    const css = readFileSync(resolve(process.cwd(), "src/pages/MessagesPage.css"), "utf8");
+
+    expect(css).toMatch(/\.rc-messages-list-item\s*\{[\s\S]*?box-sizing:\s*border-box;/);
+    expect(css).toMatch(/\.rc-messages-list-item\s*\{[\s\S]*?max-width:\s*100%;/);
+    expect(css).toMatch(/\.rc-messages-list-item\s*\{[\s\S]*?flex:\s*0 0 auto;/);
+    expect(css).toMatch(/\.rc-messages-list-item\s*\{[\s\S]*?height:\s*auto;/);
+    expect(css).toMatch(/\.rc-messages-list-item-body\s*\{[\s\S]*?align-items:\s*flex-start;/);
+    expect(css).toMatch(/\.rc-messages-list-item-title\s*\{[\s\S]*?flex:\s*1 1 auto;/);
+    expect(css).toMatch(/\.rc-messages-unread-dot\s*\{[\s\S]*?flex:\s*0 0 auto;/);
+    expect(css).toMatch(/\.rc-messages-list\s*\{[\s\S]*?overflow-x:\s*hidden;[\s\S]*?overflow-y:\s*auto;/);
+    expect(css).toMatch(/\.rc-messages-thread\s*\{[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*hidden;/);
+    expect(css).toMatch(/\.rc-messages-thread-body\s*\{[\s\S]*?overflow-y:\s*auto;/);
+    expect(css).toMatch(/\.rc-messages-composer-input\s*\{[\s\S]*?min-width:\s*0;/);
+  });
+
+  it("keeps the composer usable and sends through the selected conversation", async () => {
+    render(
+      <MemoryRouter initialEntries={["/messages?threadId=conv-1"]}>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+
+    await flushAsync();
+    const composer = screen.getByPlaceholderText("Write a message");
+    composer.focus();
+    fireEvent.change(composer, { target: { value: "Synthetic composer check" } });
+    expect(composer).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await flushAsync();
+
+    expect(mocks.sendLandlordMessageMock).toHaveBeenCalledWith(
+      "conv-1",
+      "Synthetic composer check"
+    );
   });
 
   it("does not repeatedly fire read for a stable selected conversation after background refresh", async () => {
