@@ -67,8 +67,41 @@ async function installFixture(page: Page, mobile: boolean) {
   </style><main class="rc-messages-page"><h1>Messages</h1><div class="rc-messages-grid" data-testid="messages-layout">${layout}</div></main>`);
 }
 
+async function expectConversationCardsContained(page: Page) {
+  const geometry = await page.locator(".rc-messages-list-item").evaluateAll((cards) =>
+    cards.map((card, index) => {
+      const rect = card.getBoundingClientRect();
+      const nextRect = cards[index + 1]?.getBoundingClientRect();
+      const childRects = [
+        card.querySelector(".rc-messages-list-item-body"),
+        card.querySelector(".rc-messages-list-item-title"),
+        card.querySelector(".rc-messages-list-item-meta"),
+        card.querySelector(".rc-messages-avatar"),
+        card.querySelector(".rc-messages-unread-dot"),
+      ].filter((element): element is Element => Boolean(element)).map((element) => element.getBoundingClientRect());
+      return {
+        card: { top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left, height: rect.height },
+        nextTop: nextRect?.top ?? null,
+        childrenContained: childRects.every((child) =>
+          child.top >= rect.top && child.right <= rect.right && child.bottom <= rect.bottom && child.left >= rect.left
+        ),
+      };
+    })
+  );
+
+  expect(geometry.length).toBeGreaterThan(1);
+  for (const [index, item] of geometry.entries()) {
+    expect(item.card.height, `card ${index} must retain its content-driven height`).toBeGreaterThanOrEqual(66);
+    expect(item.childrenContained, `card ${index} children must remain inside its border`).toBe(true);
+    if (item.nextTop != null) {
+      expect(item.nextTop - item.card.bottom, `card ${index} must not intersect the next card`).toBeGreaterThanOrEqual(9);
+    }
+  }
+}
+
 for (const viewport of [
   { name: "desktop", width: 1440, height: 900 },
+  { name: "wide-desktop", width: 1536, height: 960 },
   { name: "narrow-desktop", width: 1024, height: 768 },
 ]) {
   test(`${viewport.name} keeps bounded independent message panels`, async ({ page }) => {
@@ -78,6 +111,8 @@ for (const viewport of [
     const list = page.getByTestId("messages-conversation-scroll");
     const detail = page.getByTestId("messages-detail-scroll");
     const panel = page.getByTestId("messages-detail-panel");
+
+    await expectConversationCardsContained(page);
 
     for (const locator of [list, detail, panel]) {
       const geometry = await locator.evaluate((element) => ({
@@ -184,6 +219,8 @@ test("real Messages page preserves deep links, Back, composer access, and bounde
   }
   await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
   await expect(page.getByText(/QA Tenant With An Intentionally Long Governed Display Label 1/).first()).toBeVisible();
+
+  await expectConversationCardsContained(page);
 
   const list = page.getByTestId("messages-conversation-scroll");
   const detail = page.getByTestId("messages-detail-scroll");

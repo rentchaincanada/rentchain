@@ -47,6 +47,8 @@
 
 .rc-messages-list-item {
   box-sizing: border-box;
+  flex: 0 0 auto;
+  height: auto;
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -63,7 +65,7 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 10px;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .rc-messages-avatar {
@@ -89,12 +91,13 @@
 .rc-messages-list-item-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
 }
 
 .rc-messages-list-item-title {
+  flex: 1 1 auto;
   font-weight: 600;
   font-size: 0.98rem;
   color: #0f172a;
@@ -137,6 +140,7 @@
 }
 
 .rc-messages-unread-dot {
+  flex: 0 0 auto;
   width: 10px;
   height: 10px;
   border-radius: 999px;
