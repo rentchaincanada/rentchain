@@ -307,9 +307,13 @@ describe("landlord unified inbox route", () => {
     expect(res.body.ok).toBe(true);
     expect(res.body.limit).toBe(3);
     expect(res.body.offset).toBe(0);
-    expect(res.body.total).toBe(1);
-    expect(res.body.items).toHaveLength(1);
-    expect(res.body.items.map((item: any) => item.sourceKind)).toEqual(["landlord.message"]);
+    expect(res.body.total).toBe(3);
+    expect(res.body.items).toHaveLength(3);
+    expect(res.body.items.map((item: any) => item.sourceKind)).toEqual([
+      "landlord.maintenance",
+      "landlord.message",
+      "landlord.lease",
+    ]);
     expectSafeResponse(res.body);
   });
 
@@ -432,6 +436,73 @@ describe("landlord unified inbox route", () => {
     }));
   });
 
+  it("restores applications, screening, and work orders only through validated owned parents", async () => {
+    seedDoc("rentalApplications", "application-owned", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      title: "Application ready",
+      updatedAt: "2026-06-09T15:00:00.000Z",
+    });
+    seedDoc("screeningOrders", "screening-owned", {
+      landlordId: "landlord-1",
+      applicationId: "application-owned",
+      title: "Screening ready",
+      updatedAt: "2026-06-09T16:00:00.000Z",
+    });
+    seedDoc("workOrders", "work-order-owned", {
+      landlordId: "landlord-1",
+      maintenanceRequestId: "maintenance_raw_1",
+      status: "assigned",
+      updatedAt: "2026-06-09T17:00:00.000Z",
+    });
+    seedDoc("leases", "lease-forged-child", {
+      landlordId: "landlord-1",
+      propertyId: "prop-2",
+      title: "Forged foreign lease",
+      updatedAt: "2026-06-09T18:00:00.000Z",
+    });
+    seedDoc("units", "unit-foreign-parent", { landlordId: "landlord-1", propertyId: "prop-2" });
+    seedDoc("leases", "lease-forged-unit", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-foreign-parent",
+      title: "Forged foreign unit lease",
+      updatedAt: "2026-06-09T18:30:00.000Z",
+    });
+    seedDoc("screeningOrders", "screening-orphan", {
+      landlordId: "landlord-1",
+      applicationId: "missing-application",
+      title: "Orphan screening",
+      updatedAt: "2026-06-09T19:00:00.000Z",
+    });
+    seedDoc("workOrders", "work-order-orphan", {
+      landlordId: "landlord-1",
+      maintenanceRequestId: "missing-request",
+      title: "Orphan work order",
+      updatedAt: "2026-06-09T20:00:00.000Z",
+    });
+    const router = (await import("./landlordInboxRoutes")).default;
+    const res = await invokeRouter(router, {
+      url: "/inbox?limit=100",
+      user: { id: "landlord-1", landlordId: "landlord-1", role: "landlord" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items.map((item: any) => item.sourceKind)).toEqual(expect.arrayContaining([
+      "landlord.application",
+      "landlord.screening",
+      "landlord.work_order",
+      "landlord.lease",
+      "landlord.maintenance",
+      "landlord.message",
+    ]));
+    expect(JSON.stringify(res.body)).not.toContain("Forged foreign lease");
+    expect(JSON.stringify(res.body)).not.toContain("Forged foreign unit lease");
+    expect(JSON.stringify(res.body)).not.toContain("Orphan screening");
+    expect(JSON.stringify(res.body)).not.toContain("Orphan work order");
+    expectSafeResponse(res.body);
+  });
+
   it("bounds owned conversations and message candidates with deterministic truncation", async () => {
     for (let index = 0; index < 101; index += 1) {
       const conversationId = `bounded-${String(index).padStart(3, "0")}`;
@@ -505,11 +576,34 @@ describe("landlord unified inbox route", () => {
     expect(res.status).toBe(200);
     expect(queryCalls.map((query) => query.collection).sort()).toEqual([
       "conversations",
+      "leases",
+      "maintenanceRequests",
       "messages",
+      "properties",
+      "rentalApplications",
+      "screeningOrders",
       "unifiedInboxReadStates",
+      "units",
+      "workOrders",
     ]);
     expect(queryCalls.every((query) => query.filters.length > 0)).toBe(true);
     expect(queryCalls.every((query) => query.limit !== null && query.limit! > 0)).toBe(true);
+    for (const collection of [
+      "properties",
+      "units",
+      "leases",
+      "maintenanceRequests",
+      "rentalApplications",
+      "screeningOrders",
+      "workOrders",
+    ]) {
+      expect(queryCalls.find((query) => query.collection === collection)).toEqual({
+        collection,
+        filters: [{ field: "landlordId", operator: "==", value: "landlord-1" }],
+        orderBy: [{ field: "__name__", direction: "asc" }],
+        limit: 101,
+      });
+    }
     expect(queryCalls.find((query) => query.collection === "unifiedInboxReadStates")).toEqual({
       collection: "unifiedInboxReadStates",
       filters: [{ field: "landlordId", operator: "==", value: "landlord-1" }],
@@ -554,7 +648,7 @@ describe("landlord unified inbox route", () => {
     warn.mockRestore();
   });
 
-  it("omits unsafe legacy projections with a structured governed warning", async () => {
+  it("restores parent-scoped sources and warns only for unsupported projections", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const router = (await import("./landlordInboxRoutes")).default;
     await invokeRouter(router, {
@@ -563,21 +657,15 @@ describe("landlord unified inbox route", () => {
     });
 
     expect(loadLandlordAnalyticsSnapshot).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledWith("[landlord-inbox] governed projections omitted", {
-      code: "UNIFIED_INBOX_PROJECTIONS_OMITTED",
+    expect(warn).toHaveBeenCalledWith("[landlord-inbox] unsupported projections omitted", {
+      code: "UNIFIED_INBOX_SOURCES_UNSUPPORTED",
       collections: [
-        "leases",
-        "maintenanceRequests",
-        "rentalApplications",
-        "workOrders",
-        "properties",
-        "units",
+        "viewingRequests",
+        "leaseNotices",
         "events",
         "canonicalEvents",
         "financialTransactions",
-        "screeningOrders",
       ],
-      reason: "BOUNDED_CANONICAL_OWNERSHIP_QUERY_UNAVAILABLE",
     });
     warn.mockRestore();
   });
