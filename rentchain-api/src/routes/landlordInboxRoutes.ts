@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { db } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireLandlord } from "../middleware/requireLandlord";
+import { previewQaAuth } from "../middleware/previewQaAuth";
 import {
   deriveLandlordUnifiedInbox,
   buildLandlordConversationInboxRecords,
@@ -423,7 +424,7 @@ async function deriveScopedLandlordInbox(landlordId: string, request: LandlordIn
   return applyPersistedReadStates(safePage.items, readStatesByRecordId);
 }
 
-router.get("/inbox", requireAuth, requireLandlord, async (req: Request, res: Response) => {
+router.get("/inbox", previewQaAuth("landlord-inbox"), requireAuth, requireLandlord, async (req: Request, res: Response) => {
   try {
     const landlordId = asString((req as any).user?.landlordId || (req as any).user?.id, 240);
     if (!landlordId) {
