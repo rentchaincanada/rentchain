@@ -333,7 +333,8 @@ describe("landlord unified inbox route", () => {
     vi.stubEnv("PREVIEW_QA_AUTH_SCOPE", "pr1509-unified-inbox");
     vi.stubEnv("APP_ENV", "preview");
     vi.stubEnv("GOOGLE_CLOUD_PROJECT", "rentchain-preview");
-    vi.stubEnv("K_SERVICE", "rentchain-pr1509-inbox-qa-b82c9914");
+    vi.stubEnv("K_SERVICE", "rentchain-pr1509-inbox-qa-4605bba7");
+    vi.stubEnv("PREVIEW_QA_EXPECTED_SERVICE", "rentchain-pr1509-inbox-qa-4605bba7");
     vi.stubEnv("FIRESTORE_ENABLED", "true");
     vi.stubEnv("FIRESTORE_DATABASE_ID", "(default)");
 

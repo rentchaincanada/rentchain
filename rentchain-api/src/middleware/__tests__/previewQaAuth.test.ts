@@ -12,7 +12,8 @@ const enabledEnv = {
   PREVIEW_QA_AUTH_SCOPE: "pr1509-unified-inbox",
   APP_ENV: "preview",
   GOOGLE_CLOUD_PROJECT: "rentchain-preview",
-  K_SERVICE: "rentchain-pr1509-inbox-qa-b82c9914",
+  K_SERVICE: "rentchain-pr1509-inbox-qa-4605bba7",
+  PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1509-inbox-qa-4605bba7",
   FIRESTORE_ENABLED: "true",
   FIRESTORE_DATABASE_ID: "(default)",
 } as NodeJS.ProcessEnv;
@@ -99,7 +100,12 @@ describe("previewQaAuth", () => {
     ["wrong project", { ...enabledEnv, GOOGLE_CLOUD_PROJECT: "other-preview" }],
     ["Production project", { ...enabledEnv, GOOGLE_CLOUD_PROJECT: "project-0d9658de-af29-4dc0-a99" }],
     ["unsupported environment", { ...enabledEnv, APP_ENV: "production" }],
-    ["wrong service", { ...enabledEnv, K_SERVICE: "rentchain-preview-backend" }],
+    ["missing expected service", { ...enabledEnv, PREVIEW_QA_EXPECTED_SERVICE: undefined }],
+    ["malformed expected service", { ...enabledEnv, PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1509-inbox-qa-head4605" }],
+    ["uppercase suffix", { ...enabledEnv, PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1509-inbox-qa-4605BBA7" }],
+    ["arbitrary service", { ...enabledEnv, K_SERVICE: "rentchain-pr1509-other-qa-4605bba7" }],
+    ["stale service", { ...enabledEnv, K_SERVICE: "rentchain-pr1509-inbox-qa-b82c9914" }],
+    ["permanent Preview service", { ...enabledEnv, K_SERVICE: "rentchain-preview-backend" }],
     ["Firestore disabled", { ...enabledEnv, FIRESTORE_ENABLED: "false" }],
     ["wrong database", { ...enabledEnv, FIRESTORE_DATABASE_ID: "other" }],
   ])("rejects the selector with %s", (_label, env) => {

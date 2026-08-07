@@ -32,7 +32,8 @@ function enabledQaEnv() {
     PREVIEW_QA_AUTH_SCOPE: "pr1509-unified-inbox",
     APP_ENV: "preview",
     GOOGLE_CLOUD_PROJECT: "rentchain-preview",
-    K_SERVICE: "rentchain-pr1509-inbox-qa-b82c9914",
+    K_SERVICE: "rentchain-pr1509-inbox-qa-4605bba7",
+    PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1509-inbox-qa-4605bba7",
     FIRESTORE_ENABLED: "true",
     FIRESTORE_DATABASE_ID: "(default)",
   };

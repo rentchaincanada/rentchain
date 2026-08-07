@@ -6,7 +6,9 @@ export const PREVIEW_QA_IDENTITY_ALIAS = "pr1509-landlord";
 export const PREVIEW_QA_LANDLORD_ID = "qa-pr1509-landlord";
 
 const PREVIEW_PROJECT_ID = "rentchain-preview";
-const PREVIEW_QA_SERVICE = "rentchain-pr1509-inbox-qa-b82c9914";
+const PRODUCTION_PROJECT_ID = "project-0d9658de-af29-4dc0-a99";
+const PERMANENT_PREVIEW_SERVICE = "rentchain-preview-backend";
+const PREVIEW_QA_SERVICE_PATTERN = /^rentchain-pr1509-inbox-qa-[a-f0-9]{8}$/;
 const PREVIEW_QA_SCOPE = "pr1509-unified-inbox";
 const previewQaAuthenticated = Symbol("previewQaAuthenticated");
 
@@ -38,6 +40,7 @@ export function decidePreviewQaAuth(input: PreviewQaDecisionInput): PreviewQaDec
   const enabled = String(input.env.PREVIEW_QA_AUTH_ENABLED || "").trim().toLowerCase();
   const scope = String(input.env.PREVIEW_QA_AUTH_SCOPE || "").trim();
   const service = String(input.env.K_SERVICE || "").trim();
+  const expectedService = String(input.env.PREVIEW_QA_EXPECTED_SERVICE || "").trim();
   const firestoreEnabled = String(input.env.FIRESTORE_ENABLED || "").trim().toLowerCase();
   const firestoreDatabaseId = String(input.env.FIRESTORE_DATABASE_ID || "").trim();
 
@@ -45,8 +48,12 @@ export function decidePreviewQaAuth(input: PreviewQaDecisionInput): PreviewQaDec
     enabled === "true" &&
     scope === PREVIEW_QA_SCOPE &&
     appEnvironment === "preview" &&
+    projectId !== PRODUCTION_PROJECT_ID &&
     projectId === PREVIEW_PROJECT_ID &&
-    service === PREVIEW_QA_SERVICE &&
+    service !== PERMANENT_PREVIEW_SERVICE &&
+    expectedService !== PERMANENT_PREVIEW_SERVICE &&
+    PREVIEW_QA_SERVICE_PATTERN.test(expectedService) &&
+    service === expectedService &&
     firestoreEnabled === "true" &&
     firestoreDatabaseId === "(default)";
 
