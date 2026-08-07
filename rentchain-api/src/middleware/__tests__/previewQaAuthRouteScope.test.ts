@@ -154,9 +154,10 @@ describe("Preview QA auth route scope", () => {
     });
   });
 
-  it("wires QA auth only to the three approved GET handlers", () => {
+  it("wires QA auth only to the three approved GET operations, including preempting public routes", () => {
     const inboxSource = readFileSync(new URL("../../routes/landlordInboxRoutes.ts", import.meta.url), "utf8");
     const messagesSource = readFileSync(new URL("../../routes/messagesRoutes.ts", import.meta.url), "utf8");
+    const publicSource = readFileSync(new URL("../../routes/publicRoutes.ts", import.meta.url), "utf8");
     expect(inboxSource).toContain('router.get("/inbox", previewQaAuth("landlord-inbox")');
     expect(inboxSource).not.toMatch(/router\.post\([^\n]+previewQaAuth/);
     expect(messagesSource).toContain(
@@ -166,5 +167,12 @@ describe("Preview QA auth route scope", () => {
       'router.get("/landlord/messages/conversations/:id", previewQaAuth("landlord-message-detail")'
     );
     expect(messagesSource).not.toMatch(/router\.post\([^\n]+previewQaAuth/);
+    expect(publicSource).toMatch(
+      /router\.get\(\s*"\/landlord\/messages\/conversations",\s*previewQaAuth\("landlord-message-list"\)/
+    );
+    expect(publicSource).toMatch(
+      /router\.get\(\s*"\/landlord\/messages\/conversations\/:id",\s*previewQaAuth\("landlord-message-detail"\)/
+    );
+    expect(publicSource).not.toMatch(/router\.post\([\s\S]{0,160}?previewQaAuth/);
   });
 });

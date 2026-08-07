@@ -21,6 +21,7 @@ import {
   requireDiagnosticAccess,
   safeDiagnosticBuildMetadata,
 } from "../middleware/diagnosticSurfaceGuard";
+import { previewQaAuth } from "../middleware/previewQaAuth";
 
 const router = Router();
 
@@ -1119,7 +1120,7 @@ async function enforceMessagingCapability(req: any, landlordId: string, res: Res
   return true;
 }
 
-router.get("/landlord/messages/conversations", authenticateJwt, requireLandlord, async (req: any, res) => {
+router.get("/landlord/messages/conversations", previewQaAuth("landlord-message-list"), authenticateJwt, requireLandlord, async (req: any, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
@@ -1152,7 +1153,7 @@ router.get("/landlord/messages/conversations", authenticateJwt, requireLandlord,
   }
 });
 
-router.get("/landlord/messages/conversations/:id", authenticateJwt, requireLandlord, async (req: any, res) => {
+router.get("/landlord/messages/conversations/:id", previewQaAuth("landlord-message-detail"), authenticateJwt, requireLandlord, async (req: any, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
