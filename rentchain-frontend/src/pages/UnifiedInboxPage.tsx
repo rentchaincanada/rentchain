@@ -86,6 +86,14 @@ function isRecordInTab(record: UnifiedInboxRecord, tab: InboxTab) {
   return true;
 }
 
+function matchesCanonicalStatus(record: UnifiedInboxRecord, status: StatusFilter) {
+  return status === "all" || record.status === status;
+}
+
+function matchesCanonicalPriority(record: UnifiedInboxRecord, priority: PriorityFilter) {
+  return priority === "all" || record.priority === priority;
+}
+
 function statusLabel(value: StatusFilter) {
   if (value === "all") return "All statuses";
   return value.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
@@ -149,8 +157,8 @@ export default function UnifiedInboxPage({ role }: Props) {
     () =>
       safeRecords.filter((record) => {
         const matchesTab = isRecordInTab(record, activeTab);
-        const matchesStatus = statusFilter === "all" || record.status === statusFilter;
-        const matchesPriority = priorityFilter === "all" || record.priority === priorityFilter;
+        const matchesStatus = matchesCanonicalStatus(record, statusFilter);
+        const matchesPriority = matchesCanonicalPriority(record, priorityFilter);
         const matchesSearch = !normalizedSearch || normalize(recordText(record)).includes(normalizedSearch);
         return matchesTab && matchesStatus && matchesPriority && matchesSearch;
       }),
@@ -354,6 +362,7 @@ export default function UnifiedInboxPage({ role }: Props) {
                   value={statusFilter}
                   onChange={(event) => {
                     resetFilterContext();
+                    setActiveTab("all");
                     setStatusFilter(event.target.value as StatusFilter);
                   }}
                   aria-label="Filter inbox status"
@@ -382,6 +391,7 @@ export default function UnifiedInboxPage({ role }: Props) {
                   value={priorityFilter}
                   onChange={(event) => {
                     resetFilterContext();
+                    setActiveTab("all");
                     setPriorityFilter(event.target.value as PriorityFilter);
                   }}
                   aria-label="Filter inbox priority"

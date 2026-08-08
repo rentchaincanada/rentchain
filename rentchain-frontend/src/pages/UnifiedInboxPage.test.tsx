@@ -32,6 +32,82 @@ function record(overrides: Partial<UnifiedInboxRecord>): UnifiedInboxRecord {
   };
 }
 
+function founderQaRecords(): UnifiedInboxRecord[] {
+  const landlordRecord = (overrides: Partial<UnifiedInboxRecord>) =>
+    record({ audienceRole: "landlord", ...overrides });
+  return [
+    landlordRecord({
+      id: "message-unread",
+      sourceKind: "landlord.message",
+      title: "Message from QA Tenant 7255-1",
+      body: "Synthetic tenant message one",
+      status: "unread",
+      priority: "normal",
+    }),
+    landlordRecord({
+      id: "message-read",
+      sourceKind: "landlord.message",
+      title: "Message from QA Tenant 7255-2",
+      body: "Synthetic tenant message two",
+      status: "read",
+      readAt: "2026-08-07T14:42:30.000Z",
+      priority: "normal",
+    }),
+    landlordRecord({
+      id: "maintenance",
+      sourceKind: "landlord.maintenance",
+      title: "PR1509 Synthetic Maintenance",
+      body: "Status: submitted",
+      status: "unread",
+      priority: "normal",
+    }),
+    landlordRecord({
+      id: "work-order",
+      sourceKind: "landlord.work_order",
+      title: "Work order update",
+      body: "Synthetic work order status: assigned",
+      status: "unread",
+      priority: "normal",
+    }),
+    landlordRecord({
+      id: "application",
+      sourceKind: "landlord.application",
+      title: "PR1509 Synthetic Application",
+      body: "Application update is available.",
+      status: "unread",
+      priority: "normal",
+    }),
+    landlordRecord({
+      id: "screening",
+      sourceKind: "landlord.screening",
+      title: "PR1509 Synthetic Screening",
+      body: "Screening update is available.",
+      status: "resolved",
+      priority: "high",
+    }),
+    ...Array.from({ length: 19 }, (_, index) =>
+      landlordRecord({
+        id: `lease-${index + 1}`,
+        sourceKind: "landlord.lease",
+        title: `PR1509 Lease ${String(index + 1).padStart(2, "0")}`,
+        body: "Lease lifecycle update is available.",
+        status: "unread",
+        priority: "normal",
+      })
+    ),
+  ];
+}
+
+function expectShowing(visible: number, total = 25) {
+  expect(
+    screen.getByText(
+      (_content, element) =>
+        element?.tagName === "SPAN" &&
+        element.textContent?.replace(/\s+/g, " ").trim() === `Showing ${visible} of ${total}`
+    )
+  ).toBeInTheDocument();
+}
+
 describe("UnifiedInboxPage", () => {
   beforeEach(() => {
     mocks.fetchUnifiedInbox.mockReset();
@@ -292,6 +368,73 @@ describe("UnifiedInboxPage", () => {
     expect(screen.getAllByText("System notice").length).toBeGreaterThan(0);
     expect(screen.queryByText("Lease renewal ready")).not.toBeInTheDocument();
     expect(screen.queryByText("Outstanding rent balance")).not.toBeInTheDocument();
+  });
+
+  it("applies canonical mixed-source filters to the exact 25-card Founder QA fixture", async () => {
+    const records = founderQaRecords();
+    mocks.fetchUnifiedInbox.mockResolvedValue({
+      ok: true,
+      role: "landlord",
+      items: records,
+      records,
+      total: 25,
+      limit: 100,
+      offset: 0,
+    });
+
+    render(<UnifiedInboxPage role="landlord" />);
+
+    expect(await screen.findByRole("tab", { name: "All 25" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Unread 23" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Maintenance 2" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Lease 19" })).toBeInTheDocument();
+    expectShowing(25);
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search inbox" }), {
+      target: { value: "QA Tenant 7255-1" },
+    });
+    expectShowing(1);
+    expect(screen.getByText("Message from QA Tenant 7255-1")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search inbox" }), { target: { value: "" } });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Maintenance 2" }));
+    expectShowing(2);
+    fireEvent.change(screen.getByLabelText("Filter inbox status"), { target: { value: "unread" } });
+    expect(screen.getByRole("tab", { name: "All 25" })).toHaveAttribute("aria-selected", "true");
+    expectShowing(23);
+    expect(screen.getByText("Message from QA Tenant 7255-1")).toBeInTheDocument();
+    expect(screen.queryByText("Message from QA Tenant 7255-2")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter inbox status"), { target: { value: "resolved" } });
+    expectShowing(1);
+    expect(screen.getByText("PR1509 Synthetic Screening")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter inbox status"), { target: { value: "all" } });
+    fireEvent.change(screen.getByLabelText("Filter inbox priority"), { target: { value: "normal" } });
+    expectShowing(24);
+    expect(screen.getByText("PR1509 Synthetic Maintenance")).toBeInTheDocument();
+    expect(screen.getByText("Work order update")).toBeInTheDocument();
+    expect(screen.getByText("PR1509 Synthetic Application")).toBeInTheDocument();
+    expect(screen.getByText("PR1509 Lease 19")).toBeInTheDocument();
+    expect(screen.queryByText("PR1509 Synthetic Screening")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter inbox priority"), { target: { value: "high" } });
+    expectShowing(1);
+    expect(screen.getByText("PR1509 Synthetic Screening")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter inbox status"), { target: { value: "resolved" } });
+    expectShowing(1);
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search inbox" }), {
+      target: { value: "Screening" },
+    });
+    expectShowing(1);
+    fireEvent.change(screen.getByLabelText("Filter inbox priority"), { target: { value: "all" } });
+    expectShowing(1);
+    expect(screen.getByLabelText("Filter inbox status")).toHaveValue("resolved");
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search inbox" }), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Filter inbox status"), { target: { value: "all" } });
+    expectShowing(25);
   });
 
   it("keeps true work-order inbox actions on the work-order workspace", async () => {
