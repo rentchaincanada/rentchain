@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { db } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireLandlord } from "../middleware/requireLandlord";
+import { previewQaAuth } from "../middleware/previewQaAuth";
 import {
   deriveLandlordUnifiedInbox,
   buildLandlordConversationInboxRecords,
@@ -20,18 +21,14 @@ const READ_STATES_COLLECTION = "unifiedInboxReadStates";
 const MAX_LANDLORD_CONVERSATIONS = 100;
 const MAX_MESSAGES_PER_CONVERSATION = 20;
 const MAX_READ_STATES = 100;
+const MAX_OPERATIONAL_CANDIDATES = 100;
 const TRUNCATION_SENTINEL = 1;
-const OMITTED_UNSAFE_PROJECTIONS = [
-  "leases",
-  "maintenanceRequests",
-  "rentalApplications",
-  "workOrders",
-  "properties",
-  "units",
+const UNSUPPORTED_PROJECTIONS = [
+  "viewingRequests",
+  "leaseNotices",
   "events",
   "canonicalEvents",
   "financialTransactions",
-  "screeningOrders",
 ] as const;
 
 export type LandlordInboxRequest = {
@@ -68,6 +65,8 @@ const SOURCE_MAP: Record<string, SourceKind> = {
   "landlord.maintenance": "landlord.maintenance",
   message: "landlord.message",
   "landlord.message": "landlord.message",
+  work_order: "landlord.work_order",
+  "landlord.work_order": "landlord.work_order",
 };
 
 function asString(value: unknown, max = 240): string {
@@ -139,7 +138,7 @@ function validateQuery(query: any): ValidationResult {
       ok: false,
       status: 400,
       error: "INVALID_SOURCE",
-      message: "source must be one of application, screening, lease, maintenance, or message",
+      message: "source must be one of application, screening, lease, maintenance, message, or work_order",
     };
   }
 
@@ -269,6 +268,97 @@ async function loadReadStatesByRecordId(landlordId: string) {
   return new Map<string, string>(entries);
 }
 
+type OperationalSource =
+  | "properties"
+  | "units"
+  | "leases"
+  | "maintenanceRequests"
+  | "rentalApplications"
+  | "screeningOrders"
+  | "workOrders";
+
+async function loadBoundedLandlordCandidates(collection: OperationalSource, landlordId: string) {
+  const snap = await db
+    .collection(collection)
+    .where("landlordId", "==", landlordId)
+    .orderBy("__name__", "asc")
+    .limit(MAX_OPERATIONAL_CANDIDATES + TRUNCATION_SENTINEL)
+    .get()
+    .catch(() => null);
+  if (!snap) {
+    console.warn("[landlord-inbox] operational source omitted", {
+      code: "UNIFIED_INBOX_SOURCE_QUERY_FAILED",
+      collection,
+      landlordScope: landlordScopeFingerprint(landlordId),
+    });
+    return [];
+  }
+  const docs = snap.docs || [];
+  if (docs.length > MAX_OPERATIONAL_CANDIDATES) {
+    console.warn("[landlord-inbox] operational source limit reached", {
+      code: "UNIFIED_INBOX_SCOPE_LIMIT_REACHED",
+      collection,
+      limit: MAX_OPERATIONAL_CANDIDATES,
+      observedCappedCount: docs.length,
+      landlordScope: landlordScopeFingerprint(landlordId),
+    });
+  }
+  return docs
+    .slice(0, MAX_OPERATIONAL_CANDIDATES)
+    .map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }));
+}
+
+function parentScoped(record: any, parents: Map<string, any>, parentField: string) {
+  const parentId = asString(record?.[parentField], 240);
+  return Boolean(parentId && parents.has(parentId));
+}
+
+function propertyAndUnitScoped(record: any, properties: Map<string, any>, units: Map<string, any>) {
+  const propertyId = asString(record?.propertyId, 240);
+  if (!propertyId || !properties.has(propertyId)) return false;
+  const unitId = asString(record?.unitId, 240);
+  if (!unitId) return true;
+  const unit = units.get(unitId);
+  return Boolean(unit && asString(unit.propertyId, 240) === propertyId);
+}
+
+async function loadScopedOperationalSources(landlordId: string, requestedPropertyId: string | null) {
+  const [propertyCandidates, unitCandidates, leases, maintenanceRequests, rentalApplications] = await Promise.all([
+    loadBoundedLandlordCandidates("properties", landlordId),
+    loadBoundedLandlordCandidates("units", landlordId),
+    loadBoundedLandlordCandidates("leases", landlordId),
+    loadBoundedLandlordCandidates("maintenanceRequests", landlordId),
+    loadBoundedLandlordCandidates("rentalApplications", landlordId),
+  ]);
+  const properties = new Map(
+    propertyCandidates
+      .filter((record) => hasLandlordScope(record, landlordId))
+      .filter((record) => !requestedPropertyId || record.id === requestedPropertyId)
+      .map((record) => [asString(record.id, 240), record])
+  );
+  const units = new Map(
+    unitCandidates
+      .filter((record) => parentScoped(record, properties, "propertyId"))
+      .map((record) => [asString(record.id, 240), record])
+  );
+  const scopedLeases = leases.filter((record) => propertyAndUnitScoped(record, properties, units));
+  const scopedMaintenance = maintenanceRequests.filter((record) => propertyAndUnitScoped(record, properties, units));
+  const scopedApplications = rentalApplications.filter((record) => propertyAndUnitScoped(record, properties, units));
+  const applicationsById = new Map(scopedApplications.map((record) => [asString(record.id, 240), record]));
+  const maintenanceById = new Map(scopedMaintenance.map((record) => [asString(record.id, 240), record]));
+  const [screeningOrders, workOrders] = await Promise.all([
+    loadBoundedLandlordCandidates("screeningOrders", landlordId),
+    loadBoundedLandlordCandidates("workOrders", landlordId),
+  ]);
+  return {
+    leases: scopedLeases,
+    maintenanceRequests: scopedMaintenance,
+    rentalApplications: scopedApplications,
+    screeningOrders: screeningOrders.filter((record) => parentScoped(record, applicationsById, "applicationId")),
+    workOrders: workOrders.filter((record) => parentScoped(record, maintenanceById, "maintenanceRequestId")),
+  };
+}
+
 async function resolvePropertyScope(landlordId: string, propertyId: string | null) {
   if (!propertyId) return { ok: true as const };
   const propertyDoc = await db.collection("properties").doc(propertyId).get().catch(() => null);
@@ -308,32 +398,33 @@ function applyPersistedReadStates(items: UnifiedInboxEvent[], readStatesByRecord
 }
 
 async function deriveScopedLandlordInbox(landlordId: string, request: LandlordInboxRequest) {
-  console.warn("[landlord-inbox] governed projections omitted", {
-    code: "UNIFIED_INBOX_PROJECTIONS_OMITTED",
-    collections: OMITTED_UNSAFE_PROJECTIONS,
-    reason: "BOUNDED_CANONICAL_OWNERSHIP_QUERY_UNAVAILABLE",
+  console.warn("[landlord-inbox] unsupported projections omitted", {
+    code: "UNIFIED_INBOX_SOURCES_UNSUPPORTED",
+    collections: UNSUPPORTED_PROJECTIONS,
   });
-  const conversations = await loadLandlordConversations(landlordId);
+  const [operational, conversations] = await Promise.all([
+    loadScopedOperationalSources(landlordId, request.propertyId),
+    loadLandlordConversations(landlordId),
+  ]);
   const messages = await loadRecentMessagesForOwnedConversations(conversations, request.propertyId);
+  const include = (source: SourceKind) => !request.source || request.source === source;
 
   const safePage = await deriveLandlordUnifiedInbox(landlordId, {
-    applicationItems: [],
-    screeningItems: [],
-    leaseItems: [],
-    maintenanceRequests: [],
-    messages: buildLandlordConversationInboxRecords({
-      landlordId,
-      propertyId: request.propertyId,
-      conversations,
-      messages,
-    }),
+    applicationItems: include("landlord.application") ? operational.rentalApplications : [],
+    screeningItems: include("landlord.screening") ? operational.screeningOrders : [],
+    leaseItems: include("landlord.lease") ? operational.leases : [],
+    maintenanceRequests: include("landlord.maintenance") ? operational.maintenanceRequests : [],
+    messages: include("landlord.message")
+      ? buildLandlordConversationInboxRecords({ landlordId, propertyId: request.propertyId, conversations, messages })
+      : [],
+    workOrders: include("landlord.work_order") ? operational.workOrders : [],
     limit: MAX_LIMIT,
   });
   const readStatesByRecordId = await loadReadStatesByRecordId(landlordId);
   return applyPersistedReadStates(safePage.items, readStatesByRecordId);
 }
 
-router.get("/inbox", requireAuth, requireLandlord, async (req: Request, res: Response) => {
+router.get("/inbox", previewQaAuth("landlord-inbox"), requireAuth, requireLandlord, async (req: Request, res: Response) => {
   try {
     const landlordId = asString((req as any).user?.landlordId || (req as any).user?.id, 240);
     if (!landlordId) {

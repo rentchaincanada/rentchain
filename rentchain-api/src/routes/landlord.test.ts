@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 
 const { fakeDb, queryCalls, resetFakeDb, seedDoc } = vi.hoisted(() => {
@@ -116,6 +116,7 @@ vi.mock("../services/landlord/landlordAnalyticsSnapshot", () => ({
 
 vi.mock("../middleware/requireAuth", () => ({
   requireAuth: (req: any, res: any, next: any) => {
+    if (req.user) return next();
     if (!mockUser) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
     req.user = mockUser;
     return next();
@@ -133,7 +134,13 @@ vi.mock("../middleware/requireLandlord", () => ({
   },
 }));
 
-async function invokeRouter(router: any, options: { url: string; user?: any; method?: string; body?: any }) {
+async function invokeRouter(router: any, options: {
+  url: string;
+  user?: any;
+  method?: string;
+  body?: any;
+  headers?: Record<string, string>;
+}) {
   return await new Promise<{ status: number; body: any }>((resolve, reject) => {
     const [path, queryString] = options.url.split("?");
     const query = new URLSearchParams(queryString || "");
@@ -145,7 +152,7 @@ async function invokeRouter(router: any, options: { url: string; user?: any; met
       path,
       query: Object.fromEntries(query.entries()),
       params: {},
-      headers: {},
+      headers: options.headers || {},
       body: options.body || {},
     };
     const res: any = {
@@ -277,6 +284,10 @@ describe("landlord unified inbox route", () => {
     });
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("requires authentication", async () => {
     const router = (await import("./landlordInboxRoutes")).default;
     const res = await invokeRouter(router, { url: "/inbox" });
@@ -307,9 +318,126 @@ describe("landlord unified inbox route", () => {
     expect(res.body.ok).toBe(true);
     expect(res.body.limit).toBe(3);
     expect(res.body.offset).toBe(0);
-    expect(res.body.total).toBe(1);
-    expect(res.body.items).toHaveLength(1);
-    expect(res.body.items.map((item: any) => item.sourceKind)).toEqual(["landlord.message"]);
+    expect(res.body.total).toBe(3);
+    expect(res.body.items).toHaveLength(3);
+    expect(res.body.items.map((item: any) => item.sourceKind)).toEqual([
+      "landlord.maintenance",
+      "landlord.message",
+      "landlord.lease",
+    ]);
+    expectSafeResponse(res.body);
+  });
+
+  it("uses the fixed Preview QA identity for the 25-item mixed-source regression fixture", async () => {
+    vi.stubEnv("PREVIEW_QA_AUTH_ENABLED", "true");
+    vi.stubEnv("PREVIEW_QA_AUTH_SCOPE", "pr1509-unified-inbox");
+    vi.stubEnv("APP_ENV", "preview");
+    vi.stubEnv("GOOGLE_CLOUD_PROJECT", "rentchain-preview");
+    vi.stubEnv("K_SERVICE", "rentchain-pr1509-inbox-qa-4605bba7");
+    vi.stubEnv("PREVIEW_QA_EXPECTED_SERVICE", "rentchain-pr1509-inbox-qa-4605bba7");
+    vi.stubEnv("FIRESTORE_ENABLED", "true");
+    vi.stubEnv("FIRESTORE_DATABASE_ID", "(default)");
+
+    resetFakeDb();
+    seedDoc("properties", "qa-property", { landlordId: "qa-pr1509-landlord", name: "QA Property One" });
+    seedDoc("units", "qa-unit", { landlordId: "qa-pr1509-landlord", propertyId: "qa-property" });
+    for (let index = 1; index <= 19; index += 1) {
+      seedDoc("leases", `qa-lease-${index}`, {
+        landlordId: "qa-pr1509-landlord",
+        propertyId: "qa-property",
+        unitId: "qa-unit",
+        title: `QA Lease ${index}`,
+        updatedAt: `2026-08-06T${String(index).padStart(2, "0")}:00:00.000Z`,
+      });
+    }
+    seedDoc("maintenanceRequests", "qa-maintenance", {
+      landlordId: "qa-pr1509-landlord",
+      propertyId: "qa-property",
+      unitId: "qa-unit",
+      title: "QA Maintenance",
+      status: "submitted",
+      updatedAt: "2026-08-06T20:00:00.000Z",
+    });
+    seedDoc("rentalApplications", "qa-application", {
+      landlordId: "qa-pr1509-landlord",
+      propertyId: "qa-property",
+      title: "QA Application",
+      updatedAt: "2026-08-06T21:00:00.000Z",
+    });
+    seedDoc("screeningOrders", "qa-screening", {
+      landlordId: "qa-pr1509-landlord",
+      applicationId: "qa-application",
+      title: "QA Screening",
+      updatedAt: "2026-08-06T22:00:00.000Z",
+    });
+    seedDoc("workOrders", "qa-work-order", {
+      landlordId: "qa-pr1509-landlord",
+      maintenanceRequestId: "qa-maintenance",
+      status: "assigned",
+      updatedAt: "2026-08-06T23:00:00.000Z",
+    });
+    seedDoc("properties", "qa-foreign-property", { landlordId: "qa-other-landlord" });
+    seedDoc("leases", "qa-forged-lease", {
+      landlordId: "qa-pr1509-landlord",
+      propertyId: "qa-foreign-property",
+      title: "Forged lease must not appear",
+    });
+    seedDoc("units", "qa-forged-unit", {
+      landlordId: "qa-pr1509-landlord",
+      propertyId: "qa-foreign-property",
+    });
+    seedDoc("leases", "qa-forged-unit-lease", {
+      landlordId: "qa-pr1509-landlord",
+      propertyId: "qa-property",
+      unitId: "qa-forged-unit",
+      title: "Forged unit lease must not appear",
+    });
+    seedDoc("screeningOrders", "qa-orphan-screening", {
+      landlordId: "qa-pr1509-landlord",
+      applicationId: "qa-missing-application",
+      title: "Orphan screening must not appear",
+    });
+    seedDoc("workOrders", "qa-orphan-work-order", {
+      landlordId: "qa-pr1509-landlord",
+      maintenanceRequestId: "qa-missing-maintenance",
+      title: "Orphan work order must not appear",
+    });
+    for (let index = 1; index <= 2; index += 1) {
+      seedDoc("conversations", `qa-conversation-${index}`, {
+        landlordId: "qa-pr1509-landlord",
+        propertyId: "qa-property",
+        tenantDisplayName: `QA Tenant ${index}`,
+        lastMessageAt: `2026-08-06T0${index}:00:00.000Z`,
+      });
+      seedDoc("messages", `qa-message-${index}`, {
+        conversationId: `qa-conversation-${index}`,
+        senderRole: "tenant",
+        body: `Synthetic QA message ${index}`,
+        createdAt: `2026-08-06T0${index}:00:00.000Z`,
+      });
+    }
+
+    const router = (await import("./landlordInboxRoutes")).default;
+    const res = await invokeRouter(router, {
+      url: "/inbox?limit=100",
+      headers: { "x-rentchain-preview-qa-identity": "pr1509-landlord" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(25);
+    const counts = res.body.items.reduce((result: Record<string, number>, item: any) => {
+      result[item.sourceKind] = (result[item.sourceKind] || 0) + 1;
+      return result;
+    }, {});
+    expect(counts).toEqual({
+      "landlord.application": 1,
+      "landlord.screening": 1,
+      "landlord.lease": 19,
+      "landlord.maintenance": 1,
+      "landlord.message": 2,
+      "landlord.work_order": 1,
+    });
+    expect(JSON.stringify(res.body)).not.toContain("must not appear");
     expectSafeResponse(res.body);
   });
 
@@ -432,6 +560,73 @@ describe("landlord unified inbox route", () => {
     }));
   });
 
+  it("restores applications, screening, and work orders only through validated owned parents", async () => {
+    seedDoc("rentalApplications", "application-owned", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      title: "Application ready",
+      updatedAt: "2026-06-09T15:00:00.000Z",
+    });
+    seedDoc("screeningOrders", "screening-owned", {
+      landlordId: "landlord-1",
+      applicationId: "application-owned",
+      title: "Screening ready",
+      updatedAt: "2026-06-09T16:00:00.000Z",
+    });
+    seedDoc("workOrders", "work-order-owned", {
+      landlordId: "landlord-1",
+      maintenanceRequestId: "maintenance_raw_1",
+      status: "assigned",
+      updatedAt: "2026-06-09T17:00:00.000Z",
+    });
+    seedDoc("leases", "lease-forged-child", {
+      landlordId: "landlord-1",
+      propertyId: "prop-2",
+      title: "Forged foreign lease",
+      updatedAt: "2026-06-09T18:00:00.000Z",
+    });
+    seedDoc("units", "unit-foreign-parent", { landlordId: "landlord-1", propertyId: "prop-2" });
+    seedDoc("leases", "lease-forged-unit", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-foreign-parent",
+      title: "Forged foreign unit lease",
+      updatedAt: "2026-06-09T18:30:00.000Z",
+    });
+    seedDoc("screeningOrders", "screening-orphan", {
+      landlordId: "landlord-1",
+      applicationId: "missing-application",
+      title: "Orphan screening",
+      updatedAt: "2026-06-09T19:00:00.000Z",
+    });
+    seedDoc("workOrders", "work-order-orphan", {
+      landlordId: "landlord-1",
+      maintenanceRequestId: "missing-request",
+      title: "Orphan work order",
+      updatedAt: "2026-06-09T20:00:00.000Z",
+    });
+    const router = (await import("./landlordInboxRoutes")).default;
+    const res = await invokeRouter(router, {
+      url: "/inbox?limit=100",
+      user: { id: "landlord-1", landlordId: "landlord-1", role: "landlord" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items.map((item: any) => item.sourceKind)).toEqual(expect.arrayContaining([
+      "landlord.application",
+      "landlord.screening",
+      "landlord.work_order",
+      "landlord.lease",
+      "landlord.maintenance",
+      "landlord.message",
+    ]));
+    expect(JSON.stringify(res.body)).not.toContain("Forged foreign lease");
+    expect(JSON.stringify(res.body)).not.toContain("Forged foreign unit lease");
+    expect(JSON.stringify(res.body)).not.toContain("Orphan screening");
+    expect(JSON.stringify(res.body)).not.toContain("Orphan work order");
+    expectSafeResponse(res.body);
+  });
+
   it("bounds owned conversations and message candidates with deterministic truncation", async () => {
     for (let index = 0; index < 101; index += 1) {
       const conversationId = `bounded-${String(index).padStart(3, "0")}`;
@@ -505,11 +700,34 @@ describe("landlord unified inbox route", () => {
     expect(res.status).toBe(200);
     expect(queryCalls.map((query) => query.collection).sort()).toEqual([
       "conversations",
+      "leases",
+      "maintenanceRequests",
       "messages",
+      "properties",
+      "rentalApplications",
+      "screeningOrders",
       "unifiedInboxReadStates",
+      "units",
+      "workOrders",
     ]);
     expect(queryCalls.every((query) => query.filters.length > 0)).toBe(true);
     expect(queryCalls.every((query) => query.limit !== null && query.limit! > 0)).toBe(true);
+    for (const collection of [
+      "properties",
+      "units",
+      "leases",
+      "maintenanceRequests",
+      "rentalApplications",
+      "screeningOrders",
+      "workOrders",
+    ]) {
+      expect(queryCalls.find((query) => query.collection === collection)).toEqual({
+        collection,
+        filters: [{ field: "landlordId", operator: "==", value: "landlord-1" }],
+        orderBy: [{ field: "__name__", direction: "asc" }],
+        limit: 101,
+      });
+    }
     expect(queryCalls.find((query) => query.collection === "unifiedInboxReadStates")).toEqual({
       collection: "unifiedInboxReadStates",
       filters: [{ field: "landlordId", operator: "==", value: "landlord-1" }],
@@ -554,7 +772,7 @@ describe("landlord unified inbox route", () => {
     warn.mockRestore();
   });
 
-  it("omits unsafe legacy projections with a structured governed warning", async () => {
+  it("restores parent-scoped sources and warns only for unsupported projections", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const router = (await import("./landlordInboxRoutes")).default;
     await invokeRouter(router, {
@@ -563,21 +781,15 @@ describe("landlord unified inbox route", () => {
     });
 
     expect(loadLandlordAnalyticsSnapshot).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledWith("[landlord-inbox] governed projections omitted", {
-      code: "UNIFIED_INBOX_PROJECTIONS_OMITTED",
+    expect(warn).toHaveBeenCalledWith("[landlord-inbox] unsupported projections omitted", {
+      code: "UNIFIED_INBOX_SOURCES_UNSUPPORTED",
       collections: [
-        "leases",
-        "maintenanceRequests",
-        "rentalApplications",
-        "workOrders",
-        "properties",
-        "units",
+        "viewingRequests",
+        "leaseNotices",
         "events",
         "canonicalEvents",
         "financialTransactions",
-        "screeningOrders",
       ],
-      reason: "BOUNDED_CANONICAL_OWNERSHIP_QUERY_UNAVAILABLE",
     });
     warn.mockRestore();
   });

@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { verifyAuthToken, type JwtClaimsV1 } from "../auth/jwt";
 import { buildCanonicalSessionUserFromClaims } from "../services/sessionUserService";
+import { isPreviewQaAuthenticatedRequest } from "./previewQaAuth";
 
 function getBearerToken(req: any): string | null {
   const raw = req.headers?.authorization || req.headers?.Authorization;
@@ -11,6 +12,10 @@ function getBearerToken(req: any): string | null {
 
 export async function requireAuth(req: any, res: any, next: any) {
   try {
+    if (isPreviewQaAuthenticatedRequest(req)) {
+      return next();
+    }
+
     const token = getBearerToken(req);
     if (!token) {
       return res.status(401).json({ ok: false, error: "unauthenticated" });

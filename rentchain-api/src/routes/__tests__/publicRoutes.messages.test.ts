@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { sendEmailMock } = vi.hoisted(() => ({
   sendEmailMock: vi.fn(),
 }));
 
 const collections = new Map<string, Map<string, any>>();
+const originalEnv = process.env;
 
 function ensureCollection(name: string) {
   if (!collections.has(name)) collections.set(name, new Map<string, any>());
@@ -188,6 +189,7 @@ async function invokeRouter(router: any, options: {
 
 describe("publicRoutes message endpoints", () => {
   beforeEach(() => {
+    process.env = { ...originalEnv };
     collections.clear();
     sendEmailMock.mockReset();
     sendEmailMock.mockResolvedValue(undefined);
@@ -222,6 +224,21 @@ describe("publicRoutes message endpoints", () => {
     });
   });
 
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  function enablePreviewQaAuth() {
+    process.env.PREVIEW_QA_AUTH_ENABLED = "true";
+    process.env.PREVIEW_QA_AUTH_SCOPE = "pr1509-unified-inbox";
+    process.env.APP_ENV = "preview";
+    process.env.GOOGLE_CLOUD_PROJECT = "rentchain-preview";
+    process.env.K_SERVICE = "rentchain-pr1509-inbox-qa-7255f05e";
+    process.env.PREVIEW_QA_EXPECTED_SERVICE = "rentchain-pr1509-inbox-qa-7255f05e";
+    process.env.FIRESTORE_ENABLED = "true";
+    process.env.FIRESTORE_DATABASE_ID = "(default)";
+  }
+
   it("serves landlord messages through publicRoutes with active lease labels", async () => {
     const router = (await import("../publicRoutes")).default;
     const res = await invokeRouter(router, {
@@ -244,6 +261,144 @@ describe("publicRoutes message endpoints", () => {
         }),
       ])
     );
+  });
+
+  it("allows the isolated Preview QA identity through the preempting conversation-list route", async () => {
+    enablePreviewQaAuth();
+    ensureCollection("conversations").set("qa-conversation", {
+      landlordId: "qa-pr1509-landlord",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      lastMessageAt: 3000,
+    });
+    const router = (await import("../publicRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/conversations",
+      headers: { "x-rentchain-preview-qa-identity": "pr1509-landlord" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-route-source"]).toBe("publicRoutes.ts");
+    expect(res.body?.conversations).toEqual([
+      expect.objectContaining({ id: "qa-conversation", landlordId: "qa-pr1509-landlord" }),
+    ]);
+  });
+
+  it("allows the isolated Preview QA identity through the preempting conversation-detail route", async () => {
+    enablePreviewQaAuth();
+    ensureCollection("conversations").set("qa-conversation", {
+      landlordId: "qa-pr1509-landlord",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      lastMessageAt: 3000,
+    });
+    ensureCollection("messages").set("qa-message", {
+      conversationId: "qa-conversation",
+      senderRole: "tenant",
+      body: "Scoped QA message",
+      createdAt: 3000,
+    });
+    const router = (await import("../publicRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/conversations/qa-conversation",
+      headers: { "x-rentchain-preview-qa-identity": "pr1509-landlord" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-route-source"]).toBe("publicRoutes.ts");
+    expect(res.body).toMatchObject({
+      ok: true,
+      conversation: { id: "qa-conversation", landlordId: "qa-pr1509-landlord" },
+      messages: [expect.objectContaining({ id: "qa-message", body: "Scoped QA message" })],
+    });
+  });
+
+  it.each([
+    ["Production project", () => (process.env.GOOGLE_CLOUD_PROJECT = "project-0d9658de-af29-4dc0-a99")],
+    ["permanent Preview service", () => (process.env.K_SERVICE = "rentchain-preview-backend")],
+    ["missing QA flag", () => delete process.env.PREVIEW_QA_AUTH_ENABLED],
+    ["wrong expected service", () => (process.env.PREVIEW_QA_EXPECTED_SERVICE = "rentchain-pr1509-inbox-qa-deadbeef")],
+  ])("rejects the synthetic selector in %s", async (_label, mutateEnvironment) => {
+    enablePreviewQaAuth();
+    mutateEnvironment();
+    const router = (await import("../publicRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/conversations",
+      headers: { "x-rentchain-preview-qa-identity": "pr1509-landlord" },
+    });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ ok: false });
+  });
+
+  it("rejects an unknown synthetic identity", async () => {
+    enablePreviewQaAuth();
+    const router = (await import("../publicRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/conversations",
+      headers: { "x-rentchain-preview-qa-identity": "unknown-landlord" },
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("does not let an invalid bearer token fall through to synthetic QA authentication", async () => {
+    enablePreviewQaAuth();
+    const router = (await import("../publicRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/conversations",
+      headers: {
+        authorization: "Bearer invalid-token",
+        "x-rentchain-preview-qa-identity": "pr1509-landlord",
+      },
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("fails closed for foreign and missing conversation detail under synthetic QA auth", async () => {
+    enablePreviewQaAuth();
+    ensureCollection("conversations").set("foreign-conversation", {
+      landlordId: "foreign-landlord",
+      tenantId: "tenant-1",
+    });
+    const router = (await import("../publicRoutes")).default;
+    const headers = { "x-rentchain-preview-qa-identity": "pr1509-landlord" };
+
+    const foreign = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/conversations/foreign-conversation",
+      headers,
+    });
+    const missing = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/conversations/missing-conversation",
+      headers,
+    });
+
+    expect(foreign.status).toBe(403);
+    expect(missing.status).toBe(404);
+  });
+
+  it("keeps synthetic Preview QA authentication disabled on message writes", async () => {
+    enablePreviewQaAuth();
+    const router = (await import("../publicRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/messages/conversations/conv-unit-only",
+      headers: { "x-rentchain-preview-qa-identity": "pr1509-landlord" },
+      body: { body: "must not be written" },
+    });
+
+    expect(res.status).toBe(401);
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it("sends tenant email notifications for landlord replies on unit-linked conversations", async () => {

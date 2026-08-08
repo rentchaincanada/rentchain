@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { requireAuth } from "../middleware/requireAuth";
+import { previewQaAuth } from "../middleware/previewQaAuth";
 import { db, FieldValue } from "../firebase";
 import { buildUpgradeRequiredResponse, requireCapability } from "../services/capabilityGuard";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
@@ -691,7 +692,7 @@ async function enforceMessagingCapability(req: any, landlordId: string, res: any
 /**
  * Landlord endpoints
  */
-router.get("/landlord/messages/conversations", requireLandlord, async (req: any, res) => {
+router.get("/landlord/messages/conversations", previewQaAuth("landlord-message-list"), requireLandlord, async (req: any, res) => {
   const landlordId = getEffectiveLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   if (!(await enforceMessagingCapability(req, landlordId, res))) return;
@@ -718,7 +719,7 @@ router.get("/landlord/messages/conversations", requireLandlord, async (req: any,
   }
 });
 
-router.get("/landlord/messages/conversations/:id", requireLandlord, async (req: any, res) => {
+router.get("/landlord/messages/conversations/:id", previewQaAuth("landlord-message-detail"), requireLandlord, async (req: any, res) => {
   const landlordId = getEffectiveLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   if (!(await enforceMessagingCapability(req, landlordId, res))) return;
