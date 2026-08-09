@@ -18,6 +18,7 @@ export const DebugPanel: React.FC = () => {
   const [limits, setLimits] = useState<AccountLimits | null>(null);
   const [hasAuthToken, setHasAuthToken] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const isPublicRoute = isPublicRoutePath(location.pathname);
 
   useEffect(() => {
@@ -46,6 +47,34 @@ export const DebugPanel: React.FC = () => {
 
   if (!import.meta.env.DEV || !hasAuthToken || isMobileViewport || isPublicRoute) return null;
 
+  if (!isExpanded) {
+    return (
+      <button
+        type="button"
+        aria-expanded="false"
+        aria-label="Expand debug panel"
+        data-testid="debug-panel-toggle"
+        onClick={() => setIsExpanded(true)}
+        style={{
+          position: "fixed",
+          bottom: 10,
+          right: 10,
+          padding: "8px 12px",
+          borderRadius: 999,
+          background: "rgba(15,23,42,0.9)",
+          color: "#e2e8f0",
+          fontSize: 12,
+          fontWeight: 800,
+          zIndex: 5000,
+          border: "1px solid rgba(148,163,184,0.4)",
+          cursor: "pointer",
+        }}
+      >
+        Debug
+      </button>
+    );
+  }
+
   // Normalize data to avoid crashes when limits are missing/shape differs
   const limitsData = limits || null;
 
@@ -66,7 +95,25 @@ export const DebugPanel: React.FC = () => {
           maxWidth: 320,
         }}
       >
-        <div style={{ fontWeight: 800, marginBottom: 6 }}>Debug (dev only)</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ fontWeight: 800 }}>Debug (dev only)</div>
+          <button
+            type="button"
+            aria-label="Collapse debug panel"
+            onClick={() => setIsExpanded(false)}
+            style={{
+              minHeight: 28,
+              padding: "2px 8px",
+              borderRadius: 999,
+              border: "1px solid rgba(148,163,184,0.5)",
+              background: "transparent",
+              color: "inherit",
+              cursor: "pointer",
+            }}
+          >
+            Hide
+          </button>
+        </div>
         <div>Loading limits…</div>
         {lastApiError ? (
           <div style={{ marginTop: 8, color: "#fca5a5" }}>
@@ -108,7 +155,33 @@ export const DebugPanel: React.FC = () => {
         maxWidth: 320,
       }}
     >
-      <div style={{ fontWeight: 800, marginBottom: 6 }}>Debug (dev only)</div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          marginBottom: 6,
+        }}
+      >
+        <div style={{ fontWeight: 800 }}>Debug (dev only)</div>
+        <button
+          type="button"
+          aria-label="Collapse debug panel"
+          onClick={() => setIsExpanded(false)}
+          style={{
+            minHeight: 28,
+            padding: "2px 8px",
+            borderRadius: 999,
+            border: "1px solid rgba(148,163,184,0.5)",
+            background: "transparent",
+            color: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          Hide
+        </button>
+      </div>
       <div style={{ display: "grid", gap: 4 }}>
         <div>Plan: {plan}</div>
         <div title={integrityTooltip}>

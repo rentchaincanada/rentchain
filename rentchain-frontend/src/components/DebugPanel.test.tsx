@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DebugPanel } from "./DebugPanel";
@@ -52,7 +52,7 @@ describe("DebugPanel", () => {
     expect(screen.queryByText("Debug (dev only)")).not.toBeInTheDocument();
   });
 
-  it("renders account limits on authenticated desktop dev sessions", async () => {
+  it("starts minimized and expands account limits on authenticated desktop dev sessions", async () => {
     setAuthToken("demo-token");
     vi.mocked(fetchAccountLimits).mockResolvedValue({
       status: "ok",
@@ -73,9 +73,19 @@ describe("DebugPanel", () => {
 
     renderDebugPanel();
 
+    const toggle = await screen.findByRole("button", { name: "Expand debug panel" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Debug (dev only)")).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
     expect(await screen.findByText("Debug (dev only)")).toBeInTheDocument();
     expect(screen.getByText("Plan: elite")).toBeInTheDocument();
     expect(screen.getByText("Properties: 2")).toBeInTheDocument();
     expect(screen.getByText("Team Invites: no")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse debug panel" }));
+    await waitFor(() => expect(screen.queryByText("Debug (dev only)")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Expand debug panel" })).toBeInTheDocument();
   });
 });
