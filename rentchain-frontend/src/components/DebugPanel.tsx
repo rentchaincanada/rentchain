@@ -6,6 +6,23 @@ import { isPublicRoutePath } from "../lib/publicRoute";
 
 const lastApiError: unknown = null;
 
+const expandedPanelStyle: React.CSSProperties = {
+  position: "fixed",
+  top: 220,
+  right: 10,
+  padding: "10px 12px",
+  borderRadius: 10,
+  background: "rgba(15,23,42,0.9)",
+  color: "#e2e8f0",
+  fontSize: 12,
+  zIndex: 5000,
+  border: "1px solid rgba(148,163,184,0.4)",
+  maxWidth: 320,
+  maxHeight: "calc(100vh - 380px)",
+  overflowY: "auto",
+  overscrollBehavior: "contain",
+};
+
 function formatApiError(err: unknown) {
   if (typeof err === "object" && err !== null && "message" in err && typeof err.message === "string") {
     return err.message;
@@ -81,19 +98,8 @@ export const DebugPanel: React.FC = () => {
   if (!limitsData) {
     return (
       <div
-        style={{
-          position: "fixed",
-          bottom: 10,
-          right: 10,
-          padding: "10px 12px",
-          borderRadius: 10,
-          background: "rgba(15,23,42,0.9)",
-          color: "#e2e8f0",
-          fontSize: 12,
-          zIndex: 5000,
-          border: "1px solid rgba(148,163,184,0.4)",
-          maxWidth: 320,
-        }}
+        data-testid="debug-panel-expanded"
+        style={expandedPanelStyle}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ fontWeight: 800 }}>Debug (dev only)</div>
@@ -141,19 +147,8 @@ export const DebugPanel: React.FC = () => {
 
   return (
     <div
-      style={{
-        position: "fixed",
-        bottom: 10,
-        right: 10,
-        padding: "10px 12px",
-        borderRadius: 10,
-        background: "rgba(15,23,42,0.9)",
-        color: "#e2e8f0",
-        fontSize: 12,
-        zIndex: 5000,
-        border: "1px solid rgba(148,163,184,0.4)",
-        maxWidth: 320,
-      }}
+      data-testid="debug-panel-expanded"
+      style={expandedPanelStyle}
     >
       <div
         style={{

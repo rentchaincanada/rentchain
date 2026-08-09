@@ -80,6 +80,13 @@ describe("DebugPanel", () => {
     fireEvent.click(toggle);
 
     expect(await screen.findByText("Debug (dev only)")).toBeInTheDocument();
+    expect(screen.getByTestId("debug-panel-expanded")).toHaveStyle({
+      position: "fixed",
+      top: "220px",
+      right: "10px",
+      maxHeight: "calc(100vh - 380px)",
+      overflowY: "auto",
+    });
     expect(screen.getByText("Plan: elite")).toBeInTheDocument();
     expect(screen.getByText("Properties: 2")).toBeInTheDocument();
     expect(screen.getByText("Team Invites: no")).toBeInTheDocument();
