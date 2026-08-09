@@ -575,6 +575,12 @@ describe("MessagesPage", () => {
     expect(css).toMatch(/\.rc-messages-thread\s*\{[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*hidden;/);
     expect(css).toMatch(/\.rc-messages-thread-body\s*\{[\s\S]*?overflow-y:\s*auto;/);
     expect(css).toMatch(/\.rc-messages-composer-input\s*\{[\s\S]*?min-width:\s*0;/);
+    expect(css).toMatch(
+      /\.rc-messages-compose-overlay\s*\{[\s\S]*?padding:\s*12px 12px calc\(12px \+ var\(--rc-mobile-bottom-nav-height\) \+ env\(safe-area-inset-bottom, 0px\)\);/
+    );
+    expect(css).toMatch(
+      /\.rc-messages-compose-panel\s*\{[\s\S]*?max-height:\s*calc\([\s\S]*?var\(--rc-mobile-bottom-nav-height\)[\s\S]*?env\(safe-area-inset-bottom, 0px\)[\s\S]*?\);/
+    );
   });
 
   it("keeps the composer usable and sends through the selected conversation", async () => {

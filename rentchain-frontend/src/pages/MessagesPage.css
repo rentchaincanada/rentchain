@@ -445,11 +445,16 @@
 
   .rc-messages-compose-overlay {
     align-items: end;
-    padding: 12px;
+    padding: 12px 12px calc(12px + var(--rc-mobile-bottom-nav-height) + env(safe-area-inset-bottom, 0px));
   }
 
   .rc-messages-compose-panel {
-    max-height: calc(100dvh - 24px);
+    max-height: calc(
+      100dvh -
+      24px -
+      var(--rc-mobile-bottom-nav-height) -
+      env(safe-area-inset-bottom, 0px)
+    );
     padding: 16px;
   }
 }
