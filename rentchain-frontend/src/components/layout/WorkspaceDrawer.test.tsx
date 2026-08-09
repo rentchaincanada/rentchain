@@ -60,6 +60,27 @@ describe("WorkspaceDrawer", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("shows direct Messages navigation to landlords and keeps it landlord-only", () => {
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <WorkspaceDrawer open onClose={onClose} userRole="landlord" />
+        <CurrentPath />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Messages" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/messages");
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <WorkspaceDrawer open onClose={vi.fn()} userRole="admin" />
+      </MemoryRouter>
+    );
+    expect(screen.queryByRole("button", { name: "Messages" })).not.toBeInTheDocument();
+  });
+
   it("shows governed review workspace navigation only for admins", () => {
     const { rerender } = render(
       <MemoryRouter initialEntries={["/dashboard"]}>

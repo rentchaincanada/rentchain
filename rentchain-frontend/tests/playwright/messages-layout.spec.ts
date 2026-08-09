@@ -163,6 +163,15 @@ test("real Messages page preserves deep links, Back, composer access, and bounde
     if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`);
   });
 
+  await page.route("**/src/api/baseUrl.ts", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text())
+      .replace("import.meta?.env?.VITE_API_BASE_URL", '"http://127.0.0.1:5173"')
+      .replace("import.meta?.env?.VITE_DEPLOY_ENV", '"development"')
+      .replace("import.meta?.env?.DEV", "true");
+    await route.fulfill({ response, body });
+  });
+
   await installLegacySmokeHarness(page, { devPreviewUnlock: true });
   await page.route("**/api/account/limits", async (route) => {
     await route.fulfill({
@@ -182,7 +191,38 @@ test("real Messages page preserves deep links, Back, composer access, and bounde
   }));
   await page.route("**/api/landlord/messages/**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/api/landlord/messages/recipients") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          recipients: [{
+            leaseId: "lease-synthetic-1",
+            tenantId: "tenant-synthetic-1",
+            tenantDisplayName: "Synthetic Active Tenant",
+            propertyId: "property-synthetic-1",
+            propertyDisplayLabel: "Harbour Synthetic Property",
+            unitId: "unit-synthetic-1",
+            unitDisplayLabel: "Unit 4B",
+          }],
+        }),
+      });
+      return;
+    }
     if (url.pathname === "/api/landlord/messages/conversations") {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            ok: true,
+            conversationId: "conv-1",
+            created: false,
+            message: { id: "synthetic-first-message" },
+          }),
+        });
+        return;
+      }
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ conversations }) });
       return;
     }
@@ -219,6 +259,16 @@ test("real Messages page preserves deep links, Back, composer access, and bounde
   }
   await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
   await expect(page.getByText(/QA Tenant With An Intentionally Long Governed Display Label 1/).first()).toBeVisible();
+
+  await page.getByRole("button", { name: "New Message" }).first().click();
+  const compose = page.getByRole("dialog", { name: "New message" });
+  await expect(compose).toBeVisible();
+  await compose.getByPlaceholder("Search by tenant, property, or unit").fill("4B");
+  await compose.getByRole("button", { name: /Synthetic Active Tenant/ }).click();
+  await compose.getByPlaceholder("Write your message").fill("Synthetic first outbound message");
+  await compose.getByRole("button", { name: "Send Message" }).click();
+  await expect(compose).not.toBeVisible();
+  await expect(page).toHaveURL(/threadId=conv-1/);
 
   await expectConversationCardsContained(page);
 

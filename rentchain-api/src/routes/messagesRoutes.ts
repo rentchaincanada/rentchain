@@ -8,6 +8,8 @@ import { buildUpgradeRequiredResponse, requireCapability } from "../services/cap
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
 import { getEffectiveLandlordId, getEffectiveTenantId, resolveRequestAuthority } from "../auth/requestAuthority";
+import { createHash } from "node:crypto";
+import { isCurrentLeaseStatus } from "../services/leaseCanonicalizationService";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -16,6 +18,7 @@ type Role = "landlord" | "tenant";
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_LEASE_LOOKUP_CANDIDATES = 10;
 const MAX_TENANT_LOOKUP_CANDIDATES = 2;
+const MAX_MESSAGE_RECIPIENT_LEASES = 100;
 const CURRENT_LEASE_STATUSES = new Set([
   "active",
   "current",
@@ -490,6 +493,87 @@ function stringOrNull(value: any) {
   return next || null;
 }
 
+function tenantIdsForLease(raw: any) {
+  return Array.from(
+    new Set(
+      [raw?.tenantId, ...(Array.isArray(raw?.tenantIds) ? raw.tenantIds : [])]
+        .map(stringOrNull)
+        .filter((value): value is string => Boolean(value))
+    )
+  );
+}
+
+function canonicalConversationId(landlordId: string, tenantId: string, unitId: string) {
+  return `${landlordId}__${tenantId}__${unitId}`;
+}
+
+function idempotentMessageId(conversationId: string, requestId: string) {
+  return `outbound_${createHash("sha256").update(`${conversationId}:${requestId}`).digest("hex")}`;
+}
+
+function conversationMatchesRecipient(conversation: any, recipient: {
+  landlordId: string;
+  tenantId: string;
+  propertyId: string;
+  unitId: string;
+}) {
+  return (
+    stringOrNull(conversation?.landlordId) === recipient.landlordId &&
+    stringOrNull(conversation?.tenantId) === recipient.tenantId &&
+    stringOrNull(conversation?.unitId) === recipient.unitId &&
+    (!stringOrNull(conversation?.propertyId) || stringOrNull(conversation?.propertyId) === recipient.propertyId)
+  );
+}
+
+async function resolveEligibleRecipient(params: {
+  landlordId: string;
+  leaseId: string;
+  tenantId: string;
+  reader?: { get: (ref: any) => Promise<any> };
+}) {
+  const read = params.reader?.get
+    ? (ref: any) => params.reader!.get(ref)
+    : (ref: any) => ref.get();
+  const leaseRef = db.collection("leases").doc(params.leaseId);
+  const leaseSnap = await read(leaseRef);
+  if (!leaseSnap.exists) return null;
+  const lease = leaseSnap.data() as any;
+  if (stringOrNull(lease?.landlordId) !== params.landlordId) return null;
+  if (!isCurrentLeaseStatus(lease?.status)) return null;
+  if (!tenantIdsForLease(lease).includes(params.tenantId)) return null;
+
+  const propertyId = stringOrNull(lease?.propertyId);
+  const unitId = stringOrNull(lease?.unitId);
+  if (!propertyId || !unitId) return null;
+
+  const [tenantSnap, propertySnap, unitSnap] = await Promise.all([
+    read(db.collection("tenants").doc(params.tenantId)),
+    read(db.collection("properties").doc(propertyId)),
+    read(db.collection("units").doc(unitId)),
+  ]);
+  if (!tenantSnap.exists || !propertySnap.exists || !unitSnap.exists) return null;
+  const tenant = tenantSnap.data() as any;
+  const property = propertySnap.data() as any;
+  const unit = unitSnap.data() as any;
+  if (stringOrNull(property?.landlordId) !== params.landlordId) return null;
+  if (stringOrNull(unit?.propertyId) !== propertyId) return null;
+  const unitLandlordId = stringOrNull(unit?.landlordId);
+  if (unitLandlordId && unitLandlordId !== params.landlordId) return null;
+  const tenantLandlordId = stringOrNull(tenant?.landlordId);
+  if (tenantLandlordId && tenantLandlordId !== params.landlordId) return null;
+
+  return {
+    leaseId: leaseSnap.id,
+    tenantId: tenantSnap.id,
+    tenantEmail: buildTenantEmail(tenant),
+    tenantDisplayName: stringOrNull(tenant?.fullName) || stringOrNull(tenant?.name) || "Tenant",
+    propertyId,
+    propertyDisplayLabel: buildPropertyLabel(property),
+    unitId,
+    unitDisplayLabel: normalizeUnitLabel(unit?.unitNumber || unit?.unitLabel || unit?.label || unit?.name),
+  };
+}
+
 async function lookupUserEmail(userId: string | null) {
   const id = stringOrNull(userId);
   if (!id) return null;
@@ -618,8 +702,8 @@ async function sendConversationMessageEmail(params: {
   const threadPath = params.senderRole === "landlord" ? "/tenant/messages" : "/messages";
   const subjectPrefix = params.senderRole === "landlord" ? "New message from your landlord" : "New tenant message";
   const contextBits = [
-    stringOrNull(params.conversation.propertyId),
-    stringOrNull(params.conversation.unitId),
+    stringOrNull(params.conversation.propertyDisplayLabel),
+    stringOrNull(params.conversation.unitDisplayLabel),
   ].filter(Boolean);
   const preview = params.body.length > 280 ? `${params.body.slice(0, 280)}...` : params.body;
 
@@ -692,6 +776,180 @@ async function enforceMessagingCapability(req: any, landlordId: string, res: any
 /**
  * Landlord endpoints
  */
+router.get("/landlord/messages/recipients", requireLandlord, async (req: any, res) => {
+  const landlordId = getEffectiveLandlordId(req);
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceMessagingCapability(req, landlordId, res))) return;
+
+  try {
+    const leaseSnap = await db
+      .collection("leases")
+      .where("landlordId", "==", landlordId)
+      .limit(MAX_MESSAGE_RECIPIENT_LEASES)
+      .get();
+    const candidates = leaseSnap.docs.flatMap((doc: any) =>
+      tenantIdsForLease(doc.data()).map((tenantId) => ({ leaseId: doc.id, tenantId }))
+    );
+    const resolved = await Promise.all(
+      candidates.map((candidate) => resolveEligibleRecipient({ landlordId, ...candidate }))
+    );
+    const recipients = resolved
+      .filter((recipient): recipient is NonNullable<typeof recipient> => Boolean(recipient))
+      .sort((left, right) =>
+        [left.tenantDisplayName, left.propertyDisplayLabel, left.unitDisplayLabel, left.leaseId]
+          .map((value) => String(value || ""))
+          .join("\u0000")
+          .localeCompare(
+            [right.tenantDisplayName, right.propertyDisplayLabel, right.unitDisplayLabel, right.leaseId]
+              .map((value) => String(value || ""))
+              .join("\u0000")
+          )
+      );
+    return res.json({ ok: true, recipients });
+  } catch (err: any) {
+    console.error("[messages] landlord recipient list error", {
+      landlordId,
+      code: stringOrNull(err?.code) || "recipient_list_failed",
+    });
+    return res.status(500).json({ ok: false, error: "Failed to list message recipients" });
+  }
+});
+
+router.post("/landlord/messages/conversations", requireLandlord, async (req: any, res) => {
+  const landlordId = getEffectiveLandlordId(req);
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!(await enforceMessagingCapability(req, landlordId, res))) return;
+  const tenantId = stringOrNull(req.body?.tenantId);
+  const leaseId = stringOrNull(req.body?.leaseId);
+  const body = String(req.body?.body || "").trim();
+  const requestId = stringOrNull(req.body?.requestId);
+  if (!tenantId || !leaseId) return res.status(400).json({ ok: false, error: "recipient required" });
+  if (!body) return res.status(400).json({ ok: false, error: "body required" });
+  if (body.length > 4000) return res.status(400).json({ ok: false, error: "body too long" });
+  if (!requestId || !/^[A-Za-z0-9_-]{16,100}$/.test(requestId)) {
+    return res.status(400).json({ ok: false, error: "valid requestId required" });
+  }
+
+  try {
+    const result = await db.runTransaction(async (transaction: any) => {
+      const recipient = await resolveEligibleRecipient({
+        landlordId,
+        leaseId,
+        tenantId,
+        reader: transaction,
+      });
+      if (!recipient) return { forbidden: true } as const;
+
+      const deterministicConversationId = canonicalConversationId(landlordId, recipient.tenantId, recipient.unitId);
+      const deterministicConversationRef = db.collection("conversations").doc(deterministicConversationId);
+      const legacyConversationQuery = db
+        .collection("conversations")
+        .where("tenantId", "==", recipient.tenantId)
+        .limit(25);
+      const [deterministicConversationSnap, legacyConversationSnap] = await Promise.all([
+        transaction.get(deterministicConversationRef),
+        transaction.get(legacyConversationQuery),
+      ]);
+      const matchingLegacyConversation = legacyConversationSnap.docs
+        .map((doc: any) => ({ id: doc.id, data: doc.data() }))
+        .filter((candidate: any) =>
+          conversationMatchesRecipient(candidate.data, { landlordId, ...recipient })
+        )
+        .sort((left: any, right: any) => left.id.localeCompare(right.id))[0];
+      const conversationId = deterministicConversationSnap.exists
+        ? deterministicConversationId
+        : matchingLegacyConversation?.id || deterministicConversationId;
+      const conversationRef = db.collection("conversations").doc(conversationId);
+      const messageRef = db.collection("messages").doc(idempotentMessageId(conversationId, requestId));
+      const messageSnap = await transaction.get(messageRef);
+      if (messageSnap.exists) {
+        return {
+          forbidden: false,
+          conversationId,
+          created: false,
+          message: { id: messageSnap.id, ...(messageSnap.data() as any) },
+          recipient,
+          shouldNotify: false,
+        } as const;
+      }
+
+      const created = !deterministicConversationSnap.exists && !matchingLegacyConversation;
+      const now = Date.now();
+      if (created) {
+        transaction.set(conversationRef, {
+          landlordId,
+          tenantId: recipient.tenantId,
+          tenantEmail: recipient.tenantEmail,
+          tenantName: recipient.tenantDisplayName,
+          leaseId: recipient.leaseId,
+          propertyId: recipient.propertyId,
+          propertyDisplayLabel: recipient.propertyDisplayLabel,
+          unitId: recipient.unitId,
+          unitDisplayLabel: recipient.unitDisplayLabel,
+          createdAt: FieldValue.serverTimestamp(),
+          lastMessageAt: FieldValue.serverTimestamp(),
+          lastReadAtLandlord: FieldValue.serverTimestamp(),
+          lastReadAtTenant: null,
+        });
+      } else {
+        transaction.set(
+          conversationRef,
+          {
+            lastMessageAt: FieldValue.serverTimestamp(),
+            lastReadAtLandlord: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+      const message = {
+        conversationId,
+        senderRole: "landlord" as const,
+        body,
+        createdAt: FieldValue.serverTimestamp(),
+        createdAtMs: now,
+      };
+      transaction.set(messageRef, message);
+      return {
+        forbidden: false,
+        conversationId,
+        created,
+        message: { id: messageRef.id, ...message },
+        recipient,
+        shouldNotify: true,
+      } as const;
+    });
+
+    if (result.forbidden) return res.status(403).json({ ok: false, error: "Recipient unavailable" });
+    if (result.shouldNotify) {
+      try {
+        await sendConversationMessageEmail({
+          conversation: { id: result.conversationId, landlordId, ...result.recipient },
+          senderRole: "landlord",
+          body,
+        });
+      } catch (err: any) {
+        console.error("[messages] landlord first-message email failed", {
+          conversationId: result.conversationId,
+          landlordId,
+          code: stringOrNull(err?.code) || "send_failed",
+        });
+      }
+    }
+    return res.status(201).json({
+      ok: true,
+      conversationId: result.conversationId,
+      created: result.created,
+      message: result.message,
+    });
+  } catch (err: any) {
+    console.error("[messages] landlord first-message error", {
+      landlordId,
+      code: stringOrNull(err?.code) || "first_message_failed",
+    });
+    return res.status(500).json({ ok: false, error: "Failed to send message" });
+  }
+});
+
 router.get("/landlord/messages/conversations", previewQaAuth("landlord-message-list"), requireLandlord, async (req: any, res) => {
   const landlordId = getEffectiveLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });

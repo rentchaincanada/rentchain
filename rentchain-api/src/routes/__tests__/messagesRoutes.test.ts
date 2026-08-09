@@ -11,6 +11,7 @@ const { sendEmailMock } = vi.hoisted(() => ({
 const collections = new Map<string, Map<string, any>>();
 const failingDocGets = new Set<string>();
 const queryLimits: Array<{ collection: string; field: string; op: string; count: number }> = [];
+let transactionTail: Promise<void> = Promise.resolve();
 
 function ensureCollection(name: string) {
   if (!collections.has(name)) collections.set(name, new Map<string, any>());
@@ -21,7 +22,28 @@ function clone<T>(value: T): T {
   return value === undefined ? value : JSON.parse(JSON.stringify(value));
 }
 
+function seedEligibleLease() {
+  ensureCollection("leases").set("lease-1", {
+    landlordId: "landlord-1",
+    tenantId: "tenant-1",
+    tenantIds: ["tenant-1"],
+    propertyId: "prop-1",
+    unitId: "unit-1",
+    status: "active",
+  });
+}
+
 const dbMock = {
+  runTransaction: async (handler: (transaction: any) => Promise<any>) => {
+    const run = transactionTail.then(() =>
+      handler({
+        get: (ref: any) => ref.get(),
+        set: (ref: any, value: any, options?: any) => ref.set(value, options),
+      })
+    );
+    transactionTail = run.then(() => undefined, () => undefined);
+    return run;
+  },
   collection: (name: string) => ({
     doc: (id?: string) => {
       const docId = id || `doc_${ensureCollection(name).size + 1}`;
@@ -163,6 +185,7 @@ describe("messagesRoutes notifications", () => {
     collections.clear();
     failingDocGets.clear();
     queryLimits.length = 0;
+    transactionTail = Promise.resolve();
     sendEmailMock.mockReset();
     sendEmailMock.mockResolvedValue(undefined);
     process.env.EMAIL_FROM = "noreply@example.com";
@@ -186,16 +209,210 @@ describe("messagesRoutes notifications", () => {
       fullName: "Taylor Tenant",
     });
     ensureCollection("properties").set("prop-1", {
+      landlordId: "landlord-1",
       name: "Harbour View",
       units: [{ id: "unit-1", unitNumber: "2A" }],
     });
     ensureCollection("units").set("unit-1", {
+      landlordId: "landlord-1",
       propertyId: "prop-1",
       unitNumber: "2A",
     });
     ensureCollection("users").set("landlord-1", {
       email: "landlord@example.com",
     });
+  });
+
+  it("lists only bounded, independently owned current-lease recipients", async () => {
+    seedEligibleLease();
+    ensureCollection("tenants").set("tenant-ended", {
+      landlordId: "landlord-1",
+      fullName: "Ended Tenant",
+    });
+    ensureCollection("leases").set("lease-ended", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-ended",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      status: "ended",
+    });
+    ensureCollection("tenants").set("tenant-forged", {
+      landlordId: "landlord-1",
+      fullName: "Forged Tenant",
+    });
+    ensureCollection("leases").set("lease-forged", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-forged",
+      propertyId: "foreign-property",
+      unitId: "foreign-unit",
+      status: "active",
+    });
+    ensureCollection("properties").set("foreign-property", { landlordId: "landlord-2" });
+    ensureCollection("units").set("foreign-unit", { landlordId: "landlord-2", propertyId: "foreign-property" });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/recipients",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.recipients).toEqual([
+      expect.objectContaining({
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        tenantDisplayName: "Taylor Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "Unit 2A",
+      }),
+    ]);
+    expect(queryLimits).toContainEqual({
+      collection: "leases",
+      field: "landlordId",
+      op: "==",
+      count: 100,
+    });
+  });
+
+  it("atomically creates the canonical conversation and first landlord message", async () => {
+    seedEligibleLease();
+    ensureCollection("conversations").delete("conv-1");
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/messages/conversations",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) },
+      body: {
+        tenantId: "tenant-1",
+        leaseId: "lease-1",
+        body: "Welcome to your message thread.",
+        requestId: "request-first-message-0001",
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual(expect.objectContaining({
+      conversationId: "landlord-1__tenant-1__unit-1",
+      created: true,
+    }));
+    expect(ensureCollection("conversations").get("landlord-1__tenant-1__unit-1")).toEqual(
+      expect.objectContaining({
+        landlordId: "landlord-1",
+        tenantId: "tenant-1",
+        unitId: "unit-1",
+        lastReadAtLandlord: "__server_timestamp__",
+      })
+    );
+    expect(Array.from(ensureCollection("messages").values()).filter((item) => item.body === "Welcome to your message thread.")).toEqual([
+      expect.objectContaining({ senderRole: "landlord" }),
+    ]);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses the canonical conversation and deduplicates a retried first-message request", async () => {
+    seedEligibleLease();
+    ensureCollection("conversations").set("landlord-1__tenant-1__unit-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      unitId: "unit-1",
+    });
+    const router = await createRouter();
+    const request = {
+      method: "POST",
+      url: "/landlord/messages/conversations",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) },
+      body: {
+        tenantId: "tenant-1",
+        leaseId: "lease-1",
+        body: "A single retried message.",
+        requestId: "request-retry-message-0001",
+      },
+    };
+
+    const first = await invokeRouter(router, request);
+    const second = await invokeRouter(router, request);
+
+    expect(first.body).toEqual(expect.objectContaining({ created: false }));
+    expect(second.body).toEqual(expect.objectContaining({ created: false, conversationId: first.body.conversationId }));
+    expect(Array.from(ensureCollection("messages").values()).filter((item) => item.body === "A single retried message.")).toHaveLength(1);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses a matching legacy conversation instead of creating a deterministic duplicate", async () => {
+    seedEligibleLease();
+    ensureCollection("conversations").delete("conv-1");
+    ensureCollection("conversations").set("legacy-conversation-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+    });
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/messages/conversations",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) },
+      body: {
+        tenantId: "tenant-1",
+        leaseId: "lease-1",
+        body: "Continue the existing thread.",
+        requestId: "request-legacy-message-0001",
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual(expect.objectContaining({
+      conversationId: "legacy-conversation-1",
+      created: false,
+    }));
+    expect(ensureCollection("conversations").has("landlord-1__tenant-1__unit-1")).toBe(false);
+    expect(Array.from(ensureCollection("messages").values()).filter((message) => message.body === "Continue the existing thread.")).toEqual([
+      expect.objectContaining({ conversationId: "legacy-conversation-1", senderRole: "landlord" }),
+    ]);
+  });
+
+  it("serializes concurrent first sends onto one canonical conversation", async () => {
+    seedEligibleLease();
+    ensureCollection("conversations").delete("conv-1");
+    const router = await createRouter();
+    const base = {
+      method: "POST",
+      url: "/landlord/messages/conversations",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) },
+    };
+    const [first, second] = await Promise.all([
+      invokeRouter(router, { ...base, body: { tenantId: "tenant-1", leaseId: "lease-1", body: "First concurrent message", requestId: "concurrent-request-0001" } }),
+      invokeRouter(router, { ...base, body: { tenantId: "tenant-1", leaseId: "lease-1", body: "Second concurrent message", requestId: "concurrent-request-0002" } }),
+    ]);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(first.body.conversationId).toBe(second.body.conversationId);
+    expect(Array.from(ensureCollection("conversations").keys()).filter((id) => id === "landlord-1__tenant-1__unit-1")).toHaveLength(1);
+  });
+
+  it("fails closed for foreign, ended, orphan, malformed, and invalid message requests", async () => {
+    seedEligibleLease();
+    const router = await createRouter();
+    const auth = { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) };
+    ensureCollection("leases").set("lease-ended", {
+      landlordId: "landlord-1", tenantId: "tenant-1", propertyId: "prop-1", unitId: "unit-1", status: "ended",
+    });
+    ensureCollection("leases").set("lease-foreign", {
+      landlordId: "landlord-2", tenantId: "tenant-1", propertyId: "prop-1", unitId: "unit-1", status: "active",
+    });
+    ensureCollection("leases").set("lease-orphan", {
+      landlordId: "landlord-1", tenantId: "missing-tenant", propertyId: "prop-1", unitId: "unit-1", status: "active",
+    });
+    const send = (body: any) => invokeRouter(router, { method: "POST", url: "/landlord/messages/conversations", headers: auth, body });
+
+    expect((await send({ tenantId: "tenant-1", leaseId: "lease-ended", body: "No", requestId: "request-ended-0001" })).status).toBe(403);
+    expect((await send({ tenantId: "tenant-1", leaseId: "lease-foreign", body: "No", requestId: "request-foreign-0001" })).status).toBe(403);
+    expect((await send({ tenantId: "missing-tenant", leaseId: "lease-orphan", body: "No", requestId: "request-orphan-0001" })).status).toBe(403);
+    expect((await send({ tenantId: "tenant-1", leaseId: "lease-1", body: "", requestId: "request-empty-0001" })).status).toBe(400);
+    expect((await send({ tenantId: "tenant-1", leaseId: "lease-1", body: "x".repeat(4001), requestId: "request-long-0001" })).status).toBe(400);
+    expect((await send({ tenantId: "tenant-1", leaseId: "lease-1", body: "No", requestId: "short" })).status).toBe(400);
   });
 
   it("emails tenant when landlord sends a message", async () => {
