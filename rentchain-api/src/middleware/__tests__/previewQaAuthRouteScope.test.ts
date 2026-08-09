@@ -181,13 +181,14 @@ describe("Preview QA auth route scope", () => {
     const inboxSource = readFileSync(new URL("../../routes/landlordInboxRoutes.ts", import.meta.url), "utf8");
     const messagesSource = readFileSync(new URL("../../routes/messagesRoutes.ts", import.meta.url), "utf8");
     const publicSource = readFileSync(new URL("../../routes/publicRoutes.ts", import.meta.url), "utf8");
+    const appSource = readFileSync(new URL("../../app.build.ts", import.meta.url), "utf8");
     expect(inboxSource).toContain('router.get("/inbox", previewQaAuth("landlord-inbox")');
     expect(inboxSource).not.toMatch(/router\.post\([^\n]+previewQaAuth/);
     expect(messagesSource).toContain(
-      'router.get("/landlord/messages/recipients", previewQaAuth("landlord-message-recipients")'
+      'target.get("/landlord/messages/recipients", previewQaAuth("landlord-message-recipients")'
     );
     expect(messagesSource).toContain(
-      'router.post("/landlord/messages/conversations", previewQaAuth("landlord-message-compose")'
+      'target.post("/landlord/messages/conversations", previewQaAuth("landlord-message-compose")'
     );
     expect(messagesSource).toContain(
       'router.get("/landlord/messages/conversations", previewQaAuth("landlord-message-list")'
@@ -195,9 +196,20 @@ describe("Preview QA auth route scope", () => {
     expect(messagesSource).toContain(
       'router.get("/landlord/messages/conversations/:id", previewQaAuth("landlord-message-detail")'
     );
-    expect(messagesSource.match(/router\.post\([^\n]+previewQaAuth/g)).toEqual([
-      'router.post("/landlord/messages/conversations", previewQaAuth',
+    expect(messagesSource.match(/target\.post\([^\n]+previewQaAuth/g)).toEqual([
+      'target.post("/landlord/messages/conversations", previewQaAuth',
     ]);
+    const composeMount = appSource.indexOf(
+      'app.use("/api", routeSource("messagesRoutes.previewQaCompose"), previewQaComposeRoutes);'
+    );
+    const globalAuthMount = appSource.indexOf("app.use(authenticateJwt);");
+    const defaultMessagesMount = appSource.indexOf(
+      'app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);'
+    );
+    expect(composeMount).toBeGreaterThan(-1);
+    expect(composeMount).toBeLessThan(globalAuthMount);
+    expect(globalAuthMount).toBeLessThan(defaultMessagesMount);
+    expect(appSource.match(/previewQaComposeRoutes/g)).toHaveLength(2);
     expect(publicSource).toMatch(
       /router\.get\(\s*"\/landlord\/messages\/conversations",\s*previewQaAuth\("landlord-message-list"\)/
     );

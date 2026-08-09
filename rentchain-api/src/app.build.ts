@@ -91,7 +91,7 @@ import landlordApplicationLinksRoutes from "./routes/landlordApplicationLinksRou
 import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes";
 import tenantsRoutes from "./routes/tenantsRoutes";
 import tenanciesRoutes from "./routes/tenanciesRoutes";
-import messagesRoutes from "./routes/messagesRoutes";
+import messagesRoutes, { previewQaComposeRoutes } from "./routes/messagesRoutes";
 import rentalApplicationsRoutes from "./routes/rentalApplicationsRoutes";
 import verifiedScreeningRoutes from "./routes/verifiedScreeningRoutes";
 import stripeScreeningOrdersWebhookRoutes, {
@@ -431,6 +431,7 @@ app.use("/api/internal", routeSource("internalReportsRoutes.ts"), internalReport
 app.use("/api/internal", routeSource("identityOracleInternalRoutes.ts"), identityOracleInternalRoutes);
 app.use("/api/internal", routeSource("applicationReminderInternalRoutes.ts"), applicationReminderInternalRoutes);
 app.use("/api", routeSource("providerNeutralScreeningRoutes.ts"), providerNeutralScreeningRoutes);
+app.use("/api", routeSource("messagesRoutes.previewQaCompose"), previewQaComposeRoutes);
 
 // Auth decode (non-blocking if header missing)
 app.use(authenticateJwt);

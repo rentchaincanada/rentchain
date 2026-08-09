@@ -142,6 +142,10 @@ async function createRouter() {
   return (await import("../messagesRoutes")).default;
 }
 
+async function createPreviewQaComposeRouter() {
+  return (await import("../messagesRoutes")).previewQaComposeRoutes;
+}
+
 async function invokeRouter(router: any, options: {
   method: string;
   url: string;
@@ -221,6 +225,109 @@ describe("messagesRoutes notifications", () => {
     ensureCollection("users").set("landlord-1", {
       email: "landlord@example.com",
     });
+  });
+
+  it("reaches the exact recipient and Compose handlers through the pre-global PR #1510 QA router", async () => {
+    const previousEnv = process.env;
+    process.env = {
+      ...previousEnv,
+      PREVIEW_QA_AUTH_ENABLED: "true",
+      PREVIEW_QA_AUTH_SCOPE: "pr1510-landlord-messaging",
+      APP_ENV: "preview",
+      GOOGLE_CLOUD_PROJECT: "rentchain-preview",
+      K_SERVICE: "rentchain-pr1510-messaging-qa-14a551d2",
+      PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1510-messaging-qa-14a551d2",
+      FIRESTORE_ENABLED: "true",
+      FIRESTORE_DATABASE_ID: "(default)",
+    };
+    ensureCollection("leases").set("lease-qa", {
+      landlordId: "qa-pr1510-landlord",
+      tenantId: "tenant-qa",
+      propertyId: "property-qa",
+      unitId: "unit-qa",
+      status: "active",
+    });
+    ensureCollection("tenants").set("tenant-qa", {
+      landlordId: "qa-pr1510-landlord",
+      fullName: "Synthetic Tenant",
+    });
+    ensureCollection("properties").set("property-qa", {
+      landlordId: "qa-pr1510-landlord",
+      name: "Synthetic Property",
+    });
+    ensureCollection("units").set("unit-qa", {
+      landlordId: "qa-pr1510-landlord",
+      propertyId: "property-qa",
+      unitNumber: "QA-1",
+    });
+
+    try {
+      const previewRouter = await createPreviewQaComposeRouter();
+      const headers = { "x-rentchain-preview-qa-identity": "pr1510-landlord" };
+      const recipients = await invokeRouter(previewRouter, {
+        method: "GET",
+        url: "/landlord/messages/recipients",
+        headers,
+      });
+      expect(recipients.status).toBe(200);
+      expect(recipients.body.recipients).toEqual([
+        expect.objectContaining({ leaseId: "lease-qa", tenantId: "tenant-qa" }),
+      ]);
+
+      const compose = await invokeRouter(previewRouter, {
+        method: "POST",
+        url: "/landlord/messages/conversations",
+        headers,
+        body: {
+          tenantId: "tenant-qa",
+          leaseId: "lease-qa",
+          body: "Synthetic first message",
+          requestId: "qa-route-order-request-0001",
+        },
+      });
+      expect(compose.status).toBe(201);
+      expect(compose.body).toEqual(expect.objectContaining({
+        conversationId: "qa-pr1510-landlord__tenant-qa__unit-qa",
+        created: true,
+      }));
+      expect(Array.from(ensureCollection("messages").values())).toEqual(
+        expect.arrayContaining([expect.objectContaining({ senderRole: "landlord" })])
+      );
+    } finally {
+      process.env = previousEnv;
+    }
+  });
+
+  it.each([
+    ["Production", { GOOGLE_CLOUD_PROJECT: "project-0d9658de-af29-4dc0-a99" }, undefined],
+    ["permanent Preview", { K_SERVICE: "rentchain-preview-backend" }, undefined],
+    ["wrong service", { K_SERVICE: "rentchain-pr1510-messaging-qa-deadbeef" }, undefined],
+    ["wrong scope", { PREVIEW_QA_AUTH_SCOPE: "pr1509-unified-inbox" }, undefined],
+    ["wrong selector", {}, "wrong-landlord"],
+  ])("keeps the pre-global Compose router fail-closed for %s", async (_label, overrides, selector) => {
+    const previousEnv = process.env;
+    process.env = {
+      ...previousEnv,
+      PREVIEW_QA_AUTH_ENABLED: "true",
+      PREVIEW_QA_AUTH_SCOPE: "pr1510-landlord-messaging",
+      APP_ENV: "preview",
+      GOOGLE_CLOUD_PROJECT: "rentchain-preview",
+      K_SERVICE: "rentchain-pr1510-messaging-qa-14a551d2",
+      PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1510-messaging-qa-14a551d2",
+      FIRESTORE_ENABLED: "true",
+      FIRESTORE_DATABASE_ID: "(default)",
+      ...overrides,
+    };
+    try {
+      const result = await invokeRouter(await createPreviewQaComposeRouter(), {
+        method: "GET",
+        url: "/landlord/messages/recipients",
+        headers: { "x-rentchain-preview-qa-identity": selector || "pr1510-landlord" },
+      });
+      expect(result.status).toBe(401);
+    } finally {
+      process.env = previousEnv;
+    }
   });
 
   it("lists only bounded, independently owned current-lease recipients", async () => {

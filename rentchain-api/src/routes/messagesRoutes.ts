@@ -776,7 +776,8 @@ async function enforceMessagingCapability(req: any, landlordId: string, res: any
 /**
  * Landlord endpoints
  */
-router.get("/landlord/messages/recipients", previewQaAuth("landlord-message-recipients"), requireLandlord, async (req: any, res) => {
+function registerLandlordComposeRoutes(target: Router) {
+target.get("/landlord/messages/recipients", previewQaAuth("landlord-message-recipients"), requireLandlord, async (req: any, res) => {
   const landlordId = getEffectiveLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   if (!(await enforceMessagingCapability(req, landlordId, res))) return;
@@ -815,7 +816,7 @@ router.get("/landlord/messages/recipients", previewQaAuth("landlord-message-reci
   }
 });
 
-router.post("/landlord/messages/conversations", previewQaAuth("landlord-message-compose"), requireLandlord, async (req: any, res) => {
+target.post("/landlord/messages/conversations", previewQaAuth("landlord-message-compose"), requireLandlord, async (req: any, res) => {
   const landlordId = getEffectiveLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   if (!(await enforceMessagingCapability(req, landlordId, res))) return;
@@ -949,6 +950,11 @@ router.post("/landlord/messages/conversations", previewQaAuth("landlord-message-
     return res.status(500).json({ ok: false, error: "Failed to send message" });
   }
 });
+}
+
+export const previewQaComposeRoutes = Router();
+registerLandlordComposeRoutes(previewQaComposeRoutes);
+registerLandlordComposeRoutes(router);
 
 router.get("/landlord/messages/conversations", previewQaAuth("landlord-message-list"), requireLandlord, async (req: any, res) => {
   const landlordId = getEffectiveLandlordId(req);
