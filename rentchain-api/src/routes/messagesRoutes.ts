@@ -776,7 +776,7 @@ async function enforceMessagingCapability(req: any, landlordId: string, res: any
 /**
  * Landlord endpoints
  */
-router.get("/landlord/messages/recipients", requireLandlord, async (req: any, res) => {
+router.get("/landlord/messages/recipients", previewQaAuth("landlord-message-recipients"), requireLandlord, async (req: any, res) => {
   const landlordId = getEffectiveLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   if (!(await enforceMessagingCapability(req, landlordId, res))) return;
@@ -815,7 +815,7 @@ router.get("/landlord/messages/recipients", requireLandlord, async (req: any, re
   }
 });
 
-router.post("/landlord/messages/conversations", requireLandlord, async (req: any, res) => {
+router.post("/landlord/messages/conversations", previewQaAuth("landlord-message-compose"), requireLandlord, async (req: any, res) => {
   const landlordId = getEffectiveLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   if (!(await enforceMessagingCapability(req, landlordId, res))) return;

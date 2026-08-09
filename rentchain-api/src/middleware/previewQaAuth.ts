@@ -4,15 +4,57 @@ import type { UserEntitlements } from "../services/entitlementsService";
 export const PREVIEW_QA_IDENTITY_HEADER = "x-rentchain-preview-qa-identity";
 export const PREVIEW_QA_IDENTITY_ALIAS = "pr1509-landlord";
 export const PREVIEW_QA_LANDLORD_ID = "qa-pr1509-landlord";
+export const PR1510_PREVIEW_QA_IDENTITY_ALIAS = "pr1510-landlord";
+export const PR1510_PREVIEW_QA_LANDLORD_ID = "qa-pr1510-landlord";
 
 const PREVIEW_PROJECT_ID = "rentchain-preview";
 const PRODUCTION_PROJECT_ID = "project-0d9658de-af29-4dc0-a99";
 const PERMANENT_PREVIEW_SERVICE = "rentchain-preview-backend";
-const PREVIEW_QA_SERVICE_PATTERN = /^rentchain-pr1509-inbox-qa-[a-f0-9]{8}$/;
-const PREVIEW_QA_SCOPE = "pr1509-unified-inbox";
 const previewQaAuthenticated = Symbol("previewQaAuthenticated");
 
-export type PreviewQaRoute = "landlord-inbox" | "landlord-message-list" | "landlord-message-detail";
+export type PreviewQaRoute =
+  | "landlord-inbox"
+  | "landlord-message-recipients"
+  | "landlord-message-list"
+  | "landlord-message-detail"
+  | "landlord-message-compose";
+
+type PreviewQaContract = {
+  scope: string;
+  servicePattern: RegExp;
+  selector: string;
+  landlordId: string;
+  email: string;
+  allowedOperations: ReadonlySet<string>;
+};
+
+const previewQaContracts: readonly PreviewQaContract[] = [
+  {
+    scope: "pr1509-unified-inbox",
+    servicePattern: /^rentchain-pr1509-inbox-qa-[a-f0-9]{8}$/,
+    selector: PREVIEW_QA_IDENTITY_ALIAS,
+    landlordId: PREVIEW_QA_LANDLORD_ID,
+    email: "qa-pr1509-landlord@example.invalid",
+    allowedOperations: new Set([
+      "GET:landlord-inbox",
+      "GET:landlord-message-list",
+      "GET:landlord-message-detail",
+    ]),
+  },
+  {
+    scope: "pr1510-landlord-messaging",
+    servicePattern: /^rentchain-pr1510-messaging-qa-[a-f0-9]{8}$/,
+    selector: PR1510_PREVIEW_QA_IDENTITY_ALIAS,
+    landlordId: PR1510_PREVIEW_QA_LANDLORD_ID,
+    email: "qa-pr1510-landlord@example.invalid",
+    allowedOperations: new Set([
+      "GET:landlord-message-recipients",
+      "GET:landlord-message-list",
+      "GET:landlord-message-detail",
+      "POST:landlord-message-compose",
+    ]),
+  },
+];
 
 type PreviewQaDecision =
   | { kind: "continue-normal-auth" }
@@ -27,10 +69,6 @@ type PreviewQaDecisionInput = {
   authorizationPresent: boolean;
 };
 
-function isSupportedRoute(route: string): route is PreviewQaRoute {
-  return route === "landlord-inbox" || route === "landlord-message-list" || route === "landlord-message-detail";
-}
-
 export function decidePreviewQaAuth(input: PreviewQaDecisionInput): PreviewQaDecision {
   if (!input.selector) return { kind: "continue-normal-auth" };
   if (input.authorizationPresent) return { kind: "continue-normal-auth" };
@@ -43,33 +81,34 @@ export function decidePreviewQaAuth(input: PreviewQaDecisionInput): PreviewQaDec
   const expectedService = String(input.env.PREVIEW_QA_EXPECTED_SERVICE || "").trim();
   const firestoreEnabled = String(input.env.FIRESTORE_ENABLED || "").trim().toLowerCase();
   const firestoreDatabaseId = String(input.env.FIRESTORE_DATABASE_ID || "").trim();
+  const contract = previewQaContracts.find((candidate) => candidate.scope === scope);
 
   const isolatedPreviewQa =
     enabled === "true" &&
-    scope === PREVIEW_QA_SCOPE &&
+    Boolean(contract) &&
     appEnvironment === "preview" &&
     projectId !== PRODUCTION_PROJECT_ID &&
     projectId === PREVIEW_PROJECT_ID &&
     service !== PERMANENT_PREVIEW_SERVICE &&
     expectedService !== PERMANENT_PREVIEW_SERVICE &&
-    PREVIEW_QA_SERVICE_PATTERN.test(expectedService) &&
+    Boolean(contract?.servicePattern.test(expectedService)) &&
     service === expectedService &&
     firestoreEnabled === "true" &&
     firestoreDatabaseId === "(default)";
 
-  if (!isolatedPreviewQa) return { kind: "reject" };
-  if (input.method.toUpperCase() !== "GET" || !isSupportedRoute(input.route)) return { kind: "reject" };
-  if (input.selector !== PREVIEW_QA_IDENTITY_ALIAS) return { kind: "reject" };
+  if (!isolatedPreviewQa || !contract) return { kind: "reject" };
+  if (input.selector !== contract?.selector) return { kind: "reject" };
+  if (!contract.allowedOperations.has(`${input.method.toUpperCase()}:${input.route}`)) return { kind: "reject" };
   return { kind: "allow" };
 }
 
-function syntheticLandlordEntitlements(): UserEntitlements {
+function syntheticLandlordEntitlements(landlordId: string): UserEntitlements {
   return {
-    userId: PREVIEW_QA_LANDLORD_ID,
+    userId: landlordId,
     role: "landlord",
     plan: "starter",
     capabilities: ["messaging"],
-    landlordId: PREVIEW_QA_LANDLORD_ID,
+    landlordId,
   };
 }
 
@@ -93,12 +132,15 @@ export function previewQaAuth(route: PreviewQaRoute): RequestHandler {
       return res.status(401).json({ ok: false, error: "unauthenticated" });
     }
 
-    const entitlements = syntheticLandlordEntitlements();
+    const scope = String(process.env.PREVIEW_QA_AUTH_SCOPE || "").trim();
+    const contract = previewQaContracts.find((candidate) => candidate.scope === scope);
+    if (!contract) return res.status(401).json({ ok: false, error: "unauthenticated" });
+    const entitlements = syntheticLandlordEntitlements(contract.landlordId);
     (req as any).user = {
-      id: PREVIEW_QA_LANDLORD_ID,
-      email: "qa-pr1509-landlord@example.invalid",
+      id: contract.landlordId,
+      email: contract.email,
       role: "landlord",
-      landlordId: PREVIEW_QA_LANDLORD_ID,
+      landlordId: contract.landlordId,
       plan: "starter",
       capabilities: [...entitlements.capabilities],
       entitlements,

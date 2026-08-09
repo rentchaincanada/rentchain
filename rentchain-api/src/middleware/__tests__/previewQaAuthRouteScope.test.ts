@@ -3,7 +3,12 @@ import jwt from "jsonwebtoken";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requireAuth } from "../requireAuth";
 import { requireLandlord } from "../requireLandlord";
-import { PREVIEW_QA_IDENTITY_ALIAS, previewQaAuth } from "../previewQaAuth";
+import {
+  PREVIEW_QA_IDENTITY_ALIAS,
+  PR1510_PREVIEW_QA_IDENTITY_ALIAS,
+  previewQaAuth,
+  type PreviewQaRoute,
+} from "../previewQaAuth";
 
 vi.mock("../../services/sessionUserService", () => ({
   buildCanonicalSessionUserFromClaims: async (claims: any) => ({
@@ -45,7 +50,7 @@ async function invoke(options: {
   selector?: string;
   authorization?: string;
   useQaMiddleware?: boolean;
-  route?: "landlord-inbox" | "landlord-message-list" | "landlord-message-detail";
+  route?: PreviewQaRoute;
 }) {
   const headers: Record<string, string> = {};
   if (options.selector) headers["x-rentchain-preview-qa-identity"] = options.selector;
@@ -130,6 +135,24 @@ describe("Preview QA auth route scope", () => {
     expect(result.body).toMatchObject({ ok: false, error: "unauthenticated" });
   });
 
+  it("keeps invalid bearer precedence for the PR #1510 Compose mutation", async () => {
+    process.env = {
+      ...process.env,
+      PREVIEW_QA_AUTH_SCOPE: "pr1510-landlord-messaging",
+      K_SERVICE: "rentchain-pr1510-messaging-qa-759205cd",
+      PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1510-messaging-qa-759205cd",
+    };
+    const result = await invoke({
+      method: "POST",
+      route: "landlord-message-compose",
+      selector: PR1510_PREVIEW_QA_IDENTITY_ALIAS,
+      authorization: "Bearer invalid-token",
+      useQaMiddleware: true,
+    });
+    expect(result.status).toBe(401);
+    expect(result.body).toMatchObject({ ok: false, error: "unauthenticated" });
+  });
+
   it("keeps missing JWT_SECRET fail-closed when QA auth is disabled", async () => {
     process.env.PREVIEW_QA_AUTH_ENABLED = "false";
     const result = await invoke({ selector: PREVIEW_QA_IDENTITY_ALIAS, useQaMiddleware: true });
@@ -154,19 +177,27 @@ describe("Preview QA auth route scope", () => {
     });
   });
 
-  it("wires QA auth only to the three approved GET operations, including preempting public routes", () => {
+  it("wires QA auth only to the approved operations, including preempting public read routes", () => {
     const inboxSource = readFileSync(new URL("../../routes/landlordInboxRoutes.ts", import.meta.url), "utf8");
     const messagesSource = readFileSync(new URL("../../routes/messagesRoutes.ts", import.meta.url), "utf8");
     const publicSource = readFileSync(new URL("../../routes/publicRoutes.ts", import.meta.url), "utf8");
     expect(inboxSource).toContain('router.get("/inbox", previewQaAuth("landlord-inbox")');
     expect(inboxSource).not.toMatch(/router\.post\([^\n]+previewQaAuth/);
     expect(messagesSource).toContain(
+      'router.get("/landlord/messages/recipients", previewQaAuth("landlord-message-recipients")'
+    );
+    expect(messagesSource).toContain(
+      'router.post("/landlord/messages/conversations", previewQaAuth("landlord-message-compose")'
+    );
+    expect(messagesSource).toContain(
       'router.get("/landlord/messages/conversations", previewQaAuth("landlord-message-list")'
     );
     expect(messagesSource).toContain(
       'router.get("/landlord/messages/conversations/:id", previewQaAuth("landlord-message-detail")'
     );
-    expect(messagesSource).not.toMatch(/router\.post\([^\n]+previewQaAuth/);
+    expect(messagesSource.match(/router\.post\([^\n]+previewQaAuth/g)).toEqual([
+      'router.post("/landlord/messages/conversations", previewQaAuth',
+    ]);
     expect(publicSource).toMatch(
       /router\.get\(\s*"\/landlord\/messages\/conversations",\s*previewQaAuth\("landlord-message-list"\)/
     );
