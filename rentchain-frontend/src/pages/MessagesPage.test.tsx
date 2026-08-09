@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   fetchLandlordConversationMessagesMock: vi.fn(),
   markLandlordConversationReadMock: vi.fn(),
   sendLandlordMessageMock: vi.fn(),
+  fetchLandlordMessageRecipientsMock: vi.fn(),
+  createLandlordConversationMessageMock: vi.fn(),
   useCapabilitiesMock: vi.fn(),
   openUpgradeMock: vi.fn(),
 }));
@@ -19,6 +21,8 @@ vi.mock("@/api/messagesApi", () => ({
   fetchLandlordConversationMessages: mocks.fetchLandlordConversationMessagesMock,
   markLandlordConversationRead: mocks.markLandlordConversationReadMock,
   sendLandlordMessage: mocks.sendLandlordMessageMock,
+  fetchLandlordMessageRecipients: mocks.fetchLandlordMessageRecipientsMock,
+  createLandlordConversationMessage: mocks.createLandlordConversationMessageMock,
 }));
 
 vi.mock("@/hooks/useCapabilities", () => ({
@@ -63,6 +67,8 @@ describe("MessagesPage", () => {
     mocks.fetchLandlordConversationMessagesMock.mockReset();
     mocks.markLandlordConversationReadMock.mockReset();
     mocks.sendLandlordMessageMock.mockReset();
+    mocks.fetchLandlordMessageRecipientsMock.mockReset();
+    mocks.createLandlordConversationMessageMock.mockReset();
     mocks.useCapabilitiesMock.mockReturnValue({
       features: { messaging: true },
       loading: false,
@@ -88,6 +94,22 @@ describe("MessagesPage", () => {
     });
     mocks.markLandlordConversationReadMock.mockResolvedValue(undefined);
     mocks.sendLandlordMessageMock.mockResolvedValue(undefined);
+    mocks.fetchLandlordMessageRecipientsMock.mockResolvedValue([
+      {
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        tenantDisplayName: "Taylor Tenant",
+        propertyId: "prop-1",
+        propertyDisplayLabel: "Harbour View",
+        unitId: "unit-1",
+        unitDisplayLabel: "Unit 2A",
+      },
+    ]);
+    mocks.createLandlordConversationMessageMock.mockResolvedValue({
+      conversationId: "landlord-1__tenant-1__unit-1",
+      created: true,
+      message: {},
+    });
   });
 
   async function flushTimers(ms: number) {
@@ -116,6 +138,75 @@ describe("MessagesPage", () => {
     expect(screen.getAllByText("Harbour View / Unit 2A").length).toBeGreaterThan(0);
     expect(screen.getByText("TT")).toBeInTheDocument();
     expect(screen.queryByText(/Tenant tenant-/i)).not.toBeInTheDocument();
+  });
+
+  it("supports first-message compose when the landlord has no conversations", async () => {
+    mocks.fetchLandlordConversationsMock.mockResolvedValue([]);
+    mocks.fetchLandlordConversationMessagesMock.mockResolvedValue({
+      conversation: {
+        id: "landlord-1__tenant-1__unit-1",
+        tenantDisplayName: "Taylor Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "Unit 2A",
+      },
+      messages: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/messages"]}>
+        <LocationProbe />
+        <MessagesPage />
+      </MemoryRouter>
+    );
+    await flushAsync();
+    expect(screen.getByText("No conversations yet.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "New Message" })[0]);
+    await flushAsync();
+    expect(mocks.fetchLandlordMessageRecipientsMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("dialog", { name: "New message" })).toBeInTheDocument();
+    expect(screen.getByText("Harbour View / Unit 2A")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Search by tenant, property, or unit"), { target: { value: "2A" } });
+    fireEvent.click(screen.getByRole("button", { name: /Taylor Tenant/ }));
+    fireEvent.change(screen.getByPlaceholderText("Write your message"), { target: { value: "Welcome to RentChain." } });
+    fireEvent.click(screen.getByRole("button", { name: "Send Message" }));
+    await flushAsync();
+
+    expect(mocks.createLandlordConversationMessageMock).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      body: "Welcome to RentChain.",
+      requestId: expect.any(String),
+    }));
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/messages?threadId=landlord-1__tenant-1__unit-1"
+    );
+  });
+
+  it("prevents double submission while a first message is in flight", async () => {
+    let resolveRequest: ((value: any) => void) | undefined;
+    mocks.createLandlordConversationMessageMock.mockReturnValue(new Promise((resolve) => {
+      resolveRequest = resolve;
+    }));
+
+    render(
+      <MemoryRouter>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+    await flushAsync();
+    fireEvent.click(screen.getAllByRole("button", { name: "New Message" })[0]);
+    await flushAsync();
+    fireEvent.click(within(screen.getByRole("dialog", { name: "New message" })).getByRole("button", { name: /Taylor Tenant/ }));
+    fireEvent.change(screen.getByPlaceholderText("Write your message"), { target: { value: "One send only" } });
+    const send = screen.getByRole("button", { name: "Send Message" });
+    fireEvent.click(send);
+    fireEvent.click(send);
+    expect(mocks.createLandlordConversationMessageMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Sending…" })).toBeDisabled();
+    resolveRequest?.({ conversationId: "landlord-1__tenant-1__unit-1", created: true, message: {} });
+    await flushAsync();
   });
 
   it("shows a locked messages state without loading conversations when messaging is unavailable", async () => {
@@ -484,6 +575,12 @@ describe("MessagesPage", () => {
     expect(css).toMatch(/\.rc-messages-thread\s*\{[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*hidden;/);
     expect(css).toMatch(/\.rc-messages-thread-body\s*\{[\s\S]*?overflow-y:\s*auto;/);
     expect(css).toMatch(/\.rc-messages-composer-input\s*\{[\s\S]*?min-width:\s*0;/);
+    expect(css).toMatch(
+      /\.rc-messages-compose-overlay\s*\{[\s\S]*?padding:\s*12px 12px calc\(12px \+ var\(--rc-mobile-bottom-nav-height\) \+ env\(safe-area-inset-bottom, 0px\)\);/
+    );
+    expect(css).toMatch(
+      /\.rc-messages-compose-panel\s*\{[\s\S]*?max-height:\s*calc\([\s\S]*?var\(--rc-mobile-bottom-nav-height\)[\s\S]*?env\(safe-area-inset-bottom, 0px\)[\s\S]*?\);/
+    );
   });
 
   it("keeps the composer usable and sends through the selected conversation", async () => {

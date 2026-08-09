@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   PREVIEW_QA_IDENTITY_ALIAS,
   PREVIEW_QA_LANDLORD_ID,
+  PR1510_PREVIEW_QA_IDENTITY_ALIAS,
+  PR1510_PREVIEW_QA_LANDLORD_ID,
   decidePreviewQaAuth,
   isPreviewQaAuthenticatedRequest,
   previewQaAuth,
@@ -16,6 +18,13 @@ const enabledEnv = {
   PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1509-inbox-qa-4605bba7",
   FIRESTORE_ENABLED: "true",
   FIRESTORE_DATABASE_ID: "(default)",
+} as NodeJS.ProcessEnv;
+
+const pr1510EnabledEnv = {
+  ...enabledEnv,
+  PREVIEW_QA_AUTH_SCOPE: "pr1510-landlord-messaging",
+  K_SERVICE: "rentchain-pr1510-messaging-qa-759205cd",
+  PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1510-messaging-qa-759205cd",
 } as NodeJS.ProcessEnv;
 
 function decide(overrides: Partial<Parameters<typeof decidePreviewQaAuth>[0]> = {}) {
@@ -88,6 +97,80 @@ describe("previewQaAuth", () => {
       plan: "starter",
       capabilities: ["messaging"],
     });
+  });
+
+  it.each([
+    ["GET", "landlord-message-recipients"],
+    ["GET", "landlord-message-list"],
+    ["GET", "landlord-message-detail"],
+    ["POST", "landlord-message-compose"],
+  ] as const)("allows PR #1510 %s %s only under its fixed contract", (method, route) => {
+    expect(decide({
+      env: pr1510EnabledEnv,
+      method,
+      route,
+      selector: PR1510_PREVIEW_QA_IDENTITY_ALIAS,
+    })).toEqual({ kind: "allow" });
+  });
+
+  it("injects only the server-owned PR #1510 landlord identity", () => {
+    process.env = { ...pr1510EnabledEnv };
+    const headers = {
+      "x-rentchain-preview-qa-identity": PR1510_PREVIEW_QA_IDENTITY_ALIAS,
+      "x-landlord-id": "arbitrary-landlord",
+      "x-role": "admin",
+    };
+    const req: any = { method: "GET", headers, header: (name: string) => headers[name.toLowerCase() as keyof typeof headers] };
+    const res: any = { status: () => res, json: () => res };
+    let nextCalled = false;
+    previewQaAuth("landlord-message-recipients")(req, res, () => { nextCalled = true; });
+    expect(nextCalled).toBe(true);
+    expect(req.user).toMatchObject({
+      id: PR1510_PREVIEW_QA_LANDLORD_ID,
+      landlordId: PR1510_PREVIEW_QA_LANDLORD_ID,
+      role: "landlord",
+    });
+  });
+
+  it.each([
+    ["wrong service", { ...pr1510EnabledEnv, K_SERVICE: "rentchain-pr1510-messaging-qa-deadbeef" }],
+    ["malformed service", { ...pr1510EnabledEnv, K_SERVICE: "rentchain-pr1510-messaging-qa-head7592", PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1510-messaging-qa-head7592" }],
+    ["PR #1509 service", { ...pr1510EnabledEnv, K_SERVICE: enabledEnv.K_SERVICE, PREVIEW_QA_EXPECTED_SERVICE: enabledEnv.PREVIEW_QA_EXPECTED_SERVICE }],
+    ["Production", { ...pr1510EnabledEnv, GOOGLE_CLOUD_PROJECT: "project-0d9658de-af29-4dc0-a99" }],
+    ["permanent Preview", { ...pr1510EnabledEnv, K_SERVICE: "rentchain-preview-backend", PREVIEW_QA_EXPECTED_SERVICE: "rentchain-preview-backend" }],
+    ["disabled", { ...pr1510EnabledEnv, PREVIEW_QA_AUTH_ENABLED: "false" }],
+  ])("rejects PR #1510 with %s", (_label, env) => {
+    expect(decide({
+      env,
+      route: "landlord-message-recipients",
+      selector: PR1510_PREVIEW_QA_IDENTITY_ALIAS,
+    })).toEqual({ kind: "reject" });
+  });
+
+  it("rejects cross-contract selectors and scopes", () => {
+    expect(decide({ env: pr1510EnabledEnv, selector: PREVIEW_QA_IDENTITY_ALIAS })).toEqual({ kind: "reject" });
+    expect(decide({
+      env: enabledEnv,
+      route: "landlord-message-list",
+      selector: PR1510_PREVIEW_QA_IDENTITY_ALIAS,
+    })).toEqual({ kind: "reject" });
+  });
+
+  it.each([
+    ["POST", "landlord-message-list"],
+    ["POST", "landlord-message-detail"],
+    ["POST", "landlord-inbox"],
+    ["POST", "landlord-message-recipients"],
+    ["PUT", "landlord-message-compose"],
+    ["PATCH", "landlord-message-compose"],
+    ["DELETE", "landlord-message-compose"],
+  ] as const)("rejects non-allowlisted PR #1510 operation %s %s", (method, route) => {
+    expect(decide({
+      env: pr1510EnabledEnv,
+      method,
+      route,
+      selector: PR1510_PREVIEW_QA_IDENTITY_ALIAS,
+    })).toEqual({ kind: "reject" });
   });
 
   it.each([

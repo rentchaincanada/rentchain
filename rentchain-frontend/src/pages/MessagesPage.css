@@ -13,6 +13,154 @@
   overflow-x: hidden;
 }
 
+.rc-messages-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.rc-messages-page-header h1,
+.rc-messages-compose-heading h2,
+.rc-messages-compose-heading p {
+  margin: 0;
+}
+
+.rc-messages-new-button,
+.rc-messages-empty-detail button,
+.rc-messages-compose-actions .is-primary {
+  border: 1px solid #1d4ed8;
+  border-radius: 12px;
+  background: #2563eb;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 750;
+  min-height: 44px;
+  padding: 10px 16px;
+}
+
+.rc-messages-compose-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.rc-messages-compose-panel {
+  box-sizing: border-box;
+  width: min(620px, 100%);
+  max-height: min(760px, calc(100dvh - 40px));
+  overflow-y: auto;
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+}
+
+.rc-messages-compose-heading,
+.rc-messages-compose-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rc-messages-compose-heading p {
+  margin-top: 4px;
+  color: #64748b;
+}
+
+.rc-messages-compose-heading button,
+.rc-messages-compose-actions button:not(.is-primary) {
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  border-radius: 10px;
+  background: #ffffff;
+  cursor: pointer;
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+.rc-messages-compose-field {
+  display: grid;
+  gap: 6px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.rc-messages-compose-field input,
+.rc-messages-compose-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.rc-messages-compose-field textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.rc-messages-recipient-list {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.rc-messages-recipient-list button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 12px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.rc-messages-recipient-list button.is-selected {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.rc-messages-recipient-list span {
+  color: #64748b;
+  overflow-wrap: anywhere;
+}
+
+.rc-messages-compose-actions {
+  justify-content: flex-end;
+}
+
+.rc-messages-compose-actions button:disabled,
+.rc-messages-compose-heading button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.rc-messages-compose-error {
+  color: #b91c1c;
+}
+
+.rc-messages-empty-detail {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  color: #64748b;
+}
+
 .rc-messages-grid {
   flex: 1;
   min-height: 0;
@@ -289,5 +437,24 @@
 
   .rc-messages-composer-input {
     min-height: 50px;
+  }
+
+  .rc-messages-page-header {
+    align-items: flex-start;
+  }
+
+  .rc-messages-compose-overlay {
+    align-items: end;
+    padding: 12px 12px calc(12px + var(--rc-mobile-bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .rc-messages-compose-panel {
+    max-height: calc(
+      100dvh -
+      24px -
+      var(--rc-mobile-bottom-nav-height) -
+      env(safe-area-inset-bottom, 0px)
+    );
+    padding: 16px;
   }
 }

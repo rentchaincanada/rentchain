@@ -5,8 +5,11 @@ import {
   fetchLandlordConversationMessages,
   sendLandlordMessage,
   markLandlordConversationRead,
+  fetchLandlordMessageRecipients,
+  createLandlordConversationMessage,
   type Conversation,
   type Message,
+  type MessageRecipient,
 } from "@/api/messagesApi";
 import { spacing, colors, text } from "@/styles/tokens";
 import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
@@ -166,6 +169,14 @@ export default function MessagesPage() {
   const [loadingList, setLoadingList] = useState(false);
   const [loadingThread, setLoadingThread] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [recipients, setRecipients] = useState<MessageRecipient[]>([]);
+  const [recipientSearch, setRecipientSearch] = useState("");
+  const [selectedRecipientKey, setSelectedRecipientKey] = useState<string | null>(null);
+  const [firstMessage, setFirstMessage] = useState("");
+  const [loadingRecipients, setLoadingRecipients] = useState(false);
+  const [submittingFirstMessage, setSubmittingFirstMessage] = useState(false);
+  const [composeError, setComposeError] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { features, loading: capsLoading } = useCapabilities();
@@ -362,11 +373,77 @@ export default function MessagesPage() {
     await loadThread(selectedId);
     await loadConversations(selectedId, { background: true });
   };
+  const recipientKey = (recipient: MessageRecipient) => `${recipient.leaseId}:${recipient.tenantId}`;
+  const selectedRecipient = recipients.find((recipient) => recipientKey(recipient) === selectedRecipientKey) || null;
+  const filteredRecipients = recipients.filter((recipient) =>
+    [recipient.tenantDisplayName, recipient.propertyDisplayLabel, recipient.unitDisplayLabel]
+      .map((value) => String(value || "").toLowerCase())
+      .join(" ")
+      .includes(recipientSearch.trim().toLowerCase())
+  );
+
+  const openCompose = async () => {
+    setComposeOpen(true);
+    setComposeError(null);
+    setLoadingRecipients(true);
+    try {
+      setRecipients(await fetchLandlordMessageRecipients());
+    } catch (err: any) {
+      setComposeError(err?.message || "Failed to load eligible tenants");
+    } finally {
+      setLoadingRecipients(false);
+    }
+  };
+
+  const closeCompose = () => {
+    if (submittingFirstMessage) return;
+    setComposeOpen(false);
+    setRecipientSearch("");
+    setSelectedRecipientKey(null);
+    setFirstMessage("");
+    setComposeError(null);
+  };
+
+  const handleFirstMessage = async () => {
+    const body = firstMessage.trim();
+    if (!selectedRecipient || !body || submittingFirstMessage) return;
+    setSubmittingFirstMessage(true);
+    setComposeError(null);
+    try {
+      const requestId = globalThis.crypto?.randomUUID?.() || `compose-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const result = await createLandlordConversationMessage({
+        tenantId: selectedRecipient.tenantId,
+        leaseId: selectedRecipient.leaseId,
+        body,
+        requestId,
+      });
+      setComposeOpen(false);
+      setFirstMessage("");
+      setRecipientSearch("");
+      setSelectedRecipientKey(null);
+      selectedIdRef.current = result.conversationId;
+      setSelectedId(result.conversationId);
+      navigate(`/messages?threadId=${encodeURIComponent(result.conversationId)}`);
+      await loadConversations(result.conversationId, { background: true });
+      await loadThread(result.conversationId);
+    } catch (err: any) {
+      setComposeError(err?.message || "Failed to send first message");
+    } finally {
+      setSubmittingFirstMessage(false);
+    }
+  };
   const selectedConversationTitle = buildConversationTitle(selectedConversation);
 
   return (
     <div className="rc-messages-page">
-      <h1 style={{ marginBottom: spacing.md }}>Messages</h1>
+      <div className="rc-messages-page-header">
+        <h1>Messages</h1>
+        {!capsLoading && messagingEnabled ? (
+          <button type="button" className="rc-messages-new-button" onClick={() => void openCompose()}>
+            New Message
+          </button>
+        ) : null}
+      </div>
       {error && <div style={{ color: colors.danger, marginBottom: spacing.sm }}>{error}</div>}
       {!capsLoading && !messagingEnabled ? (
         <LockedFeature
@@ -374,6 +451,73 @@ export default function MessagesPage() {
           ctaLabel="Upgrade to Starter"
         />
       ) : (
+      <>
+      {composeOpen ? (
+        <div className="rc-messages-compose-overlay" role="dialog" aria-modal="true" aria-label="New message">
+          <div className="rc-messages-compose-panel">
+            <div className="rc-messages-compose-heading">
+              <div>
+                <h2>New Message</h2>
+                <p>Select a current tenant and send the first message.</p>
+              </div>
+              <button type="button" onClick={closeCompose} disabled={submittingFirstMessage} aria-label="Close new message">
+                Close
+              </button>
+            </div>
+            {composeError ? <div className="rc-messages-compose-error" role="alert">{composeError}</div> : null}
+            <label className="rc-messages-compose-field">
+              <span>Search tenants</span>
+              <input
+                value={recipientSearch}
+                onChange={(event) => setRecipientSearch(event.target.value)}
+                placeholder="Search by tenant, property, or unit"
+              />
+            </label>
+            <div className="rc-messages-recipient-list" aria-label="Eligible tenants">
+              {loadingRecipients ? (
+                <div>Loading eligible tenants…</div>
+              ) : filteredRecipients.length === 0 ? (
+                <div>No eligible current tenants found.</div>
+              ) : filteredRecipients.map((recipient) => {
+                const key = recipientKey(recipient);
+                const selected = key === selectedRecipientKey;
+                return (
+                  <button
+                    type="button"
+                    key={key}
+                    className={selected ? "is-selected" : ""}
+                    aria-pressed={selected}
+                    onClick={() => setSelectedRecipientKey(key)}
+                  >
+                    <strong>{recipient.tenantDisplayName}</strong>
+                    <span>{[recipient.propertyDisplayLabel, recipient.unitDisplayLabel].filter(Boolean).join(" / ")}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <label className="rc-messages-compose-field">
+              <span>Message</span>
+              <textarea
+                value={firstMessage}
+                onChange={(event) => setFirstMessage(event.target.value)}
+                maxLength={4000}
+                placeholder="Write your message"
+              />
+            </label>
+            <div className="rc-messages-compose-actions">
+              <button type="button" onClick={closeCompose} disabled={submittingFirstMessage}>Cancel</button>
+              <button
+                type="button"
+                className="is-primary"
+                onClick={() => void handleFirstMessage()}
+                disabled={!selectedRecipient || !firstMessage.trim() || submittingFirstMessage}
+              >
+                {submittingFirstMessage ? "Sending…" : "Send Message"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="rc-messages-grid" data-testid="messages-layout">
         <ResponsiveMasterDetail
           masterTitle="Conversations"
@@ -535,12 +679,16 @@ export default function MessagesPage() {
                   </div>
                 </>
               ) : (
-                <div style={{ color: text.muted }}>Select a conversation.</div>
+                <div className="rc-messages-empty-detail">
+                  <span>Select a conversation or start a new one.</span>
+                  <button type="button" onClick={() => void openCompose()}>New Message</button>
+                </div>
               )}
             </div>
           }
         />
       </div>
+      </>
       )}
     </div>
   );

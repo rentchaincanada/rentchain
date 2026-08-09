@@ -314,7 +314,7 @@ describe("LandlordNav mobile drawer", () => {
     );
   });
 
-  it("shows one landlord drawer inbox entry pointing to the unified inbox", async () => {
+  it("shows distinct landlord drawer entries for the unified inbox and direct messages", async () => {
     renderLandlordNav();
 
     fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
@@ -322,12 +322,23 @@ describe("LandlordNav mobile drawer", () => {
     const drawer = screen.getByRole("dialog", { name: "Navigation menu" });
     const inboxButtons = within(drawer).getAllByRole("button", { name: "Inbox" });
     expect(inboxButtons).toHaveLength(1);
-    expect(within(drawer).queryByRole("button", { name: "Messages" })).not.toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "Messages" })).toBeInTheDocument();
 
     fireEvent.click(inboxButtons[0]);
 
     await waitFor(() => {
       expect(screen.getByTestId("current-path")).toHaveTextContent("/landlord/unified-inbox");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "Navigation menu" })).getByRole("button", {
+        name: "Messages",
+      })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/messages");
     });
   });
 

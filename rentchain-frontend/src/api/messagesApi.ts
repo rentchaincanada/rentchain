@@ -23,9 +23,37 @@ export type Message = {
   createdAtMs?: number | null;
 };
 
+export type MessageRecipient = {
+  leaseId: string;
+  tenantId: string;
+  tenantDisplayName: string;
+  propertyId: string;
+  propertyDisplayLabel?: string | null;
+  unitId: string;
+  unitDisplayLabel?: string | null;
+};
+
 export async function fetchLandlordConversations(): Promise<Conversation[]> {
   const res = await apiFetch("/landlord/messages/conversations");
   return Array.isArray((res as any)?.conversations) ? (res as any).conversations : [];
+}
+
+export async function fetchLandlordMessageRecipients(): Promise<MessageRecipient[]> {
+  const res = await apiFetch("/landlord/messages/recipients");
+  return Array.isArray((res as any)?.recipients) ? (res as any).recipients : [];
+}
+
+export async function createLandlordConversationMessage(input: {
+  tenantId: string;
+  leaseId: string;
+  body: string;
+  requestId: string;
+}): Promise<{ conversationId: string; created: boolean; message: Message }> {
+  return apiFetch("/landlord/messages/conversations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }) as Promise<{ conversationId: string; created: boolean; message: Message }>;
 }
 
 export async function fetchLandlordConversationMessages(

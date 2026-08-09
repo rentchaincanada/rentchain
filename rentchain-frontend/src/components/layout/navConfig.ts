@@ -118,9 +118,10 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Messages",
     to: "/messages",
     icon: MessagesSquare,
-    showInDrawer: false,
+    showInDrawer: true,
     showInTabs: false,
     requiresFeature: "messaging",
+    requiresRoles: ["landlord"],
   },
   {
     id: "payments",
