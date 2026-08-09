@@ -134,8 +134,10 @@ grep -Fq "resource.name == 'projects/\${var.project_id}/databases/\${local.previ
 
 expected_runtime_firestore_permissions="$(cat <<'EOF'
 datastore.databases.get
+datastore.entities.create
 datastore.entities.get
 datastore.entities.list
+datastore.entities.update
 EOF
 )"
 actual_runtime_firestore_permissions="$(
@@ -163,7 +165,7 @@ rg -q 'name         = "preview-backend-auth"' "$root_dir/datastore_auth.tf"
 rg -q 'display_name = "Preview Backend Identity Toolkit"' "$root_dir/datastore_auth.tf"
 rg -U -q '(?s)resource "google_apikeys_key" "preview_backend_auth" \{.*lifecycle \{\n    prevent_destroy = true\n  \}' "$root_dir/datastore_auth.tf"
 
-if rg -n 'firebaseauth\.users\.(create|delete|update|sendEmail)|datastore\.(databases\.(delete|update)|entities\.(create|delete|update)|indexes\.|operations\.)|roles/(datastore|firebase|identityplatform)' "$root_dir/datastore_auth.tf"; then
+if rg -n 'firebaseauth\.users\.(create|delete|update|sendEmail)|datastore\.(databases\.(delete|update)|entities\.delete|indexes\.|operations\.)|roles/(datastore|firebase|identityplatform)' "$root_dir/datastore_auth.tf"; then
   echo "B7 runtime IAM broadening or destructive datastore permission found" >&2
   exit 1
 fi

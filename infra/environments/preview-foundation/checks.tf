@@ -42,8 +42,10 @@ check "b7_preview_datastore_boundary" {
   assert {
     condition = local.preview_runtime_firestore_permissions == toset([
       "datastore.databases.get",
+      "datastore.entities.create",
       "datastore.entities.get",
       "datastore.entities.list",
+      "datastore.entities.update",
     ])
     error_message = "B7 Preview runtime Firestore permissions changed outside the exact data-plane set."
   }

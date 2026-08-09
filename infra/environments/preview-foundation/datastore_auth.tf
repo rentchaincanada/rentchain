@@ -6,8 +6,10 @@ locals {
 
   preview_runtime_firestore_permissions = toset([
     "datastore.databases.get",
+    "datastore.entities.create",
     "datastore.entities.get",
     "datastore.entities.list",
+    "datastore.entities.update",
   ])
 
   preview_runtime_auth_permissions = toset([
