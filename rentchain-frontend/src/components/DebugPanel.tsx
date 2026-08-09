@@ -8,7 +8,7 @@ const lastApiError: unknown = null;
 
 const expandedPanelStyle: React.CSSProperties = {
   position: "fixed",
-  top: 220,
+  bottom: 160,
   right: 10,
   padding: "10px 12px",
   borderRadius: 10,
@@ -18,7 +18,7 @@ const expandedPanelStyle: React.CSSProperties = {
   zIndex: 5000,
   border: "1px solid rgba(148,163,184,0.4)",
   maxWidth: 320,
-  maxHeight: "calc(100vh - 380px)",
+  maxHeight: "calc(100vh - 440px)",
   overflowY: "auto",
   overscrollBehavior: "contain",
 };
