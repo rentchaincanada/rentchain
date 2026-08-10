@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare, User, ReceiptText, BarChart3, Inbox, ClipboardList, FileText, CalendarDays } from "lucide-react";
+import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare, Megaphone, User, ReceiptText, BarChart3, Inbox, ClipboardList, FileText, CalendarDays } from "lucide-react";
 import { SCREENING_ENABLED } from "../../config/screening";
 
 export type NavItem = {
@@ -118,6 +118,16 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Messages",
     to: "/messages",
     icon: MessagesSquare,
+    showInDrawer: true,
+    showInTabs: false,
+    requiresFeature: "messaging",
+    requiresRoles: ["landlord"],
+  },
+  {
+    id: "notices",
+    label: "Notices",
+    to: "/notices",
+    icon: Megaphone,
     showInDrawer: true,
     showInTabs: false,
     requiresFeature: "messaging",

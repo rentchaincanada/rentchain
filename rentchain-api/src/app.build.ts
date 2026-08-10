@@ -92,6 +92,7 @@ import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes"
 import tenantsRoutes from "./routes/tenantsRoutes";
 import tenanciesRoutes from "./routes/tenanciesRoutes";
 import messagesRoutes, { previewQaComposeRoutes } from "./routes/messagesRoutes";
+import propertyNoticesRoutes from "./routes/propertyNoticesRoutes";
 import rentalApplicationsRoutes from "./routes/rentalApplicationsRoutes";
 import verifiedScreeningRoutes from "./routes/verifiedScreeningRoutes";
 import stripeScreeningOrdersWebhookRoutes, {
@@ -712,6 +713,7 @@ app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
+app.use("/api", routeSource("propertyNoticesRoutes.ts"), propertyNoticesRoutes);
 console.log(
   "[routes] /api/properties, /api/properties/:propertyId/units, /api/action-requests, /api/applications"
 );
