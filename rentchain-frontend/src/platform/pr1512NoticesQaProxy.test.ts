@@ -38,6 +38,11 @@ describe("PR #1512 read-only Notices proxy", () => {
     "/api/pr1512-notices/api/me",
   ])("allows exact read %s", (url) => expect(classifyPr1512Request(req(url))).toMatchObject({ allowed: true }));
 
+  it("accepts only Vercel's exact catch-all routing parameter", () => {
+    expect(classifyPr1512Request(req("/api/pr1512-notices/api/landlord/notices?limit=50&path=api%2Flandlord%2Fnotices"))).toMatchObject({ allowed: true });
+    expect(classifyPr1512Request(req("/api/pr1512-notices/api/landlord/notices?limit=50&path=api%2Fproperties"))).toMatchObject({ allowed: false });
+  });
+
   it.each([
     "/api/pr1512-notices/api/admin/users",
     "/api/pr1512-notices/api/landlord/notices?limit=500",

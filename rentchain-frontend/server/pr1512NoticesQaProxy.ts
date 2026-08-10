@@ -46,7 +46,11 @@ function requestPath(req: any) {
   const [path, query = ""] = raw.split("?", 2);
   const prefix = "/api/pr1512-notices";
   if (!path.startsWith(`${prefix}/`) || /%2f|%5c|\\|\0/i.test(path)) return null;
-  return { backendPath: path.slice(prefix.length), query };
+  const backendPath = path.slice(prefix.length);
+  const params = new URLSearchParams(query);
+  const routedSuffix = backendPath.slice(1);
+  if (params.get("path") === routedSuffix) params.delete("path");
+  return { backendPath, query: params.toString() };
 }
 
 function safeQuery(path: string, query: string) {
