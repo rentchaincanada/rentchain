@@ -3,7 +3,7 @@ import { installLegacySmokeHarness } from "./legacy-smoke-setup";
 
 test.use({ serviceWorkers: "block" });
 
-async function installNoticesHarness(page: Page) {
+async function installNoticesHarness(page: Page, options: { rejectRecipientPreview?: boolean } = {}) {
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
   const fiveXX: string[] = [];
@@ -28,6 +28,11 @@ async function installNoticesHarness(page: Page) {
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname.endsWith("/recipients")) {
+      if (options.rejectRecipientPreview) {
+        await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({
+          ok: false, code: "notice_recipient_not_eligible", error: "Notice recipients unavailable",
+        }) }); return;
+      }
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
         property: { id: "property-synthetic", label: "Harbour Synthetic Property" },
         recipients: [
@@ -51,6 +56,19 @@ async function installNoticesHarness(page: Page) {
   });
   return { consoleErrors, pageErrors, fiveXX };
 }
+
+test("handles fail-closed recipient preview rejection without sending", async ({ page }) => {
+  const errors = await installNoticesHarness(page, { rejectRecipientPreview: true });
+  await page.goto("/notices");
+  await page.getByRole("button", { name: "New Notice" }).click();
+  await page.getByLabel("Property").selectOption("property-synthetic");
+  await page.getByRole("button", { name: "Resolve current recipients" }).click();
+  await expect(page.getByRole("alert")).toHaveText("Eligible recipients could not be resolved.");
+  await expect(page.getByRole("button", { name: "Preview Notice" })).toHaveCount(0);
+  expect(errors.consoleErrors).toEqual([expect.stringContaining("403 (Forbidden)")]);
+  expect(errors.pageErrors).toEqual([]);
+  expect(errors.fiveXX).toEqual([]);
+});
 
 for (const viewport of [
   { name: "desktop", width: 1440, height: 900 },

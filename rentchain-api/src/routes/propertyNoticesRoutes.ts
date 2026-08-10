@@ -16,6 +16,7 @@ const MAX_NOTICE_RECIPIENTS = 100;
 const MAX_NOTICE_LEASES = 101;
 const MAX_NOTICE_HISTORY = 50;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const documentIdPattern = /^[A-Za-z0-9_-]{1,1500}$/;
 
 function text(value: unknown): string | null {
   const normalized = String(value ?? "").trim();
@@ -25,6 +26,18 @@ function text(value: unknown): string | null {
 function ids(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return Array.from(new Set(value.map(text).filter((item): item is string => Boolean(item)))).sort();
+}
+
+function hasOwn(value: unknown, key: string): boolean {
+  return Boolean(value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, key));
+}
+
+function explicitTenantFilter(value: unknown, provided: boolean) {
+  if (!provided) return { tenantFilterProvided: false, tenantFilterMalformed: false };
+  const malformed = !Array.isArray(value) || value.length === 0 || value.some((item) =>
+    typeof item !== "string" || !documentIdPattern.test(item.trim())
+  );
+  return { tenantFilterProvided: true, tenantFilterMalformed: malformed };
 }
 
 function tenantIdsForLease(raw: any): string[] {
@@ -83,12 +96,17 @@ async function resolveRecipients(params: {
   propertyId: string;
   selectedUnitIds?: string[];
   selectedTenantIds?: string[];
+  tenantFilterProvided?: boolean;
+  tenantFilterMalformed?: boolean;
 }) {
   const propertySnap = await db.collection("properties").doc(params.propertyId).get();
   if (!propertySnap.exists) return { kind: "not_found" as const };
   const property = propertySnap.data() as any;
   if (text(property?.landlordId) !== params.landlordId || isArchived(property)) {
     return { kind: "forbidden" as const };
+  }
+  if (params.tenantFilterProvided && params.tenantFilterMalformed) {
+    return { kind: "recipient_not_eligible" as const };
   }
 
   const leaseSnap = await db.collection("leases")
@@ -106,12 +124,19 @@ async function resolveRecipients(params: {
     if (text(lease?.landlordId) !== params.landlordId || !isCurrentLeaseStatus(lease?.status) || !unitId) continue;
     if (selectedUnits.size && !selectedUnits.has(unitId)) continue;
     for (const tenantId of tenantIdsForLease(lease)) {
-      if (!selectedTenants.size || selectedTenants.has(tenantId)) candidates.push({ leaseId: leaseDoc.id, tenantId, unitId });
+      candidates.push({ leaseId: leaseDoc.id, tenantId, unitId });
     }
   }
 
-  const uniqueUnitIds = Array.from(new Set(candidates.map((candidate) => candidate.unitId))).sort();
-  const uniqueTenantIds = Array.from(new Set(candidates.map((candidate) => candidate.tenantId))).sort();
+  const eligibleLeaseTenantIds = new Set(candidates.map((candidate) => candidate.tenantId));
+  if (params.tenantFilterProvided && Array.from(selectedTenants).some((tenantId) => !eligibleLeaseTenantIds.has(tenantId))) {
+    return { kind: "recipient_not_eligible" as const };
+  }
+  const intendedCandidates = params.tenantFilterProvided
+    ? candidates.filter((candidate) => selectedTenants.has(candidate.tenantId))
+    : candidates;
+  const uniqueUnitIds = Array.from(new Set(intendedCandidates.map((candidate) => candidate.unitId))).sort();
+  const uniqueTenantIds = Array.from(new Set(intendedCandidates.map((candidate) => candidate.tenantId))).sort();
   if (uniqueTenantIds.length > MAX_NOTICE_RECIPIENTS) return { kind: "too_many" as const };
 
   const [unitEntries, tenantEntries] = await Promise.all([
@@ -122,7 +147,7 @@ async function resolveRecipients(params: {
   const tenants = new Map(tenantEntries);
   const byTenant = new Map<string, ResolvedRecipient>();
 
-  for (const candidate of candidates) {
+  for (const candidate of intendedCandidates) {
     const unitSnap = units.get(candidate.unitId);
     const tenantSnap = tenants.get(candidate.tenantId);
     if (!unitSnap?.exists || !tenantSnap?.exists) continue;
@@ -146,6 +171,10 @@ async function resolveRecipients(params: {
     existing.unitLabels = Array.from(new Set([...existing.unitLabels, unitLabel(unit)])).sort();
     existing.leaseIds = Array.from(new Set([...existing.leaseIds, candidate.leaseId])).sort();
     byTenant.set(candidate.tenantId, existing);
+  }
+
+  if (params.tenantFilterProvided && Array.from(selectedTenants).some((tenantId) => !byTenant.has(tenantId))) {
+    return { kind: "recipient_not_eligible" as const };
   }
 
   const recipients = Array.from(byTenant.values()).sort((a, b) =>
@@ -189,13 +218,22 @@ async function requireResolved(req: any, res: any) {
   const propertyId = text(req.method === "GET" ? req.query?.propertyId : req.body?.propertyId);
   if (!landlordId) { res.status(401).json({ ok: false, error: "Unauthorized" }); return null; }
   if (!propertyId) { res.status(400).json({ ok: false, error: "propertyId required" }); return null; }
+  const tenantFilterProvided = req.method === "GET"
+    ? hasOwn(req.query, "tenantIds")
+    : hasOwn(req.body, "selectedTenantIds");
   const filterSource = req.method === "GET" ? {
     selectedUnitIds: String(req.query?.unitIds || "").split(",").filter(Boolean),
-    selectedTenantIds: String(req.query?.tenantIds || "").split(",").filter(Boolean),
+    selectedTenantIds: tenantFilterProvided ? String(req.query?.tenantIds ?? "").split(",") : [],
   } : req.body;
-  const result = await resolveRecipients({ landlordId, propertyId, ...parseFilters(filterSource) });
+  const filters = parseFilters(filterSource);
+  const tenantValidation = explicitTenantFilter(filterSource?.selectedTenantIds, tenantFilterProvided);
+  const result = await resolveRecipients({ landlordId, propertyId, ...filters, ...tenantValidation });
   if (result.kind === "not_found") { res.status(404).json({ ok: false, error: "Property not found" }); return null; }
   if (result.kind === "forbidden") { res.status(403).json({ ok: false, error: "Property unavailable" }); return null; }
+  if (result.kind === "recipient_not_eligible") {
+    res.status(403).json({ ok: false, code: "notice_recipient_not_eligible", error: "Notice recipients unavailable" });
+    return null;
+  }
   if (result.kind === "too_many") {
     res.status(422).json({ ok: false, error: "Recipient limit exceeded", maxRecipients: MAX_NOTICE_RECIPIENTS });
     return null;

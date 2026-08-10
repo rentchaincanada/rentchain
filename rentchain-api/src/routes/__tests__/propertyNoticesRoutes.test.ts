@@ -69,10 +69,12 @@ function seed() {
   collection("tenants").set("tenant-1", { landlordId: "landlord-1", fullName: "Alex Current", email: "alex@example.test" });
   collection("tenants").set("tenant-2", { landlordId: "landlord-1", fullName: "Blair Missing" });
   collection("tenants").set("tenant-ended", { landlordId: "landlord-1", fullName: "Former Tenant", email: "former@example.test" });
+  collection("tenants").set("tenant-foreign", { landlordId: "landlord-2", fullName: "Foreign Tenant", email: "foreign@example.test" });
   collection("leases").set("lease-1", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantIds: ["tenant-1", "tenant-2"], status: "active" });
   collection("leases").set("lease-duplicate", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-2", tenantId: "tenant-1", status: "active" });
   collection("leases").set("lease-ended", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-2", tenantId: "tenant-ended", status: "ended" });
   collection("leases").set("lease-foreign", { landlordId: "landlord-2", propertyId: "property-1", unitId: "unit-2", tenantId: "tenant-ended", status: "active" });
+  collection("leases").set("lease-foreign-tenant", { landlordId: "landlord-2", propertyId: "property-1", unitId: "unit-2", tenantId: "tenant-foreign", status: "active" });
 }
 
 describe("propertyNoticesRoutes", () => {
@@ -99,6 +101,120 @@ describe("propertyNoticesRoutes", () => {
     expect(foreign.status).toBe(403);
     const supplied = await invoke({ method: "POST", url: "/landlord/notices", user: landlord, body: { landlordId: "landlord-2", propertyId: "property-1", subject: "Test", body: "Body", idempotencyKey: "request_1234567890" } });
     expect(supplied.status).toBe(400);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["ended", "tenant-ended"],
+    ["foreign", "tenant-foreign"],
+    ["unknown", "tenant-unknown"],
+    ["malformed", "tenant/unsafe"],
+    ["empty", ""],
+    ["mixed ended", "tenant-1,tenant-ended"],
+    ["mixed foreign", "tenant-1,tenant-foreign"],
+    ["mixed unknown", "tenant-1,tenant-unknown"],
+  ])("rejects an explicit %s tenant preview filter without partial results", async (_label, tenantIds) => {
+    const response = await invoke({
+      method: "GET",
+      url: `/landlord/notices/recipients?propertyId=property-1&tenantIds=${encodeURIComponent(tenantIds)}`,
+      user: landlord,
+    });
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ ok: false, code: "notice_recipient_not_eligible", error: "Notice recipients unavailable" });
+  });
+
+  it("preserves valid subsets, unit-scoped validation, dedupe, missing destination, and duplicate normalization", async () => {
+    const one = await invoke({ method: "GET", url: "/landlord/notices/recipients?propertyId=property-1&tenantIds=tenant-1", user: landlord });
+    expect(one.status).toBe(200);
+    expect(one.body.recipients.map((item: any) => item.tenantId)).toEqual(["tenant-1"]);
+    expect(one.body.recipients[0].unitLabels).toEqual(["1A", "2B"]);
+
+    const multiple = await invoke({ method: "GET", url: "/landlord/notices/recipients?propertyId=property-1&tenantIds=tenant-1,tenant-2", user: landlord });
+    expect(multiple.status).toBe(200);
+    expect(multiple.body.recipients.map((item: any) => item.tenantId)).toEqual(["tenant-1", "tenant-2"]);
+    expect(multiple.body.recipients[1].deliveryAvailability).toBe("missing_email");
+
+    const duplicate = await invoke({ method: "GET", url: "/landlord/notices/recipients?propertyId=property-1&tenantIds=tenant-1,tenant-1", user: landlord });
+    expect(duplicate.status).toBe(200);
+    expect(duplicate.body.recipients).toHaveLength(1);
+
+    const unitValid = await invoke({ method: "GET", url: "/landlord/notices/recipients?propertyId=property-1&unitIds=unit-1&tenantIds=tenant-1", user: landlord });
+    expect(unitValid.status).toBe(200);
+    expect(unitValid.body.recipients[0].unitLabels).toEqual(["1A"]);
+
+    const outsideUnit = await invoke({ method: "GET", url: "/landlord/notices/recipients?propertyId=property-1&unitIds=unit-2&tenantIds=tenant-2", user: landlord });
+    expect(outsideUnit.status).toBe(403);
+    expect(outsideUnit.body.code).toBe("notice_recipient_not_eligible");
+
+    const multipleUnits = await invoke({ method: "GET", url: "/landlord/notices/recipients?propertyId=property-1&unitIds=unit-1,unit-2&tenantIds=tenant-1,tenant-2", user: landlord });
+    expect(multipleUnits.status).toBe(200);
+    expect(multipleUnits.body.recipients).toHaveLength(2);
+
+    const emptyUnit = await invoke({ method: "GET", url: "/landlord/notices/recipients?propertyId=property-1&unitIds=unit-unknown", user: landlord });
+    expect(emptyUnit.status).toBe(200);
+    expect(emptyUnit.body.recipients).toEqual([]);
+  });
+
+  it.each(["tenant-ended", "tenant-foreign", "tenant-unknown"])(
+    "rejects unit-scoped explicit ineligible tenant %s",
+    async (tenantId) => {
+      const response = await invoke({
+        method: "GET",
+        url: `/landlord/notices/recipients?propertyId=property-1&unitIds=unit-1&tenantIds=${tenantId}`,
+        user: landlord,
+      });
+      expect(response.status).toBe(403);
+      expect(response.body.code).toBe("notice_recipient_not_eligible");
+    }
+  );
+
+  it.each([
+    ["ended", ["tenant-ended"]],
+    ["foreign", ["tenant-foreign"]],
+    ["unknown", ["tenant-unknown"]],
+    ["malformed", ["tenant/unsafe"]],
+    ["empty", []],
+    ["mixed invalid", ["tenant-1", "tenant-unknown"]],
+  ])("rejects an explicit %s create filter before persistence or provider/network invocation", async (_label, selectedTenantIds) => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const response = await invoke({
+      method: "POST",
+      url: "/landlord/notices",
+      user: landlord,
+      body: {
+        propertyId: "property-1",
+        subject: "Synthetic rejection",
+        body: "No delivery is authorized.",
+        idempotencyKey: "request_reject_12345",
+        selectedTenantIds,
+      },
+    });
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ ok: false, code: "notice_recipient_not_eligible", error: "Notice recipients unavailable" });
+    expect(collection("propertyNotices")).toHaveLength(0);
+    expect(collection("propertyNoticeDeliveries")).toHaveLength(0);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("rejects a non-array explicit create filter before persistence or provider invocation", async () => {
+    const response = await invoke({
+      method: "POST",
+      url: "/landlord/notices",
+      user: landlord,
+      body: {
+        propertyId: "property-1",
+        subject: "Synthetic rejection",
+        body: "No delivery is authorized.",
+        idempotencyKey: "request_reject_67890",
+        selectedTenantIds: "tenant-1",
+      },
+    });
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("notice_recipient_not_eligible");
+    expect(collection("propertyNotices")).toHaveLength(0);
+    expect(collection("propertyNoticeDeliveries")).toHaveLength(0);
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
