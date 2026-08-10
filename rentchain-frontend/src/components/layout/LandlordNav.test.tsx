@@ -403,6 +403,33 @@ describe("LandlordNav mobile drawer", () => {
     }
   });
 
+  it.each([
+    ["/landlord/unified-inbox", "Unified Inbox"],
+    ["/messages", "Messages"],
+    ["/notices", "Notices"],
+  ])("keeps the canonical Communications shell available when messaging capability is false at %s", (path, label) => {
+    mocks.useCapabilities.mockReturnValue({
+      features: { messaging: false },
+      loading: false,
+    });
+
+    renderLandlordNav(path);
+
+    const context = screen.getByLabelText("Workspace context");
+    const communications = within(screen.getByRole("navigation", { name: "Workspace navigation" })).getByRole("group", {
+      name: "Communications",
+    });
+
+    expect(within(communications).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Unified Inbox",
+      "Messages",
+      "Notices",
+    ]);
+    expect(within(communications).getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
+    expect(context.querySelector("strong")).toHaveTextContent(label);
+    expect(context.querySelector("strong")).not.toHaveTextContent("Workspace");
+  });
+
   it("marks the active Communications child in the responsive drawer", () => {
     renderLandlordNav("/notices");
 
