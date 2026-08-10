@@ -13,7 +13,31 @@ export type NavItem = {
   requiresLandlordOrAdmin?: boolean;
   requiresFeature?: string;
   requiresRoles?: string[];
+  groupId?: string;
+  groupLabel?: string;
+  matchPaths?: string[];
 };
+
+export const COMMUNICATIONS_GROUP_ID = "communications";
+export const COMMUNICATIONS_GROUP_LABEL = "Communications";
+
+export function isNavRouteActive(pathname: string, target: string): boolean {
+  return pathname === target || pathname.startsWith(`${target}/`);
+}
+
+export function isNavItemActive(pathname: string, item: Pick<NavItem, "to" | "matchPaths">): boolean {
+  return [item.to, ...(item.matchPaths || [])].some((target) => isNavRouteActive(pathname, target));
+}
+
+export function resolveNavItem(pathname: string, items: NavItem[]): NavItem | undefined {
+  return [...items]
+    .sort((left, right) => {
+      const leftLength = Math.max(left.to.length, ...(left.matchPaths || []).map((path) => path.length));
+      const rightLength = Math.max(right.to.length, ...(right.matchPaths || []).map((path) => path.length));
+      return rightLength - leftLength;
+    })
+    .find((item) => isNavItemActive(pathname, item));
+}
 
 export const getVisibleNavItems = (role?: string | null, features?: Record<string, boolean>) => {
   const normalizedRole = String(role || "").trim().toLowerCase();
@@ -89,12 +113,15 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "unified-inbox",
-    label: "Inbox",
+    label: "Unified Inbox",
     to: "/landlord/unified-inbox",
+    matchPaths: ["/landlord/inbox"],
     icon: Inbox,
     showInDrawer: true,
     showInTabs: true,
     requiresLandlordOrAdmin: true,
+    groupId: COMMUNICATIONS_GROUP_ID,
+    groupLabel: COMMUNICATIONS_GROUP_LABEL,
   },
   {
     id: "decision-inbox",
@@ -122,6 +149,8 @@ export const NAV_ITEMS: NavItem[] = [
     showInTabs: false,
     requiresFeature: "messaging",
     requiresRoles: ["landlord"],
+    groupId: COMMUNICATIONS_GROUP_ID,
+    groupLabel: COMMUNICATIONS_GROUP_LABEL,
   },
   {
     id: "notices",
@@ -132,6 +161,8 @@ export const NAV_ITEMS: NavItem[] = [
     showInTabs: false,
     requiresFeature: "messaging",
     requiresRoles: ["landlord"],
+    groupId: COMMUNICATIONS_GROUP_ID,
+    groupLabel: COMMUNICATIONS_GROUP_LABEL,
   },
   {
     id: "payments",
