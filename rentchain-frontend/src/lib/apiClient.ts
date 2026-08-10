@@ -1,5 +1,6 @@
 import {
   getApiBaseUrlForRequest,
+  PR1512_NOTICES_QA_API_BASE_URL,
   PREVIEW_API_BASE_URL,
 } from "../api/baseUrl";
 import { clearAuthToken, getAuthToken, setAuthToken } from "./authToken";
@@ -12,7 +13,10 @@ export function isAuthorizedPreviewProxyUrl(url: string): boolean {
   return (
     url === PREVIEW_API_BASE_URL ||
     url.startsWith(`${PREVIEW_API_BASE_URL}/`) ||
-    url.startsWith(`${PREVIEW_API_BASE_URL}?`)
+    url.startsWith(`${PREVIEW_API_BASE_URL}?`) ||
+    url === PR1512_NOTICES_QA_API_BASE_URL ||
+    url.startsWith(`${PR1512_NOTICES_QA_API_BASE_URL}/`) ||
+    url.startsWith(`${PR1512_NOTICES_QA_API_BASE_URL}?`)
   );
 }
 
@@ -27,7 +31,10 @@ export function resolveApiUrl(input: string, method = "GET") {
   if (
     sRaw === PREVIEW_API_BASE_URL ||
     sRaw.startsWith(`${PREVIEW_API_BASE_URL}/`) ||
-    sRaw.startsWith(`${PREVIEW_API_BASE_URL}?`)
+    sRaw.startsWith(`${PREVIEW_API_BASE_URL}?`) ||
+    sRaw === PR1512_NOTICES_QA_API_BASE_URL ||
+    sRaw.startsWith(`${PR1512_NOTICES_QA_API_BASE_URL}/`) ||
+    sRaw.startsWith(`${PR1512_NOTICES_QA_API_BASE_URL}?`)
   ) {
     throw new Error("Preview proxy paths must be resolved from backend API paths");
   }

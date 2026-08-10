@@ -83,6 +83,10 @@
   ],
   "routes": [
     {
+      "src": "^/api/pr1512-notices/(.*)$",
+      "dest": "/api/pr1512-notices/[...path]?path=$1"
+    },
+    {
       "src": "^/api/preview-backend/(.*)$",
       "dest": "/api/preview-backend/[...path]?path=$1"
     },

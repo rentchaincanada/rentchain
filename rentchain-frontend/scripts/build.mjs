@@ -15,6 +15,15 @@ const env = {
   VITE_BUILD_ID: buildId,
 };
 
+if (
+  process.env.VERCEL_ENV === "preview" &&
+  process.env.VERCEL_GIT_COMMIT_REF === "feat/property-notices-v1"
+) {
+  env.VITE_API_BASE_URL = "/api/pr1512-notices";
+  env.VITE_DEPLOY_ENV = "preview";
+  env.VITE_PR1512_NOTICES_QA = "true";
+}
+
 function run(cmd, args) {
   const result = spawnSync(cmd, args, { stdio: "inherit", env });
   if (result.error) {

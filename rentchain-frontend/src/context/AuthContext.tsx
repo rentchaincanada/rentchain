@@ -265,10 +265,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } catch {
           // ignore
         }
-      setUser(null);
-      setToken(null);
-      setAuthStatus("guest");
-      clearStoredToken();
+        if (import.meta.env.VITE_PR1512_NOTICES_QA === "true") {
+          setUser({ id: "qa-pr1512-landlord", landlordId: "qa-pr1512-landlord", email: "qa-pr1512-landlord@example.invalid", role: "landlord", plan: "starter", approved: true });
+          setToken(null);
+          setAuthStatus("authed");
+        } else {
+          setUser(null);
+          setToken(null);
+          setAuthStatus("guest");
+          clearStoredToken();
+        }
         setIsLoading(false);
         setReady(true);
         return;

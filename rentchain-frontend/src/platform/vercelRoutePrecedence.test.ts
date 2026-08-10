@@ -31,6 +31,10 @@ describe("Vercel Preview backend route precedence", () => {
   it("routes the complete Preview suffix to the existing Function before filesystem misses", () => {
     expect(config.routes).toEqual([
       {
+        src: "^/api/pr1512-notices/(.*)$",
+        dest: "/api/pr1512-notices/[...path]?path=$1",
+      },
+      {
         src: "^/api/preview-backend/(.*)$",
         dest: "/api/preview-backend/[...path]?path=$1",
       },
@@ -45,14 +49,25 @@ describe("Vercel Preview backend route precedence", () => {
     "/api/preview-backend/api/me",
     "/api/preview-backend/api/auth/login",
   ])("reserves %s for the dedicated filesystem Function", (requestPath) => {
-    const functionRoute = config.routes[0];
+    const functionRoute = config.routes[1];
     const match = new RegExp(functionRoute.src as string).exec(requestPath);
 
     expect(match?.[1]).toBe(requestPath.slice("/api/preview-backend/".length));
     expect(functionRoute.dest?.replace("$1", match?.[1] ?? "")).toBe(
       `/api/preview-backend/[...path]?path=${match?.[1]}`,
     );
-    expect(config.routes[1]).toEqual({ handle: "filesystem" });
+    expect(config.routes[2]).toEqual({ handle: "filesystem" });
+  });
+
+  it("reserves the PR #1512 read-only QA suffix before filesystem misses", () => {
+    const requestPath = "/api/pr1512-notices/api/landlord/notices";
+    const functionRoute = config.routes[0];
+    const match = new RegExp(functionRoute.src as string).exec(requestPath);
+    expect(match?.[1]).toBe("api/landlord/notices");
+    expect(functionRoute.dest?.replace("$1", match?.[1] ?? "")).toBe(
+      "/api/pr1512-notices/[...path]?path=api/landlord/notices",
+    );
+    expect(existsSync(join(frontendRoot, "api/pr1512-notices/[...path].ts"))).toBe(true);
   });
 
   it.each(["/api/properties", "/api/tenants"])(
