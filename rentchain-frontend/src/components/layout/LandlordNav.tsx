@@ -4,7 +4,15 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import TopNav from "./TopNav";
 import { useAuth } from "../../context/useAuth";
 import { fetchLandlordConversations } from "../../api/messagesApi";
-import { getVisibleNavItems } from "./navConfig";
+import {
+  COMMUNICATIONS_GROUP_ID,
+  COMMUNICATIONS_GROUP_LABEL,
+  NAV_ITEMS,
+  getVisibleNavItems,
+  isNavItemActive,
+  resolveNavItem,
+  type NavItem,
+} from "./navConfig";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { UpgradeNudgeHost } from "@/features/upgradeNudges/UpgradeNudgeHost";
 import { getRoleDefaultDestination } from "@/lib/authDestination";
@@ -16,11 +24,17 @@ type Props = {
   unreadMessages?: boolean;
 };
 
+const unifiedInboxNavItem = NAV_ITEMS.find((item) => item.id === "unified-inbox");
+
 const landlordMobileTabs = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/properties", label: "Properties", icon: Building2 },
   { to: "/applications", label: "Applicants", icon: ScrollText },
-  { to: "/landlord/unified-inbox", label: "Inbox", icon: Inbox },
+  {
+    to: unifiedInboxNavItem?.to || "/landlord/unified-inbox",
+    label: unifiedInboxNavItem?.label || "Unified Inbox",
+    icon: unifiedInboxNavItem?.icon || Inbox,
+  },
   { to: "/operations", label: "Operations", icon: ClipboardList },
 ];
 
@@ -36,28 +50,22 @@ const stickyWorkspaceIds = new Set([
   "work-orders",
   "delegated-access",
   "pm-company-management",
+  "messages",
+  "notices",
 ]);
 
 const workspaceAliases: Array<{ prefix: string; label: string }> = [
   { prefix: "/account/property-manager-companies", label: "PM Companies" },
   { prefix: "/account/delegated-access", label: "Delegate Management" },
-  { prefix: "/landlord/inbox", label: "Inbox" },
-  { prefix: "/landlord/unified-inbox", label: "Inbox" },
   { prefix: "/work-orders", label: "Work Orders" },
   { prefix: "/maintenance", label: "Maintenance" },
   { prefix: "/scheduling", label: "Scheduling" },
 ];
 
-function isRouteActive(pathname: string, target: string): boolean {
-  return pathname === target || pathname.startsWith(`${target}/`);
-}
-
-function resolveWorkspaceLabel(pathname: string, items: Array<{ to: string; label: string }>): string {
-  const alias = workspaceAliases.find((entry) => isRouteActive(pathname, entry.prefix));
+function resolveWorkspaceLabel(pathname: string, items: NavItem[]): string {
+  const alias = workspaceAliases.find((entry) => pathname === entry.prefix || pathname.startsWith(`${entry.prefix}/`));
   if (alias) return alias.label;
-  const match = [...items]
-    .sort((left, right) => right.to.length - left.to.length)
-    .find((item) => isRouteActive(pathname, item.to));
+  const match = resolveNavItem(pathname, items);
   return match?.label || "Workspace";
 }
 
@@ -115,6 +123,9 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const visibleItems = navLoading || !isLandlordWorkspace ? [] : getVisibleNavItems(effectiveRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
   const workspaceItems = visibleItems.filter((item) => stickyWorkspaceIds.has(item.id));
+  const standardWorkspaceItems = workspaceItems.filter((item) => item.groupId !== COMMUNICATIONS_GROUP_ID);
+  const communicationsItems = workspaceItems.filter((item) => item.groupId === COMMUNICATIONS_GROUP_ID);
+  const communicationsActive = communicationsItems.some((item) => isNavItemActive(loc.pathname, item));
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
   const orderedPrimaryDrawerItems = React.useMemo(
@@ -259,15 +270,35 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
             <strong>{workspaceLabel}</strong>
           </div>
           <nav className="rc-landlord-workspace-links" aria-label="Workspace navigation">
-            {workspaceItems.map(({ id, to, label }) => (
+            {standardWorkspaceItems.map((item) => (
               <Link
-                key={id}
-                to={to}
-                className={isRouteActive(loc.pathname, to) || (id === "unified-inbox" && isRouteActive(loc.pathname, "/landlord/inbox")) ? "active" : ""}
+                key={item.id}
+                to={item.to}
+                className={isNavItemActive(loc.pathname, item) ? "active" : ""}
+                aria-current={isNavItemActive(loc.pathname, item) ? "page" : undefined}
               >
-                {label}
+                {item.label}
               </Link>
             ))}
+            {communicationsItems.length ? (
+              <div
+                className={`rc-landlord-workspace-group${communicationsActive ? " active" : ""}`}
+                role="group"
+                aria-label={COMMUNICATIONS_GROUP_LABEL}
+              >
+                <span className="rc-landlord-workspace-group-label">{COMMUNICATIONS_GROUP_LABEL}</span>
+                {communicationsItems.map((item) => (
+                  <Link
+                    key={item.id}
+                    to={item.to}
+                    className={isNavItemActive(loc.pathname, item) ? "active" : ""}
+                    aria-current={isNavItemActive(loc.pathname, item) ? "page" : undefined}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
           </nav>
         </div>
       </div>
@@ -326,7 +357,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                 Close
               </button>
             </div>
-            <div className="rc-landlord-drawer-scroll">
+            <div className="rc-landlord-drawer-scroll" tabIndex={0} aria-label="Workspace destinations">
               {navLoading ? (
                 <div className="rc-landlord-drawer-links">
                   <button type="button" disabled className="active">
@@ -335,16 +366,33 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                 </div>
               ) : (
                 <div className="rc-landlord-drawer-links">
-                  {orderedPrimaryDrawerItems.map(({ id, to, label }) => (
+                  {orderedPrimaryDrawerItems.filter((item) => item.groupId !== COMMUNICATIONS_GROUP_ID).map((item) => (
                     <button
-                      key={id}
+                      key={item.id}
                       type="button"
-                      onClick={() => handleDrawerNavigation(to)}
-                      className={loc.pathname.startsWith(to) ? "active" : ""}
+                      onClick={() => handleDrawerNavigation(item.to)}
+                      className={isNavItemActive(loc.pathname, item) ? "active" : ""}
+                      aria-current={isNavItemActive(loc.pathname, item) ? "page" : undefined}
                     >
-                      {label}
+                      {item.label}
                     </button>
                   ))}
+                  {communicationsItems.length ? (
+                    <div className="rc-landlord-drawer-group" role="group" aria-label={COMMUNICATIONS_GROUP_LABEL}>
+                      <div className="rc-landlord-drawer-group-label">{COMMUNICATIONS_GROUP_LABEL}</div>
+                      {communicationsItems.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleDrawerNavigation(item.to)}
+                          className={isNavItemActive(loc.pathname, item) ? "active" : ""}
+                          aria-current={isNavItemActive(loc.pathname, item) ? "page" : undefined}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               )}
               <div className="rc-landlord-drawer-divider" />
@@ -380,13 +428,14 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
         <nav className="rc-landlord-mobile-tabbar" aria-label="Bottom navigation">
           {(navLoading ? [] : tabItems).map(({ to, label, icon: Icon }) => {
             if (!Icon) return null;
-            const active = loc.pathname.startsWith(to);
+            const active = loc.pathname === to || loc.pathname.startsWith(`${to}/`);
             return (
               <button
                 key={to}
                 type="button"
                 onClick={() => nav(to)}
                 className={active ? "active" : ""}
+                aria-current={active ? "page" : undefined}
               >
                 <Icon size={20} strokeWidth={2.2} />
                 <span className="rc-landlord-mobile-tabbar-label">

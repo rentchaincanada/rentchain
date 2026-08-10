@@ -6,6 +6,10 @@ export const PREVIEW_QA_IDENTITY_ALIAS = "pr1509-landlord";
 export const PREVIEW_QA_LANDLORD_ID = "qa-pr1509-landlord";
 export const PR1510_PREVIEW_QA_IDENTITY_ALIAS = "pr1510-landlord";
 export const PR1510_PREVIEW_QA_LANDLORD_ID = "qa-pr1510-landlord";
+export const PR1512_PREVIEW_QA_SCOPE = "pr1512-property-notices";
+export const PR1512_PREVIEW_QA_IDENTITY_ALIAS = "pr1512-landlord";
+export const PR1512_PREVIEW_QA_LANDLORD_ID = "qa-pr1512-landlord";
+export const PR1512_PREVIEW_QA_SERVICE_PATTERN = /^rentchain-pr1512-notices-qa-[a-f0-9]{8}$/;
 
 const PREVIEW_PROJECT_ID = "rentchain-preview";
 const PRODUCTION_PROJECT_ID = "project-0d9658de-af29-4dc0-a99";
@@ -17,7 +21,11 @@ export type PreviewQaRoute =
   | "landlord-message-recipients"
   | "landlord-message-list"
   | "landlord-message-detail"
-  | "landlord-message-compose";
+  | "landlord-message-compose"
+  | "landlord-notice-recipients"
+  | "landlord-notice-list"
+  | "landlord-notice-detail"
+  | "landlord-notice-create";
 
 type PreviewQaContract = {
   scope: string;
@@ -52,6 +60,19 @@ const previewQaContracts: readonly PreviewQaContract[] = [
       "GET:landlord-message-list",
       "GET:landlord-message-detail",
       "POST:landlord-message-compose",
+    ]),
+  },
+  {
+    scope: PR1512_PREVIEW_QA_SCOPE,
+    servicePattern: PR1512_PREVIEW_QA_SERVICE_PATTERN,
+    selector: PR1512_PREVIEW_QA_IDENTITY_ALIAS,
+    landlordId: PR1512_PREVIEW_QA_LANDLORD_ID,
+    email: "qa-pr1512-landlord@example.invalid",
+    allowedOperations: new Set([
+      "GET:landlord-notice-recipients",
+      "GET:landlord-notice-list",
+      "GET:landlord-notice-detail",
+      "POST:landlord-notice-create",
     ]),
   },
 ];
@@ -100,6 +121,23 @@ export function decidePreviewQaAuth(input: PreviewQaDecisionInput): PreviewQaDec
   if (input.selector !== contract?.selector) return { kind: "reject" };
   if (!contract.allowedOperations.has(`${input.method.toUpperCase()}:${input.route}`)) return { kind: "reject" };
   return { kind: "allow" };
+}
+
+export function isPr1512PreviewQaRuntime(env: NodeJS.ProcessEnv = process.env): boolean {
+  const service = String(env.K_SERVICE || "").trim();
+  const expectedService = String(env.PREVIEW_QA_EXPECTED_SERVICE || "").trim();
+  return (
+    String(env.PREVIEW_QA_AUTH_ENABLED || "").trim().toLowerCase() === "true" &&
+    String(env.PREVIEW_QA_AUTH_SCOPE || "").trim() === PR1512_PREVIEW_QA_SCOPE &&
+    String(env.APP_ENV || "").trim().toLowerCase() === "preview" &&
+    String(env.GOOGLE_CLOUD_PROJECT || env.GCLOUD_PROJECT || "").trim() === PREVIEW_PROJECT_ID &&
+    service !== PERMANENT_PREVIEW_SERVICE &&
+    expectedService !== PERMANENT_PREVIEW_SERVICE &&
+    service === expectedService &&
+    PR1512_PREVIEW_QA_SERVICE_PATTERN.test(service) &&
+    String(env.FIRESTORE_ENABLED || "").trim().toLowerCase() === "true" &&
+    String(env.FIRESTORE_DATABASE_ID || "").trim() === "(default)"
+  );
 }
 
 function syntheticLandlordEntitlements(landlordId: string): UserEntitlements {

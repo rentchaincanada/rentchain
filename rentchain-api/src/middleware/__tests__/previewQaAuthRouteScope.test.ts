@@ -3,6 +3,8 @@ import jwt from "jsonwebtoken";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requireAuth } from "../requireAuth";
 import { requireLandlord } from "../requireLandlord";
+import { authenticateJwt } from "../authMiddleware";
+import { JWT_SECRET } from "../../config/authConfig";
 import {
   PREVIEW_QA_IDENTITY_ALIAS,
   PR1510_PREVIEW_QA_IDENTITY_ALIAS,
@@ -153,6 +155,71 @@ describe("Preview QA auth route scope", () => {
     expect(result.body).toMatchObject({ ok: false, error: "unauthenticated" });
   });
 
+  it("preserves invalid-bearer precedence through the exact PR #1512 early-route chain", async () => {
+    process.env = {
+      ...process.env,
+      JWT_SECRET,
+      PREVIEW_QA_AUTH_SCOPE: "pr1512-property-notices",
+      K_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
+      PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
+    };
+    const headers = {
+      "x-rentchain-preview-qa-identity": "pr1512-landlord",
+      authorization: "Bearer invalid-token",
+    };
+    const req: any = {
+      method: "POST",
+      path: "/api/landlord/notices",
+      originalUrl: "/api/landlord/notices",
+      headers,
+      header: (name: string) => headers[name.toLowerCase() as keyof typeof headers],
+    };
+    let status = 200;
+    let body: any;
+    const res: any = {
+      status(code: number) { status = code; return this; },
+      json(value: any) { body = value; return this; },
+    };
+    previewQaAuth("landlord-notice-create")(req, res, () => {
+      authenticateJwt(req, res, () => requireLandlord(req, res, () => undefined));
+    });
+    expect(status).toBe(401);
+    expect(body).toMatchObject({ ok: false });
+    expect(req.user).toBeUndefined();
+  });
+
+  it("preserves a valid normal JWT through the exact PR #1512 early-route chain", async () => {
+    process.env = {
+      ...process.env,
+      JWT_SECRET,
+      PREVIEW_QA_AUTH_SCOPE: "pr1512-property-notices",
+      K_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
+      PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
+    };
+    const token = jwt.sign({
+      sub: "normal-landlord",
+      email: "normal-landlord@example.invalid",
+      role: "landlord",
+      landlordId: "normal-landlord",
+    }, JWT_SECRET);
+    const headers = { authorization: `Bearer ${token}` };
+    const req: any = {
+      method: "GET",
+      path: "/api/landlord/notices",
+      originalUrl: "/api/landlord/notices",
+      headers,
+      header: (name: string) => headers[name.toLowerCase() as keyof typeof headers],
+    };
+    let completed = false;
+    const res: any = { status: () => res, json: () => res };
+    previewQaAuth("landlord-notice-list")(req, res, () => {
+      authenticateJwt(req, res, () => requireLandlord(req, res, () => { completed = true; }));
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(completed).toBe(true);
+    expect(req.user).toMatchObject({ id: "normal-landlord", landlordId: "normal-landlord", role: "landlord" });
+  });
+
   it("keeps missing JWT_SECRET fail-closed when QA auth is disabled", async () => {
     process.env.PREVIEW_QA_AUTH_ENABLED = "false";
     const result = await invoke({ selector: PREVIEW_QA_IDENTITY_ALIAS, useQaMiddleware: true });
@@ -202,14 +269,25 @@ describe("Preview QA auth route scope", () => {
     const composeMount = appSource.indexOf(
       'app.use("/api", routeSource("messagesRoutes.previewQaCompose"), previewQaComposeRoutes);'
     );
+    const noticesQaMount = appSource.indexOf(
+      'app.use("/api", routeSource("propertyNoticesRoutes.previewQa"), previewQaPropertyNoticesRoutes);'
+    );
     const globalAuthMount = appSource.indexOf("app.use(authenticateJwt);");
     const defaultMessagesMount = appSource.indexOf(
       'app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);'
     );
     expect(composeMount).toBeGreaterThan(-1);
     expect(composeMount).toBeLessThan(globalAuthMount);
+    expect(noticesQaMount).toBeGreaterThan(-1);
+    expect(noticesQaMount).toBeLessThan(globalAuthMount);
     expect(globalAuthMount).toBeLessThan(defaultMessagesMount);
     expect(appSource.match(/previewQaComposeRoutes/g)).toHaveLength(2);
+    expect(appSource.match(/previewQaPropertyNoticesRoutes/g)).toHaveLength(2);
+    const noticesSource = readFileSync(new URL("../../routes/propertyNoticesRoutes.ts", import.meta.url), "utf8");
+    expect(noticesSource).toContain('...authFor("landlord-notice-recipients")');
+    expect(noticesSource).toContain('...authFor("landlord-notice-list")');
+    expect(noticesSource).toContain('...authFor("landlord-notice-detail")');
+    expect(noticesSource).toContain('...authFor("landlord-notice-create")');
     expect(publicSource).toMatch(
       /router\.get\(\s*"\/landlord\/messages\/conversations",\s*previewQaAuth\("landlord-message-list"\)/
     );

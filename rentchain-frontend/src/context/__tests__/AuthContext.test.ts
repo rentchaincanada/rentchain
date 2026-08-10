@@ -9,6 +9,7 @@ vi.mock("../../api/baseUrl", () => ({
   getApiBaseUrlForPath: () => "https://rentchain.test",
   getApiBaseUrlForRequest: () => "https://rentchain.test",
   PREVIEW_API_BASE_URL: "/api/preview-backend",
+  PR1512_NOTICES_QA_API_BASE_URL: "/api/pr1512-notices",
 }));
 
 vi.mock("../../lib/firebaseAuthToken", () => ({

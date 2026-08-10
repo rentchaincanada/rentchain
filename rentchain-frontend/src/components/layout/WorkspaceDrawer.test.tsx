@@ -81,6 +81,27 @@ describe("WorkspaceDrawer", () => {
     expect(screen.queryByRole("button", { name: "Messages" })).not.toBeInTheDocument();
   });
 
+  it("shows property Notices beside Messages for landlords and keeps it landlord-only", () => {
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <WorkspaceDrawer open onClose={onClose} userRole="landlord" />
+        <CurrentPath />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Notices" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/notices");
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <WorkspaceDrawer open onClose={vi.fn()} userRole="admin" />
+      </MemoryRouter>
+    );
+    expect(screen.queryByRole("button", { name: "Notices" })).not.toBeInTheDocument();
+  });
+
   it("shows governed review workspace navigation only for admins", () => {
     const { rerender } = render(
       <MemoryRouter initialEntries={["/dashboard"]}>
