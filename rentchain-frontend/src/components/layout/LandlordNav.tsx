@@ -357,7 +357,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                 Close
               </button>
             </div>
-            <div className="rc-landlord-drawer-scroll">
+            <div className="rc-landlord-drawer-scroll" tabIndex={0} aria-label="Workspace destinations">
               {navLoading ? (
                 <div className="rc-landlord-drawer-links">
                   <button type="button" disabled className="active">

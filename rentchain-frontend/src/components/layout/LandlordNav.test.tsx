@@ -92,6 +92,7 @@ describe("LandlordNav mobile drawer", () => {
 
     const drawer = screen.getByRole("dialog", { name: "Navigation menu" });
     expect(drawer).toHaveClass("is-open");
+    expect(within(drawer).getByLabelText("Workspace destinations")).toHaveAttribute("tabindex", "0");
     expect(within(drawer).getByRole("button", { name: "Dashboard" })).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "Operations" })).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "Payments" })).toBeInTheDocument();

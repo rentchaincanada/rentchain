@@ -370,9 +370,14 @@
 
 .rc-landlord-drawer-scroll {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   display: grid;
   gap: 12px;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -675,6 +680,10 @@
 
   .rc-landlord-drawer-links {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rc-landlord-drawer-group {
+    grid-column: 1 / -1;
   }
 
   .rc-landlord-drawer-links button {
