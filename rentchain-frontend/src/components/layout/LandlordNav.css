@@ -128,10 +128,11 @@
   position: relative;
   z-index: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 16px;
   min-height: var(--rc-landlord-workspace-bar-height);
-  height: var(--rc-landlord-workspace-bar-height);
+  height: auto;
   padding: 6px max(20px, env(safe-area-inset-right, 0px)) 8px max(20px, env(safe-area-inset-left, 0px));
   border-top: 1px solid rgba(91, 70, 48, 0.1);
   border-bottom: 1px solid var(--rc-landlord-border-strong);
@@ -139,7 +140,7 @@
   box-shadow: var(--rc-landlord-shadow-soft);
   box-sizing: border-box;
   max-width: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .rc-landlord-workspace-context {
@@ -163,14 +164,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1 1 0;
+  flex-wrap: wrap;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.rc-landlord-workspace-links::-webkit-scrollbar {
-  display: none;
+  overflow: visible;
+  row-gap: 8px;
 }
 
 .rc-landlord-workspace-links a {
@@ -218,12 +216,7 @@
 
 @media (min-width: 821px) and (max-width: 1180px) {
   .rc-landlord-workspace-bar {
-    height: auto;
-    min-height: var(--rc-landlord-workspace-bar-height);
-    align-items: flex-start;
-    flex-wrap: wrap;
     gap: 8px 12px;
-    overflow: visible;
   }
 
   .rc-landlord-workspace-context {
@@ -232,9 +225,6 @@
 
   .rc-landlord-workspace-links {
     flex: 1 1 100%;
-    flex-wrap: wrap;
-    overflow-x: visible;
-    row-gap: 8px;
   }
 
   .rc-landlord-workspace-links a {
