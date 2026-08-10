@@ -4,6 +4,9 @@ import {
   PREVIEW_QA_LANDLORD_ID,
   PR1510_PREVIEW_QA_IDENTITY_ALIAS,
   PR1510_PREVIEW_QA_LANDLORD_ID,
+  PR1512_PREVIEW_QA_IDENTITY_ALIAS,
+  PR1512_PREVIEW_QA_LANDLORD_ID,
+  PR1512_PREVIEW_QA_SCOPE,
   decidePreviewQaAuth,
   isPreviewQaAuthenticatedRequest,
   previewQaAuth,
@@ -25,6 +28,13 @@ const pr1510EnabledEnv = {
   PREVIEW_QA_AUTH_SCOPE: "pr1510-landlord-messaging",
   K_SERVICE: "rentchain-pr1510-messaging-qa-759205cd",
   PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1510-messaging-qa-759205cd",
+} as NodeJS.ProcessEnv;
+
+const pr1512EnabledEnv = {
+  ...enabledEnv,
+  PREVIEW_QA_AUTH_SCOPE: PR1512_PREVIEW_QA_SCOPE,
+  K_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
+  PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
 } as NodeJS.ProcessEnv;
 
 function decide(overrides: Partial<Parameters<typeof decidePreviewQaAuth>[0]> = {}) {
@@ -130,6 +140,94 @@ describe("previewQaAuth", () => {
       landlordId: PR1510_PREVIEW_QA_LANDLORD_ID,
       role: "landlord",
     });
+  });
+
+  it.each([
+    ["GET", "landlord-notice-recipients"],
+    ["GET", "landlord-notice-list"],
+    ["GET", "landlord-notice-detail"],
+    ["POST", "landlord-notice-create"],
+  ] as const)("allows PR #1512 %s %s only under its fixed contract", (method, route) => {
+    expect(decide({
+      env: pr1512EnabledEnv,
+      method,
+      route,
+      selector: PR1512_PREVIEW_QA_IDENTITY_ALIAS,
+    })).toEqual({ kind: "allow" });
+  });
+
+  it("injects only the server-owned PR #1512 landlord identity", () => {
+    process.env = { ...pr1512EnabledEnv };
+    const headers = {
+      "x-rentchain-preview-qa-identity": PR1512_PREVIEW_QA_IDENTITY_ALIAS,
+      "x-landlord-id": "arbitrary-landlord",
+      "x-role": "admin",
+    };
+    const req: any = { method: "GET", headers, header: (name: string) => headers[name.toLowerCase() as keyof typeof headers] };
+    const res: any = { status: () => res, json: () => res };
+    let nextCalled = false;
+    previewQaAuth("landlord-notice-recipients")(req, res, () => { nextCalled = true; });
+    expect(nextCalled).toBe(true);
+    expect(req.user).toMatchObject({
+      id: PR1512_PREVIEW_QA_LANDLORD_ID,
+      landlordId: PR1512_PREVIEW_QA_LANDLORD_ID,
+      role: "landlord",
+    });
+  });
+
+  it.each([
+    ["wrong service", { ...pr1512EnabledEnv, K_SERVICE: "rentchain-pr1512-notices-qa-deadbeef" }],
+    ["malformed service", { ...pr1512EnabledEnv, K_SERVICE: "rentchain-pr1512-notices-qa-head590e", PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1512-notices-qa-head590e" }],
+    ["wrong scope", { ...pr1512EnabledEnv, PREVIEW_QA_AUTH_SCOPE: "pr1510-landlord-messaging" }],
+    ["Production", { ...pr1512EnabledEnv, GOOGLE_CLOUD_PROJECT: "project-0d9658de-af29-4dc0-a99" }],
+    ["permanent Preview", { ...pr1512EnabledEnv, K_SERVICE: "rentchain-preview-backend", PREVIEW_QA_EXPECTED_SERVICE: "rentchain-preview-backend" }],
+    ["disabled", { ...pr1512EnabledEnv, PREVIEW_QA_AUTH_ENABLED: "false" }],
+  ])("rejects PR #1512 with %s", (_label, env) => {
+    expect(decide({
+      env,
+      route: "landlord-notice-recipients",
+      selector: PR1512_PREVIEW_QA_IDENTITY_ALIAS,
+    })).toEqual({ kind: "reject" });
+  });
+
+  it("rejects cross-contract PR #1510 and PR #1512 scope/selector combinations", () => {
+    expect(decide({
+      env: pr1510EnabledEnv,
+      route: "landlord-notice-recipients",
+      selector: PR1512_PREVIEW_QA_IDENTITY_ALIAS,
+    })).toEqual({ kind: "reject" });
+    expect(decide({
+      env: pr1512EnabledEnv,
+      route: "landlord-message-recipients",
+      selector: PR1510_PREVIEW_QA_IDENTITY_ALIAS,
+    })).toEqual({ kind: "reject" });
+  });
+
+  it.each([
+    ["POST", "landlord-notice-recipients"],
+    ["POST", "landlord-notice-list"],
+    ["POST", "landlord-notice-detail"],
+    ["GET", "landlord-notice-create"],
+    ["PUT", "landlord-notice-create"],
+    ["PATCH", "landlord-notice-create"],
+    ["DELETE", "landlord-notice-create"],
+  ] as const)("rejects non-allowlisted PR #1512 operation %s %s", (method, route) => {
+    expect(decide({
+      env: pr1512EnabledEnv,
+      method,
+      route,
+      selector: PR1512_PREVIEW_QA_IDENTITY_ALIAS,
+    })).toEqual({ kind: "reject" });
+  });
+
+  it("rejects invalid bearer precedence for the PR #1512 write contract", () => {
+    expect(decide({
+      env: pr1512EnabledEnv,
+      method: "POST",
+      route: "landlord-notice-create",
+      selector: PR1512_PREVIEW_QA_IDENTITY_ALIAS,
+      authorizationPresent: true,
+    })).toEqual({ kind: "continue-normal-auth" });
   });
 
   it.each([

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Router } from "express";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { requireLandlord } from "../middleware/requireLandlord";
+import { previewQaAuth, type PreviewQaRoute } from "../middleware/previewQaAuth";
 import { db, FieldValue } from "../firebase";
 import { getEffectiveLandlordId, resolveRequestAuthority } from "../auth/requestAuthority";
 import { isCurrentLeaseStatus } from "../services/leaseCanonicalizationService";
@@ -9,7 +10,7 @@ import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemp
 import { sendEmail } from "../services/emailService";
 
 const router = Router();
-router.use(authenticateJwt, requireLandlord);
+export const previewQaPropertyNoticesRoutes = Router();
 
 const MAX_NOTICE_RECIPIENTS = 100;
 const MAX_NOTICE_LEASES = 101;
@@ -202,7 +203,7 @@ async function requireResolved(req: any, res: any) {
   return { landlordId, propertyId, ...result };
 }
 
-router.get("/landlord/notices/recipients", async (req: any, res) => {
+const handleNoticeRecipients = async (req: any, res: any) => {
   try {
     const resolved = await requireResolved(req, res);
     if (!resolved) return;
@@ -218,9 +219,9 @@ router.get("/landlord/notices/recipients", async (req: any, res) => {
     console.error("[property-notices] preview failed", { code: text(error?.code) || "preview_failed" });
     return res.status(500).json({ ok: false, error: "Failed to preview notice recipients" });
   }
-});
+};
 
-router.post("/landlord/notices", async (req: any, res) => {
+const handleNoticeCreate = async (req: any, res: any) => {
   if ("landlordId" in (req.body || {}) || "recipientEmails" in (req.body || {}) || "recipients" in (req.body || {})) {
     return res.status(400).json({ ok: false, error: "Unsupported recipient authority fields" });
   }
@@ -327,9 +328,9 @@ router.post("/landlord/notices", async (req: any, res) => {
     console.error("[property-notices] send failed", { code: text(error?.code) || "send_failed" });
     return res.status(500).json({ ok: false, error: "Failed to send notice" });
   }
-});
+};
 
-router.get("/landlord/notices", async (req: any, res) => {
+const handleNoticeList = async (req: any, res: any) => {
   const landlordId = getEffectiveLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   const requestedLimit = Number(req.query?.limit || 25);
@@ -340,9 +341,9 @@ router.get("/landlord/notices", async (req: any, res) => {
     .slice(0, limit)
     .map((notice: any) => publicNotice(notice.id, notice));
   return res.json({ ok: true, notices, nextCursor: null });
-});
+};
 
-router.get("/landlord/notices/:noticeId", async (req: any, res) => {
+const handleNoticeDetail = async (req: any, res: any) => {
   const landlordId = getEffectiveLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   const noticeSnap = await db.collection("propertyNotices").doc(String(req.params.noticeId)).get();
@@ -357,6 +358,36 @@ router.get("/landlord/notices/:noticeId", async (req: any, res) => {
     .map(({ landlordId: _landlordId, destination: _destination, leaseIds: _leaseIds, ...delivery }: any) => delivery);
   const { landlordId: _landlordId, idempotencyKeyHash: _hash, ...safeNotice } = notice;
   return res.json({ ok: true, notice: { id: noticeSnap.id, ...safeNotice }, deliveries });
-});
+};
+
+function authFor(route: PreviewQaRoute) {
+  return [previewQaAuth(route), authenticateJwt, requireLandlord] as const;
+}
+
+function registerPropertyNoticeRoutes(target: Router) {
+  target.get(
+    "/landlord/notices/recipients",
+    ...authFor("landlord-notice-recipients"),
+    handleNoticeRecipients
+  );
+  target.post(
+    "/landlord/notices",
+    ...authFor("landlord-notice-create"),
+    handleNoticeCreate
+  );
+  target.get(
+    "/landlord/notices",
+    ...authFor("landlord-notice-list"),
+    handleNoticeList
+  );
+  target.get(
+    "/landlord/notices/:noticeId",
+    ...authFor("landlord-notice-detail"),
+    handleNoticeDetail
+  );
+}
+
+registerPropertyNoticeRoutes(previewQaPropertyNoticesRoutes);
+registerPropertyNoticeRoutes(router);
 
 export default router;

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { sendEmailMock } = vi.hoisted(() => ({ sendEmailMock: vi.fn() }));
 const collections = new Map<string, Map<string, any>>();
 const queryLimits: Array<{ collection: string; field: string; limit: number }> = [];
+let transactionTail = Promise.resolve();
 
 function collection(name: string) {
   if (!collections.has(name)) collections.set(name, new Map());
@@ -23,7 +24,14 @@ function docRef(name: string, id: string) {
 }
 
 const dbMock = {
-  runTransaction: async (handler: any) => handler({ get: (ref: any) => ref.get(), set: (ref: any, value: any, options?: any) => ref.set(value, options) }),
+  runTransaction: async (handler: any) => {
+    const result = transactionTail.then(() => handler({
+      get: (ref: any) => ref.get(),
+      set: (ref: any, value: any, options?: any) => ref.set(value, options),
+    }));
+    transactionTail = result.then(() => undefined, () => undefined);
+    return result;
+  },
   collection: (name: string) => ({
     doc: (id: string) => docRef(name, id),
     where: (field: string, _op: string, value: any) => ({
@@ -69,7 +77,7 @@ function seed() {
 
 describe("propertyNoticesRoutes", () => {
   beforeEach(() => {
-    collections.clear(); queryLimits.length = 0; sendEmailMock.mockReset();
+    collections.clear(); queryLimits.length = 0; transactionTail = Promise.resolve(); sendEmailMock.mockReset();
     sendEmailMock.mockResolvedValue({ provider: "mailgun", providerMessageId: "provider-safe", providerResponseId: "provider-safe" });
     process.env.EMAIL_FROM = "notices@example.test";
     seed();
@@ -119,6 +127,18 @@ describe("propertyNoticesRoutes", () => {
     expect(sendEmailMock.mock.calls[0][0].bcc).toBeUndefined();
     expect(first.body.notice.status).toBe("partially_failed");
     expect(first.body.notice.skippedCount).toBe(1);
+  });
+
+  it("serializes concurrent requests for one idempotency key without duplicate delivery", async () => {
+    const request = { propertyId: "property-1", subject: "Concurrent", body: "Synthetic concurrency check.", idempotencyKey: "request_concurrent_123" };
+    const [first, second] = await Promise.all([
+      invoke({ method: "POST", url: "/landlord/notices", user: landlord, body: request }),
+      invoke({ method: "POST", url: "/landlord/notices", user: landlord, body: request }),
+    ]);
+    expect([first.status, second.status].sort()).toEqual([200, 201]);
+    expect(collection("propertyNotices")).toHaveLength(1);
+    expect(collection("propertyNoticeDeliveries")).toHaveLength(2);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
   });
 
   it("records normalized partial failure without exposing the provider error", async () => {

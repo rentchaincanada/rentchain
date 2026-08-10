@@ -1,9 +1,14 @@
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { isPr1512PreviewQaRuntime } from "../middleware/previewQaAuth";
+import {
+  PREVIEW_QA_FAKE_EMAIL_PROVIDER,
+  sendViaPreviewQaFake,
+} from "./previewQaFakeEmailProvider";
 
 type SendResult = { ok: true } | { ok: false; error: string };
 
 export type EmailSendResult = {
-  provider: "mailgun";
+  provider: "mailgun" | "preview_qa_fake";
   providerMessageId: string | null;
   providerResponseId: string | null;
 };
@@ -238,6 +243,12 @@ export async function sendLandlordWelcomeEmail(params: {
 
 export async function sendEmail(message: EmailMessage): Promise<EmailSendResult> {
   const provider = safeStr(process.env.EMAIL_PROVIDER || "mailgun").toLowerCase();
+  if (provider === PREVIEW_QA_FAKE_EMAIL_PROVIDER) {
+    if (!isPr1512PreviewQaRuntime(process.env)) {
+      throw new Error("PREVIEW_QA_FAKE_PROVIDER_INVALID_RUNTIME");
+    }
+    return sendViaPreviewQaFake(message);
+  }
   if (provider !== "mailgun") {
     throw new Error(`EMAIL_PROVIDER_UNSUPPORTED:${provider || "unset"}`);
   }
