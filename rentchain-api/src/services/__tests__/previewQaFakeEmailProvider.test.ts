@@ -8,16 +8,16 @@ import {
 
 const originalEnv = process.env;
 
-function exactQaEnv() {
+function exactQaEnv(scope = "pr1512-property-notices", service = "rentchain-pr1512-notices-qa-590e0ecb") {
   process.env = {
     ...originalEnv,
     EMAIL_PROVIDER: PREVIEW_QA_FAKE_EMAIL_PROVIDER,
     PREVIEW_QA_AUTH_ENABLED: "true",
-    PREVIEW_QA_AUTH_SCOPE: "pr1512-property-notices",
+    PREVIEW_QA_AUTH_SCOPE: scope,
     APP_ENV: "preview",
     GOOGLE_CLOUD_PROJECT: "rentchain-preview",
-    K_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
-    PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
+    K_SERVICE: service,
+    PREVIEW_QA_EXPECTED_SERVICE: service,
     FIRESTORE_ENABLED: "true",
     FIRESTORE_DATABASE_ID: "(default)",
   };
@@ -60,6 +60,14 @@ describe("PR #1512 non-networking fake email provider", () => {
     await expect(sendEmail(message(PREVIEW_QA_FAKE_FAILURE_DESTINATION))).rejects.toThrow(
       "preview_qa_fake_provider_rejected"
     );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("supports the exact PR #1516 isolated Notices runtime without network", async () => {
+    exactQaEnv("pr1516-multi-property-notices", "rentchain-pr1516-notices-qa-252bf576");
+    const fetchMock = vi.fn(() => { throw new Error("network forbidden"); });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(sendEmail(message())).resolves.toMatchObject({ provider: PREVIEW_QA_FAKE_EMAIL_PROVIDER });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
