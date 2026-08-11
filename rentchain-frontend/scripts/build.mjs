@@ -24,20 +24,6 @@ if (
   env.VITE_PR1512_NOTICES_QA = "true";
 }
 
-if (
-  process.env.VERCEL_ENV === "preview" &&
-  process.env.VERCEL_GIT_COMMIT_REF === "feat/multi-property-notices-v1" &&
-  /^[a-f0-9]{40}$/.test(process.env.VERCEL_GIT_COMMIT_SHA || "")
-) {
-  env.VITE_API_BASE_URL = "/api/pr1516-notices";
-  env.VITE_DEPLOY_ENV = "preview";
-  env.VITE_PR1516_NOTICES_QA = "true";
-  env.VITE_PR1516_QA_BRANCH = process.env.VERCEL_GIT_COMMIT_REF;
-  env.VITE_PR1516_QA_COMMIT_SHA = process.env.VERCEL_GIT_COMMIT_SHA;
-  env.VITE_PR1516_QA_SCOPE = "pr1516-multi-property-notices";
-  env.VITE_PR1516_QA_SELECTOR = "pr1516-landlord";
-}
-
 function run(cmd, args) {
   const result = spawnSync(cmd, args, { stdio: "inherit", env });
   if (result.error) {

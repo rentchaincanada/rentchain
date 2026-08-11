@@ -11,7 +11,6 @@ import ApplicantApplyPage from "./pages/ApplicantApplyPage";
 import CosignPage from "./pages/CosignPage";
 import PricingPage from "./pages/PricingPage";
 import LoginPage from "./pages/LoginPage";
-import Pr1516QaBootstrapPage from "./pages/Pr1516QaBootstrapPage";
 import SignupPage from "./pages/SignupPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import AuthActionPage from "./pages/AuthActionPage";
@@ -416,7 +415,6 @@ function App() {
   return (
     <>
       <Routes>
-        <Route path="/__qa/pr1516" element={<Pr1516QaBootstrapPage />} />
         <Route path="/" element={suspensePage(<LandingPage />)} />
         <Route path="/site" element={suspensePage(<LandingPage />)} />
         <Route path="/login" element={<LoginPage />} />

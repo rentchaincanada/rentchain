@@ -63,14 +63,6 @@ describe("PR #1512 non-networking fake email provider", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("supports the exact PR #1516 isolated Notices runtime without network", async () => {
-    exactQaEnv("pr1516-multi-property-notices", "rentchain-pr1516-notices-qa-252bf576");
-    const fetchMock = vi.fn(() => { throw new Error("network forbidden"); });
-    vi.stubGlobal("fetch", fetchMock);
-    await expect(sendEmail(message())).resolves.toMatchObject({ provider: PREVIEW_QA_FAKE_EMAIL_PROVIDER });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
   it.each([
     ["Production", { GOOGLE_CLOUD_PROJECT: "project-0d9658de-af29-4dc0-a99" }],
     ["permanent Preview", { K_SERVICE: "rentchain-preview-backend", PREVIEW_QA_EXPECTED_SERVICE: "rentchain-preview-backend" }],

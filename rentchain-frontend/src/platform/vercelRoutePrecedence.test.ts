@@ -7,6 +7,7 @@ type VercelRoute = {
   src?: string;
   dest?: string;
   handle?: string;
+  status?: number;
 };
 
 type VercelRewrite = {
@@ -31,8 +32,8 @@ describe("Vercel Preview backend route precedence", () => {
   it("routes the complete Preview suffix to the existing Function before filesystem misses", () => {
     expect(config.routes).toEqual([
       {
-        src: "^/api/pr1516-notices/(.*)$",
-        dest: "/api/pr1516-notices/[...path]?path=$1",
+        src: "^/api/pr1516-(?:bootstrap|notices(?:/.*)?)$",
+        status: 404,
       },
       {
         src: "^/api/pr1512-notices/(.*)$",
@@ -74,15 +75,14 @@ describe("Vercel Preview backend route precedence", () => {
     expect(existsSync(join(frontendRoot, "api/pr1512-notices/[...path].ts"))).toBe(true);
   });
 
-  it("reserves the PR #1516 read-only QA suffix before filesystem misses", () => {
-    const requestPath = "/api/pr1516-notices/api/landlord/notices/recipients";
-    const functionRoute = config.routes[0];
-    const match = new RegExp(functionRoute.src as string).exec(requestPath);
-    expect(match?.[1]).toBe("api/landlord/notices/recipients");
-    expect(functionRoute.dest?.replace("$1", match?.[1] ?? "")).toBe(
-      "/api/pr1516-notices/[...path]?path=api/landlord/notices/recipients",
-    );
-    expect(existsSync(join(frontendRoot, "api/pr1516-notices/[...path].ts"))).toBe(true);
+  it.each([
+    "/api/pr1516-bootstrap",
+    "/api/pr1516-notices/api/landlord/notices/recipients",
+  ])("fails the retired PR #1516 QA path closed before Production rewrites: %s", (requestPath) => {
+    const retiredRoute = config.routes[0];
+    expect(new RegExp(retiredRoute.src as string).test(requestPath)).toBe(true);
+    expect(retiredRoute).toMatchObject({ status: 404 });
+    expect(retiredRoute.dest).toBeUndefined();
   });
 
   it.each(["/api/properties", "/api/tenants"])(
