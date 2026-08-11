@@ -10,7 +10,6 @@ apply_permissions_file="$root_dir/tests/hcp_apply_permissions.txt"
 b4_apply_delta_file="$root_dir/tests/hcp_b4_apply_permission_delta.txt"
 b7_plan_delta_file="$root_dir/tests/hcp_b7_plan_permission_delta.txt"
 b7_apply_delta_file="$root_dir/tests/hcp_b7_apply_permission_delta.txt"
-pr1512_invoker_file="$root_dir/pr1512_vercel_proxy_invoker.tf"
 
 expected_resources="$(cat <<'EOF'
 google_apikeys_key
@@ -121,19 +120,6 @@ rg -q 'member   = google_service_account\.vercel_preview_proxy\.member' "$vercel
 
 if rg -n 'principalSet://|roles/iam\.(serviceAccountTokenCreator|serviceAccountUser)|google_service_account_key|google_project_iam_(member|binding)|allUsers|allAuthenticatedUsers|project-0d9658de-af29-4dc0-a99' "$vercel_identity_file"; then
   echo "Broad federation, token, project IAM, public, static-key, or production scope found in Vercel Preview identity" >&2
-  exit 1
-fi
-
-test "$(rg -No '^resource "google_cloud_run_v2_service_iam_member" "pr1512_vercel_proxy_invoker"' "$pr1512_invoker_file" | wc -l | tr -d ' ')" = "1"
-rg -q 'project  = "rentchain-preview"' "$pr1512_invoker_file"
-rg -q 'location = "northamerica-northeast1"' "$pr1512_invoker_file"
-rg -q 'name     = "rentchain-pr1512-notices-qa-fff3a2dc"' "$pr1512_invoker_file"
-rg -q 'role     = "roles/run.invoker"' "$pr1512_invoker_file"
-rg -q 'member   = google_service_account\.vercel_preview_proxy\.member' "$pr1512_invoker_file"
-rg -U -q 'basename\(\n        google_cloud_run_v2_service_iam_member\.pr1512_vercel_proxy_invoker\.name\n      \) == "rentchain-pr1512-notices-qa-fff3a2dc"' "$root_dir/checks.tf"
-
-if rg -n 'google_(project|folder|organization)_iam|allUsers|allAuthenticatedUsers|project-0d9658de-af29-4dc0-a99|rentchain-preview-backend' "$pr1512_invoker_file"; then
-  echo "PR #1512 Invoker scope is broader than the exact isolated service member" >&2
   exit 1
 fi
 
