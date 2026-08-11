@@ -24,6 +24,15 @@ if (
   env.VITE_PR1512_NOTICES_QA = "true";
 }
 
+if (
+  process.env.VERCEL_ENV === "preview" &&
+  process.env.VERCEL_GIT_COMMIT_REF === "feat/multi-property-notices-v1"
+) {
+  env.VITE_API_BASE_URL = "/api/pr1516-notices";
+  env.VITE_DEPLOY_ENV = "preview";
+  env.VITE_PR1516_NOTICES_QA = "true";
+}
+
 function run(cmd, args) {
   const result = spawnSync(cmd, args, { stdio: "inherit", env });
   if (result.error) {

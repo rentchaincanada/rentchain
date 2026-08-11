@@ -2,6 +2,7 @@ export const PREVIEW_DEPLOY_ENV = "preview";
 export const PRODUCTION_DEPLOY_ENV = "production";
 export const PREVIEW_API_BASE_URL = "/api/preview-backend";
 export const PR1512_NOTICES_QA_API_BASE_URL = "/api/pr1512-notices";
+export const PR1516_NOTICES_QA_API_BASE_URL = "/api/pr1516-notices";
 export const PRODUCTION_API_BASE_URL =
   "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app";
 export const PREVIEW_API_ROUTE_NOT_AVAILABLE = "PREVIEW_API_ROUTE_NOT_AVAILABLE";
@@ -14,6 +15,14 @@ const PREVIEW_AUTH_OPERATIONS = new Map([
 ]);
 
 const PR1512_READ_OPERATIONS = [
+  /^GET:\/api\/me$/,
+  /^GET:\/api\/properties$/,
+  /^GET:\/api\/landlord\/notices$/,
+  /^GET:\/api\/landlord\/notices\/recipients$/,
+  /^GET:\/api\/landlord\/notices\/notice_[a-f0-9]{64}$/,
+];
+
+const PR1516_READ_OPERATIONS = [
   /^GET:\/api\/me$/,
   /^GET:\/api\/properties$/,
   /^GET:\/api\/landlord\/notices$/,
@@ -71,6 +80,10 @@ export function isPr1512QaReadRequest(input: string, method = "GET"): boolean {
   return PR1512_READ_OPERATIONS.some((pattern) => pattern.test(`${String(method).toUpperCase()}:${normalizeBackendPath(input)}`));
 }
 
+export function isPr1516QaReadRequest(input: string, method = "GET"): boolean {
+  return PR1516_READ_OPERATIONS.some((pattern) => pattern.test(`${String(method).toUpperCase()}:${normalizeBackendPath(input)}`));
+}
+
 export function resolveConfiguredApiBase({
   apiBaseUrl,
   deployEnv,
@@ -84,7 +97,7 @@ export function resolveConfiguredApiBase({
   }
 
   if (rawDeployEnv === PREVIEW_DEPLOY_ENV) {
-    if (![PREVIEW_API_BASE_URL, PR1512_NOTICES_QA_API_BASE_URL].includes(rawBase)) {
+    if (![PREVIEW_API_BASE_URL, PR1512_NOTICES_QA_API_BASE_URL, PR1516_NOTICES_QA_API_BASE_URL].includes(rawBase)) {
       throw new Error(
         "Preview API configuration is invalid: use the authorized same-origin proxy"
       );
@@ -96,7 +109,7 @@ export function resolveConfiguredApiBase({
     throw new Error("VITE_DEPLOY_ENV is not recognized");
   }
 
-  if (rawBase === PREVIEW_API_BASE_URL || rawBase === PR1512_NOTICES_QA_API_BASE_URL) {
+  if (rawBase === PREVIEW_API_BASE_URL || rawBase === PR1512_NOTICES_QA_API_BASE_URL || rawBase === PR1516_NOTICES_QA_API_BASE_URL) {
     throw new Error("The Preview API proxy requires VITE_DEPLOY_ENV=preview");
   }
 
@@ -150,6 +163,10 @@ export function getApiBaseUrlForRequest(input: string, method = "GET"): string {
     if (isPr1512QaReadRequest(input, method)) return configuredBase;
     throw new PreviewApiRouteUnavailableError(input, method);
   }
+  if (configuredBase === PR1516_NOTICES_QA_API_BASE_URL) {
+    if (isPr1516QaReadRequest(input, method)) return configuredBase;
+    throw new PreviewApiRouteUnavailableError(input, method);
+  }
   if (configuredBase !== PREVIEW_API_BASE_URL) return configuredBase;
   if (isPreviewAuthRequest(input, method)) return PREVIEW_API_BASE_URL;
   throw new PreviewApiRouteUnavailableError(input, method);
@@ -189,6 +206,7 @@ export function assertPreviewBrowserRequestAvailable(inputUrl: string, method = 
   if (parsed.origin === origin && parsed.pathname.startsWith(prefix)) {
     const backendPath = parsed.pathname.slice(configuredBase.length);
     if (configuredBase === PR1512_NOTICES_QA_API_BASE_URL && isPr1512QaReadRequest(backendPath, method)) return;
+    if (configuredBase === PR1516_NOTICES_QA_API_BASE_URL && isPr1516QaReadRequest(backendPath, method)) return;
     if (configuredBase === PREVIEW_API_BASE_URL && isPreviewAuthRequest(backendPath, method)) return;
     throw new PreviewApiRouteUnavailableError(backendPath, method);
   }
