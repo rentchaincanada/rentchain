@@ -14,6 +14,7 @@ export const previewQaPropertyNoticesRoutes = Router();
 
 const MAX_NOTICE_RECIPIENTS = 100;
 const MAX_NOTICE_LEASES = 101;
+const MAX_NOTICE_PROPERTIES = 25;
 const MAX_NOTICE_HISTORY = 50;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const documentIdPattern = /^[A-Za-z0-9_-]{1,1500}$/;
@@ -66,8 +67,8 @@ function unitLabel(raw: any): string {
   return text(raw?.unitNumber || raw?.unitLabel || raw?.label || raw?.name) || "Unit";
 }
 
-function noticeId(landlordId: string, idempotencyKey: string): string {
-  return `notice_${createHash("sha256").update(`${landlordId}:${idempotencyKey}`).digest("hex")}`;
+function noticeId(landlordId: string, idempotencyKey: string, canonicalRequest: string): string {
+  return `notice_${createHash("sha256").update(`${landlordId}:${idempotencyKey}:${canonicalRequest}`).digest("hex")}`;
 }
 
 function deliveryId(campaignId: string, tenantId: string): string {
@@ -88,44 +89,51 @@ type ResolvedRecipient = {
   unitIds: string[];
   unitLabels: string[];
   leaseIds: string[];
+  propertyIds: string[];
+  propertyLabels: string[];
+  units: Array<{ id: string; label: string; propertyId: string; propertyLabel: string }>;
   deliveryAvailability: "available" | "missing_email" | "duplicate_destination";
 };
 
 async function resolveRecipients(params: {
   landlordId: string;
-  propertyId: string;
+  propertyIds: string[];
   selectedUnitIds?: string[];
   selectedTenantIds?: string[];
   tenantFilterProvided?: boolean;
   tenantFilterMalformed?: boolean;
 }) {
-  const propertySnap = await db.collection("properties").doc(params.propertyId).get();
-  if (!propertySnap.exists) return { kind: "not_found" as const };
-  const property = propertySnap.data() as any;
-  if (text(property?.landlordId) !== params.landlordId || isArchived(property)) {
-    return { kind: "forbidden" as const };
-  }
+  const propertyEntries = await Promise.all(params.propertyIds.map(async (id) => [id, await db.collection("properties").doc(id).get()] as const));
+  if (propertyEntries.some(([, snap]) => !snap.exists)) return { kind: "not_found" as const };
+  const properties = propertyEntries.map(([id, snap]) => ({ id, raw: snap.data() as any }));
+  if (properties.some(({ raw }) => text(raw?.landlordId) !== params.landlordId || isArchived(raw))) return { kind: "forbidden" as const };
+  const propertyLabels = new Map(properties.map(({ id, raw }) => [id, propertyLabel(raw)]));
   if (params.tenantFilterProvided && params.tenantFilterMalformed) {
     return { kind: "recipient_not_eligible" as const };
   }
 
-  const leaseSnap = await db.collection("leases")
-    .where("propertyId", "==", params.propertyId)
-    .limit(MAX_NOTICE_LEASES)
-    .get();
-  if (leaseSnap.docs.length >= MAX_NOTICE_LEASES) return { kind: "too_many" as const };
-
   const selectedUnits = new Set(params.selectedUnitIds || []);
   const selectedTenants = new Set(params.selectedTenantIds || []);
-  const candidates: Array<{ leaseId: string; tenantId: string; unitId: string }> = [];
-  for (const leaseDoc of leaseSnap.docs) {
-    const lease = leaseDoc.data() as any;
-    const unitId = text(lease?.unitId);
-    if (text(lease?.landlordId) !== params.landlordId || !isCurrentLeaseStatus(lease?.status) || !unitId) continue;
-    if (selectedUnits.size && !selectedUnits.has(unitId)) continue;
-    for (const tenantId of tenantIdsForLease(lease)) {
-      candidates.push({ leaseId: leaseDoc.id, tenantId, unitId });
+  const candidates: Array<{ leaseId: string; tenantId: string; unitId: string; propertyId: string }> = [];
+  for (const propertyId of params.propertyIds) {
+    const leaseSnap = await db.collection("leases").where("propertyId", "==", propertyId).limit(MAX_NOTICE_LEASES).get();
+    if (leaseSnap.docs.length >= MAX_NOTICE_LEASES) return { kind: "too_many" as const };
+    for (const leaseDoc of leaseSnap.docs) {
+      const lease = leaseDoc.data() as any;
+      const unitId = text(lease?.unitId);
+      if (text(lease?.landlordId) !== params.landlordId || !isCurrentLeaseStatus(lease?.status) || !unitId) continue;
+      if (selectedUnits.size && !selectedUnits.has(unitId)) continue;
+      for (const tenantId of tenantIdsForLease(lease)) candidates.push({ leaseId: leaseDoc.id, tenantId, unitId, propertyId });
     }
+  }
+
+  if (selectedUnits.size) {
+    const selectedUnitEntries = await Promise.all(Array.from(selectedUnits).map(async (id) => [id, await db.collection("units").doc(id).get()] as const));
+    if (selectedUnitEntries.some(([, snap]) => !snap.exists)) return { kind: "recipient_not_eligible" as const };
+    if (selectedUnitEntries.some(([, snap]) => {
+      const unit = snap.data() as any;
+      return !params.propertyIds.includes(text(unit?.propertyId) || "") || (text(unit?.landlordId) && text(unit?.landlordId) !== params.landlordId);
+    })) return { kind: "recipient_not_eligible" as const };
   }
 
   const eligibleLeaseTenantIds = new Set(candidates.map((candidate) => candidate.tenantId));
@@ -153,7 +161,7 @@ async function resolveRecipients(params: {
     if (!unitSnap?.exists || !tenantSnap?.exists) continue;
     const unit = unitSnap.data() as any;
     const tenant = tenantSnap.data() as any;
-    if (text(unit?.propertyId) !== params.propertyId) continue;
+    if (text(unit?.propertyId) !== candidate.propertyId) continue;
     if (text(unit?.landlordId) && text(unit?.landlordId) !== params.landlordId) continue;
     if (text(tenant?.landlordId) && text(tenant?.landlordId) !== params.landlordId) continue;
     if (isArchived(tenant)) continue;
@@ -165,11 +173,22 @@ async function resolveRecipients(params: {
       unitIds: [],
       unitLabels: [],
       leaseIds: [],
+      propertyIds: [],
+      propertyLabels: [],
+      units: [],
       deliveryAvailability: tenantEmail(tenant) ? "available" as const : "missing_email" as const,
     };
     existing.unitIds = Array.from(new Set([...existing.unitIds, candidate.unitId])).sort();
     existing.unitLabels = Array.from(new Set([...existing.unitLabels, unitLabel(unit)])).sort();
     existing.leaseIds = Array.from(new Set([...existing.leaseIds, candidate.leaseId])).sort();
+    existing.propertyIds = Array.from(new Set([...existing.propertyIds, candidate.propertyId])).sort();
+    existing.propertyLabels = existing.propertyIds.map((id) => propertyLabels.get(id) || "Property");
+    existing.units = [...existing.units.filter((item) => item.id !== candidate.unitId), {
+      id: candidate.unitId,
+      label: unitLabel(unit),
+      propertyId: candidate.propertyId,
+      propertyLabel: propertyLabels.get(candidate.propertyId) || "Property",
+    }].sort((a, b) => [a.propertyLabel, a.label, a.id].join("\0").localeCompare([b.propertyLabel, b.label, b.id].join("\0")));
     byTenant.set(candidate.tenantId, existing);
   }
 
@@ -188,7 +207,12 @@ async function resolveRecipients(params: {
     else destinationOwner.set(recipient.email, recipient.tenantId);
   }
   if (recipients.length > MAX_NOTICE_RECIPIENTS) return { kind: "too_many" as const };
-  return { kind: "ok" as const, propertyLabel: propertyLabel(property), recipients };
+  const propertySnapshots = params.propertyIds.map((id) => ({ id, label: propertyLabels.get(id) || "Property" }));
+  const propertyBreakdown = propertySnapshots.map((property) => ({
+    ...property,
+    recipientCount: recipients.filter((recipient) => recipient.propertyIds.includes(property.id)).length,
+  }));
+  return { kind: "ok" as const, properties: propertySnapshots, propertyBreakdown, recipients };
 }
 
 function parseFilters(value: any) {
@@ -204,6 +228,9 @@ function publicRecipient(recipient: ResolvedRecipient) {
     tenantDisplayName: recipient.tenantDisplayName,
     unitIds: recipient.unitIds,
     unitLabels: recipient.unitLabels,
+    propertyIds: recipient.propertyIds,
+    propertyLabels: recipient.propertyLabels,
+    units: recipient.units,
     deliveryAvailability: recipient.deliveryAvailability,
   };
 }
@@ -215,9 +242,17 @@ function publicNotice(id: string, raw: any) {
 
 async function requireResolved(req: any, res: any) {
   const landlordId = getEffectiveLandlordId(req);
-  const propertyId = text(req.method === "GET" ? req.query?.propertyId : req.body?.propertyId);
   if (!landlordId) { res.status(401).json({ ok: false, error: "Unauthorized" }); return null; }
-  if (!propertyId) { res.status(400).json({ ok: false, error: "propertyId required" }); return null; }
+  const rawPropertyIds = req.method === "GET"
+    ? (hasOwn(req.query, "propertyIds") ? String(req.query?.propertyIds ?? "").split(",") : [req.query?.propertyId])
+    : (hasOwn(req.body, "propertyIds") ? req.body?.propertyIds : [req.body?.propertyId]);
+  if (!Array.isArray(rawPropertyIds) || rawPropertyIds.length === 0 || rawPropertyIds.some((item) => typeof item !== "string" || !documentIdPattern.test(item.trim()))) {
+    res.status(400).json({ ok: false, error: "Valid propertyIds required" }); return null;
+  }
+  const propertyIds = ids(rawPropertyIds);
+  if (!propertyIds.length || propertyIds.length > MAX_NOTICE_PROPERTIES) {
+    res.status(400).json({ ok: false, error: "Valid propertyIds required", maxProperties: MAX_NOTICE_PROPERTIES }); return null;
+  }
   const tenantFilterProvided = req.method === "GET"
     ? hasOwn(req.query, "tenantIds")
     : hasOwn(req.body, "selectedTenantIds");
@@ -227,7 +262,7 @@ async function requireResolved(req: any, res: any) {
   } : req.body;
   const filters = parseFilters(filterSource);
   const tenantValidation = explicitTenantFilter(filterSource?.selectedTenantIds, tenantFilterProvided);
-  const result = await resolveRecipients({ landlordId, propertyId, ...filters, ...tenantValidation });
+  const result = await resolveRecipients({ landlordId, propertyIds, ...filters, ...tenantValidation });
   if (result.kind === "not_found") { res.status(404).json({ ok: false, error: "Property not found" }); return null; }
   if (result.kind === "forbidden") { res.status(403).json({ ok: false, error: "Property unavailable" }); return null; }
   if (result.kind === "recipient_not_eligible") {
@@ -238,7 +273,7 @@ async function requireResolved(req: any, res: any) {
     res.status(422).json({ ok: false, error: "Recipient limit exceeded", maxRecipients: MAX_NOTICE_RECIPIENTS });
     return null;
   }
-  return { landlordId, propertyId, ...result };
+  return { landlordId, propertyIds, ...result };
 }
 
 const handleNoticeRecipients = async (req: any, res: any) => {
@@ -248,10 +283,13 @@ const handleNoticeRecipients = async (req: any, res: any) => {
     const availableCount = resolved.recipients.filter((recipient) => recipient.deliveryAvailability === "available").length;
     return res.json({
       ok: true,
-      property: { id: resolved.propertyId, label: resolved.propertyLabel },
+      properties: resolved.properties,
+      property: resolved.properties.length === 1 ? resolved.properties[0] : undefined,
+      propertyBreakdown: resolved.propertyBreakdown,
       recipients: resolved.recipients.map(publicRecipient),
       counts: { total: resolved.recipients.length, available: availableCount, skipped: resolved.recipients.length - availableCount },
       maxRecipients: MAX_NOTICE_RECIPIENTS,
+      maxProperties: MAX_NOTICE_PROPERTIES,
     });
   } catch (error: any) {
     console.error("[property-notices] preview failed", { code: text(error?.code) || "preview_failed" });
@@ -266,7 +304,7 @@ const handleNoticeCreate = async (req: any, res: any) => {
   const subject = text(req.body?.subject);
   const body = text(req.body?.body);
   const idempotencyKey = text(req.body?.idempotencyKey);
-  if (!subject || subject.length > 160) return res.status(400).json({ ok: false, error: "Valid subject required" });
+  if (!subject || subject.length > 160 || /[\r\n]/.test(subject)) return res.status(400).json({ ok: false, error: "Valid subject required" });
   if (!body || body.length > 10000) return res.status(400).json({ ok: false, error: "Valid body required" });
   if (!idempotencyKey || !/^[A-Za-z0-9_-]{16,100}$/.test(idempotencyKey)) {
     return res.status(400).json({ ok: false, error: "Valid idempotencyKey required" });
@@ -278,7 +316,15 @@ const handleNoticeCreate = async (req: any, res: any) => {
     if (!resolved.recipients.length || !resolved.recipients.some((item) => item.deliveryAvailability === "available")) {
       return res.status(422).json({ ok: false, error: "No deliverable recipients" });
     }
-    const campaignId = noticeId(resolved.landlordId, idempotencyKey);
+    const filters = parseFilters(req.body);
+    const canonicalRequest = JSON.stringify({
+      propertyIds: resolved.propertyIds,
+      selectedUnitIds: filters.selectedUnitIds,
+      selectedTenantIds: filters.selectedTenantIds,
+      subject,
+      body,
+    });
+    const campaignId = noticeId(resolved.landlordId, idempotencyKey, canonicalRequest);
     const campaignRef = db.collection("propertyNotices").doc(campaignId);
     const now = Date.now();
     const actorId = resolveRequestAuthority(req).actorId;
@@ -287,8 +333,11 @@ const handleNoticeCreate = async (req: any, res: any) => {
       if (existing.exists) return false;
       transaction.set(campaignRef, {
         landlordId: resolved.landlordId,
-        propertyId: resolved.propertyId,
-        propertyLabel: resolved.propertyLabel,
+        propertyIds: resolved.propertyIds,
+        properties: resolved.properties,
+        propertyCount: resolved.properties.length,
+        propertyId: resolved.properties.length === 1 ? resolved.properties[0].id : null,
+        propertyLabel: resolved.properties.length === 1 ? resolved.properties[0].label : null,
         subject,
         body,
         createdBy: actorId,
@@ -297,7 +346,7 @@ const handleNoticeCreate = async (req: any, res: any) => {
         updatedAt: FieldValue.serverTimestamp(),
         status: "sending",
         idempotencyKeyHash: createHash("sha256").update(idempotencyKey).digest("hex"),
-        filters: parseFilters(req.body),
+        filters,
         recipientCount: resolved.recipients.length,
         sentCount: 0,
         failedCount: 0,
@@ -307,7 +356,10 @@ const handleNoticeCreate = async (req: any, res: any) => {
         transaction.set(db.collection("propertyNoticeDeliveries").doc(deliveryId(campaignId, recipient.tenantId)), {
           noticeId: campaignId,
           landlordId: resolved.landlordId,
-          propertyId: resolved.propertyId,
+          propertyIds: recipient.propertyIds,
+          propertyLabels: recipient.propertyLabels,
+          units: recipient.units,
+          propertyId: recipient.propertyIds.length === 1 ? recipient.propertyIds[0] : null,
           tenantId: recipient.tenantId,
           tenantDisplayName: recipient.tenantDisplayName,
           unitIds: recipient.unitIds,
@@ -359,7 +411,7 @@ const handleNoticeCreate = async (req: any, res: any) => {
     }
     const skippedCount = resolved.recipients.length - sentCount - failedCount;
     const status = failedCount === 0 && skippedCount === 0 ? "completed" : sentCount > 0 ? "partially_failed" : "failed";
-    await campaignRef.set({ status, sentCount, failedCount, skippedCount, updatedAt: FieldValue.serverTimestamp(), completedAt: FieldValue.serverTimestamp() }, { merge: true });
+    await campaignRef.set({ status, sentCount, failedCount, skippedCount, updatedAt: FieldValue.serverTimestamp(), completedAt: FieldValue.serverTimestamp(), completedAtMs: Date.now() }, { merge: true });
     const final = await campaignRef.get();
     return res.status(201).json({ ok: true, created: true, notice: publicNotice(campaignId, final.data()) });
   } catch (error: any) {
