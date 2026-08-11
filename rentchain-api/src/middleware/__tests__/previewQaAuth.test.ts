@@ -7,9 +7,6 @@ import {
   PR1512_PREVIEW_QA_IDENTITY_ALIAS,
   PR1512_PREVIEW_QA_LANDLORD_ID,
   PR1512_PREVIEW_QA_SCOPE,
-  PR1516_PREVIEW_QA_IDENTITY_ALIAS,
-  PR1516_PREVIEW_QA_LANDLORD_ID,
-  PR1516_PREVIEW_QA_SCOPE,
   decidePreviewQaAuth,
   isPreviewQaAuthenticatedRequest,
   previewQaAuth,
@@ -38,13 +35,6 @@ const pr1512EnabledEnv = {
   PREVIEW_QA_AUTH_SCOPE: PR1512_PREVIEW_QA_SCOPE,
   K_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
   PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
-} as NodeJS.ProcessEnv;
-
-const pr1516EnabledEnv = {
-  ...enabledEnv,
-  PREVIEW_QA_AUTH_SCOPE: PR1516_PREVIEW_QA_SCOPE,
-  K_SERVICE: "rentchain-pr1516-notices-qa-252bf576",
-  PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1516-notices-qa-252bf576",
 } as NodeJS.ProcessEnv;
 
 function decide(overrides: Partial<Parameters<typeof decidePreviewQaAuth>[0]> = {}) {
@@ -183,48 +173,6 @@ describe("previewQaAuth", () => {
       landlordId: PR1512_PREVIEW_QA_LANDLORD_ID,
       role: "landlord",
     });
-  });
-
-  it.each([
-    ["GET", "landlord-notice-recipients"],
-    ["GET", "landlord-notice-list"],
-    ["GET", "landlord-notice-detail"],
-    ["POST", "landlord-notice-create"],
-  ] as const)("allows PR #1516 %s %s only under its fixed contract", (method, route) => {
-    expect(decide({
-      env: pr1516EnabledEnv,
-      method,
-      route,
-      selector: PR1516_PREVIEW_QA_IDENTITY_ALIAS,
-    })).toEqual({ kind: "allow" });
-  });
-
-  it("injects only the server-owned PR #1516 landlord identity", () => {
-    process.env = { ...pr1516EnabledEnv };
-    const headers = { "x-rentchain-preview-qa-identity": PR1516_PREVIEW_QA_IDENTITY_ALIAS };
-    const req: any = { method: "GET", headers, header: (name: string) => headers[name.toLowerCase() as keyof typeof headers] };
-    const res: any = { status: () => res, json: () => res };
-    let nextCalled = false;
-    previewQaAuth("landlord-notice-recipients")(req, res, () => { nextCalled = true; });
-    expect(nextCalled).toBe(true);
-    expect(req.user).toMatchObject({
-      id: PR1516_PREVIEW_QA_LANDLORD_ID,
-      landlordId: PR1516_PREVIEW_QA_LANDLORD_ID,
-      role: "landlord",
-    });
-  });
-
-  it.each([
-    ["wrong service", { ...pr1516EnabledEnv, K_SERVICE: "rentchain-pr1516-notices-qa-deadbeef" }],
-    ["Production", { ...pr1516EnabledEnv, GOOGLE_CLOUD_PROJECT: "project-0d9658de-af29-4dc0-a99" }],
-    ["permanent Preview", { ...pr1516EnabledEnv, K_SERVICE: "rentchain-preview-backend", PREVIEW_QA_EXPECTED_SERVICE: "rentchain-preview-backend" }],
-    ["wrong scope", { ...pr1516EnabledEnv, PREVIEW_QA_AUTH_SCOPE: PR1512_PREVIEW_QA_SCOPE }],
-  ])("rejects PR #1516 with %s", (_label, env) => {
-    expect(decide({
-      env,
-      route: "landlord-notice-recipients",
-      selector: PR1516_PREVIEW_QA_IDENTITY_ALIAS,
-    })).toEqual({ kind: "reject" });
   });
 
   it.each([
