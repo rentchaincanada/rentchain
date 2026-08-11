@@ -91,109 +91,38 @@ for (const route of communicationsRoutes) {
   }
 }
 
-test("scrolls the real mobile Workspace menu to Communications above the bottom navigation", async ({ page }) => {
+test("keeps communication destinations out of the mobile Workspace drawer and tab bar", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await installWorkspaceHarness(page);
   await page.goto("/messages");
 
   await page.getByRole("button", { name: "Open workspace pages" }).first().click();
   const drawer = page.getByRole("dialog", { name: "Navigation menu" });
-  const scrollRegion = drawer.locator(".rc-landlord-drawer-scroll");
-  const communications = drawer.getByRole("group", { name: "Communications" });
-  await expect(communications).toBeAttached();
   await expect(drawer.getByRole("button", { name: "Close menu" })).toBeVisible();
-
-  const before = await scrollRegion.evaluate((element) => {
-    const styles = getComputedStyle(element);
-    const drawerRect = element.parentElement?.getBoundingClientRect();
-    const headerRect = element.previousElementSibling?.getBoundingClientRect();
-    const communicationsRect = element.querySelector('[role="group"][aria-label="Communications"]')?.getBoundingClientRect();
-    const bottomNavRect = document.querySelector('[aria-label="Bottom navigation"]')?.getBoundingClientRect();
-    return {
-      viewportHeight: window.innerHeight,
-      drawerTop: drawerRect?.top,
-      drawerBottom: drawerRect?.bottom,
-      drawerHeight: drawerRect?.height,
-      headerHeight: headerRect?.height,
-      clientHeight: element.clientHeight,
-      scrollHeight: element.scrollHeight,
-      scrollTop: element.scrollTop,
-      overflowY: styles.overflowY,
-      minHeight: styles.minHeight,
-      communicationsTop: communicationsRect?.top,
-      communicationsBottom: communicationsRect?.bottom,
-      bottomNavTop: bottomNavRect?.top,
-    };
-  });
-  test.info().annotations.push({ type: "mobile-menu-before-scroll", description: JSON.stringify(before) });
-
-  expect(before.scrollHeight).toBeGreaterThan(before.clientHeight);
-  await scrollRegion.evaluate((element) => element.scrollTo({ top: element.scrollHeight, behavior: "instant" }));
-  await expect.poll(() => scrollRegion.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-
-  const after = await scrollRegion.evaluate((element) => {
-    const regionRect = element.getBoundingClientRect();
-    const noticesRect = Array.from(element.querySelectorAll("button"))
-      .find((button) => button.textContent?.trim() === "Notices")
-      ?.getBoundingClientRect();
-    const bottomNavRect = document.querySelector('[aria-label="Bottom navigation"]')?.getBoundingClientRect();
-    return {
-      clientWidth: element.clientWidth,
-      scrollWidth: element.scrollWidth,
-      scrollTop: element.scrollTop,
-      regionTop: regionRect.top,
-      regionBottom: regionRect.bottom,
-      noticesTop: noticesRect?.top,
-      noticesBottom: noticesRect?.bottom,
-      bottomNavTop: bottomNavRect?.top,
-    };
-  });
-  test.info().annotations.push({ type: "mobile-menu-after-scroll", description: JSON.stringify(after) });
-
-  expect(after.scrollWidth).toBeLessThanOrEqual(after.clientWidth + 1);
-  expect(after.noticesTop).toBeGreaterThanOrEqual(after.regionTop);
-  expect(after.noticesBottom).toBeLessThanOrEqual(after.regionBottom);
-  expect(after.noticesBottom).toBeLessThanOrEqual(after.bottomNavTop);
-  await expect(communications.getByRole("button", { name: "Unified Inbox" })).toBeInViewport();
-  await expect(communications.getByRole("button", { name: "Messages" })).toBeInViewport();
-  await expect(communications.getByRole("button", { name: "Notices" })).toBeInViewport();
-
-  await communications.getByRole("button", { name: "Notices" }).click();
-  await expect(page).toHaveURL(/\/notices$/);
-  await expect(drawer).not.toBeAttached();
-  await expect(page.locator(".rc-landlord-mobile-role")).toHaveText("Notices");
-
-  await page.getByRole("button", { name: "Open workspace pages" }).first().click();
-  const reopenedCommunications = page.getByRole("dialog", { name: "Navigation menu" }).getByRole("group", {
-    name: "Communications",
-  });
-  await expect(reopenedCommunications.getByRole("button", { name: "Notices" })).toHaveAttribute("aria-current", "page");
+  await expect(drawer.getByRole("group", { name: "Communications" })).toHaveCount(0);
+  await expect(drawer.getByRole("button", { name: "Unified Inbox" })).toHaveCount(0);
+  await expect(drawer.getByRole("button", { name: "Messages" })).toHaveCount(0);
+  await expect(drawer.getByRole("button", { name: "Notices" })).toHaveCount(0);
+  const tabbar = page.getByRole("navigation", { name: "Bottom navigation" });
+  await expect(tabbar.getByRole("button", { name: "Unified Inbox" })).toHaveCount(0);
+  await expect(tabbar.getByRole("button", { name: "Messages" })).toHaveCount(0);
+  await expect(tabbar.getByRole("button", { name: "Notices" })).toHaveCount(0);
 });
 
 for (const destination of communicationsRoutes) {
-  test(`navigates to ${destination.title} from the scrolled mobile Workspace menu`, async ({ page }) => {
+  test(`navigates to ${destination.title} from the mobile Communications menu`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await installWorkspaceHarness(page);
     await page.goto("/messages");
 
-    await page.getByRole("button", { name: "Open workspace pages" }).first().click();
-    const target = page
-      .getByRole("dialog", { name: "Navigation menu" })
-      .getByRole("group", { name: "Communications" })
-      .getByRole("button", { name: destination.title });
-    await target.scrollIntoViewIfNeeded();
-    await expect(target).toBeInViewport();
+    await page.getByRole("button", { name: "Communications" }).click();
+    const target = page.getByRole("menu", { name: "Communications destinations" }).getByRole("menuitem", { name: destination.title });
     await target.click();
 
     await expect(page).toHaveURL(new RegExp(`${destination.path.replaceAll("/", "\\/")}$`));
     await expect(page.locator(".rc-landlord-mobile-role")).toHaveText(destination.title);
-    await page.getByRole("button", { name: "Open workspace pages" }).first().click();
-    await expect(
-      page
-        .getByRole("dialog", { name: "Navigation menu" })
-        .getByRole("group", { name: "Communications" })
-        .getByRole("button", { name: destination.title }),
-    ).toHaveAttribute("aria-current", "page");
+    await page.getByRole("button", { name: "Communications" }).click();
+    await expect(page.getByRole("menuitem", { name: destination.title })).toHaveAttribute("aria-current", "page");
   });
 }
 
@@ -202,23 +131,20 @@ for (const viewport of [
   { width: 360, height: 800 },
   { width: 430, height: 932 },
 ]) {
-  test(`keeps Communications scroll-reachable at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+  test(`keeps Communications exclusive to the header at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await installWorkspaceHarness(page);
     await page.goto("/notices");
 
     await page.getByRole("button", { name: "Open workspace pages" }).first().click();
     const drawer = page.getByRole("dialog", { name: "Navigation menu" });
-    const scrollRegion = drawer.getByLabel("Workspace destinations");
-    const communications = drawer.getByRole("group", { name: "Communications" });
-    await scrollRegion.evaluate((element) => element.scrollTo({ top: element.scrollHeight, behavior: "instant" }));
-
-    await expect.poll(() => scrollRegion.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-    await expect(communications.getByRole("button", { name: "Unified Inbox" })).toBeInViewport();
-    await expect(communications.getByRole("button", { name: "Messages" })).toBeInViewport();
-    await expect(communications.getByRole("button", { name: "Notices" })).toBeInViewport();
-    expect(await scrollRegion.evaluate((element) => element.scrollWidth)).toBeLessThanOrEqual(
-      await scrollRegion.evaluate((element) => element.clientWidth + 1),
+    await expect(drawer.getByRole("group", { name: "Communications" })).toHaveCount(0);
+    await drawer.getByRole("button", { name: "Close menu" }).click();
+    await page.getByRole("button", { name: "Communications" }).click();
+    const communications = page.getByRole("menu", { name: "Communications destinations" });
+    await expect(communications.getByRole("menuitem")).toHaveCount(3);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      await page.evaluate(() => document.documentElement.clientWidth + 1),
     );
   });
 }
@@ -243,7 +169,7 @@ for (const route of communicationsRoutes) {
     { name: "tablet", width: 820, height: 1180 },
     { name: "mobile", width: 390, height: 844 },
   ]) {
-    test(`keeps ${route.title} Communications state usable in the ${viewport.name} drawer`, async ({ page }) => {
+    test(`keeps ${route.title} in the header menu but out of the ${viewport.name} Workspace drawer`, async ({ page }) => {
       await page.setViewportSize(viewport);
       await installWorkspaceHarness(page);
       await page.goto(route.path);
@@ -259,11 +185,10 @@ for (const route of communicationsRoutes) {
       await expect(headerMenu).not.toBeAttached();
       await page.getByRole("button", { name: "Open workspace pages" }).first().click();
       const drawer = page.getByRole("dialog", { name: "Navigation menu" });
-      const communications = drawer.getByRole("group", { name: "Communications" });
-      await expect(communications.getByRole("button", { name: "Unified Inbox" })).toBeVisible();
-      await expect(communications.getByRole("button", { name: "Messages" })).toBeVisible();
-      await expect(communications.getByRole("button", { name: "Notices" })).toBeVisible();
-      await expect(communications.getByRole("button", { name: route.title })).toHaveAttribute("aria-current", "page");
+      await expect(drawer.getByRole("group", { name: "Communications" })).toHaveCount(0);
+      await expect(drawer.getByRole("button", { name: "Unified Inbox" })).toHaveCount(0);
+      await expect(drawer.getByRole("button", { name: "Messages" })).toHaveCount(0);
+      await expect(drawer.getByRole("button", { name: "Notices" })).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         await page.evaluate(() => document.documentElement.clientWidth + 1),
       );

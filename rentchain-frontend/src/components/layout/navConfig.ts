@@ -9,6 +9,7 @@ export type NavItem = {
   icon?: ComponentType<{ size?: number; strokeWidth?: number }>;
   showInDrawer?: boolean;
   showInTabs?: boolean;
+  showInWorkspace?: boolean;
   requiresAdmin?: boolean;
   requiresLandlordOrAdmin?: boolean;
   requiresFeature?: string;
@@ -118,7 +119,8 @@ export const NAV_ITEMS: NavItem[] = [
     matchPaths: ["/landlord/inbox"],
     icon: Inbox,
     showInDrawer: true,
-    showInTabs: true,
+    showInTabs: false,
+    showInWorkspace: false,
     requiresLandlordOrAdmin: true,
     groupId: COMMUNICATIONS_GROUP_ID,
     groupLabel: COMMUNICATIONS_GROUP_LABEL,
@@ -147,6 +149,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: MessagesSquare,
     showInDrawer: true,
     showInTabs: false,
+    showInWorkspace: false,
     requiresRoles: ["landlord"],
     groupId: COMMUNICATIONS_GROUP_ID,
     groupLabel: COMMUNICATIONS_GROUP_LABEL,
@@ -158,6 +161,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Megaphone,
     showInDrawer: true,
     showInTabs: false,
+    showInWorkspace: false,
     requiresRoles: ["landlord"],
     groupId: COMMUNICATIONS_GROUP_ID,
     groupLabel: COMMUNICATIONS_GROUP_LABEL,

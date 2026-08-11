@@ -1,13 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Building2, ClipboardList, Inbox, LayoutDashboard, Menu, ScrollText, X } from "lucide-react";
+import { Building2, ClipboardList, LayoutDashboard, Menu, ScrollText, X } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import TopNav from "./TopNav";
 import { useAuth } from "../../context/useAuth";
 import { fetchLandlordConversations } from "../../api/messagesApi";
 import {
   COMMUNICATIONS_GROUP_ID,
-  COMMUNICATIONS_GROUP_LABEL,
-  NAV_ITEMS,
   getVisibleNavItems,
   isNavItemActive,
   resolveNavItem,
@@ -25,17 +23,10 @@ type Props = {
   unreadMessages?: boolean;
 };
 
-const unifiedInboxNavItem = NAV_ITEMS.find((item) => item.id === "unified-inbox");
-
 const landlordMobileTabs = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/properties", label: "Properties", icon: Building2 },
   { to: "/applications", label: "Applicants", icon: ScrollText },
-  {
-    to: unifiedInboxNavItem?.to || "/landlord/unified-inbox",
-    label: unifiedInboxNavItem?.label || "Unified Inbox",
-    icon: unifiedInboxNavItem?.icon || Inbox,
-  },
   { to: "/operations", label: "Operations", icon: ClipboardList },
 ];
 
@@ -122,10 +113,10 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
     });
   }
   const visibleItems = navLoading || !isLandlordWorkspace ? [] : getVisibleNavItems(effectiveRole, features);
-  const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
-  const workspaceItems = visibleItems.filter((item) => stickyWorkspaceIds.has(item.id));
-  const standardWorkspaceItems = workspaceItems.filter((item) => item.groupId !== COMMUNICATIONS_GROUP_ID);
-  const communicationsItems = workspaceItems.filter((item) => item.groupId === COMMUNICATIONS_GROUP_ID);
+  const workspaceVisibleItems = visibleItems.filter((item) => item.showInWorkspace !== false);
+  const drawerItems = workspaceVisibleItems.filter((item) => item.showInDrawer !== false);
+  const standardWorkspaceItems = workspaceVisibleItems.filter((item) => stickyWorkspaceIds.has(item.id));
+  const communicationsItems = visibleItems.filter((item) => item.groupId === COMMUNICATIONS_GROUP_ID);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
   const orderedPrimaryDrawerItems = React.useMemo(
@@ -243,7 +234,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       window.removeEventListener("resize", syncStickyOffset);
       observer?.disconnect();
     };
-  }, [workspaceItems.length, workspaceLabel]);
+  }, [standardWorkspaceItems.length, workspaceLabel]);
 
   if (navLoading) {
     return (
@@ -348,7 +339,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                 </div>
               ) : (
                 <div className="rc-landlord-drawer-links">
-                  {orderedPrimaryDrawerItems.filter((item) => item.groupId !== COMMUNICATIONS_GROUP_ID).map((item) => (
+                  {orderedPrimaryDrawerItems.map((item) => (
                     <button
                       key={item.id}
                       type="button"
@@ -359,22 +350,6 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                       {item.label}
                     </button>
                   ))}
-                  {communicationsItems.length ? (
-                    <div className="rc-landlord-drawer-group" role="group" aria-label={COMMUNICATIONS_GROUP_LABEL}>
-                      <div className="rc-landlord-drawer-group-label">{COMMUNICATIONS_GROUP_LABEL}</div>
-                      {communicationsItems.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => handleDrawerNavigation(item.to)}
-                          className={isNavItemActive(loc.pathname, item) ? "active" : ""}
-                          aria-current={isNavItemActive(loc.pathname, item) ? "page" : undefined}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
               )}
               <div className="rc-landlord-drawer-divider" />
