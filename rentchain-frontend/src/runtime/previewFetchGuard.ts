@@ -26,7 +26,9 @@ function isSameOriginPreviewProxyUrl(url: string, browserOrigin: string): boolea
   return (
     parsed.origin === browserOrigin &&
     (parsed.pathname.startsWith("/api/preview-backend/") ||
-      parsed.pathname.startsWith("/api/pr1512-notices/"))
+      parsed.pathname.startsWith("/api/pr1512-notices/") ||
+      parsed.pathname.startsWith("/api/pr1516-notices/") ||
+      parsed.pathname === "/api/pr1516-bootstrap")
   );
 }
 

@@ -202,6 +202,12 @@ export function assertPreviewBrowserRequestAvailable(inputUrl: string, method = 
   if (!isProductionApi && !isSameOriginApi) return;
 
   const configuredBase = getApiBaseUrl();
+  if (
+    configuredBase === PR1516_NOTICES_QA_API_BASE_URL &&
+    parsed.origin === origin &&
+    parsed.pathname === "/api/pr1516-bootstrap" &&
+    String(method || "GET").toUpperCase() === "GET"
+  ) return;
   const prefix = `${configuredBase}/`;
   if (parsed.origin === origin && parsed.pathname.startsWith(prefix)) {
     const backendPath = parsed.pathname.slice(configuredBase.length);
