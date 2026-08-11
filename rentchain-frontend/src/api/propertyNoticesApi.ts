@@ -5,13 +5,19 @@ export type NoticeRecipient = {
   tenantDisplayName: string;
   unitIds: string[];
   unitLabels: string[];
+  propertyIds: string[];
+  propertyLabels: string[];
+  units: Array<{ id: string; label: string; propertyId: string; propertyLabel: string }>;
   deliveryAvailability: "available" | "missing_email" | "duplicate_destination";
 };
 
 export type NoticeSummary = {
   id: string;
-  propertyId: string;
-  propertyLabel: string;
+  propertyId?: string | null;
+  propertyLabel?: string | null;
+  propertyIds: string[];
+  properties: Array<{ id: string; label: string }>;
+  propertyCount: number;
   subject: string;
   body?: string;
   status: "sending" | "completed" | "partially_failed" | "failed";
@@ -20,6 +26,7 @@ export type NoticeSummary = {
   failedCount: number;
   skippedCount: number;
   createdAtMs?: number;
+  completedAtMs?: number;
 };
 
 export type NoticeDelivery = {
@@ -28,17 +35,21 @@ export type NoticeDelivery = {
   tenantDisplayName: string;
   unitIds: string[];
   unitLabels: string[];
+  propertyIds: string[];
+  propertyLabels: string[];
+  units: Array<{ id: string; label: string; propertyId: string; propertyLabel: string }>;
   channel: "email";
   status: "pending" | "sent" | "failed" | "skipped";
   errorCategory?: string | null;
 };
 
-export async function fetchNoticeRecipients(propertyId: string, filters?: { unitIds?: string[]; tenantIds?: string[] }) {
-  const params = new URLSearchParams({ propertyId });
+export async function fetchNoticeRecipients(propertyIds: string[], filters?: { unitIds?: string[]; tenantIds?: string[] }) {
+  const params = new URLSearchParams({ propertyIds: propertyIds.join(",") });
   if (filters?.unitIds?.length) params.set("unitIds", filters.unitIds.join(","));
   if (filters?.tenantIds?.length) params.set("tenantIds", filters.tenantIds.join(","));
   return apiFetch(`/landlord/notices/recipients?${params.toString()}`) as Promise<{
-    property: { id: string; label: string };
+    properties: Array<{ id: string; label: string }>;
+    propertyBreakdown: Array<{ id: string; label: string; recipientCount: number }>;
     recipients: NoticeRecipient[];
     counts: { total: number; available: number; skipped: number };
     maxRecipients: number;
@@ -46,8 +57,8 @@ export async function fetchNoticeRecipients(propertyId: string, filters?: { unit
 }
 
 export async function fetchPropertyNotices(): Promise<NoticeSummary[]> {
-  const response = await apiFetch("/landlord/notices?limit=50");
-  return Array.isArray((response as any)?.notices) ? (response as any).notices : [];
+  const response = await apiFetch("/landlord/notices?limit=50") as { notices?: NoticeSummary[] };
+  return Array.isArray(response.notices) ? response.notices : [];
 }
 
 export async function fetchPropertyNotice(id: string): Promise<{ notice: NoticeSummary; deliveries: NoticeDelivery[] }> {
@@ -55,7 +66,7 @@ export async function fetchPropertyNotice(id: string): Promise<{ notice: NoticeS
 }
 
 export async function sendPropertyNotice(input: {
-  propertyId: string;
+  propertyIds: string[];
   subject: string;
   body: string;
   selectedUnitIds?: string[];

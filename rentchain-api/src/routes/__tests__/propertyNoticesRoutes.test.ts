@@ -64,17 +64,22 @@ const landlord = { id: "landlord-1", role: "landlord" };
 function seed() {
   collection("properties").set("property-1", { landlordId: "landlord-1", name: "Harbour House", status: "active" });
   collection("properties").set("foreign-property", { landlordId: "landlord-2", name: "Foreign" });
+  collection("properties").set("property-2", { landlordId: "landlord-1", name: "Queen Court", status: "active" });
   collection("units").set("unit-1", { landlordId: "landlord-1", propertyId: "property-1", unitNumber: "1A" });
   collection("units").set("unit-2", { landlordId: "landlord-1", propertyId: "property-1", unitNumber: "2B" });
+  collection("units").set("unit-3", { landlordId: "landlord-1", propertyId: "property-2", unitNumber: "3C" });
   collection("tenants").set("tenant-1", { landlordId: "landlord-1", fullName: "Alex Current", email: "alex@example.test" });
   collection("tenants").set("tenant-2", { landlordId: "landlord-1", fullName: "Blair Missing" });
   collection("tenants").set("tenant-ended", { landlordId: "landlord-1", fullName: "Former Tenant", email: "former@example.test" });
   collection("tenants").set("tenant-foreign", { landlordId: "landlord-2", fullName: "Foreign Tenant", email: "foreign@example.test" });
+  collection("tenants").set("tenant-3", { landlordId: "landlord-1", fullName: "Casey Current", email: "casey@example.test" });
   collection("leases").set("lease-1", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantIds: ["tenant-1", "tenant-2"], status: "active" });
   collection("leases").set("lease-duplicate", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-2", tenantId: "tenant-1", status: "active" });
   collection("leases").set("lease-ended", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-2", tenantId: "tenant-ended", status: "ended" });
   collection("leases").set("lease-foreign", { landlordId: "landlord-2", propertyId: "property-1", unitId: "unit-2", tenantId: "tenant-ended", status: "active" });
   collection("leases").set("lease-foreign-tenant", { landlordId: "landlord-2", propertyId: "property-1", unitId: "unit-2", tenantId: "tenant-foreign", status: "active" });
+  collection("leases").set("lease-property-2-shared", { landlordId: "landlord-1", propertyId: "property-2", unitId: "unit-3", tenantId: "tenant-1", status: "active" });
+  collection("leases").set("lease-property-2", { landlordId: "landlord-1", propertyId: "property-2", unitId: "unit-3", tenantId: "tenant-3", status: "active" });
 }
 
 describe("propertyNoticesRoutes", () => {
@@ -151,8 +156,33 @@ describe("propertyNoticesRoutes", () => {
     expect(multipleUnits.body.recipients).toHaveLength(2);
 
     const emptyUnit = await invoke({ method: "GET", url: "/landlord/notices/recipients?propertyId=property-1&unitIds=unit-unknown", user: landlord });
-    expect(emptyUnit.status).toBe(200);
-    expect(emptyUnit.body.recipients).toEqual([]);
+    expect(emptyUnit.status).toBe(403);
+    expect(emptyUnit.body.code).toBe("notice_recipient_not_eligible");
+  });
+
+  it("aggregates selected properties with deterministic cross-property tenant dedupe and context", async () => {
+    const response = await invoke({ method: "GET", url: "/landlord/notices/recipients?propertyIds=property-2,property-1,property-2", user: landlord });
+    expect(response.status).toBe(200);
+    expect(response.body.properties).toEqual([{ id: "property-1", label: "Harbour House" }, { id: "property-2", label: "Queen Court" }]);
+    expect(response.body.recipients.map((item: any) => item.tenantId)).toEqual(["tenant-1", "tenant-2", "tenant-3"]);
+    const shared = response.body.recipients.find((item: any) => item.tenantId === "tenant-1");
+    expect(shared.propertyIds).toEqual(["property-1", "property-2"]);
+    expect(shared.units.map((unit: any) => `${unit.propertyLabel}:${unit.label}`)).toEqual(["Harbour House:1A", "Harbour House:2B", "Queen Court:3C"]);
+    expect(response.body.propertyBreakdown).toEqual([
+      { id: "property-1", label: "Harbour House", recipientCount: 2 },
+      { id: "property-2", label: "Queen Court", recipientCount: 2 },
+    ]);
+  });
+
+  it.each([
+    ["empty", ""],
+    ["malformed", "property-1,bad/property"],
+    ["unknown", "property-1,property-unknown"],
+    ["foreign", "property-1,foreign-property"],
+  ])("fails closed for %s multi-property selection", async (_label, propertyIds) => {
+    const response = await invoke({ method: "GET", url: `/landlord/notices/recipients?propertyIds=${encodeURIComponent(propertyIds)}`, user: landlord });
+    expect([400, 403, 404]).toContain(response.status);
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it.each(["tenant-ended", "tenant-foreign", "tenant-unknown"])(
@@ -229,6 +259,33 @@ describe("propertyNoticesRoutes", () => {
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
+  it("allows exactly 100 aggregated recipients and rejects 101 without truncation", async () => {
+    collection("leases").clear();
+    collection("tenants").clear();
+    for (let index = 0; index < 100; index += 1) {
+      collection("tenants").set(`bounded-tenant-${index}`, { landlordId: "landlord-1", fullName: `Bounded ${String(index).padStart(3, "0")}`, email: `bounded-${index}@example.test` });
+      collection("leases").set(`bounded-lease-${index}`, { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: `bounded-tenant-${index}`, status: "active" });
+    }
+    const exact = await invoke({ method: "GET", url: "/landlord/notices/recipients?propertyIds=property-1,property-2", user: landlord });
+    expect(exact.status).toBe(200);
+    expect(exact.body.recipients).toHaveLength(100);
+    collection("tenants").set("bounded-tenant-100", { landlordId: "landlord-1", fullName: "Bounded 100", email: "bounded-100@example.test" });
+    collection("leases").set("bounded-lease-100", { landlordId: "landlord-1", propertyId: "property-2", unitId: "unit-3", tenantId: "bounded-tenant-100", status: "active" });
+    const over = await invoke({ method: "GET", url: "/landlord/notices/recipients?propertyIds=property-1,property-2", user: landlord });
+    expect(over.status).toBe(422);
+    expect(over.body).toEqual({ ok: false, error: "Recipient limit exceeded", maxRecipients: 100 });
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty and over-cap property arrays", async () => {
+    const empty = await invoke({ method: "POST", url: "/landlord/notices", user: landlord, body: { propertyIds: [], subject: "Empty", body: "No properties.", idempotencyKey: "request_empty_properties_123" } });
+    expect(empty.status).toBe(400);
+    for (let index = 0; index < 26; index += 1) collection("properties").set(`many-property-${index}`, { landlordId: "landlord-1", name: `Property ${index}` });
+    const over = await invoke({ method: "GET", url: `/landlord/notices/recipients?propertyIds=${Array.from({ length: 26 }, (_, index) => `many-property-${index}`).join(",")}`, user: landlord });
+    expect(over.status).toBe(400);
+    expect(over.body.maxProperties).toBe(25);
+  });
+
   it("creates one private delivery per deduped recipient and is idempotent", async () => {
     const request = { propertyId: "property-1", subject: "Water shutdown", body: "Water is off at noon.", idempotencyKey: "request_1234567890" };
     const first = await invoke({ method: "POST", url: "/landlord/notices", user: landlord, body: request });
@@ -255,6 +312,44 @@ describe("propertyNoticesRoutes", () => {
     expect(collection("propertyNotices")).toHaveLength(1);
     expect(collection("propertyNoticeDeliveries")).toHaveLength(2);
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("canonicalizes reordered multi-property and filter inputs into one campaign snapshot", async () => {
+    const base = { subject: "Portfolio update", body: "Shared operational update.", idempotencyKey: "request_multi_order_123" };
+    const first = await invoke({ method: "POST", url: "/landlord/notices", user: landlord, body: { ...base, propertyIds: ["property-2", "property-1"], selectedTenantIds: ["tenant-3", "tenant-1"] } });
+    const replay = await invoke({ method: "POST", url: "/landlord/notices", user: landlord, body: { ...base, propertyIds: ["property-1", "property-2", "property-1"], selectedTenantIds: ["tenant-1", "tenant-3"] } });
+    expect([first.status, replay.status]).toEqual([201, 200]);
+    expect(first.body.notice.id).toBe(replay.body.notice.id);
+    expect(first.body.notice.properties).toEqual([{ id: "property-1", label: "Harbour House" }, { id: "property-2", label: "Queen Court" }]);
+    expect(first.body.notice.propertyCount).toBe(2);
+    expect(collection("propertyNotices")).toHaveLength(1);
+    expect(collection("propertyNoticeDeliveries")).toHaveLength(2);
+    expect(sendEmailMock).toHaveBeenCalledTimes(2);
+    for (const [input] of sendEmailMock.mock.calls) {
+      expect(input.subject).toBe("Operational Notice: Portfolio update");
+      expect(input.subject).not.toContain(base.body);
+      expect(input.cc).toBeUndefined();
+      expect(input.bcc).toBeUndefined();
+    }
+  });
+
+  it("serializes identical concurrent multi-property requests", async () => {
+    const request = { propertyIds: ["property-2", "property-1"], selectedTenantIds: ["tenant-1", "tenant-3"], subject: "Concurrent portfolio", body: "Synthetic only.", idempotencyKey: "request_multi_concurrent_123" };
+    const responses = await Promise.all([
+      invoke({ method: "POST", url: "/landlord/notices", user: landlord, body: request }),
+      invoke({ method: "POST", url: "/landlord/notices", user: landlord, body: { ...request, propertyIds: [...request.propertyIds].reverse(), selectedTenantIds: [...request.selectedTenantIds].reverse() } }),
+    ]);
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 201]);
+    expect(collection("propertyNotices")).toHaveLength(1);
+    expect(collection("propertyNoticeDeliveries")).toHaveLength(2);
+    expect(sendEmailMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["Line one\nBcc: injected@example.test", "Line one\rLine two"])("rejects unsafe subject %j before persistence or delivery", async (subject) => {
+    const response = await invoke({ method: "POST", url: "/landlord/notices", user: landlord, body: { propertyIds: ["property-1"], subject, body: "Body only", idempotencyKey: "request_subject_safe_123" } });
+    expect(response.status).toBe(400);
+    expect(collection("propertyNotices")).toHaveLength(0);
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it("records normalized partial failure without exposing the provider error", async () => {

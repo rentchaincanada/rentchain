@@ -17,6 +17,7 @@ import {
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY, TENANT_TOKEN_KEY } from "../lib/authKeys";
 import { clearAuthToken, setAuthToken, TOKEN_KEY } from "../lib/authToken";
 import { isPublicRoutePath } from "../lib/publicRoute";
+import { clearPr1516BrowserQaSession, resolvePr1516BrowserQaUser } from "../runtime/pr1516BrowserQaBootstrap";
 
 const LANDLORD_WELCOME_PENDING_KEY = "rentchain.landlordWelcome.pending";
 
@@ -265,7 +266,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } catch {
           // ignore
         }
-        if (import.meta.env.VITE_PR1512_NOTICES_QA === "true") {
+        const pr1516QaUser = resolvePr1516BrowserQaUser(window.sessionStorage, import.meta.env, window.location.hostname);
+        if (pr1516QaUser) {
+          setUser(pr1516QaUser);
+          setToken(null);
+          setAuthStatus("authed");
+        } else if (import.meta.env.VITE_PR1512_NOTICES_QA === "true") {
           setUser({ id: "qa-pr1512-landlord", landlordId: "qa-pr1512-landlord", email: "qa-pr1512-landlord@example.invalid", role: "landlord", plan: "starter", approved: true });
           setToken(null);
           setAuthStatus("authed");
@@ -509,6 +515,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const currentToken = getStoredToken();
 
     clearStoredToken();
+    clearPr1516BrowserQaSession();
     setToken(null);
     setUser(null);
     setAuthStatus("guest");

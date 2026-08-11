@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   PREVIEW_API_BASE_URL,
   PR1512_NOTICES_QA_API_BASE_URL,
+  PR1516_NOTICES_QA_API_BASE_URL,
   PRODUCTION_API_BASE_URL,
   PreviewApiRouteUnavailableError,
   assertPreviewBrowserRequestAvailable,
   isPreviewAuthPath,
   isPreviewAuthRequest,
   isPr1512QaReadRequest,
+  isPr1516QaReadRequest,
   resolveConfiguredApiBase,
 } from "./baseUrl";
 
@@ -34,6 +36,10 @@ describe("resolveConfiguredApiBase", () => {
 
   it("accepts the exact PR #1512 Preview-only proxy base", () => {
     expect(resolveConfiguredApiBase({ apiBaseUrl: PR1512_NOTICES_QA_API_BASE_URL, deployEnv: "preview", isDevelopment: false })).toBe(PR1512_NOTICES_QA_API_BASE_URL);
+  });
+
+  it("accepts the exact PR #1516 Preview-only proxy base", () => {
+    expect(resolveConfiguredApiBase({ apiBaseUrl: PR1516_NOTICES_QA_API_BASE_URL, deployEnv: "preview", isDevelopment: false })).toBe(PR1516_NOTICES_QA_API_BASE_URL);
   });
 
   it.each([
@@ -86,6 +92,20 @@ describe("PR #1512 QA read scope", () => {
 
   it.each([["/api/landlord/notices", "POST"], ["/api/admin/users", "GET"], ["/api/properties", "DELETE"]])(
     "rejects %s with %s", (path, method) => expect(isPr1512QaReadRequest(path, method)).toBe(false),
+  );
+});
+
+describe("PR #1516 QA read scope", () => {
+  it.each([
+    ["/api/me", "GET"],
+    ["/api/properties?status=active", "GET"],
+    ["/api/landlord/notices?limit=50", "GET"],
+    ["/api/landlord/notices/recipients?propertyIds=fixed-a,fixed-b", "GET"],
+    [`/api/landlord/notices/notice_${"a".repeat(64)}`, "GET"],
+  ])("allows %s with %s", (path, method) => expect(isPr1516QaReadRequest(path, method)).toBe(true));
+
+  it.each([["/api/landlord/notices", "POST"], ["/api/admin/users", "GET"], ["/api/properties", "DELETE"]])(
+    "rejects %s with %s", (path, method) => expect(isPr1516QaReadRequest(path, method)).toBe(false),
   );
 });
 

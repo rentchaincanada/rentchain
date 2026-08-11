@@ -10,6 +10,10 @@ export const PR1512_PREVIEW_QA_SCOPE = "pr1512-property-notices";
 export const PR1512_PREVIEW_QA_IDENTITY_ALIAS = "pr1512-landlord";
 export const PR1512_PREVIEW_QA_LANDLORD_ID = "qa-pr1512-landlord";
 export const PR1512_PREVIEW_QA_SERVICE_PATTERN = /^rentchain-pr1512-notices-qa-[a-f0-9]{8}$/;
+export const PR1516_PREVIEW_QA_SCOPE = "pr1516-multi-property-notices";
+export const PR1516_PREVIEW_QA_IDENTITY_ALIAS = "pr1516-landlord";
+export const PR1516_PREVIEW_QA_LANDLORD_ID = "qa-pr1516-landlord";
+export const PR1516_PREVIEW_QA_SERVICE_PATTERN = /^rentchain-pr1516-notices-qa-[a-f0-9]{8}$/;
 
 const PREVIEW_PROJECT_ID = "rentchain-preview";
 const PRODUCTION_PROJECT_ID = "project-0d9658de-af29-4dc0-a99";
@@ -75,6 +79,19 @@ const previewQaContracts: readonly PreviewQaContract[] = [
       "POST:landlord-notice-create",
     ]),
   },
+  {
+    scope: PR1516_PREVIEW_QA_SCOPE,
+    servicePattern: PR1516_PREVIEW_QA_SERVICE_PATTERN,
+    selector: PR1516_PREVIEW_QA_IDENTITY_ALIAS,
+    landlordId: PR1516_PREVIEW_QA_LANDLORD_ID,
+    email: "qa-pr1516-landlord@example.invalid",
+    allowedOperations: new Set([
+      "GET:landlord-notice-recipients",
+      "GET:landlord-notice-list",
+      "GET:landlord-notice-detail",
+      "POST:landlord-notice-create",
+    ]),
+  },
 ];
 
 type PreviewQaDecision =
@@ -123,18 +140,24 @@ export function decidePreviewQaAuth(input: PreviewQaDecisionInput): PreviewQaDec
   return { kind: "allow" };
 }
 
-export function isPr1512PreviewQaRuntime(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isPropertyNoticesPreviewQaRuntime(env: NodeJS.ProcessEnv = process.env): boolean {
   const service = String(env.K_SERVICE || "").trim();
   const expectedService = String(env.PREVIEW_QA_EXPECTED_SERVICE || "").trim();
+  const scope = String(env.PREVIEW_QA_AUTH_SCOPE || "").trim();
+  const servicePattern = scope === PR1512_PREVIEW_QA_SCOPE
+    ? PR1512_PREVIEW_QA_SERVICE_PATTERN
+    : scope === PR1516_PREVIEW_QA_SCOPE
+      ? PR1516_PREVIEW_QA_SERVICE_PATTERN
+      : null;
   return (
     String(env.PREVIEW_QA_AUTH_ENABLED || "").trim().toLowerCase() === "true" &&
-    String(env.PREVIEW_QA_AUTH_SCOPE || "").trim() === PR1512_PREVIEW_QA_SCOPE &&
+    Boolean(servicePattern) &&
     String(env.APP_ENV || "").trim().toLowerCase() === "preview" &&
     String(env.GOOGLE_CLOUD_PROJECT || env.GCLOUD_PROJECT || "").trim() === PREVIEW_PROJECT_ID &&
     service !== PERMANENT_PREVIEW_SERVICE &&
     expectedService !== PERMANENT_PREVIEW_SERVICE &&
     service === expectedService &&
-    PR1512_PREVIEW_QA_SERVICE_PATTERN.test(service) &&
+    Boolean(servicePattern?.test(service)) &&
     String(env.FIRESTORE_ENABLED || "").trim().toLowerCase() === "true" &&
     String(env.FIRESTORE_DATABASE_ID || "").trim() === "(default)"
   );

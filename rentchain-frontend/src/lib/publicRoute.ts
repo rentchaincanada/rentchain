@@ -28,6 +28,7 @@ const PUBLIC_PREFIXES = [
   "/tenant/login",
   "/tenant/magic",
   "/tenant/invite",
+  "/__qa",
 ];
 
 export function isPublicRoutePath(pathname?: string | null): boolean {
