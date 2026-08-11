@@ -40,7 +40,8 @@ for (const route of communicationsRoutes) {
       const workspaceNav = page.getByRole("navigation", { name: "Workspace navigation" });
       await expect(workspaceNav.getByRole("group", { name: "Communications" })).toHaveCount(0);
       await expect(workspaceNav.getByText("COMMUNICATIONS")).toHaveCount(0);
-      await page.getByRole("button", { name: "Communications" }).click();
+      const trigger = page.getByRole("button", { name: "Communications" });
+      await trigger.click();
       const communications = page.getByRole("menu", { name: "Communications destinations" });
       await expect(communications.getByRole("menuitem")).toHaveCount(3);
       await expect(communications.getByRole("menuitem", { name: "Unified Inbox" })).toBeVisible();
@@ -64,12 +65,28 @@ for (const route of communicationsRoutes) {
       expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
       const menuGeometry = await communications.evaluate((menu) => {
         const rect = menu.getBoundingClientRect();
-        return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, viewportWidth: innerWidth, viewportHeight: innerHeight };
+        const first = menu.querySelector<HTMLElement>('[role="menuitem"]');
+        const firstRect = first?.getBoundingClientRect();
+        const topElement = firstRect ? document.elementFromPoint(firstRect.left + firstRect.width / 2, firstRect.top + firstRect.height / 2) : null;
+        return {
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+          viewportWidth: innerWidth,
+          viewportHeight: innerHeight,
+          firstItemReceivesPointer: Boolean(topElement?.closest('[role="menuitem"]') === first),
+          portalParent: menu.parentElement?.tagName,
+        };
       });
+      const triggerBottom = await trigger.evaluate((element) => element.getBoundingClientRect().bottom);
       expect(menuGeometry.left).toBeGreaterThanOrEqual(0);
       expect(menuGeometry.right).toBeLessThanOrEqual(menuGeometry.viewportWidth);
       expect(menuGeometry.top).toBeGreaterThanOrEqual(0);
       expect(menuGeometry.bottom).toBeLessThanOrEqual(menuGeometry.viewportHeight);
+      expect(menuGeometry.top).toBeGreaterThanOrEqual(triggerBottom + 7);
+      expect(menuGeometry.firstItemReceivesPointer).toBe(true);
+      expect(menuGeometry.portalParent).toBe("BODY");
     });
   }
 }

@@ -140,17 +140,55 @@
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
-.rc-messages-recipient-list button.is-selected {
-  border-color: #2563eb;
-  background: rgba(37, 99, 235, 0.1);
-}
-
 .rc-messages-recipient-name,
 .rc-messages-recipient-context {
   display: block;
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: normal;
+}
+
+.rc-messages-selected-recipient {
+  display: grid;
+  gap: 8px;
+}
+
+.rc-messages-selected-recipient-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.rc-messages-selected-recipient-heading button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid rgba(37, 99, 235, 0.48);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.rc-messages-selected-recipient-heading button:hover,
+.rc-messages-selected-recipient-heading button:focus-visible {
+  border-color: #2563eb;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.rc-messages-selected-recipient-card {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(37, 99, 235, 0.48);
+  border-radius: 12px;
+  background: rgba(37, 99, 235, 0.08);
 }
 
 .rc-messages-recipient-name {

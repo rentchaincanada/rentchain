@@ -89,6 +89,7 @@ describe("TopNav", () => {
     expect(screen.getByRole("menuitem", { name: "Messages" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("menuitem", { name: "Notices" })).toHaveAttribute("href", "/notices");
     expect(menu).toBeInTheDocument();
+    expect(menu.parentElement).toBe(document.body);
   });
 
   it("replaces the prominent account text action with a scheduling shortcut", async () => {

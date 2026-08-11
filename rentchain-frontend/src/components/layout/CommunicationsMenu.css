@@ -43,15 +43,15 @@
 }
 
 .rc-communications-menu__panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
+  position: fixed;
   z-index: 4300;
   display: grid;
   gap: 4px;
   width: max-content;
   min-width: 210px;
   max-width: min(280px, calc(100vw - 24px));
+  max-height: calc(100dvh - 12px);
+  overflow-y: auto;
   padding: 8px;
   border: 1px solid rgba(91, 70, 48, 0.18);
   border-radius: 14px;
@@ -90,9 +90,5 @@
     min-height: 38px;
     padding: 7px 9px;
     font-size: 0.72rem;
-  }
-
-  .rc-communications-menu--mobile .rc-communications-menu__panel {
-    right: -52px;
   }
 }

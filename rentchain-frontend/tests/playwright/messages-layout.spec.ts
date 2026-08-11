@@ -295,8 +295,20 @@ test("real Messages page preserves deep links, Back, composer access, and bounde
   await expect(compose.getByRole("button", { name: "Send Message" })).toBeVisible();
   await compose.getByPlaceholder("Search by tenant, property, or unit").fill("4B");
   await compose.getByRole("button", { name: /Synthetic Active Tenant With/ }).click();
-  await compose.getByPlaceholder("Write your message").fill("Synthetic first outbound message");
-  await compose.getByRole("button", { name: "Send Message" }).click();
+  await expect(compose.getByText("Selected recipient")).toBeVisible();
+  await expect(compose.getByPlaceholder("Search by tenant, property, or unit")).toHaveCount(0);
+  await expect(compose.locator(".rc-messages-recipient-list button")).toHaveCount(0);
+  await expect(compose.getByText(/Synthetic Active Tenant With/)).toBeVisible();
+  await expect(compose.getByText(/Harbour Synthetic Property With An Intentionally Long Waterfront Name/)).toBeVisible();
+  await compose.getByPlaceholder("Write your message").fill("Harmless unsent draft retained during recipient change");
+  await compose.getByRole("button", { name: "Change" }).click();
+  await expect(compose.getByPlaceholder("Search by tenant, property, or unit")).toBeFocused();
+  await expect(compose.getByPlaceholder("Write your message")).toHaveValue("Harmless unsent draft retained during recipient change");
+  await expect(compose.locator(".rc-messages-recipient-list button")).toHaveCount(6);
+  await compose.getByRole("button", { name: /Synthetic Active Tenant 2/ }).click();
+  await expect(compose.getByText("Selected recipient")).toBeVisible();
+  await expect(compose.getByText("Synthetic Active Tenant 2")).toBeVisible();
+  await compose.getByRole("button", { name: "Cancel" }).click();
   await expect(compose).not.toBeVisible();
   await expect(page).toHaveURL(/threadId=conv-1/);
 

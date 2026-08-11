@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { isNavRouteActive } from "./navConfig";
@@ -19,8 +20,20 @@ export function CommunicationsMenu({ className = "", hasUnread = false }: Props)
   const location = useLocation();
   const [open, setOpen] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const panelRef = React.useRef<HTMLDivElement | null>(null);
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const menuId = React.useId();
+  const [panelPosition, setPanelPosition] = React.useState({ top: 0, right: 12 });
+
+  const updatePanelPosition = React.useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    setPanelPosition({
+      top: rect.bottom + 8,
+      right: Math.max(12, window.innerWidth - rect.right),
+    });
+  }, []);
 
   const isActive = React.useCallback(
     (item: (typeof COMMUNICATION_LINKS)[number]) =>
@@ -35,7 +48,8 @@ export function CommunicationsMenu({ className = "", hasUnread = false }: Props)
   React.useEffect(() => {
     if (!open) return undefined;
     const handlePointerDown = (event: MouseEvent | TouchEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -52,10 +66,21 @@ export function CommunicationsMenu({ className = "", hasUnread = false }: Props)
     };
   }, [open]);
 
+  React.useLayoutEffect(() => {
+    if (!open) return undefined;
+    updatePanelPosition();
+    window.addEventListener("resize", updatePanelPosition);
+    window.addEventListener("scroll", updatePanelPosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePanelPosition);
+      window.removeEventListener("scroll", updatePanelPosition, true);
+    };
+  }, [open, updatePanelPosition]);
+
   React.useEffect(() => {
     if (!open) return;
-    const current = rootRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
-    const first = rootRef.current?.querySelector<HTMLElement>('[role="menuitem"]');
+    const current = panelRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
+    const first = panelRef.current?.querySelector<HTMLElement>('[role="menuitem"]');
     (current || first)?.focus();
   }, [open]);
 
@@ -69,14 +94,24 @@ export function CommunicationsMenu({ className = "", hasUnread = false }: Props)
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (!open) updatePanelPosition();
+          setOpen((current) => !current);
+        }}
       >
         <span>Communications</span>
         <ChevronDown size={15} aria-hidden="true" />
         {hasUnread ? <span className="rc-communications-menu__unread" aria-hidden="true" /> : null}
       </button>
-      {open ? (
-        <div id={menuId} className="rc-communications-menu__panel" role="menu" aria-label="Communications destinations">
+      {open ? createPortal(
+        <div
+          ref={panelRef}
+          id={menuId}
+          className="rc-communications-menu__panel"
+          role="menu"
+          aria-label="Communications destinations"
+          style={{ top: panelPosition.top, right: panelPosition.right }}
+        >
           {COMMUNICATION_LINKS.map((item) => {
             const active = isActive(item);
             return (
@@ -93,7 +128,8 @@ export function CommunicationsMenu({ className = "", hasUnread = false }: Props)
               </Link>
             );
           })}
-        </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );

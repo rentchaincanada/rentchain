@@ -142,6 +142,26 @@ describe("MessagesPage", () => {
 
   it("supports first-message compose when the landlord has no conversations", async () => {
     mocks.fetchLandlordConversationsMock.mockResolvedValue([]);
+    mocks.fetchLandlordMessageRecipientsMock.mockResolvedValue([
+      {
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        tenantDisplayName: "Taylor Tenant",
+        propertyId: "prop-1",
+        propertyDisplayLabel: "Harbour View",
+        unitId: "unit-1",
+        unitDisplayLabel: "Unit 2A",
+      },
+      {
+        leaseId: "lease-2",
+        tenantId: "tenant-2",
+        tenantDisplayName: "Jordan Tenant",
+        propertyId: "prop-2",
+        propertyDisplayLabel: "North Point",
+        unitId: "unit-2",
+        unitDisplayLabel: "Unit 9",
+      },
+    ]);
     mocks.fetchLandlordConversationMessagesMock.mockResolvedValue({
       conversation: {
         id: "landlord-1__tenant-1__unit-1",
@@ -172,7 +192,15 @@ describe("MessagesPage", () => {
 
     fireEvent.change(screen.getByPlaceholderText("Search by tenant, property, or unit"), { target: { value: "2A" } });
     fireEvent.click(screen.getByRole("button", { name: /Taylor Tenant/ }));
+    expect(screen.getByText("Selected recipient")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Search by tenant, property, or unit")).not.toBeInTheDocument();
+    expect(screen.queryByText("Jordan Tenant")).not.toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText("Write your message"), { target: { value: "Welcome to RentChain." } });
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.getByPlaceholderText("Search by tenant, property, or unit")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Write your message")).toHaveValue("Welcome to RentChain.");
+    expect(screen.getByText("Jordan Tenant")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Taylor Tenant/ }));
     fireEvent.click(screen.getByRole("button", { name: "Send Message" }));
     await flushAsync();
 

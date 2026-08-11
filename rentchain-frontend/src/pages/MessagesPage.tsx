@@ -187,6 +187,8 @@ export default function MessagesPage() {
   const hasLoadedThreadRef = useRef(false);
   const selectedIdRef = useRef<string | null>(null);
   const lastMarkedReadRef = useRef<Record<string, number>>({});
+  const recipientSearchRef = useRef<HTMLInputElement | null>(null);
+  const firstMessageRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -382,6 +384,17 @@ export default function MessagesPage() {
       .includes(recipientSearch.trim().toLowerCase())
   );
 
+  const selectRecipient = (key: string) => {
+    setSelectedRecipientKey(key);
+    window.requestAnimationFrame(() => firstMessageRef.current?.focus());
+  };
+
+  const changeRecipient = () => {
+    setSelectedRecipientKey(null);
+    setRecipientSearch("");
+    window.requestAnimationFrame(() => recipientSearchRef.current?.focus());
+  };
+
   const openCompose = async () => {
     setComposeOpen(true);
     setComposeError(null);
@@ -465,41 +478,57 @@ export default function MessagesPage() {
               </button>
             </div>
             {composeError ? <div className="rc-messages-compose-error" role="alert">{composeError}</div> : null}
-            <label className="rc-messages-compose-field">
-              <span>Search tenants</span>
-              <input
-                value={recipientSearch}
-                onChange={(event) => setRecipientSearch(event.target.value)}
-                placeholder="Search by tenant, property, or unit"
-              />
-            </label>
-            <div className="rc-messages-recipient-list" aria-label="Eligible tenants">
-              {loadingRecipients ? (
-                <div>Loading eligible tenants…</div>
-              ) : filteredRecipients.length === 0 ? (
-                <div>No eligible current tenants found.</div>
-              ) : filteredRecipients.map((recipient) => {
-                const key = recipientKey(recipient);
-                const selected = key === selectedRecipientKey;
-                return (
-                  <button
-                    type="button"
-                    key={key}
-                    className={selected ? "is-selected" : ""}
-                    aria-pressed={selected}
-                    onClick={() => setSelectedRecipientKey(key)}
-                  >
-                    <strong className="rc-messages-recipient-name">{recipient.tenantDisplayName}</strong>
-                    <span className="rc-messages-recipient-context">
-                      {[recipient.propertyDisplayLabel, recipient.unitDisplayLabel].filter(Boolean).join(" / ")}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            {selectedRecipient ? (
+              <section className="rc-messages-selected-recipient" aria-labelledby="selected-recipient-label">
+                <div className="rc-messages-selected-recipient-heading">
+                  <span id="selected-recipient-label">Selected recipient</span>
+                  <button type="button" onClick={changeRecipient}>Change</button>
+                </div>
+                <div className="rc-messages-selected-recipient-card">
+                  <strong className="rc-messages-recipient-name">{selectedRecipient.tenantDisplayName}</strong>
+                  <span className="rc-messages-recipient-context">
+                    {[selectedRecipient.propertyDisplayLabel, selectedRecipient.unitDisplayLabel].filter(Boolean).join(" / ")}
+                  </span>
+                </div>
+              </section>
+            ) : (
+              <>
+                <label className="rc-messages-compose-field">
+                  <span>Search tenants</span>
+                  <input
+                    ref={recipientSearchRef}
+                    value={recipientSearch}
+                    onChange={(event) => setRecipientSearch(event.target.value)}
+                    placeholder="Search by tenant, property, or unit"
+                  />
+                </label>
+                <div className="rc-messages-recipient-list" aria-label="Eligible tenants">
+                  {loadingRecipients ? (
+                    <div>Loading eligible tenants…</div>
+                  ) : filteredRecipients.length === 0 ? (
+                    <div>No eligible current tenants found.</div>
+                  ) : filteredRecipients.map((recipient) => {
+                    const key = recipientKey(recipient);
+                    return (
+                      <button
+                        type="button"
+                        key={key}
+                        onClick={() => selectRecipient(key)}
+                      >
+                        <strong className="rc-messages-recipient-name">{recipient.tenantDisplayName}</strong>
+                        <span className="rc-messages-recipient-context">
+                          {[recipient.propertyDisplayLabel, recipient.unitDisplayLabel].filter(Boolean).join(" / ")}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
             <label className="rc-messages-compose-field">
               <span>Message</span>
               <textarea
+                ref={firstMessageRef}
                 value={firstMessage}
                 onChange={(event) => setFirstMessage(event.target.value)}
                 maxLength={4000}
