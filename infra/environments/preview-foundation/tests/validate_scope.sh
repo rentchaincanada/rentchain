@@ -82,12 +82,13 @@ if rg -n 'allUsers|allAuthenticatedUsers|google_storage_bucket|google_firestore_
 fi
 
 vercel_identity_file="$root_dir/vercel_preview_identity.tf"
-test "$(rg -No '^resource "' "$vercel_identity_file" | wc -l | tr -d ' ')" = "6"
+test "$(rg -No '^resource "' "$vercel_identity_file" | wc -l | tr -d ' ')" = "7"
 test "$(rg -No '^resource "google_iam_workload_identity_pool" "vercel_preview_proxy"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
 test "$(rg -No '^resource "google_iam_workload_identity_pool_provider" "vercel_preview"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
 test "$(rg -No '^resource "google_service_account" "vercel_preview_proxy"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
 test "$(rg -No '^resource "google_service_account_iam_member" "vercel_preview_proxy_(workload_identity_user|openid_token_creator)"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "2"
 test "$(rg -No '^resource "google_cloud_run_v2_service_iam_member" "vercel_preview_proxy_invoker"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_cloud_run_v2_service_iam_member" "pr1516_vercel_proxy_invoker"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
 
 rg -q 'workload_identity_pool_id = "vercel-preview-proxy"' "$vercel_identity_file"
 rg -q 'workload_identity_pool_provider_id = "vercel-preview"' "$vercel_identity_file"
@@ -95,6 +96,13 @@ rg -q 'vercel_preview_issuer[[:space:]]*=[[:space:]]*"https://oidc\.vercel\.com/
 test "$(rg -No 'allowed_audiences' "$vercel_identity_file" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No 'google_service_account_iam_member\.vercel_preview_proxy_(workload_identity_user|openid_token_creator)\.service_account_id' "$root_dir/checks.tf" | wc -l | tr -d ' ')" = "0"
 rg -U -q 'basename\(\n        google_cloud_run_v2_service_iam_member\.vercel_preview_proxy_invoker\.name\n      \) == "rentchain-preview-backend"' "$root_dir/checks.tf"
+rg -q 'name     = "rentchain-pr1516-notices-qa-a2695c6c"' "$vercel_identity_file"
+rg -q 'google_cloud_run_v2_service_iam_member\.pr1516_vercel_proxy_invoker\.project == "rentchain-preview"' "$root_dir/checks.tf"
+rg -q 'google_cloud_run_v2_service_iam_member\.pr1516_vercel_proxy_invoker\.location == "northamerica-northeast1"' "$root_dir/checks.tf"
+rg -q 'basename\(google_cloud_run_v2_service_iam_member\.pr1516_vercel_proxy_invoker\.name\) == "rentchain-pr1516-notices-qa-a2695c6c"' "$root_dir/checks.tf"
+rg -q 'google_cloud_run_v2_service_iam_member\.pr1516_vercel_proxy_invoker\.role == "roles/run.invoker"' "$root_dir/checks.tf"
+rg -q 'google_cloud_run_v2_service_iam_member\.pr1516_vercel_proxy_invoker\.member == "serviceAccount:vercel-preview-proxy@rentchain-preview.iam.gserviceaccount.com"' "$root_dir/checks.tf"
+test "$(rg -No 'role     = "roles/run\.invoker"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "2"
 grep -Fq 'length(google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping) == 4' "$root_dir/checks.tf"
 grep -Fq 'attribute_mapping["google.subject"] == "assertion.sub"' "$root_dir/checks.tf"
 grep -Fq 'attribute_mapping["attribute.owner_id"] == "assertion.owner_id"' "$root_dir/checks.tf"
