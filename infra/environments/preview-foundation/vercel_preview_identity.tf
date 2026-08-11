@@ -92,3 +92,13 @@ resource "google_cloud_run_v2_service_iam_member" "vercel_preview_proxy_invoker"
   role     = "roles/run.invoker"
   member   = google_service_account.vercel_preview_proxy.member
 }
+
+# Temporary service-level access for PR #1516 isolated multi-property Notices
+# browser QA. Remove through Terraform/HCP after the PR QA/release lifecycle.
+resource "google_cloud_run_v2_service_iam_member" "pr1516_vercel_proxy_invoker" {
+  project  = var.project_id
+  location = local.preview_deployment_region
+  name     = "rentchain-pr1516-notices-qa-a2695c6c"
+  role     = "roles/run.invoker"
+  member   = google_service_account.vercel_preview_proxy.member
+}
