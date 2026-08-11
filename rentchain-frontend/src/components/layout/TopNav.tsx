@@ -9,6 +9,7 @@ import { colors, radius, shadows, spacing, text, layout, blur } from "../../styl
 import { RentChainLogo } from "../brand/RentChainLogo";
 import { fetchLandlordConversations } from "../../api/messagesApi";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { CommunicationsMenu } from "./CommunicationsMenu";
 import "./TopNav.css";
 
 function roleLabel(raw: string): string {
@@ -71,13 +72,13 @@ const TopNav: React.FC = () => {
   const accountInitials = userInitials(user);
   const accountButtonLabel = accountName ? `Account menu for ${accountName}` : "Account menu";
   const canShowSchedulingShortcut = authResolved && (effectiveRole === "landlord" || effectiveRole === "admin");
-  const canShowMessagesShortcut =
+  const canShowCommunications =
     authResolved &&
-    (effectiveRole === "landlord" || effectiveRole === "admin") &&
-    features?.messaging !== false;
+    (effectiveRole === "landlord" || effectiveRole === "admin");
+  const canLoadUnreadMessages = canShowCommunications && features?.messaging !== false;
 
   React.useEffect(() => {
-    if (!canShowMessagesShortcut) {
+    if (!canLoadUnreadMessages) {
       setHasUnreadMessages(false);
       return;
     }
@@ -98,7 +99,7 @@ const TopNav: React.FC = () => {
       mounted = false;
       window.clearInterval(interval);
     };
-  }, [canShowMessagesShortcut]);
+  }, [canLoadUnreadMessages]);
 
   return (
     <>
@@ -144,40 +145,7 @@ const TopNav: React.FC = () => {
             >
               Role: {roleBadge}
             </span>
-            {canShowMessagesShortcut ? (
-              <Button
-                className="rc-top-nav-optional-action"
-                variant="secondary"
-                onClick={() => navigate("/landlord/inbox")}
-                aria-label={hasUnreadMessages ? "Inbox (unread)" : "Inbox"}
-                style={{
-                  position: "relative",
-                  borderRadius: radius.pill,
-                  border: `1px solid ${colors.border}`,
-                  background: colors.panel,
-                  color: text.primary,
-                  boxShadow: shadows.sm,
-                  fontWeight: 700,
-                  paddingRight: hasUnreadMessages ? "16px" : undefined,
-                }}
-              >
-                Inbox
-                {hasUnreadMessages ? (
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      position: "absolute",
-                      top: 8,
-                      right: 8,
-                      width: 8,
-                      height: 8,
-                      borderRadius: 999,
-                      background: colors.accent,
-                    }}
-                  />
-                ) : null}
-              </Button>
-            ) : null}
+            {canShowCommunications ? <CommunicationsMenu hasUnread={hasUnreadMessages} /> : null}
             {canShowSchedulingShortcut ? (
               <Button
                 className="rc-top-nav-optional-action"

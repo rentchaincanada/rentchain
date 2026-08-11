@@ -142,6 +142,26 @@ describe("MessagesPage", () => {
 
   it("supports first-message compose when the landlord has no conversations", async () => {
     mocks.fetchLandlordConversationsMock.mockResolvedValue([]);
+    mocks.fetchLandlordMessageRecipientsMock.mockResolvedValue([
+      {
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        tenantDisplayName: "Taylor Tenant",
+        propertyId: "prop-1",
+        propertyDisplayLabel: "Harbour View",
+        unitId: "unit-1",
+        unitDisplayLabel: "Unit 2A",
+      },
+      {
+        leaseId: "lease-2",
+        tenantId: "tenant-2",
+        tenantDisplayName: "Jordan Tenant",
+        propertyId: "prop-2",
+        propertyDisplayLabel: "North Point",
+        unitId: "unit-2",
+        unitDisplayLabel: "Unit 9",
+      },
+    ]);
     mocks.fetchLandlordConversationMessagesMock.mockResolvedValue({
       conversation: {
         id: "landlord-1__tenant-1__unit-1",
@@ -166,10 +186,21 @@ describe("MessagesPage", () => {
     expect(mocks.fetchLandlordMessageRecipientsMock).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("dialog", { name: "New message" })).toBeInTheDocument();
     expect(screen.getByText("Harbour View / Unit 2A")).toBeInTheDocument();
+    const recipient = screen.getByRole("button", { name: /Taylor Tenant/ });
+    expect(within(recipient).getByText("Taylor Tenant")).toHaveClass("rc-messages-recipient-name");
+    expect(within(recipient).getByText("Harbour View / Unit 2A")).toHaveClass("rc-messages-recipient-context");
 
     fireEvent.change(screen.getByPlaceholderText("Search by tenant, property, or unit"), { target: { value: "2A" } });
     fireEvent.click(screen.getByRole("button", { name: /Taylor Tenant/ }));
+    expect(screen.getByText("Selected recipient")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Search by tenant, property, or unit")).not.toBeInTheDocument();
+    expect(screen.queryByText("Jordan Tenant")).not.toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText("Write your message"), { target: { value: "Welcome to RentChain." } });
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.getByPlaceholderText("Search by tenant, property, or unit")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Write your message")).toHaveValue("Welcome to RentChain.");
+    expect(screen.getByText("Jordan Tenant")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Taylor Tenant/ }));
     fireEvent.click(screen.getByRole("button", { name: "Send Message" }));
     await flushAsync();
 
@@ -182,6 +213,33 @@ describe("MessagesPage", () => {
     expect(screen.getByTestId("location")).toHaveTextContent(
       "/messages?threadId=landlord-1__tenant-1__unit-1"
     );
+  });
+
+  it("keeps long recipient names and property context in distinct wrapping-safe elements", async () => {
+    mocks.fetchLandlordMessageRecipientsMock.mockResolvedValue([
+      {
+        leaseId: "lease-long",
+        tenantId: "tenant-long",
+        tenantDisplayName: "Alexandria Montgomery-Wellington With A Long Tenant Display Name",
+        propertyId: "prop-long",
+        propertyDisplayLabel: "The Residences at an Intentionally Long Waterfront Property Name",
+        unitId: "unit-long",
+        unitDisplayLabel: "Unit PH-1208 East Wing With Extended Label",
+      },
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/messages"]}>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+    await flushAsync();
+    fireEvent.click(screen.getAllByRole("button", { name: "New Message" })[0]);
+    await flushAsync();
+
+    const row = screen.getByRole("button", { name: /Alexandria Montgomery-Wellington/ });
+    expect(within(row).getByText(/Alexandria Montgomery-Wellington/)).toHaveClass("rc-messages-recipient-name");
+    expect(within(row).getByText(/The Residences.*Extended Label/)).toHaveClass("rc-messages-recipient-context");
   });
 
   it("prevents double submission while a first message is in flight", async () => {

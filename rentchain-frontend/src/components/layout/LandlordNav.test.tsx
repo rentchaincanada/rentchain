@@ -118,10 +118,10 @@ describe("LandlordNav mobile drawer", () => {
     expect(within(workspaceNav).getByRole("link", { name: "Tenants" })).toHaveAttribute("href", "/tenants");
     expect(within(workspaceNav).getByRole("link", { name: "Leases" })).toHaveAttribute("href", "/leases");
     expect(within(workspaceNav).getByRole("link", { name: "Payments" })).toHaveClass("active");
-    const communications = within(workspaceNav).getByRole("group", { name: "Communications" });
-    expect(within(communications).getByRole("link", { name: "Unified Inbox" })).toHaveAttribute("href", "/landlord/unified-inbox");
-    expect(within(communications).getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/messages");
-    expect(within(communications).getByRole("link", { name: "Notices" })).toHaveAttribute("href", "/notices");
+    expect(within(workspaceNav).queryByRole("group", { name: "Communications" })).not.toBeInTheDocument();
+    expect(within(workspaceNav).queryByRole("link", { name: "Unified Inbox" })).not.toBeInTheDocument();
+    expect(within(workspaceNav).queryByRole("link", { name: "Messages" })).not.toBeInTheDocument();
+    expect(within(workspaceNav).queryByRole("link", { name: "Notices" })).not.toBeInTheDocument();
     expect(within(workspaceNav).getByRole("link", { name: "Work Orders" })).toHaveAttribute("href", "/work-orders");
   });
 
@@ -168,8 +168,7 @@ describe("LandlordNav mobile drawer", () => {
     const workspaceNav = screen.getByRole("navigation", { name: "Workspace navigation" });
 
     expect(context).toHaveTextContent("Unified Inbox");
-    expect(within(workspaceNav).getByRole("link", { name: "Unified Inbox" })).toHaveClass("active");
-    expect(within(workspaceNav).getByRole("link", { name: "Unified Inbox" })).toHaveAttribute("aria-current", "page");
+    expect(within(workspaceNav).queryByRole("link", { name: "Unified Inbox" })).not.toBeInTheDocument();
     expect(screen.getByText("Unified Inbox", { selector: ".rc-landlord-mobile-role" })).toBeInTheDocument();
   });
 
@@ -285,14 +284,12 @@ describe("LandlordNav mobile drawer", () => {
     expect(within(tabbar).getByText("Dashboard")).toBeInTheDocument();
     expect(within(tabbar).getByText("Properties")).toBeInTheDocument();
     expect(within(tabbar).getByText("Applicants")).toBeInTheDocument();
-    expect(within(tabbar).getByText("Unified Inbox")).toBeInTheDocument();
     expect(within(tabbar).getByText("Operations")).toBeInTheDocument();
     expect(within(tabbar).getByText("More")).toBeInTheDocument();
     expect(within(tabbar).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "Dashboard",
       "Properties",
       "Applicants",
-      "Unified Inbox",
       "Operations",
       "More",
     ]);
@@ -308,7 +305,6 @@ describe("LandlordNav mobile drawer", () => {
       "Dashboard",
       "Properties",
       "Applications",
-      "Unified Inbox",
     ]);
     expect(NAV_ITEMS.find((item) => item.id === "operations")).toEqual(
       expect.objectContaining({
@@ -319,34 +315,16 @@ describe("LandlordNav mobile drawer", () => {
     );
   });
 
-  it("shows distinct landlord drawer entries for the unified inbox and direct messages", async () => {
+  it("keeps communication destinations out of the Workspace drawer", () => {
     renderLandlordNav();
 
     fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
 
     const drawer = screen.getByRole("dialog", { name: "Navigation menu" });
-    const communications = within(drawer).getByRole("group", { name: "Communications" });
-    const inboxButtons = within(communications).getAllByRole("button", { name: "Unified Inbox" });
-    expect(inboxButtons).toHaveLength(1);
-    expect(within(communications).getByRole("button", { name: "Messages" })).toBeInTheDocument();
-    expect(within(communications).getByRole("button", { name: "Notices" })).toBeInTheDocument();
-
-    fireEvent.click(inboxButtons[0]);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("current-path")).toHaveTextContent("/landlord/unified-inbox");
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
-    fireEvent.click(
-      within(screen.getByRole("dialog", { name: "Navigation menu" })).getByRole("button", {
-        name: "Messages",
-      })
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("current-path")).toHaveTextContent("/messages");
-    });
+    expect(within(drawer).queryByRole("group", { name: "Communications" })).not.toBeInTheDocument();
+    expect(within(drawer).queryByRole("button", { name: "Unified Inbox" })).not.toBeInTheDocument();
+    expect(within(drawer).queryByRole("button", { name: "Messages" })).not.toBeInTheDocument();
+    expect(within(drawer).queryByRole("button", { name: "Notices" })).not.toBeInTheDocument();
   });
 
   it("navigates landlord mobile tabs to canonical routes", () => {
@@ -359,9 +337,6 @@ describe("LandlordNav mobile drawer", () => {
     fireEvent.click(within(tabbar).getByRole("button", { name: "Applicants" }));
     expect(screen.getByTestId("current-path")).toHaveTextContent("/applications");
 
-    fireEvent.click(within(tabbar).getByRole("button", { name: "Unified Inbox" }));
-    expect(screen.getByTestId("current-path")).toHaveTextContent("/landlord/unified-inbox");
-
     fireEvent.click(within(tabbar).getByRole("button", { name: "Operations" }));
     expect(screen.getByTestId("current-path")).toHaveTextContent("/operations");
   });
@@ -373,28 +348,29 @@ describe("LandlordNav mobile drawer", () => {
     expect(within(tabbar).getByRole("button", { name: "Operations" })).toHaveClass("active");
   });
 
-  it("marks the unified inbox tab active on the landlord unified inbox route", () => {
+  it("keeps communication destinations out of the mobile tab bar", () => {
     renderLandlordNav("/landlord/unified-inbox");
 
     const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
-    expect(within(tabbar).getByRole("button", { name: "Unified Inbox" })).toHaveClass("active");
-    expect(within(tabbar).getByRole("button", { name: "Unified Inbox" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabbar).queryByRole("button", { name: "Unified Inbox" })).not.toBeInTheDocument();
+    expect(within(tabbar).queryByRole("button", { name: "Messages" })).not.toBeInTheDocument();
+    expect(within(tabbar).queryByRole("button", { name: "Notices" })).not.toBeInTheDocument();
   });
 
   it.each([
     ["/landlord/unified-inbox", "Unified Inbox"],
     ["/messages", "Messages"],
     ["/notices", "Notices"],
-  ])("selects the Communications child and header for %s", (path, label) => {
+  ])("keeps route-specific titles and active Communications menu items for %s", (path, label) => {
     renderLandlordNav(path);
 
     const context = screen.getByLabelText("Workspace context");
     const workspaceNav = screen.getByRole("navigation", { name: "Workspace navigation" });
-    const communications = within(workspaceNav).getByRole("group", { name: "Communications" });
-    const activeChild = within(communications).getByRole("link", { name: label });
+    fireEvent.click(screen.getByRole("button", { name: "Communications" }));
+    const communications = screen.getByRole("menu", { name: "Communications destinations" });
+    const activeChild = within(communications).getByRole("menuitem", { name: label });
 
-    expect(communications).toHaveClass("active");
-    expect(activeChild).toHaveClass("active");
+    expect(within(workspaceNav).queryByRole("group", { name: "Communications" })).not.toBeInTheDocument();
     expect(activeChild).toHaveAttribute("aria-current", "page");
     expect(context.querySelector("strong")).toHaveTextContent(label);
     expect(screen.getByText(label, { selector: ".rc-landlord-mobile-role" })).toBeInTheDocument();
@@ -417,31 +393,28 @@ describe("LandlordNav mobile drawer", () => {
     renderLandlordNav(path);
 
     const context = screen.getByLabelText("Workspace context");
-    const communications = within(screen.getByRole("navigation", { name: "Workspace navigation" })).getByRole("group", {
-      name: "Communications",
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Communications" }));
+    const communications = screen.getByRole("menu", { name: "Communications destinations" });
 
-    expect(within(communications).getAllByRole("link").map((link) => link.textContent)).toEqual([
+    expect(within(communications).getAllByRole("menuitem").map((link) => link.textContent?.replace("✓", ""))).toEqual([
       "Unified Inbox",
       "Messages",
       "Notices",
     ]);
-    expect(within(communications).getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
+    expect(within(communications).getByRole("menuitem", { name: label })).toHaveAttribute("aria-current", "page");
     expect(context.querySelector("strong")).toHaveTextContent(label);
     expect(context.querySelector("strong")).not.toHaveTextContent("Workspace");
   });
 
-  it("marks the active Communications child in the responsive drawer", () => {
+  it("keeps the active communication route out of the responsive drawer", () => {
     renderLandlordNav("/notices");
 
     fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
-    const communications = within(screen.getByRole("dialog", { name: "Navigation menu" })).getByRole("group", {
-      name: "Communications",
-    });
-
-    expect(within(communications).getByRole("button", { name: "Notices" })).toHaveAttribute("aria-current", "page");
-    expect(within(communications).getByRole("button", { name: "Messages" })).not.toHaveAttribute("aria-current");
-    expect(within(communications).getByRole("button", { name: "Unified Inbox" })).not.toHaveAttribute("aria-current");
+    const drawer = within(screen.getByRole("dialog", { name: "Navigation menu" }));
+    expect(drawer.queryByRole("group", { name: "Communications" })).not.toBeInTheDocument();
+    expect(drawer.queryByRole("button", { name: "Notices" })).not.toBeInTheDocument();
+    expect(drawer.queryByRole("button", { name: "Messages" })).not.toBeInTheDocument();
+    expect(drawer.queryByRole("button", { name: "Unified Inbox" })).not.toBeInTheDocument();
   });
 
   it("does not render the landlord bottom nav for admin role contexts", () => {
