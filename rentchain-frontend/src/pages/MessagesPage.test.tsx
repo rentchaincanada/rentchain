@@ -166,6 +166,9 @@ describe("MessagesPage", () => {
     expect(mocks.fetchLandlordMessageRecipientsMock).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("dialog", { name: "New message" })).toBeInTheDocument();
     expect(screen.getByText("Harbour View / Unit 2A")).toBeInTheDocument();
+    const recipient = screen.getByRole("button", { name: /Taylor Tenant/ });
+    expect(within(recipient).getByText("Taylor Tenant")).toHaveClass("rc-messages-recipient-name");
+    expect(within(recipient).getByText("Harbour View / Unit 2A")).toHaveClass("rc-messages-recipient-context");
 
     fireEvent.change(screen.getByPlaceholderText("Search by tenant, property, or unit"), { target: { value: "2A" } });
     fireEvent.click(screen.getByRole("button", { name: /Taylor Tenant/ }));
@@ -182,6 +185,33 @@ describe("MessagesPage", () => {
     expect(screen.getByTestId("location")).toHaveTextContent(
       "/messages?threadId=landlord-1__tenant-1__unit-1"
     );
+  });
+
+  it("keeps long recipient names and property context in distinct wrapping-safe elements", async () => {
+    mocks.fetchLandlordMessageRecipientsMock.mockResolvedValue([
+      {
+        leaseId: "lease-long",
+        tenantId: "tenant-long",
+        tenantDisplayName: "Alexandria Montgomery-Wellington With A Long Tenant Display Name",
+        propertyId: "prop-long",
+        propertyDisplayLabel: "The Residences at an Intentionally Long Waterfront Property Name",
+        unitId: "unit-long",
+        unitDisplayLabel: "Unit PH-1208 East Wing With Extended Label",
+      },
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/messages"]}>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+    await flushAsync();
+    fireEvent.click(screen.getAllByRole("button", { name: "New Message" })[0]);
+    await flushAsync();
+
+    const row = screen.getByRole("button", { name: /Alexandria Montgomery-Wellington/ });
+    expect(within(row).getByText(/Alexandria Montgomery-Wellington/)).toHaveClass("rc-messages-recipient-name");
+    expect(within(row).getByText(/The Residences.*Extended Label/)).toHaveClass("rc-messages-recipient-context");
   });
 
   it("prevents double submission while a first message is in flight", async () => {

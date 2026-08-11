@@ -18,6 +18,7 @@ import { UpgradeNudgeHost } from "@/features/upgradeNudges/UpgradeNudgeHost";
 import { getRoleDefaultDestination } from "@/lib/authDestination";
 import { RentChainLogo } from "../brand/RentChainLogo";
 import "./LandlordNav.css";
+import { CommunicationsMenu } from "./CommunicationsMenu";
 
 type Props = {
   children: React.ReactNode;
@@ -125,7 +126,6 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const workspaceItems = visibleItems.filter((item) => stickyWorkspaceIds.has(item.id));
   const standardWorkspaceItems = workspaceItems.filter((item) => item.groupId !== COMMUNICATIONS_GROUP_ID);
   const communicationsItems = workspaceItems.filter((item) => item.groupId === COMMUNICATIONS_GROUP_ID);
-  const communicationsActive = communicationsItems.some((item) => isNavItemActive(loc.pathname, item));
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
   const orderedPrimaryDrawerItems = React.useMemo(
@@ -280,25 +280,6 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                 {item.label}
               </Link>
             ))}
-            {communicationsItems.length ? (
-              <div
-                className={`rc-landlord-workspace-group${communicationsActive ? " active" : ""}`}
-                role="group"
-                aria-label={COMMUNICATIONS_GROUP_LABEL}
-              >
-                <span className="rc-landlord-workspace-group-label">{COMMUNICATIONS_GROUP_LABEL}</span>
-                {communicationsItems.map((item) => (
-                  <Link
-                    key={item.id}
-                    to={item.to}
-                    className={isNavItemActive(loc.pathname, item) ? "active" : ""}
-                    aria-current={isNavItemActive(loc.pathname, item) ? "page" : undefined}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
-            ) : null}
           </nav>
         </div>
       </div>
@@ -306,6 +287,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       <div className="rc-landlord-mobile-topbar">
         <RentChainLogo href="/dashboard" size="sm" />
         <span className="rc-landlord-mobile-role">{workspaceLabel}</span>
+        {communicationsItems.length ? <CommunicationsMenu className="rc-communications-menu--mobile" hasUnread={unreadFlag} /> : null}
         <button
           type="button"
           className="rc-landlord-mobile-menu"

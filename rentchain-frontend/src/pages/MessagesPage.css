@@ -112,17 +112,20 @@
 
 .rc-messages-recipient-list {
   display: grid;
-  gap: 8px;
+  grid-auto-rows: max-content;
+  gap: 12px;
   max-height: 240px;
   overflow-y: auto;
 }
 
 .rc-messages-recipient-list button {
   display: grid;
-  gap: 4px;
+  align-content: center;
+  gap: 7px;
   width: 100%;
   min-width: 0;
-  padding: 10px 12px;
+  min-height: 72px;
+  padding: 13px 14px;
   text-align: left;
   border: 1px solid rgba(148, 163, 184, 0.45);
   border-radius: 12px;
@@ -130,14 +133,35 @@
   cursor: pointer;
 }
 
+.rc-messages-recipient-list button:hover,
+.rc-messages-recipient-list button:focus-visible {
+  border-color: rgba(37, 99, 235, 0.62);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
 .rc-messages-recipient-list button.is-selected {
   border-color: #2563eb;
   background: rgba(37, 99, 235, 0.1);
 }
 
-.rc-messages-recipient-list span {
-  color: #64748b;
+.rc-messages-recipient-name,
+.rc-messages-recipient-context {
+  display: block;
+  min-width: 0;
   overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.rc-messages-recipient-name {
+  color: #0f172a;
+  line-height: 1.35;
+}
+
+.rc-messages-recipient-context {
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .rc-messages-compose-actions {

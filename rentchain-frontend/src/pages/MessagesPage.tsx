@@ -489,8 +489,10 @@ export default function MessagesPage() {
                     aria-pressed={selected}
                     onClick={() => setSelectedRecipientKey(key)}
                   >
-                    <strong>{recipient.tenantDisplayName}</strong>
-                    <span>{[recipient.propertyDisplayLabel, recipient.unitDisplayLabel].filter(Boolean).join(" / ")}</span>
+                    <strong className="rc-messages-recipient-name">{recipient.tenantDisplayName}</strong>
+                    <span className="rc-messages-recipient-context">
+                      {[recipient.propertyDisplayLabel, recipient.unitDisplayLabel].filter(Boolean).join(" / ")}
+                    </span>
                   </button>
                 );
               })}

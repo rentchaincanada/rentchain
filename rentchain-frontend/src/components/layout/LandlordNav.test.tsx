@@ -118,10 +118,10 @@ describe("LandlordNav mobile drawer", () => {
     expect(within(workspaceNav).getByRole("link", { name: "Tenants" })).toHaveAttribute("href", "/tenants");
     expect(within(workspaceNav).getByRole("link", { name: "Leases" })).toHaveAttribute("href", "/leases");
     expect(within(workspaceNav).getByRole("link", { name: "Payments" })).toHaveClass("active");
-    const communications = within(workspaceNav).getByRole("group", { name: "Communications" });
-    expect(within(communications).getByRole("link", { name: "Unified Inbox" })).toHaveAttribute("href", "/landlord/unified-inbox");
-    expect(within(communications).getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/messages");
-    expect(within(communications).getByRole("link", { name: "Notices" })).toHaveAttribute("href", "/notices");
+    expect(within(workspaceNav).queryByRole("group", { name: "Communications" })).not.toBeInTheDocument();
+    expect(within(workspaceNav).queryByRole("link", { name: "Unified Inbox" })).not.toBeInTheDocument();
+    expect(within(workspaceNav).queryByRole("link", { name: "Messages" })).not.toBeInTheDocument();
+    expect(within(workspaceNav).queryByRole("link", { name: "Notices" })).not.toBeInTheDocument();
     expect(within(workspaceNav).getByRole("link", { name: "Work Orders" })).toHaveAttribute("href", "/work-orders");
   });
 
@@ -168,8 +168,7 @@ describe("LandlordNav mobile drawer", () => {
     const workspaceNav = screen.getByRole("navigation", { name: "Workspace navigation" });
 
     expect(context).toHaveTextContent("Unified Inbox");
-    expect(within(workspaceNav).getByRole("link", { name: "Unified Inbox" })).toHaveClass("active");
-    expect(within(workspaceNav).getByRole("link", { name: "Unified Inbox" })).toHaveAttribute("aria-current", "page");
+    expect(within(workspaceNav).queryByRole("link", { name: "Unified Inbox" })).not.toBeInTheDocument();
     expect(screen.getByText("Unified Inbox", { selector: ".rc-landlord-mobile-role" })).toBeInTheDocument();
   });
 
@@ -385,16 +384,16 @@ describe("LandlordNav mobile drawer", () => {
     ["/landlord/unified-inbox", "Unified Inbox"],
     ["/messages", "Messages"],
     ["/notices", "Notices"],
-  ])("selects the Communications child and header for %s", (path, label) => {
+  ])("keeps route-specific titles and active Communications menu items for %s", (path, label) => {
     renderLandlordNav(path);
 
     const context = screen.getByLabelText("Workspace context");
     const workspaceNav = screen.getByRole("navigation", { name: "Workspace navigation" });
-    const communications = within(workspaceNav).getByRole("group", { name: "Communications" });
-    const activeChild = within(communications).getByRole("link", { name: label });
+    fireEvent.click(screen.getByRole("button", { name: "Communications" }));
+    const communications = screen.getByRole("menu", { name: "Communications destinations" });
+    const activeChild = within(communications).getByRole("menuitem", { name: label });
 
-    expect(communications).toHaveClass("active");
-    expect(activeChild).toHaveClass("active");
+    expect(within(workspaceNav).queryByRole("group", { name: "Communications" })).not.toBeInTheDocument();
     expect(activeChild).toHaveAttribute("aria-current", "page");
     expect(context.querySelector("strong")).toHaveTextContent(label);
     expect(screen.getByText(label, { selector: ".rc-landlord-mobile-role" })).toBeInTheDocument();
@@ -417,16 +416,15 @@ describe("LandlordNav mobile drawer", () => {
     renderLandlordNav(path);
 
     const context = screen.getByLabelText("Workspace context");
-    const communications = within(screen.getByRole("navigation", { name: "Workspace navigation" })).getByRole("group", {
-      name: "Communications",
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Communications" }));
+    const communications = screen.getByRole("menu", { name: "Communications destinations" });
 
-    expect(within(communications).getAllByRole("link").map((link) => link.textContent)).toEqual([
+    expect(within(communications).getAllByRole("menuitem").map((link) => link.textContent?.replace("✓", ""))).toEqual([
       "Unified Inbox",
       "Messages",
       "Notices",
     ]);
-    expect(within(communications).getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
+    expect(within(communications).getByRole("menuitem", { name: label })).toHaveAttribute("aria-current", "page");
     expect(context.querySelector("strong")).toHaveTextContent(label);
     expect(context.querySelector("strong")).not.toHaveTextContent("Workspace");
   });

@@ -196,15 +196,19 @@ test("real Messages page preserves deep links, Back, composer access, and bounde
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          recipients: [{
-            leaseId: "lease-synthetic-1",
-            tenantId: "tenant-synthetic-1",
-            tenantDisplayName: "Synthetic Active Tenant",
-            propertyId: "property-synthetic-1",
-            propertyDisplayLabel: "Harbour Synthetic Property",
-            unitId: "unit-synthetic-1",
-            unitDisplayLabel: "Unit 4B",
-          }],
+          recipients: Array.from({ length: 6 }, (_, index) => ({
+            leaseId: `lease-synthetic-${index + 1}`,
+            tenantId: `tenant-synthetic-${index + 1}`,
+            tenantDisplayName: index === 0
+              ? "Synthetic Active Tenant With An Intentionally Long Wrapping Display Name"
+              : `Synthetic Active Tenant ${index + 1}`,
+            propertyId: `property-synthetic-${index + 1}`,
+            propertyDisplayLabel: index === 0
+              ? "Harbour Synthetic Property With An Intentionally Long Waterfront Name"
+              : "Harbour Synthetic Property",
+            unitId: `unit-synthetic-${index + 1}`,
+            unitDisplayLabel: index === 0 ? "Unit 4B East Wing With Extended Label" : `Unit ${index + 1}`,
+          })),
         }),
       });
       return;
@@ -263,8 +267,34 @@ test("real Messages page preserves deep links, Back, composer access, and bounde
   await page.getByRole("button", { name: "New Message" }).first().click();
   const compose = page.getByRole("dialog", { name: "New message" });
   await expect(compose).toBeVisible();
+  const recipientRows = compose.locator(".rc-messages-recipient-list button");
+  await expect(recipientRows).toHaveCount(6);
+  const rowGeometry = await recipientRows.evaluateAll((rows) => rows.map((row, index) => {
+    const rect = row.getBoundingClientRect();
+    const name = row.querySelector<HTMLElement>(".rc-messages-recipient-name")?.getBoundingClientRect();
+    const context = row.querySelector<HTMLElement>(".rc-messages-recipient-context")?.getBoundingClientRect();
+    const next = rows[index + 1]?.getBoundingClientRect();
+    return {
+      rowTop: rect.top,
+      rowBottom: rect.bottom,
+      nameTop: name?.top,
+      nameBottom: name?.bottom,
+      contextTop: context?.top,
+      contextBottom: context?.bottom,
+      nextTop: next?.top,
+    };
+  }));
+  for (const geometry of rowGeometry) {
+    expect(geometry.nameTop).toBeGreaterThanOrEqual(geometry.rowTop);
+    expect(geometry.nameBottom).toBeLessThanOrEqual(geometry.contextTop ?? Infinity);
+    expect(geometry.contextBottom).toBeLessThanOrEqual(geometry.rowBottom);
+    if (geometry.nextTop !== undefined) expect(geometry.rowBottom).toBeLessThan(geometry.nextTop);
+  }
+  await expect(compose.getByPlaceholder("Write your message")).toBeVisible();
+  await expect(compose.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(compose.getByRole("button", { name: "Send Message" })).toBeVisible();
   await compose.getByPlaceholder("Search by tenant, property, or unit").fill("4B");
-  await compose.getByRole("button", { name: /Synthetic Active Tenant/ }).click();
+  await compose.getByRole("button", { name: /Synthetic Active Tenant With/ }).click();
   await compose.getByPlaceholder("Write your message").fill("Synthetic first outbound message");
   await compose.getByRole("button", { name: "Send Message" }).click();
   await expect(compose).not.toBeVisible();

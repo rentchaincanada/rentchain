@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TopNav from "./TopNav";
+import { MemoryRouter } from "react-router-dom";
 
 const mocks = vi.hoisted(() => ({
   navigateMock: vi.fn(),
@@ -46,6 +47,14 @@ vi.mock("../brand/RentChainLogo", () => ({
 }));
 
 describe("TopNav", () => {
+  function renderTopNav(path = "/dashboard") {
+    return render(
+      <MemoryRouter initialEntries={[path]}>
+        <TopNav />
+      </MemoryRouter>
+    );
+  }
+
   afterEach(() => {
     cleanup();
   });
@@ -67,17 +76,23 @@ describe("TopNav", () => {
     });
   });
 
-  it("renders a landlord inbox shortcut and routes to the unified inbox", async () => {
-    render(<TopNav />);
+  it("replaces the Inbox shortcut with an accessible Communications menu", async () => {
+    renderTopNav("/messages");
 
-    const messagesButton = await screen.findByRole("button", { name: "Inbox" });
-    fireEvent.click(messagesButton);
+    expect(screen.queryByRole("button", { name: /^Inbox/ })).not.toBeInTheDocument();
+    const communicationsButton = await screen.findByRole("button", { name: "Communications" });
+    fireEvent.click(communicationsButton);
 
-    expect(mocks.navigateMock).toHaveBeenCalledWith("/landlord/inbox");
+    const menu = screen.getByRole("menu", { name: "Communications destinations" });
+    expect(screen.getByRole("menuitem", { name: "Unified Inbox" })).toHaveAttribute("href", "/landlord/unified-inbox");
+    expect(screen.getByRole("menuitem", { name: "Messages" })).toHaveAttribute("href", "/messages");
+    expect(screen.getByRole("menuitem", { name: "Messages" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("menuitem", { name: "Notices" })).toHaveAttribute("href", "/notices");
+    expect(menu).toBeInTheDocument();
   });
 
   it("replaces the prominent account text action with a scheduling shortcut", async () => {
-    render(<TopNav />);
+    renderTopNav();
 
     const scheduleButton = await screen.findByRole("button", { name: /Scheduling/i });
     fireEvent.click(scheduleButton);
@@ -101,7 +116,7 @@ describe("TopNav", () => {
       authStatus: "authed",
     });
 
-    render(<TopNav />);
+    renderTopNav();
 
     const accountButton = await screen.findByRole("button", { name: "Account menu for Paul Chater" });
     expect(accountButton).toHaveTextContent("PC");
@@ -126,7 +141,7 @@ describe("TopNav", () => {
       authStatus: "authed",
     });
 
-    render(<TopNav />);
+    renderTopNav();
 
     expect(await screen.findByRole("button", { name: "Account menu" })).toHaveTextContent("PM");
     expect(screen.queryByText("My Account")).not.toBeInTheDocument();
@@ -135,10 +150,23 @@ describe("TopNav", () => {
   it("shows unread indicator from existing conversation unread data", async () => {
     mocks.fetchLandlordConversationsMock.mockResolvedValue([{ id: "conv-1", hasUnread: true }]);
 
-    render(<TopNav />);
+    renderTopNav();
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Inbox (unread)" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Communications (unread)" })).toBeInTheDocument();
     });
+  });
+
+  it("closes the Communications menu on Escape and restores trigger focus", async () => {
+    renderTopNav();
+
+    const trigger = screen.getByRole("button", { name: "Communications" });
+    fireEvent.click(trigger);
+    expect(screen.getByRole("menu", { name: "Communications destinations" })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("menu", { name: "Communications destinations" })).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
   });
 });
