@@ -418,18 +418,3 @@ check "b7_vercel_preview_proxy_identity_boundary" {
     error_message = "Run Invoker must remain service-scoped to the private Preview backend and dedicated Vercel proxy identity."
   }
 }
-
-check "pr1512_vercel_proxy_invoker_boundary" {
-  assert {
-    condition = (
-      google_cloud_run_v2_service_iam_member.pr1512_vercel_proxy_invoker.project == "rentchain-preview" &&
-      google_cloud_run_v2_service_iam_member.pr1512_vercel_proxy_invoker.location == "northamerica-northeast1" &&
-      basename(
-        google_cloud_run_v2_service_iam_member.pr1512_vercel_proxy_invoker.name
-      ) == "rentchain-pr1512-notices-qa-fff3a2dc" &&
-      google_cloud_run_v2_service_iam_member.pr1512_vercel_proxy_invoker.role == "roles/run.invoker" &&
-      google_cloud_run_v2_service_iam_member.pr1512_vercel_proxy_invoker.member == "serviceAccount:vercel-preview-proxy@rentchain-preview.iam.gserviceaccount.com"
-    )
-    error_message = "PR #1512 Vercel proxy access must remain an exact service-level Invoker member on only the isolated Notices QA service."
-  }
-}
