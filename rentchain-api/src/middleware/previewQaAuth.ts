@@ -123,18 +123,22 @@ export function decidePreviewQaAuth(input: PreviewQaDecisionInput): PreviewQaDec
   return { kind: "allow" };
 }
 
-export function isPr1512PreviewQaRuntime(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isPropertyNoticesPreviewQaRuntime(env: NodeJS.ProcessEnv = process.env): boolean {
   const service = String(env.K_SERVICE || "").trim();
   const expectedService = String(env.PREVIEW_QA_EXPECTED_SERVICE || "").trim();
+  const scope = String(env.PREVIEW_QA_AUTH_SCOPE || "").trim();
+  const servicePattern = scope === PR1512_PREVIEW_QA_SCOPE
+    ? PR1512_PREVIEW_QA_SERVICE_PATTERN
+    : null;
   return (
     String(env.PREVIEW_QA_AUTH_ENABLED || "").trim().toLowerCase() === "true" &&
-    String(env.PREVIEW_QA_AUTH_SCOPE || "").trim() === PR1512_PREVIEW_QA_SCOPE &&
+    Boolean(servicePattern) &&
     String(env.APP_ENV || "").trim().toLowerCase() === "preview" &&
     String(env.GOOGLE_CLOUD_PROJECT || env.GCLOUD_PROJECT || "").trim() === PREVIEW_PROJECT_ID &&
     service !== PERMANENT_PREVIEW_SERVICE &&
     expectedService !== PERMANENT_PREVIEW_SERVICE &&
     service === expectedService &&
-    PR1512_PREVIEW_QA_SERVICE_PATTERN.test(service) &&
+    Boolean(servicePattern?.test(service)) &&
     String(env.FIRESTORE_ENABLED || "").trim().toLowerCase() === "true" &&
     String(env.FIRESTORE_DATABASE_ID || "").trim() === "(default)"
   );

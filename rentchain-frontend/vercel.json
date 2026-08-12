@@ -83,6 +83,10 @@
   ],
   "routes": [
     {
+      "src": "^/api/pr1516-(?:bootstrap|notices(?:/.*)?)$",
+      "status": 404
+    },
+    {
       "src": "^/api/pr1512-notices/(.*)$",
       "dest": "/api/pr1512-notices/[...path]?path=$1"
     },

@@ -35,7 +35,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "43"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "42"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|secretmanager|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "9"
@@ -95,6 +95,7 @@ rg -q 'vercel_preview_issuer[[:space:]]*=[[:space:]]*"https://oidc\.vercel\.com/
 test "$(rg -No 'allowed_audiences' "$vercel_identity_file" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No 'google_service_account_iam_member\.vercel_preview_proxy_(workload_identity_user|openid_token_creator)\.service_account_id' "$root_dir/checks.tf" | wc -l | tr -d ' ')" = "0"
 rg -U -q 'basename\(\n        google_cloud_run_v2_service_iam_member\.vercel_preview_proxy_invoker\.name\n      \) == "rentchain-preview-backend"' "$root_dir/checks.tf"
+test "$(rg -No 'role     = "roles/run\.invoker"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
 grep -Fq 'length(google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping) == 4' "$root_dir/checks.tf"
 grep -Fq 'attribute_mapping["google.subject"] == "assertion.sub"' "$root_dir/checks.tf"
 grep -Fq 'attribute_mapping["attribute.owner_id"] == "assertion.owner_id"' "$root_dir/checks.tf"
