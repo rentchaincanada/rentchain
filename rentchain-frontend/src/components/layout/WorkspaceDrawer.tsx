@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { radius, spacing } from "../../styles/tokens";
-import { getVisibleNavItems } from "./navConfig";
+import { getVisibleNavItems, getWorkspaceNavItems } from "./navConfig";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
@@ -43,7 +43,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
   const isMobile = useIsMobile(WORKSPACE_DRAWER_MOBILE_QUERY);
   const navLoading = !userRole || capsLoading;
   const visibleItems = navLoading ? [] : getVisibleNavItems(userRole, features);
-  const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
+  const drawerItems = getWorkspaceNavItems(visibleItems).filter((item) => item.showInDrawer !== false);
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const orderedPrimaryDrawerItems = [...primaryDrawerItems].sort((a, b) => {
     if (a.id === "account") return -1;

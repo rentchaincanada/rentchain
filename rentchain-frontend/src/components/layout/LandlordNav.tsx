@@ -7,6 +7,7 @@ import { fetchLandlordConversations } from "../../api/messagesApi";
 import {
   COMMUNICATIONS_GROUP_ID,
   getVisibleNavItems,
+  getWorkspaceNavItems,
   isNavItemActive,
   resolveNavItem,
   type NavItem,
@@ -113,7 +114,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
     });
   }
   const visibleItems = navLoading || !isLandlordWorkspace ? [] : getVisibleNavItems(effectiveRole, features);
-  const workspaceVisibleItems = visibleItems.filter((item) => item.showInWorkspace !== false);
+  const workspaceVisibleItems = getWorkspaceNavItems(visibleItems);
   const drawerItems = workspaceVisibleItems.filter((item) => item.showInDrawer !== false);
   const standardWorkspaceItems = workspaceVisibleItems.filter((item) => stickyWorkspaceIds.has(item.id));
   const communicationsItems = visibleItems.filter((item) => item.groupId === COMMUNICATIONS_GROUP_ID);
