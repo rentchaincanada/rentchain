@@ -465,6 +465,25 @@
   }
 }
 
+@media (max-width: 480px) {
+  .rc-properties-page {
+    width: calc(100% + 28px);
+    max-width: calc(100% + 28px);
+    margin-inline: -14px;
+    padding: 10px;
+  }
+
+  .rc-properties-page .rc-properties-detail-card {
+    padding: 0;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .rc-properties-page .rc-property-detail-stack {
+    padding: 0;
+  }
+}
+
 @media (max-width: 380px) {
   .rc-units-edit-mobile-grid,
   .rc-modal-footer .rc-wrap-row {
