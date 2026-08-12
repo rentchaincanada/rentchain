@@ -633,6 +633,10 @@ describe("MessagesPage", () => {
     expect(css).toMatch(/\.rc-messages-thread\s*\{[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*hidden;/);
     expect(css).toMatch(/\.rc-messages-thread-body\s*\{[\s\S]*?overflow-y:\s*auto;/);
     expect(css).toMatch(/\.rc-messages-composer-input\s*\{[\s\S]*?min-width:\s*0;/);
+    expect(css).toContain("--rc-messages-accent: var(--rc-landlord-pine, #245842)");
+    expect(css).toContain("--rc-messages-accent-soft: var(--rc-landlord-pine-soft, rgba(36, 88, 66, 0.12))");
+    expect(css).toMatch(/\.rc-messages-composer-input:focus-visible\s*\{[\s\S]*?var\(--rc-messages-focus-ring\)/);
+    expect(css).not.toMatch(/#(?:1d4ed8|2563eb|3b82f6)|rgba\(37,\s*99,\s*235/);
     expect(css).toMatch(
       /\.rc-messages-compose-overlay\s*\{[\s\S]*?padding:\s*12px 12px calc\(12px \+ var\(--rc-mobile-bottom-nav-height\) \+ env\(safe-area-inset-bottom, 0px\)\);/
     );

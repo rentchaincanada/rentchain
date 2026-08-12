@@ -263,6 +263,8 @@ test("real Messages page preserves deep links, Back, composer access, and bounde
   }
   await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
   await expect(page.getByText(/QA Tenant With An Intentionally Long Governed Display Label 1/).first()).toBeVisible();
+  await expect(page.locator(".rc-messages-list-item").first()).toHaveCSS("border-color", "rgb(30, 95, 78)");
+  await expect(page.locator(".rc-messages-composer-send")).toHaveCSS("background-color", "rgb(30, 95, 78)");
 
   await page.getByRole("button", { name: "New Message" }).first().click();
   const compose = page.getByRole("dialog", { name: "New message" });
@@ -296,11 +298,19 @@ test("real Messages page preserves deep links, Back, composer access, and bounde
   await compose.getByPlaceholder("Search by tenant, property, or unit").fill("4B");
   await compose.getByRole("button", { name: /Synthetic Active Tenant With/ }).click();
   await expect(compose.getByText("Selected recipient")).toBeVisible();
+  await expect(compose.locator(".rc-messages-selected-recipient-card")).toHaveCSS(
+    "background-color",
+    "rgba(36, 88, 66, 0.12)",
+  );
   await expect(compose.getByPlaceholder("Search by tenant, property, or unit")).toHaveCount(0);
   await expect(compose.locator(".rc-messages-recipient-list button")).toHaveCount(0);
   await expect(compose.getByText(/Synthetic Active Tenant With/)).toBeVisible();
   await expect(compose.getByText(/Harbour Synthetic Property With An Intentionally Long Waterfront Name/)).toBeVisible();
   await compose.getByPlaceholder("Write your message").fill("Harmless unsent draft retained during recipient change");
+  await expect(compose.getByPlaceholder("Write your message")).toHaveCSS(
+    "border-color",
+    "rgb(36, 88, 66)",
+  );
   await compose.getByRole("button", { name: "Change" }).click();
   await expect(compose.getByPlaceholder("Search by tenant, property, or unit")).toBeFocused();
   await expect(compose.getByPlaceholder("Write your message")).toHaveValue("Harmless unsent draft retained during recipient change");

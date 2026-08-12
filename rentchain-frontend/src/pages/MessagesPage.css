@@ -1,4 +1,8 @@
 .rc-messages-page {
+  --rc-messages-accent: var(--rc-landlord-pine, #245842);
+  --rc-messages-accent-soft: var(--rc-landlord-pine-soft, rgba(36, 88, 66, 0.12));
+  --rc-messages-accent-border: rgba(36, 88, 66, 0.48);
+  --rc-messages-focus-ring: rgba(36, 88, 66, 0.28);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -30,14 +34,32 @@
 .rc-messages-new-button,
 .rc-messages-empty-detail button,
 .rc-messages-compose-actions .is-primary {
-  border: 1px solid #1d4ed8;
+  border: 1px solid var(--rc-messages-accent);
   border-radius: 12px;
-  background: #2563eb;
+  background: var(--rc-messages-accent);
   color: #ffffff;
   cursor: pointer;
   font-weight: 750;
   min-height: 44px;
   padding: 10px 16px;
+}
+
+.rc-messages-new-button:hover,
+.rc-messages-empty-detail button:hover,
+.rc-messages-compose-actions .is-primary:hover {
+  filter: brightness(0.9);
+}
+
+.rc-messages-new-button:focus-visible,
+.rc-messages-empty-detail button:focus-visible,
+.rc-messages-compose-actions .is-primary:focus-visible,
+.rc-messages-compose-heading button:focus-visible,
+.rc-messages-compose-actions button:not(.is-primary):focus-visible,
+.rc-messages-back:focus-visible,
+.rc-messages-composer-send:focus-visible,
+.rc-messages-list-item:focus-visible {
+  outline: 3px solid var(--rc-messages-focus-ring);
+  outline-offset: 2px;
 }
 
 .rc-messages-compose-overlay {
@@ -105,6 +127,14 @@
   font: inherit;
 }
 
+.rc-messages-compose-field input:focus-visible,
+.rc-messages-compose-field textarea:focus-visible,
+.rc-messages-composer-input:focus-visible {
+  border-color: var(--rc-messages-accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--rc-messages-focus-ring);
+}
+
 .rc-messages-compose-field textarea {
   min-height: 120px;
   resize: vertical;
@@ -135,9 +165,9 @@
 
 .rc-messages-recipient-list button:hover,
 .rc-messages-recipient-list button:focus-visible {
-  border-color: rgba(37, 99, 235, 0.62);
+  border-color: var(--rc-messages-accent);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0 0 3px var(--rc-messages-focus-ring);
 }
 
 .rc-messages-recipient-name,
@@ -165,10 +195,10 @@
 .rc-messages-selected-recipient-heading button {
   min-height: 40px;
   padding: 8px 12px;
-  border: 1px solid rgba(37, 99, 235, 0.48);
+  border: 1px solid var(--rc-messages-accent-border);
   border-radius: 10px;
   background: #ffffff;
-  color: #1d4ed8;
+  color: var(--rc-messages-accent);
   cursor: pointer;
   font: inherit;
   font-weight: 700;
@@ -176,9 +206,9 @@
 
 .rc-messages-selected-recipient-heading button:hover,
 .rc-messages-selected-recipient-heading button:focus-visible {
-  border-color: #2563eb;
+  border-color: var(--rc-messages-accent);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0 0 3px var(--rc-messages-focus-ring);
 }
 
 .rc-messages-selected-recipient-card {
@@ -186,9 +216,9 @@
   gap: 7px;
   min-width: 0;
   padding: 14px;
-  border: 1px solid rgba(37, 99, 235, 0.48);
+  border: 1px solid var(--rc-messages-accent-border);
   border-radius: 12px;
-  background: rgba(37, 99, 235, 0.08);
+  background: var(--rc-messages-accent-soft);
 }
 
 .rc-messages-recipient-name {
@@ -271,6 +301,11 @@
   min-height: 44px;
 }
 
+.rc-messages-list-item:hover {
+  border-color: var(--rc-messages-accent) !important;
+  background: var(--rc-messages-accent-soft) !important;
+}
+
 .rc-messages-list-item-body {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -285,8 +320,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(37, 99, 235, 0.12);
-  color: #1d4ed8;
+  background: var(--rc-messages-accent-soft);
+  color: var(--rc-messages-accent);
   font-size: 0.86rem;
   font-weight: 800;
   flex-shrink: 0;
@@ -316,9 +351,9 @@
 }
 
 .rc-messages-tenant-profile-button {
-  border: 1px solid rgba(37, 99, 235, 0.35);
-  background: rgba(37, 99, 235, 0.08);
-  color: #1d4ed8;
+  border: 1px solid var(--rc-messages-accent-border);
+  background: var(--rc-messages-accent-soft);
+  color: var(--rc-messages-accent);
   border-radius: 999px;
   cursor: pointer;
   font: inherit;
@@ -331,8 +366,8 @@
 
 .rc-messages-tenant-profile-button:hover,
 .rc-messages-tenant-profile-button:focus-visible {
-  background: rgba(37, 99, 235, 0.14);
-  outline: 2px solid rgba(37, 99, 235, 0.25);
+  background: rgba(36, 88, 66, 0.18);
+  outline: 2px solid var(--rc-messages-focus-ring);
   outline-offset: 2px;
 }
 
@@ -354,7 +389,7 @@
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: #2563eb;
+  background: var(--rc-messages-accent);
 }
 
 .rc-messages-thread {

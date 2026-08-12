@@ -608,8 +608,8 @@ export default function MessagesPage() {
                         navigate(`/messages?threadId=${c.id}`);
                       }}
                       style={{
-                        border: `1px solid ${isActive ? colors.accent : colors.border}`,
-                        background: isActive ? colors.accentSoft : colors.panel,
+                        border: `1px solid ${isActive ? colors.pine : colors.border}`,
+                        background: isActive ? colors.pineSoft : colors.panel,
                       }}
                     >
                       <div className="rc-messages-list-item-body">
@@ -673,7 +673,7 @@ export default function MessagesPage() {
                               className={`rc-messages-bubble ${isSender ? "is-sent" : "is-received"}`}
                               style={{
                                 alignSelf: isSender ? "flex-end" : "flex-start",
-                                background: isSender ? colors.accentSoft : colors.panel,
+                                background: isSender ? colors.pineSoft : colors.panel,
                                 border: `1px solid ${colors.border}`,
                               }}
                             >
@@ -699,7 +699,7 @@ export default function MessagesPage() {
                       disabled={!composer.trim()}
                       className="rc-messages-composer-send"
                       style={{
-                        background: colors.accent,
+                        background: colors.pine,
                         border: `1px solid ${colors.border}`,
                         cursor: composer.trim() ? "pointer" : "not-allowed",
                         opacity: composer.trim() ? 1 : 0.6,
