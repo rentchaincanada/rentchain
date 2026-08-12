@@ -60,46 +60,19 @@ describe("WorkspaceDrawer", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("shows direct Messages navigation to landlords and keeps it landlord-only", () => {
-    const onClose = vi.fn();
-    const { rerender } = render(
+  it("keeps Communications-owned destinations out of the Workspace drawer", () => {
+    render(
       <MemoryRouter initialEntries={["/dashboard"]}>
-        <WorkspaceDrawer open onClose={onClose} userRole="landlord" />
-        <CurrentPath />
+        <WorkspaceDrawer open onClose={vi.fn()} userRole="landlord" />
       </MemoryRouter>
     );
 
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Messages" }));
-    expect(screen.getByTestId("current-path")).toHaveTextContent("/messages");
-    expect(onClose).toHaveBeenCalledTimes(1);
-
-    rerender(
-      <MemoryRouter initialEntries={["/dashboard"]}>
-        <WorkspaceDrawer open onClose={vi.fn()} userRole="admin" />
-      </MemoryRouter>
-    );
-    expect(screen.queryByRole("button", { name: "Messages" })).not.toBeInTheDocument();
-  });
-
-  it("shows property Notices beside Messages for landlords and keeps it landlord-only", () => {
-    const onClose = vi.fn();
-    const { rerender } = render(
-      <MemoryRouter initialEntries={["/dashboard"]}>
-        <WorkspaceDrawer open onClose={onClose} userRole="landlord" />
-        <CurrentPath />
-      </MemoryRouter>
-    );
-
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Notices" }));
-    expect(screen.getByTestId("current-path")).toHaveTextContent("/notices");
-    expect(onClose).toHaveBeenCalledTimes(1);
-
-    rerender(
-      <MemoryRouter initialEntries={["/dashboard"]}>
-        <WorkspaceDrawer open onClose={vi.fn()} userRole="admin" />
-      </MemoryRouter>
-    );
-    expect(screen.queryByRole("button", { name: "Notices" })).not.toBeInTheDocument();
+    const drawer = within(screen.getByRole("dialog", { name: "Workspace navigation" }));
+    expect(drawer.queryByRole("button", { name: "Unified Inbox" })).not.toBeInTheDocument();
+    expect(drawer.queryByRole("button", { name: "Messages" })).not.toBeInTheDocument();
+    expect(drawer.queryByRole("button", { name: "Notices" })).not.toBeInTheDocument();
+    expect(drawer.getByRole("button", { name: "Dashboard" })).toBeInTheDocument();
+    expect(drawer.getByRole("button", { name: "Payments" })).toBeInTheDocument();
   });
 
   it("shows governed review workspace navigation only for admins", () => {

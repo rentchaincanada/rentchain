@@ -54,6 +54,9 @@ export const getVisibleNavItems = (role?: string | null, features?: Record<strin
   });
 };
 
+export const getWorkspaceNavItems = (items: NavItem[]): NavItem[] =>
+  items.filter((item) => item.showInWorkspace !== false);
+
 export const NAV_ITEMS: NavItem[] = [
   {
     id: "dashboard",
