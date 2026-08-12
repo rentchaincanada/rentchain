@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { updateUnit, uploadUnitLeaseDocument } from "../../api/unitsApi";
 import { Button } from "../ui/Ui";
+import "./UnitEditModal.css";
 
 type Props = {
   open: boolean;
@@ -70,6 +72,18 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
     setError(null);
   }, [unit]);
 
+  useEffect(() => {
+    if (!open || typeof document === "undefined") return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const previousOverscrollBehavior = document.body.style.overscrollBehavior;
+    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscrollBehavior;
+    };
+  }, [open]);
+
   if (!open || !unit) return null;
 
   async function save() {
@@ -116,46 +130,29 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
     }
   }
 
-  return (
+  return createPortal(
     <div
       className="rc-unit-edit-overlay"
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.4)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 4000,
-        padding: 16,
-      }}
+      role="presentation"
       onMouseDown={() => {
         if (!saving) onClose();
       }}
     >
       <div
         className="rc-unit-edit-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rc-unit-edit-title"
         onMouseDown={(e) => e.stopPropagation()}
-        style={{
-          width: "100%",
-          maxWidth: 520,
-          maxHeight: "calc(100vh - 32px)",
-          overflowY: "auto",
-          background: "#fff",
-          borderRadius: 12,
-          border: "1px solid #e5e7eb",
-          padding: 16,
-          display: "grid",
-          gap: 12,
-        }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>Edit unit</div>
+        <div className="rc-unit-edit-header">
+          <div id="rc-unit-edit-title" style={{ fontWeight: 700, fontSize: 16 }}>Edit unit</div>
           <Button onClick={onClose} disabled={saving} style={{ padding: "6px 10px" }}>
             Close
           </Button>
         </div>
 
+        <div className="rc-unit-edit-body">
         <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
           Unit number
           <input
@@ -315,8 +312,9 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
             {error}
           </div>
         ) : null}
+        </div>
 
-        <div className="rc-unit-edit-actions" style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <div className="rc-unit-edit-actions">
           <Button onClick={onClose} disabled={saving} style={{ padding: "8px 12px" }}>
             Cancel
           </Button>
@@ -325,6 +323,7 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
