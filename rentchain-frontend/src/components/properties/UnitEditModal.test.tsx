@@ -20,6 +20,58 @@ describe("UnitEditModal", () => {
   beforeEach(() => {
     mocks.updateUnit.mockReset();
     mocks.uploadUnitLeaseDocument.mockReset();
+    document.body.style.overflow = "";
+    document.body.style.overscrollBehavior = "";
+  });
+
+  it("locks background scrolling and restores prior body styles when closed", () => {
+    document.body.style.overflow = "scroll";
+    document.body.style.overscrollBehavior = "auto";
+    const { rerender } = render(
+      <UnitEditModal
+        open
+        unit={{ id: "unit-1", unitNumber: "101", status: "vacant" }}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />
+    );
+
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(document.body.style.overscrollBehavior).toBe("none");
+    expect(screen.getByRole("dialog", { name: "Edit unit" })).toBeInTheDocument();
+    expect(document.querySelector(".rc-unit-edit-body")).toBeInTheDocument();
+    expect(document.querySelector(".rc-unit-edit-actions")).toContainElement(
+      screen.getByRole("button", { name: "Save" })
+    );
+
+    rerender(
+      <UnitEditModal
+        open={false}
+        unit={{ id: "unit-1", unitNumber: "101", status: "vacant" }}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />
+    );
+
+    expect(document.body.style.overflow).toBe("scroll");
+    expect(document.body.style.overscrollBehavior).toBe("auto");
+  });
+
+  it("keeps Cancel independently clickable without saving", () => {
+    const onClose = vi.fn();
+    render(
+      <UnitEditModal
+        open
+        unit={{ id: "unit-1", unitNumber: "101", status: "occupied" }}
+        onClose={onClose}
+        onSaved={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(mocks.updateUnit).not.toHaveBeenCalled();
   });
 
   it("blocks placeholder unit IDs before submitting occupancy updates", async () => {

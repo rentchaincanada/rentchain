@@ -1,0 +1,104 @@
+.rc-unit-edit-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4030;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding:
+    max(16px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.rc-unit-edit-panel {
+  width: 100%;
+  max-width: 520px;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100svh - 32px);
+  max-height: calc(
+    100dvh - max(16px, env(safe-area-inset-top, 0px)) - max(16px, env(safe-area-inset-bottom, 0px))
+  );
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.rc-unit-edit-header,
+.rc-unit-edit-actions {
+  flex: 0 0 auto;
+  padding: 16px;
+  background: #fff;
+}
+
+.rc-unit-edit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.rc-unit-edit-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.rc-unit-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid #e5e7eb;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 768px) {
+  .rc-unit-edit-overlay {
+    align-items: stretch;
+    padding:
+      max(8px, env(safe-area-inset-top, 0px))
+      max(8px, env(safe-area-inset-right, 0px))
+      max(8px, env(safe-area-inset-bottom, 0px))
+      max(8px, env(safe-area-inset-left, 0px));
+  }
+
+  .rc-unit-edit-panel {
+    max-height: calc(100vh - 16px);
+    max-height: calc(100svh - 16px);
+    max-height: calc(
+      100dvh - max(8px, env(safe-area-inset-top, 0px)) - max(8px, env(safe-area-inset-bottom, 0px))
+    );
+  }
+
+  .rc-unit-edit-header,
+  .rc-unit-edit-body,
+  .rc-unit-edit-actions {
+    padding: 12px;
+  }
+
+  .rc-unit-edit-actions {
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .rc-unit-edit-actions button {
+    min-height: 44px;
+    flex: 1 1 0;
+  }
+}
