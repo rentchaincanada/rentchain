@@ -437,9 +437,14 @@
   }
 
   .rc-unit-card-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: minmax(88px, 0.7fr) minmax(0, 1.3fr);
+    align-items: start;
+    gap: 10px 16px;
+  }
+
+  .rc-unit-card-row > * {
+    min-width: 0;
   }
 
   .rc-unit-card-specs {
@@ -451,12 +456,14 @@
   .rc-unit-label {
     font-size: 12px;
     color: #0f172a;
+    white-space: nowrap;
   }
 
   .rc-unit-value {
     font-size: 14px;
     font-weight: 600;
     color: #0f172a;
+    overflow-wrap: break-word;
   }
 
   .rc-unit-actions {
