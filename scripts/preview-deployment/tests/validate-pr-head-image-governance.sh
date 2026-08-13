@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 workflow="${repo_root}/.github/workflows/preview-deployment-identity-validation.yml"
 validator="${repo_root}/scripts/preview-deployment/validate-pr-head-request.mjs"
+dependency_policy="${repo_root}/scripts/preview-deployment/validate-runtime-dependency-policy.mjs"
 document="${repo_root}/docs/operations/preview-pr-head-image-publication.md"
 fixtures="$(mktemp -d)"
 trap 'rm -rf "${fixtures}"' EXIT
@@ -51,12 +52,19 @@ check "moved head fails" invalid_with_jq '.head.sha="1822687bd0bbfb0708ed2baa8f1
 check "moved base fails" invalid_with_jq '.base.sha="24d91a023c9f8f3765ae836c673ac3d86c17b5a5"' 1453 "${head_sha}" "${base_sha}" auth
 check "workflow source is trusted main" contains "${workflow}" 'test "${GITHUB_WORKFLOW_REF}" = "rentchaincanada/rentchain/.github/workflows/preview-deployment-identity-validation.yml@refs/heads/main"'
 check "source checkout is detached at exact SHA" contains "${workflow}" 'git checkout --detach "${SOURCE_SHA}"'
-check "critical build files must match trusted main" contains "${workflow}" 'git diff --quiet "${WORKFLOW_SHA}" "${SOURCE_SHA}" -- rentchain-api/Dockerfile rentchain-api/package.json rentchain-api/package-lock.json'
+check "protected build files use trusted centralized policy" contains "${workflow}" 'node "${trusted_policy}" protected-files "${GITHUB_WORKSPACE}" "${WORKFLOW_SHA}" "${SOURCE_SHA}"'
+check "Dockerfile remains protected" contains "${dependency_policy}" '"rentchain-api/Dockerfile"'
+check "package files use trusted dependency validation" contains "${workflow}" 'node "${trusted_policy}" dependencies "${trusted_package}" "${trusted_lock}" rentchain-api/package.json rentchain-api/package-lock.json'
+check "clean lockfile install runs before authentication" bash -c "test \"\$(grep -n 'npm ci --ignore-scripts --prefix rentchain-api' '${workflow}' | cut -d: -f1)\" -lt \"\$(grep -n 'Authenticate to the isolated Preview project' '${workflow}' | cut -d: -f1)\""
+check "Sharp native runtime is validated" contains "${workflow}" 'const sharp = require("sharp");'
+check "runtime dependency policy positive and negative tests pass" node "${repo_root}/scripts/preview-deployment/tests/validate-runtime-dependency-policy.mjs"
 check "Preview project is fixed" contains "${workflow}" 'PROJECT_ID: rentchain-preview'
 check "Preview registry is fixed" contains "${workflow}" 'northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend'
 check "Production project is absent" not_contains "${workflow}" 'project-0d9658de-af29-4dc0-a99'
 check "tag derives from PR and full SHA" contains "${workflow}" 'image_tag="pr-${PR_NUMBER}-sha-${SOURCE_SHA}"'
 check "platform is linux/amd64" contains "${workflow}" '--platform linux/amd64'
+check "image revision label binds exact source SHA" contains "${workflow}" '--label "org.opencontainers.image.revision=${SOURCE_SHA}"'
+check "image source label binds trusted repository" contains "${workflow}" '--label "org.opencontainers.image.source=https://github.com/rentchaincanada/rentchain"'
 check "workflow contains one build" bash -c "test \"\$(grep -c 'docker buildx build' '${workflow}')\" = 1"
 check "workflow contains one push" bash -c "test \"\$(grep -c '^          docker push ' '${workflow}')\" = 1"
 check "runtime validation precedes authentication" bash -c "test \"\$(grep -n 'Smoke-test the validated image' '${workflow}' | cut -d: -f1)\" -lt \"\$(grep -n 'Authenticate to the isolated Preview project' '${workflow}' | cut -d: -f1)\""
