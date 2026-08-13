@@ -5,7 +5,12 @@ test.use({ serviceWorkers: "block" });
 
 const desktopViewports = [1440, 1366, 1309, 1280, 1180, 1024];
 
-async function installWorkspaceHarness(page: Page) {
+type UnreadHarnessState = {
+  messages?: boolean;
+  inbox?: boolean;
+};
+
+async function installWorkspaceHarness(page: Page, unread: UnreadHarnessState = {}) {
   await page.route("**/src/api/baseUrl.ts", async (route) => {
     const response = await route.fetch();
     const body = (await response.text())
@@ -19,7 +24,41 @@ async function installWorkspaceHarness(page: Page) {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ ok: true, plan: "free", features: { messaging: false } }),
+      body: JSON.stringify({ ok: true, plan: "free", features: { messaging: unread.messages === true } }),
+    });
+  });
+  await page.route("**/api/landlord/messages/conversations", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        conversations: unread.messages ? [{ id: "conversation-1", hasUnread: true }] : [],
+      }),
+    });
+  });
+  await page.route("**/api/landlord/inbox", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        items: unread.inbox
+          ? [{
+              id: "maintenance-1",
+              sourceKind: "landlord.maintenance",
+              audienceRole: "landlord",
+              title: "Maintenance update",
+              body: "Synthetic update",
+              priority: "normal",
+              status: "unread",
+              occurredAt: "2026-08-12T00:00:00.000Z",
+              readAt: null,
+            }]
+          : [],
+        total: unread.inbox ? 1 : 0,
+        limit: 100,
+        offset: 0,
+      }),
     });
   });
 }
@@ -34,6 +73,49 @@ function visibleCommunicationsMenuTrigger(page: Page) {
   return page
     .locator(".rc-landlord-topnav:visible, .rc-landlord-mobile-topbar:visible")
     .getByRole("button", { name: "Communications" });
+}
+
+for (const width of [1180, 1440]) {
+  test(`shows truthful child unread indicators in the desktop menu at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await installWorkspaceHarness(page, { messages: true, inbox: true });
+    await page.goto("/messages");
+
+    const trigger = page.getByRole("button", { name: "Communications (unread)" });
+    await trigger.click();
+    const menu = page.getByRole("menu", { name: "Communications destinations" });
+    await expect(menu.getByRole("menuitem", { name: "Unified Inbox, unread activity" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Messages, unread activity" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Notices" })).toBeVisible();
+    await expect(menu.locator(".rc-communications-menu__child-unread")).toHaveCount(2);
+  });
+}
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 393, height: 852 },
+  { width: 414, height: 896 },
+  { width: 430, height: 932 },
+  { width: 820, height: 1180 },
+]) {
+  test(`keeps child unread truth readable in the responsive drawer at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installWorkspaceHarness(page, { messages: true, inbox: true });
+    await page.goto("/messages");
+
+    const tabbar = page.getByRole("navigation", { name: "Bottom navigation" });
+    const trigger = tabbar.getByRole("button", { name: "Communications" });
+    await expect(trigger.locator(".rc-landlord-mobile-tabbar-dot")).toBeVisible();
+    await trigger.click();
+    const drawer = page.getByRole("dialog", { name: "Communications navigation" });
+    await expect(drawer.getByRole("button", { name: "Unified Inbox, unread activity" })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "Messages, unread activity" })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "Notices" })).toBeVisible();
+    await expect(drawer.locator(".rc-landlord-communications-child-unread")).toHaveCount(2);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      await page.evaluate(() => document.documentElement.clientWidth + 1),
+    );
+  });
 }
 
 for (const route of communicationsRoutes) {

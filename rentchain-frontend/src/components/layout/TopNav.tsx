@@ -7,9 +7,13 @@ import { WorkspaceDrawer } from "./WorkspaceDrawer";
 import { Button } from "../ui/Ui";
 import { colors, radius, shadows, spacing, text, layout, blur } from "../../styles/tokens";
 import { RentChainLogo } from "../brand/RentChainLogo";
-import { fetchLandlordConversations } from "../../api/messagesApi";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { CommunicationsMenu } from "./CommunicationsMenu";
+import {
+  EMPTY_COMMUNICATIONS_UNREAD,
+  loadCommunicationsUnreadState,
+  type CommunicationsUnreadState,
+} from "./communicationsUnread";
 import "./TopNav.css";
 
 function roleLabel(raw: string): string {
@@ -53,12 +57,16 @@ function userInitials(user: ReturnType<typeof useAuth>["user"]): string {
   return initialsFromName(name) || initialsFromEmail(user?.email || "") || "U";
 }
 
-const TopNav: React.FC = () => {
+type Props = {
+  communicationsUnread?: CommunicationsUnreadState;
+};
+
+const TopNav: React.FC<Props> = ({ communicationsUnread }) => {
   const navigate = useNavigate();
   const { user, logout, ready, isLoading, authStatus } = useAuth();
   const { features } = useCapabilities();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+  const [loadedUnread, setLoadedUnread] = useState<CommunicationsUnreadState>(EMPTY_COMMUNICATIONS_UNREAD);
   const authResolved = ready && !isLoading && authStatus !== "restoring" && !!user;
   const effectiveRole = React.useMemo(() => {
     if (!authResolved) return "";
@@ -75,22 +83,22 @@ const TopNav: React.FC = () => {
   const canShowCommunications =
     authResolved &&
     (effectiveRole === "landlord" || effectiveRole === "admin");
-  const canLoadUnreadMessages = canShowCommunications && features?.messaging !== false;
+  const canLoadUnread = canShowCommunications && communicationsUnread === undefined;
+  const effectiveUnread = communicationsUnread || loadedUnread;
 
   React.useEffect(() => {
-    if (!canLoadUnreadMessages) {
-      setHasUnreadMessages(false);
+    if (!canLoadUnread) {
       return;
     }
     let mounted = true;
     const loadUnreadState = async () => {
       try {
-        const conversations = await fetchLandlordConversations();
+        const next = await loadCommunicationsUnreadState(features?.messaging !== false);
         if (!mounted) return;
-        setHasUnreadMessages((conversations || []).some((conversation: any) => conversation?.hasUnread === true));
+        setLoadedUnread(next);
       } catch {
         if (!mounted) return;
-        setHasUnreadMessages(false);
+        setLoadedUnread(EMPTY_COMMUNICATIONS_UNREAD);
       }
     };
     void loadUnreadState();
@@ -99,7 +107,7 @@ const TopNav: React.FC = () => {
       mounted = false;
       window.clearInterval(interval);
     };
-  }, [canLoadUnreadMessages]);
+  }, [canLoadUnread, features?.messaging]);
 
   return (
     <>
@@ -145,7 +153,12 @@ const TopNav: React.FC = () => {
             >
               Role: {roleBadge}
             </span>
-            {canShowCommunications ? <CommunicationsMenu hasUnread={hasUnreadMessages} /> : null}
+            {canShowCommunications ? (
+              <CommunicationsMenu
+                messagesUnread={effectiveUnread.messages}
+                inboxUnread={effectiveUnread.inbox}
+              />
+            ) : null}
             {canShowSchedulingShortcut ? (
               <Button
                 className="rc-top-nav-optional-action"

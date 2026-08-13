@@ -3,7 +3,6 @@ import { Building2, LayoutDashboard, Menu, MessagesSquare, ScrollText, X } from 
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import TopNav from "./TopNav";
 import { useAuth } from "../../context/useAuth";
-import { fetchLandlordConversations } from "../../api/messagesApi";
 import {
   COMMUNICATIONS_GROUP_ID,
   getVisibleNavItems,
@@ -18,10 +17,16 @@ import { getRoleDefaultDestination } from "@/lib/authDestination";
 import { RentChainLogo } from "../brand/RentChainLogo";
 import "./LandlordNav.css";
 import { CommunicationsMenu } from "./CommunicationsMenu";
+import {
+  EMPTY_COMMUNICATIONS_UNREAD,
+  loadCommunicationsUnreadState,
+  type CommunicationsUnreadState,
+} from "./communicationsUnread";
 
 type Props = {
   children: React.ReactNode;
   unreadMessages?: boolean;
+  unreadInbox?: boolean;
 };
 
 type DrawerMode = "workspace" | "communications" | null;
@@ -86,13 +91,17 @@ function isAdminContext(user: unknown): boolean {
   );
 }
 
-export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
+export const LandlordNav: React.FC<Props> = ({ children, unreadMessages, unreadInbox }) => {
   const nav = useNavigate();
   const loc = useLocation();
   const { logout, user, ready, isLoading, authStatus } = useAuth();
   const { features, loading: capsLoading } = useCapabilities();
-  const [hasUnread, setHasUnread] = useState<boolean>(false);
-  const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
+  const [loadedUnread, setLoadedUnread] = useState<CommunicationsUnreadState>(EMPTY_COMMUNICATIONS_UNREAD);
+  const unreadState = {
+    messages: typeof unreadMessages === "boolean" ? unreadMessages : loadedUnread.messages,
+    inbox: typeof unreadInbox === "boolean" ? unreadInbox : loadedUnread.inbox,
+  };
+  const unreadFlag = unreadState.messages || unreadState.inbox;
   const [drawerMode, setDrawerMode] = useState<DrawerMode>(null);
   const drawerOpen = drawerMode !== null;
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -168,23 +177,19 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
 
   useEffect(() => {
     let mounted = true;
-    if (navLoading || !isLandlordWorkspace || features?.messaging === false) {
-      setHasUnread(false);
+    if (navLoading || !isLandlordWorkspace) {
       return () => {
         mounted = false;
       };
     }
     const load = async () => {
       try {
-        const list = await fetchLandlordConversations();
+        const next = await loadCommunicationsUnreadState(features?.messaging !== false);
         if (!mounted) return;
-        const unread = (list || []).some(
-          (c: any) => c?.hasUnread === true || (c?.unreadCount ?? 0) > 0
-        );
-        setHasUnread(unread);
+        setLoadedUnread(next);
       } catch {
         if (!mounted) return;
-        setHasUnread(false);
+        setLoadedUnread(EMPTY_COMMUNICATIONS_UNREAD);
       }
     };
     void load();
@@ -276,7 +281,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   return (
     <div className={shellClassName} ref={shellRef}>
       <div className="rc-landlord-topnav" ref={stickyShellRef}>
-        <TopNav />
+        <TopNav communicationsUnread={unreadState} />
         <div className="rc-landlord-workspace-bar" aria-label="Workspace context">
           <div className="rc-landlord-workspace-context">
             <span>Current workspace</span>
@@ -300,7 +305,13 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       <div className="rc-landlord-mobile-topbar">
         <RentChainLogo href="/dashboard" size="sm" />
         <span className="rc-landlord-mobile-role">{workspaceLabel}</span>
-        {communicationsItems.length ? <CommunicationsMenu className="rc-communications-menu--mobile" hasUnread={unreadFlag} /> : null}
+        {communicationsItems.length ? (
+          <CommunicationsMenu
+            className="rc-communications-menu--mobile"
+            messagesUnread={unreadState.messages}
+            inboxUnread={unreadState.inbox}
+          />
+        ) : null}
         <button
           type="button"
           className="rc-landlord-mobile-menu"
@@ -363,6 +374,12 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                   {communicationsItems.map((item) => {
                     const Icon = item.icon;
                     const active = isNavItemActive(loc.pathname, item);
+                    const unread =
+                      item.id === "messages"
+                        ? unreadState.messages
+                        : item.id === "unified-inbox"
+                          ? unreadState.inbox
+                          : false;
                     return (
                       <button
                         key={item.id}
@@ -370,9 +387,11 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                         onClick={() => handleDrawerNavigation(item.to)}
                         className={active ? "active" : ""}
                         aria-current={active ? "page" : undefined}
+                        aria-label={unread ? `${item.label}, unread activity` : item.label}
                       >
                         {Icon ? <Icon size={20} strokeWidth={2.2} /> : null}
                         <span>{item.label}</span>
+                        {unread ? <span className="rc-landlord-communications-child-unread" aria-hidden="true" /> : null}
                       </button>
                     );
                   })}
