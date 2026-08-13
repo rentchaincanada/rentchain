@@ -92,3 +92,13 @@ resource "google_cloud_run_v2_service_iam_member" "vercel_preview_proxy_invoker"
   role     = "roles/run.invoker"
   member   = google_service_account.vercel_preview_proxy.member
 }
+
+# Temporary service-level access for isolated PR #1525 attachment QA.
+# Remove through Terraform/HCP after the governed QA/release lifecycle.
+resource "google_cloud_run_v2_service_iam_member" "pr1525_vercel_proxy_invoker" {
+  project  = var.project_id
+  location = local.preview_deployment_region
+  name     = "rentchain-pr1525-attachments-qa-d4fe051b"
+  role     = "roles/run.invoker"
+  member   = google_service_account.vercel_preview_proxy.member
+}
