@@ -277,25 +277,33 @@ describe("LandlordNav mobile drawer", () => {
     expect(screen.getByTestId("current-path")).toHaveTextContent("/payments");
   });
 
-  it("uses the free-tier landlord mobile app tabs in setup order", () => {
+  it("uses the five-slot landlord mobile IA with Communications primary and Operations in More", () => {
     renderLandlordNav();
 
     const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
     expect(within(tabbar).getByText("Dashboard")).toBeInTheDocument();
     expect(within(tabbar).getByText("Properties")).toBeInTheDocument();
     expect(within(tabbar).getByText("Applicants")).toBeInTheDocument();
-    expect(within(tabbar).getByText("Operations")).toBeInTheDocument();
+    expect(within(tabbar).getByText("Communications")).toBeInTheDocument();
     expect(within(tabbar).getByText("More")).toBeInTheDocument();
     expect(within(tabbar).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "Dashboard",
       "Properties",
       "Applicants",
-      "Operations",
+      "Communications",
       "More",
     ]);
     expect(within(tabbar).queryByText("Tenants")).not.toBeInTheDocument();
     expect(within(tabbar).queryByText("Leases")).not.toBeInTheDocument();
     expect(within(tabbar).queryByText("Messages")).not.toBeInTheDocument();
+    expect(within(tabbar).queryByText("Operations")).not.toBeInTheDocument();
+
+    fireEvent.click(within(tabbar).getByRole("button", { name: "Open workspace pages" }));
+    expect(
+      within(screen.getByRole("dialog", { name: "Navigation menu" })).getByRole("button", {
+        name: "Operations",
+      })
+    ).toBeInTheDocument();
   });
 
   it("keeps the shared nav tab configuration aligned with the landlord mobile app tabs", async () => {
@@ -327,7 +335,7 @@ describe("LandlordNav mobile drawer", () => {
     expect(within(drawer).queryByRole("button", { name: "Notices" })).not.toBeInTheDocument();
   });
 
-  it("navigates landlord mobile tabs to canonical routes", () => {
+  it("navigates direct landlord tabs while Communications opens its drawer without changing route", () => {
     renderLandlordNav();
 
     const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
@@ -337,25 +345,97 @@ describe("LandlordNav mobile drawer", () => {
     fireEvent.click(within(tabbar).getByRole("button", { name: "Applicants" }));
     expect(screen.getByTestId("current-path")).toHaveTextContent("/applications");
 
-    fireEvent.click(within(tabbar).getByRole("button", { name: "Operations" }));
-    expect(screen.getByTestId("current-path")).toHaveTextContent("/operations");
+    fireEvent.click(within(tabbar).getByRole("button", { name: "Communications" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/applications");
+    const communicationsDrawer = screen.getByRole("dialog", { name: "Communications navigation" });
+    expect(within(communicationsDrawer).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Close",
+      "Unified Inbox",
+      "Messages",
+      "Notices",
+    ]);
   });
 
-  it("marks the Operations tab active on the operations route", () => {
+  it.each([
+    ["Unified Inbox", "/landlord/unified-inbox"],
+    ["Messages", "/messages"],
+    ["Notices", "/notices"],
+  ])("navigates to %s from the Communications drawer and closes it", async (label, path) => {
+    renderLandlordNav("/dashboard");
+
+    const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
+    fireEvent.click(within(tabbar).getByRole("button", { name: "Communications" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "Communications navigation" })).getByRole("button", { name: label })
+    );
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Communications navigation" })).not.toBeInTheDocument());
+    expect(screen.getByTestId("current-path")).toHaveTextContent(path);
+    expect(within(tabbar).getByRole("button", { name: "Communications" })).toHaveClass("active");
+  });
+
+  it("reopens Communications from child routes and never redirects until a destination is selected", () => {
+    renderLandlordNav("/messages");
+
+    const communications = within(screen.getByRole("navigation", { name: "Bottom navigation" })).getByRole("button", {
+      name: "Communications",
+    });
+    fireEvent.click(communications);
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/messages");
+    expect(
+      within(screen.getByRole("dialog", { name: "Communications navigation" })).getByRole("button", { name: "Messages" })
+    ).toHaveAttribute("aria-current", "page");
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Communications navigation" })).getByRole("button", { name: "Notices" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/notices");
+
+    fireEvent.click(communications);
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/notices");
+    expect(screen.getByRole("dialog", { name: "Communications navigation" })).toBeInTheDocument();
+  });
+
+  it("dismisses the Communications drawer by backdrop and Escape while restoring trigger focus", async () => {
+    renderLandlordNav("/messages");
+
+    const communications = within(screen.getByRole("navigation", { name: "Bottom navigation" })).getByRole("button", {
+      name: "Communications",
+    });
+    fireEvent.click(communications);
+    fireEvent.click(document.querySelector(".rc-landlord-backdrop") as HTMLElement);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Communications navigation" })).not.toBeInTheDocument());
+    expect(communications).toHaveFocus();
+
+    fireEvent.click(communications);
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Communications navigation" })).not.toBeInTheDocument());
+    expect(communications).toHaveFocus();
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/messages");
+  });
+
+  it("keeps Operations reachable and active from More", () => {
     renderLandlordNav("/operations");
 
     const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
-    expect(within(tabbar).getByRole("button", { name: "Operations" })).toHaveClass("active");
+    expect(within(tabbar).queryByRole("button", { name: "Operations" })).not.toBeInTheDocument();
+    fireEvent.click(within(tabbar).getByRole("button", { name: "Open workspace pages" }));
+    expect(
+      within(screen.getByRole("dialog", { name: "Navigation menu" })).getByRole("button", {
+        name: "Operations",
+      })
+    ).toHaveClass("active");
   });
 
-  it("keeps communication destinations out of the mobile tab bar", () => {
-    renderLandlordNav("/landlord/unified-inbox");
+  it.each(["/landlord/unified-inbox", "/landlord/inbox", "/messages", "/notices"])(
+    "marks Communications active while keeping child routes out of the mobile tab bar at %s",
+    (path) => {
+      renderLandlordNav(path);
 
-    const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
-    expect(within(tabbar).queryByRole("button", { name: "Unified Inbox" })).not.toBeInTheDocument();
-    expect(within(tabbar).queryByRole("button", { name: "Messages" })).not.toBeInTheDocument();
-    expect(within(tabbar).queryByRole("button", { name: "Notices" })).not.toBeInTheDocument();
-  });
+      const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
+      expect(within(tabbar).getByRole("button", { name: "Communications" })).toHaveClass("active");
+      expect(within(tabbar).queryByRole("button", { name: "Unified Inbox" })).not.toBeInTheDocument();
+      expect(within(tabbar).queryByRole("button", { name: "Messages" })).not.toBeInTheDocument();
+      expect(within(tabbar).queryByRole("button", { name: "Notices" })).not.toBeInTheDocument();
+    }
+  );
 
   it.each([
     ["/landlord/unified-inbox", "Unified Inbox"],
@@ -366,7 +446,11 @@ describe("LandlordNav mobile drawer", () => {
 
     const context = screen.getByLabelText("Workspace context");
     const workspaceNav = screen.getByRole("navigation", { name: "Workspace navigation" });
-    fireEvent.click(screen.getByRole("button", { name: "Communications" }));
+    fireEvent.click(
+      within(document.querySelector(".rc-landlord-mobile-topbar") as HTMLElement).getByRole("button", {
+        name: "Communications",
+      })
+    );
     const communications = screen.getByRole("menu", { name: "Communications destinations" });
     const activeChild = within(communications).getByRole("menuitem", { name: label });
 
@@ -393,7 +477,11 @@ describe("LandlordNav mobile drawer", () => {
     renderLandlordNav(path);
 
     const context = screen.getByLabelText("Workspace context");
-    fireEvent.click(screen.getByRole("button", { name: "Communications" }));
+    fireEvent.click(
+      within(document.querySelector(".rc-landlord-mobile-topbar") as HTMLElement).getByRole("button", {
+        name: "Communications",
+      })
+    );
     const communications = screen.getByRole("menu", { name: "Communications destinations" });
 
     expect(within(communications).getAllByRole("menuitem").map((link) => link.textContent?.replace("✓", ""))).toEqual([
