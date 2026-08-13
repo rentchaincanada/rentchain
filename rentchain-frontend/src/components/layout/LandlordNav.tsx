@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Building2, ClipboardList, LayoutDashboard, Menu, ScrollText, X } from "lucide-react";
+import { Building2, LayoutDashboard, Menu, MessagesSquare, ScrollText, X } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import TopNav from "./TopNav";
 import { useAuth } from "../../context/useAuth";
@@ -28,7 +28,6 @@ const landlordMobileTabs = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/properties", label: "Properties", icon: Building2 },
   { to: "/applications", label: "Applicants", icon: ScrollText },
-  { to: "/operations", label: "Operations", icon: ClipboardList },
 ];
 
 const stickyWorkspaceIds = new Set([
@@ -129,9 +128,19 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       }),
     [primaryDrawerItems]
   );
+  const communicationsTab = (() => {
+    const landing = communicationsItems.find((item) => item.id === "unified-inbox");
+    if (!landing) return null;
+    return {
+      to: landing.to,
+      label: "Communications",
+      icon: MessagesSquare,
+      matchPaths: communicationsItems.flatMap((item) => [item.to, ...(item.matchPaths || [])]),
+    };
+  })();
   const tabItems =
     effectiveRole === "landlord" && !isAdminLikeContext
-      ? landlordMobileTabs.filter((item) => !item.requiresMessaging || features?.messaging !== false)
+      ? [...landlordMobileTabs, ...(communicationsTab ? [communicationsTab] : [])]
       : [];
   const showMobileBottomNav = effectiveRole === "landlord" && !isAdminLikeContext;
   const workspaceLabel = resolveWorkspaceLabel(loc.pathname, visibleItems);
@@ -384,9 +393,10 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
 
       {showMobileBottomNav ? (
         <nav className="rc-landlord-mobile-tabbar" aria-label="Bottom navigation">
-          {(navLoading ? [] : tabItems).map(({ to, label, icon: Icon }) => {
+          {(navLoading ? [] : tabItems).map((item) => {
+            const { to, label, icon: Icon } = item;
             if (!Icon) return null;
-            const active = loc.pathname === to || loc.pathname.startsWith(`${to}/`);
+            const active = isNavItemActive(loc.pathname, item);
             return (
               <button
                 key={to}
@@ -398,7 +408,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                 <Icon size={20} strokeWidth={2.2} />
                 <span className="rc-landlord-mobile-tabbar-label">
                   {label}
-                  {label === "Messages" && unreadFlag ? (
+                  {label === "Communications" && unreadFlag ? (
                     <span className="rc-landlord-mobile-tabbar-dot" />
                   ) : null}
                 </span>

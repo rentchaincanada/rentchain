@@ -430,7 +430,7 @@
   background: var(--rc-landlord-panel);
   box-shadow: 0 -10px 28px rgba(59, 44, 28, 0.12);
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   z-index: var(--rc-landlord-z-nav);
   box-sizing: border-box;
   max-width: 100%;
@@ -612,7 +612,7 @@
 
   .rc-landlord-mobile-tabbar {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     z-index: var(--rc-landlord-z-nav);
     width: 100%;
     max-width: 100%;

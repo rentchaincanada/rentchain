@@ -30,6 +30,12 @@ const communicationsRoutes = [
   { path: "/notices", title: "Notices" },
 ];
 
+function visibleCommunicationsMenuTrigger(page: Page) {
+  return page
+    .locator(".rc-landlord-topnav:visible, .rc-landlord-mobile-topbar:visible")
+    .getByRole("button", { name: "Communications" });
+}
+
 for (const route of communicationsRoutes) {
   for (const width of desktopViewports) {
     test(`keeps ${route.title} Communications state visible without Workspace scrolling at ${width}px`, async ({ page }) => {
@@ -40,7 +46,7 @@ for (const route of communicationsRoutes) {
       const workspaceNav = page.getByRole("navigation", { name: "Workspace navigation" });
       await expect(workspaceNav.getByRole("group", { name: "Communications" })).toHaveCount(0);
       await expect(workspaceNav.getByText("COMMUNICATIONS")).toHaveCount(0);
-      const trigger = page.getByRole("button", { name: "Communications" });
+      const trigger = visibleCommunicationsMenuTrigger(page);
       await trigger.click();
       const communications = page.getByRole("menu", { name: "Communications destinations" });
       await expect(communications.getByRole("menuitem")).toHaveCount(3);
@@ -91,7 +97,7 @@ for (const route of communicationsRoutes) {
   }
 }
 
-test("keeps communication destinations out of the mobile Workspace drawer and tab bar", async ({ page }) => {
+test("keeps Communications children out of the mobile Workspace drawer and tab bar", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await installWorkspaceHarness(page);
   await page.goto("/messages");
@@ -104,6 +110,7 @@ test("keeps communication destinations out of the mobile Workspace drawer and ta
   await expect(drawer.getByRole("button", { name: "Messages" })).toHaveCount(0);
   await expect(drawer.getByRole("button", { name: "Notices" })).toHaveCount(0);
   const tabbar = page.getByRole("navigation", { name: "Bottom navigation" });
+  await expect(tabbar.getByRole("button", { name: "Communications" })).toBeVisible();
   await expect(tabbar.getByRole("button", { name: "Unified Inbox" })).toHaveCount(0);
   await expect(tabbar.getByRole("button", { name: "Messages" })).toHaveCount(0);
   await expect(tabbar.getByRole("button", { name: "Notices" })).toHaveCount(0);
@@ -115,23 +122,26 @@ for (const destination of communicationsRoutes) {
     await installWorkspaceHarness(page);
     await page.goto("/messages");
 
-    await page.getByRole("button", { name: "Communications" }).click();
+    await visibleCommunicationsMenuTrigger(page).click();
     const target = page.getByRole("menu", { name: "Communications destinations" }).getByRole("menuitem", { name: destination.title });
     await target.click();
 
     await expect(page).toHaveURL(new RegExp(`${destination.path.replaceAll("/", "\\/")}$`));
     await expect(page.locator(".rc-landlord-mobile-role")).toHaveText(destination.title);
-    await page.getByRole("button", { name: "Communications" }).click();
+    await visibleCommunicationsMenuTrigger(page).click();
     await expect(page.getByRole("menuitem", { name: destination.title })).toHaveAttribute("aria-current", "page");
   });
 }
 
 for (const viewport of [
-  { width: 375, height: 812 },
-  { width: 360, height: 800 },
+  { width: 390, height: 844 },
+  { width: 393, height: 852 },
+  { width: 414, height: 896 },
   { width: 430, height: 932 },
+  { width: 768, height: 1024 },
+  { width: 820, height: 1180 },
 ]) {
-  test(`keeps Communications exclusive to the header at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+  test(`keeps Communications primary in bottom nav without Workspace duplication at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await installWorkspaceHarness(page);
     await page.goto("/notices");
@@ -140,12 +150,26 @@ for (const viewport of [
     const drawer = page.getByRole("dialog", { name: "Navigation menu" });
     await expect(drawer.getByRole("group", { name: "Communications" })).toHaveCount(0);
     await drawer.getByRole("button", { name: "Close menu" }).click();
-    await page.getByRole("button", { name: "Communications" }).click();
+    const tabbar = page.getByRole("navigation", { name: "Bottom navigation" });
+    await expect(tabbar.getByRole("button")).toHaveCount(5);
+    await expect(tabbar.getByText("Dashboard")).toBeVisible();
+    await expect(tabbar.getByText("Properties")).toBeVisible();
+    await expect(tabbar.getByText("Applicants")).toBeVisible();
+    await expect(tabbar.getByText("Communications")).toBeVisible();
+    await expect(tabbar.getByText("More")).toBeVisible();
+    await expect(tabbar.getByText("Operations")).toHaveCount(0);
+    await expect(tabbar.getByRole("button", { name: "Communications" })).toHaveAttribute("aria-current", "page");
+    await visibleCommunicationsMenuTrigger(page).click();
     const communications = page.getByRole("menu", { name: "Communications destinations" });
     await expect(communications.getByRole("menuitem")).toHaveCount(3);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       await page.evaluate(() => document.documentElement.clientWidth + 1),
     );
+
+    await tabbar.getByRole("button", { name: "Open workspace pages" }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Navigation menu" }).getByRole("button", { name: "Operations" })
+    ).toBeVisible();
   });
 }
 
@@ -157,7 +181,7 @@ test("redirects the legacy landlord inbox into the canonical Communications shel
   await expect(page).toHaveURL(/\/landlord\/unified-inbox\?status=unread#updates$/);
   const workspaceNav = page.getByRole("navigation", { name: "Workspace navigation" });
   await expect(workspaceNav.getByRole("group", { name: "Communications" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Communications" }).click();
+  await visibleCommunicationsMenuTrigger(page).click();
   const communications = page.getByRole("menu", { name: "Communications destinations" });
   await expect(communications.getByRole("menuitem")).toHaveCount(3);
   await expect(communications.getByRole("menuitem", { name: "Unified Inbox" })).toHaveAttribute("aria-current", "page");
@@ -175,7 +199,10 @@ for (const route of communicationsRoutes) {
       await page.goto(route.path);
 
       await expect(page.locator(".rc-landlord-mobile-role")).toHaveText(route.title);
-      await page.getByRole("button", { name: "Communications" }).click();
+      await expect(
+        page.getByRole("navigation", { name: "Bottom navigation" }).getByRole("button", { name: "Communications" })
+      ).toHaveAttribute("aria-current", "page");
+      await visibleCommunicationsMenuTrigger(page).click();
       const headerMenu = page.getByRole("menu", { name: "Communications destinations" });
       await expect(headerMenu.getByRole("menuitem", { name: "Unified Inbox" })).toBeVisible();
       await expect(headerMenu.getByRole("menuitem", { name: "Messages" })).toBeVisible();
