@@ -35,7 +35,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "42"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "46"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|secretmanager|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "9"
@@ -78,6 +78,53 @@ fi
 
 if rg -n 'allUsers|allAuthenticatedUsers|google_storage_bucket|google_firestore_(document|field|index)|google_compute|google_container|google_cloudbuild' "$root_dir" --glob '*.tf'; then
   echo "Public IAM or workload resource found" >&2
+  exit 1
+fi
+
+expected_storage_plan_permissions="$(cat <<'EOF'
+storage.buckets.get
+storage.buckets.getIamPolicy
+EOF
+)"
+actual_storage_plan_permissions="$(
+  sed -n '/hcp_terraform_preview_storage_reader_permissions = toset(/,/])/p' "$root_dir/iam.tf" \
+    | rg -No '"[^"]+"' \
+    | tr -d '"'
+)"
+test "$actual_storage_plan_permissions" = "$expected_storage_plan_permissions"
+
+expected_storage_apply_permissions="$(cat <<'EOF'
+storage.buckets.create
+storage.buckets.get
+storage.buckets.getIamPolicy
+storage.buckets.setIamPolicy
+storage.buckets.update
+EOF
+)"
+actual_storage_apply_permissions="$(
+  sed -n '/terraform_preview_storage_manager_permissions = toset(/,/])/p' "$root_dir/iam.tf" \
+    | rg -No '"[^"]+"' \
+    | tr -d '"'
+)"
+test "$actual_storage_apply_permissions" = "$expected_storage_apply_permissions"
+
+rg -q 'role_id     = "hcpTerraformPreviewStorageReader"' "$root_dir/iam.tf"
+rg -q 'role_id     = "terraformPreviewStorageManager"' "$root_dir/iam.tf"
+rg -q 'resource "google_project_iam_member" "hcp_terraform_preview_storage_reader"' "$root_dir/iam.tf"
+rg -q 'resource "google_project_iam_member" "terraform_preview_storage_manager"' "$root_dir/iam.tf"
+rg -q 'member  = local\.hcp_terraform_plan_member' "$root_dir/iam.tf"
+rg -q 'member  = local\.hcp_terraform_apply_member' "$root_dir/iam.tf"
+grep -Fq 'local.hcp_terraform_preview_storage_reader_permissions == toset([' "$root_dir/checks.tf"
+grep -Fq 'local.terraform_preview_storage_manager_permissions == toset([' "$root_dir/checks.tf"
+
+if printf '%s\n%s\n' "$actual_storage_plan_permissions" "$actual_storage_apply_permissions" \
+  | rg -n 'storage\.buckets\.delete|storage\.objects\.'; then
+  echo "Bucket delete or object-data permission found in HCP Storage bootstrap" >&2
+  exit 1
+fi
+
+if rg -n 'roles/storage\.|google_storage_bucket|google_storage_bucket_iam|allUsers|allAuthenticatedUsers' "$root_dir" --glob '*.tf'; then
+  echo "Predefined Storage role, bucket resource, bucket IAM, or public principal found in bootstrap" >&2
   exit 1
 fi
 
