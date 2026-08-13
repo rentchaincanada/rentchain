@@ -87,6 +87,10 @@
       "status": 404
     },
     {
+      "src": "^/api/pr1525-readiness$",
+      "dest": "/api/pr1525-readiness"
+    },
+    {
       "src": "^/api/pr1512-notices/(.*)$",
       "dest": "/api/pr1512-notices/[...path]?path=$1"
     },
