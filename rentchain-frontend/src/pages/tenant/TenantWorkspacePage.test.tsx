@@ -21,6 +21,10 @@ const tenantPortalApi = vi.hoisted(() => ({
   createTenantLeasePaymentCheckout: vi.fn(),
   signTenantLease: vi.fn(),
   listTenantWorkspaceMaintenance: vi.fn(),
+  listTenantWorkspaceMaintenanceImages: vi.fn(),
+  uploadTenantWorkspaceMaintenanceImage: vi.fn(),
+  deleteTenantWorkspaceMaintenanceImage: vi.fn(),
+  getTenantWorkspaceMaintenanceImageAccess: vi.fn(),
   redeemTenantWorkspaceInvite: vi.fn(),
 }));
 

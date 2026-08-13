@@ -6,6 +6,14 @@ import { verifyAuthToken } from "../auth/jwt";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
 import { uploadBufferToGcs } from "../lib/gcs";
+import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
+import {
+  MAINTENANCE_IMAGE_ATTACHMENT_COLLECTION,
+  MAX_MAINTENANCE_IMAGE_ATTACHMENTS,
+  parseMaintenanceImageAttachment,
+  projectMaintenanceImageAttachment,
+  type MaintenanceImageAttachmentRecord,
+} from "../lib/maintenanceImageAttachments";
 import {
   buildEvidenceStoragePath,
   makeEvidenceId,
@@ -1248,6 +1256,62 @@ router.get("/maintenance-requests", async (req: any, res) => {
     console.error("[maintenance-requests] list failed", { err });
     return res.status(500).json({ ok: false, error: "MAINT_REQUEST_LIST_FAILED" });
   }
+});
+
+async function loadLandlordAuthorizedAttachmentRequest(req: any, requestId: string) {
+  const role = roleOf(req);
+  if (role !== "landlord" && role !== "admin") return null;
+  const landlordId = landlordIdOf(req);
+  if (!landlordId) return null;
+  const requestSnap = await db.collection("maintenanceRequests").doc(requestId).get();
+  if (!requestSnap.exists) return null;
+  const request = { id: requestSnap.id, ...((requestSnap.data() as any) || {}) };
+  if (String(request.landlordId || "") !== landlordId) return null;
+  const propertyId = String(request.propertyId || "").trim();
+  if (!propertyId) return null;
+  const propertySnap = await db.collection("properties").doc(propertyId).get();
+  if (!propertySnap.exists || String((propertySnap.data() as any)?.landlordId || "") !== landlordId) return null;
+  return request;
+}
+
+async function listLandlordMaintenanceImages(requestId: string) {
+  const snap = await db
+    .collection(MAINTENANCE_IMAGE_ATTACHMENT_COLLECTION)
+    .where("maintenanceRequestId", "==", requestId)
+    .limit(MAX_MAINTENANCE_IMAGE_ATTACHMENTS + 1)
+    .get();
+  return snap.docs
+    .map((doc) => parseMaintenanceImageAttachment({ attachmentId: doc.id, ...(doc.data() as any) }))
+    .filter((item): item is MaintenanceImageAttachmentRecord => Boolean(item))
+    .sort((a, b) => a.createdAt - b.createdAt);
+}
+
+router.get("/landlord/maintenance/:id/attachments", async (req: any, res) => {
+  const requestId = String(req.params?.id || "").trim();
+  const request = requestId ? await loadLandlordAuthorizedAttachmentRequest(req, requestId) : null;
+  if (!request) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+  const attachments = await listLandlordMaintenanceImages(requestId);
+  return res.json({ ok: true, data: attachments.map(projectMaintenanceImageAttachment) });
+});
+
+router.get("/landlord/maintenance/:id/attachments/:attachmentId/access", async (req: any, res) => {
+  const requestId = String(req.params?.id || "").trim();
+  const attachmentId = String(req.params?.attachmentId || "").trim();
+  const request = requestId ? await loadLandlordAuthorizedAttachmentRequest(req, requestId) : null;
+  if (!request || !attachmentId) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+  const snap = await db.collection(MAINTENANCE_IMAGE_ATTACHMENT_COLLECTION).doc(attachmentId).get();
+  const attachment = parseMaintenanceImageAttachment(
+    snap.exists ? { attachmentId: snap.id, ...(snap.data() as any) } : null
+  );
+  if (!attachment || attachment.maintenanceRequestId !== requestId) {
+    return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+  }
+  const url = await getSignedDownloadUrl({
+    bucket: String(process.env.GCS_UPLOAD_BUCKET || ""),
+    path: attachment.storageObjectKey,
+    expiresMinutes: 10,
+  });
+  return res.json({ ok: true, data: { url, expiresInSeconds: 600 } });
 });
 
 router.post("/maintenance-requests/validate-transition", async (req: any, res) => {

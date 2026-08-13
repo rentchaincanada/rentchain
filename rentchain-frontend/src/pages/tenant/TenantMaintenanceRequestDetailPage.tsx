@@ -2,12 +2,15 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   getTenantMaintenance,
+  getTenantMaintenanceImageAccess,
+  listTenantMaintenanceImages,
   updateTenantMaintenanceConfirmation,
   updateTenantMaintenanceReopen,
   updateTenantMaintenanceReworkAccess,
   updateTenantMaintenanceReworkSignoff,
   updateTenantMaintenanceSignoff,
   type MaintenanceWorkflowItem,
+  type MaintenanceImageAttachment,
 } from "../../api/maintenanceWorkflowApi";
 import { Button, Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
@@ -93,6 +96,9 @@ export default function TenantMaintenanceRequestDetailPage() {
   const [reopenReason, setReopenReason] = useState("");
   const [reworkAccessNote, setReworkAccessNote] = useState("");
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [attachments, setAttachments] = useState<Array<MaintenanceImageAttachment & { url?: string }>>([]);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [attachmentsError, setAttachmentsError] = useState<string | null>(null);
   const [hasToken, setHasToken] = useState<boolean>(() =>
     typeof window === "undefined" ? true : !!getTenantToken()
   );
@@ -137,6 +143,36 @@ export default function TenantMaintenanceRequestDetailPage() {
     };
     void load();
   }, [id]);
+
+  useEffect(() => {
+    if (!id || !hasToken || sessionExpired) return;
+    let cancelled = false;
+    setAttachmentsLoading(true);
+    setAttachmentsError(null);
+    void listTenantMaintenanceImages(id)
+      .then(async (items) => {
+        const withUrls = await Promise.all(
+          items.map(async (item) => {
+            try {
+              const access = await getTenantMaintenanceImageAccess(id, item.attachmentId);
+              return { ...item, url: access.url };
+            } catch {
+              return item;
+            }
+          })
+        );
+        if (!cancelled) setAttachments(withUrls);
+      })
+      .catch((err: any) => {
+        if (!cancelled) setAttachmentsError(err?.message || "Unable to load photos.");
+      })
+      .finally(() => {
+        if (!cancelled) setAttachmentsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasToken, id, sessionExpired]);
 
   if (!hasToken || sessionExpired) {
     return (
@@ -362,6 +398,36 @@ export default function TenantMaintenanceRequestDetailPage() {
               </div>
               <div style={{ color: textTokens.primary, fontSize: "1rem", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
                 {data.description}
+              </div>
+              <div style={{ border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: "12px 14px", background: colors.panel }}>
+                <div style={{ fontWeight: 800, color: textTokens.primary }}>Photos ({attachments.length})</div>
+                {attachmentsLoading ? <div style={{ color: textTokens.muted, marginTop: 8 }}>Loading photos…</div> : null}
+                {attachmentsError ? <div role="alert" style={{ color: "#9a3412", marginTop: 8 }}>{attachmentsError}</div> : null}
+                {!attachmentsLoading && !attachmentsError && !attachments.length ? (
+                  <div style={{ color: textTokens.muted, marginTop: 8 }}>No photos attached.</div>
+                ) : null}
+                {attachments.length ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginTop: 10 }}>
+                    {attachments.map((attachment) => (
+                      <button
+                        key={attachment.attachmentId}
+                        type="button"
+                        disabled={!attachment.url}
+                        onClick={() => attachment.url && window.open(attachment.url, "_blank", "noopener,noreferrer")}
+                        aria-label={`Open ${attachment.filename}`}
+                        style={{ textAlign: "left", border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: 8, background: "#fff", minWidth: 0 }}
+                      >
+                        {attachment.url ? (
+                          <img src={attachment.url} alt="" style={{ width: "100%", height: 100, objectFit: "cover", borderRadius: radius.sm }} />
+                        ) : (
+                          <div style={{ height: 100, display: "grid", placeItems: "center", color: textTokens.muted }}>Unavailable</div>
+                        )}
+                        <div style={{ marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachment.filename}</div>
+                        <div style={{ color: textTokens.muted, fontSize: "0.8rem" }}>{(attachment.byteSize / (1024 * 1024)).toFixed(1)} MB</div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               {lifecycleView ? (
                 <div

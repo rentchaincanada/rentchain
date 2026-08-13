@@ -1,0 +1,102 @@
+import { expect, test, type Page } from "@playwright/test";
+import { installLegacySmokeHarness } from "./legacy-smoke-setup";
+
+test.use({ serviceWorkers: "block" });
+
+const viewports = [
+  { width: 390, height: 844 },
+  { width: 393, height: 852 },
+  { width: 414, height: 896 },
+  { width: 430, height: 932 },
+  { width: 768, height: 1024 },
+  { width: 820, height: 1180 },
+  { width: 1440, height: 900 },
+];
+
+const tenantToken = `tenant.${Buffer.from(JSON.stringify({ sub: "tenant-image-qa", role: "tenant", exp: 4102444800 })).toString("base64url")}.qa`;
+
+async function installTenantHarness(page: Page, uploadFails = false) {
+  await page.addInitScript(({ token }) => {
+    localStorage.setItem("rentchain_tenant_token", token);
+    sessionStorage.setItem("rentchain_tenant_token", token);
+    localStorage.setItem("dev_auth_unlocked", "1");
+  }, { token: tenantToken });
+  await page.route("**/api/tenant/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path.endsWith("/api/tenant/workspace")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: { context: { authority: "active_tenant", tenantId: "tenant-image-qa", propertyId: "property-qa", leaseId: "lease-qa" }, tenant: { id: "tenant-image-qa", status: "active" }, landlord: { name: "Synthetic Landlord" }, property: { id: "property-qa", name: "QA Property" }, unit: { id: "unit-qa", label: "Unit 1" }, lease: { id: "lease-qa", status: "active" }, application: null, maintenance: [] } }) });
+      return;
+    }
+    if (request.method() === "POST" && /\/attachments$/.test(path)) {
+      await route.fulfill({
+        status: uploadFails ? 500 : 201,
+        contentType: "application/json",
+        body: JSON.stringify(uploadFails
+          ? { ok: false, error: "UPLOAD_FAILED" }
+          : { ok: true, data: { attachmentId: "image-qa", filename: "leak.jpg", contentType: "image/jpeg", byteSize: 32, width: 8, height: 8, createdAt: 100 } }),
+      });
+      return;
+    }
+    if (request.method() === "POST" && path.endsWith("/api/tenant/maintenance-requests")) {
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ ok: true, data: { requestId: "maint-image-qa", status: "submitted" } }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: [] }) });
+  });
+}
+
+for (const viewport of viewports) {
+  test(`keeps tenant image selection responsive at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installTenantHarness(page);
+    await page.goto("/tenant/maintenance/new", { waitUntil: "domcontentloaded" });
+
+    const input = page.locator('input[type="file"]');
+    await expect(page.getByText("Add photos", { exact: true })).toBeVisible();
+    await input.setInputFiles([
+      { name: "leak.jpg", mimeType: "image/jpeg", buffer: Buffer.from("synthetic-image-a") },
+      { name: "pipe.webp", mimeType: "image/webp", buffer: Buffer.from("synthetic-image-b") },
+    ]);
+    await expect(page.getByText("leak.jpg", { exact: true })).toBeVisible();
+    await expect(page.getByText("pipe.webp", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Remove pipe.webp" }).click();
+    await expect(page.getByText("pipe.webp", { exact: true })).toHaveCount(0);
+
+    const geometry = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
+    expect(geometry.document).toBeLessThanOrEqual(geometry.viewport + 1);
+  });
+}
+
+test("preserves a created request when a synthetic image upload fails", async ({ page }) => {
+  await installTenantHarness(page, true);
+  await page.goto("/tenant/maintenance/new", { waitUntil: "domcontentloaded" });
+  await page.locator('input[type="file"]').setInputFiles({ name: "leak.jpg", mimeType: "image/jpeg", buffer: Buffer.from("synthetic-image") });
+  await page.getByPlaceholder("Leaking kitchen faucet").fill("Synthetic leak");
+  await page.getByPlaceholder(/Describe the issue/).fill("Synthetic QA description");
+  await page.getByRole("button", { name: "Submit request" }).click();
+  await expect(page.getByText(/request was saved, but one or more photos could not be uploaded/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry photo uploads" })).toBeVisible();
+});
+
+test("shows an authorized landlord thumbnail without exposing an object path", async ({ page }) => {
+  await installLegacySmokeHarness(page, { devPreviewUnlock: true });
+  await page.route("**/api/contractor/invites", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, invites: [] }) });
+  });
+  await page.route("**/api/landlord/maintenance**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/attachments/image-qa/access")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: { url: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", expiresInSeconds: 600 } }) });
+      return;
+    }
+    if (path.endsWith("/attachments")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: [{ attachmentId: "image-qa", filename: "tenant-leak.jpg", contentType: "image/jpeg", byteSize: 32, width: 8, height: 8, createdAt: 100 }] }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [{ id: "maint-image-qa", tenantId: "tenant-qa", landlordId: "smoke-landlord", propertyId: "property-qa", unitId: "unit-qa", tenantName: "Synthetic Tenant", propertyLabel: "QA Property", unitLabel: "Unit 1", title: "Synthetic leak", description: "Synthetic only", category: "PLUMBING", priority: "normal", status: "submitted", assignedContractorName: null, serviceWindowStartAt: null, serviceWindowEndAt: null, accessRequired: null, createdAt: 100, updatedAt: 100 }] }) });
+  });
+  await page.goto("/maintenance/maint-image-qa", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("button", { name: "Open tenant photo tenant-leak.jpg" })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("maintenance/images/");
+});

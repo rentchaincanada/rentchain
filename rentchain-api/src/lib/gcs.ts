@@ -25,3 +25,13 @@ export async function uploadBufferToGcs(opts: {
 
   return { bucket: bucket.name, path: opts.path };
 }
+
+export async function deleteObjectFromGcs(opts: { path: string; ignoreNotFound?: boolean }) {
+  const bucket = getUploadsBucket();
+  try {
+    await bucket.file(opts.path).delete({ ignoreNotFound: opts.ignoreNotFound ?? true });
+  } catch (error: any) {
+    if ((opts.ignoreNotFound ?? true) && Number(error?.code) === 404) return;
+    throw error;
+  }
+}

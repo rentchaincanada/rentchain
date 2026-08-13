@@ -750,6 +750,47 @@ export async function createTenantWorkspaceMaintenance(payload: {
   return res?.data;
 }
 
+export type MaintenanceImageAttachment = {
+  attachmentId: string;
+  filename: string;
+  contentType: "image/jpeg" | "image/png" | "image/webp";
+  byteSize: number;
+  width: number;
+  height: number;
+  createdAt: number;
+};
+
+export async function listTenantWorkspaceMaintenanceImages(requestId: string) {
+  const res = await tenantApiFetch<{ ok: boolean; data: MaintenanceImageAttachment[] }>(
+    `/tenant/maintenance-requests/${encodeURIComponent(requestId)}/attachments`
+  );
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function uploadTenantWorkspaceMaintenanceImage(requestId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await tenantApiFetch<{ ok: boolean; data: MaintenanceImageAttachment }>(
+    `/tenant/maintenance-requests/${encodeURIComponent(requestId)}/attachments`,
+    { method: "POST", body: form }
+  );
+  return res.data;
+}
+
+export async function deleteTenantWorkspaceMaintenanceImage(requestId: string, attachmentId: string) {
+  await tenantApiFetch(
+    `/tenant/maintenance-requests/${encodeURIComponent(requestId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    { method: "DELETE" }
+  );
+}
+
+export async function getTenantWorkspaceMaintenanceImageAccess(requestId: string, attachmentId: string) {
+  const res = await tenantApiFetch<{ ok: boolean; data: { url: string; expiresInSeconds: number } }>(
+    `/tenant/maintenance-requests/${encodeURIComponent(requestId)}/attachments/${encodeURIComponent(attachmentId)}/access`
+  );
+  return res.data;
+}
+
 export async function updateTenantWorkspaceMaintenanceConfirmation(
   id: string,
   payload: {

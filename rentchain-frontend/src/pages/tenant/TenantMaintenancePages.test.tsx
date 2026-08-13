@@ -1,7 +1,7 @@
 import React from "react";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import TenantMaintenanceRequestsPage from "./TenantMaintenanceRequestsPage";
 import TenantMaintenanceRequestDetailPage from "./TenantMaintenanceRequestDetailPage";
 import TenantMaintenanceRequestNewPage from "./TenantMaintenanceRequestNewPage";
@@ -10,6 +10,10 @@ const maintenanceWorkflowApi = vi.hoisted(() => ({
   listTenantMaintenance: vi.fn(),
   getTenantMaintenance: vi.fn(),
   createTenantMaintenance: vi.fn(),
+  listTenantMaintenanceImages: vi.fn(),
+  getTenantMaintenanceImageAccess: vi.fn(),
+  uploadTenantMaintenanceImage: vi.fn(),
+  deleteTenantMaintenanceImage: vi.fn(),
   updateTenantMaintenanceConfirmation: vi.fn(),
   updateTenantMaintenanceReopen: vi.fn(),
   updateTenantMaintenanceReworkAccess: vi.fn(),
@@ -31,6 +35,10 @@ vi.mock("../../api/maintenanceWorkflowApi", async () => {
     listTenantMaintenance: maintenanceWorkflowApi.listTenantMaintenance,
     getTenantMaintenance: maintenanceWorkflowApi.getTenantMaintenance,
     createTenantMaintenance: maintenanceWorkflowApi.createTenantMaintenance,
+    listTenantMaintenanceImages: maintenanceWorkflowApi.listTenantMaintenanceImages,
+    getTenantMaintenanceImageAccess: maintenanceWorkflowApi.getTenantMaintenanceImageAccess,
+    uploadTenantMaintenanceImage: maintenanceWorkflowApi.uploadTenantMaintenanceImage,
+    deleteTenantMaintenanceImage: maintenanceWorkflowApi.deleteTenantMaintenanceImage,
     updateTenantMaintenanceConfirmation: maintenanceWorkflowApi.updateTenantMaintenanceConfirmation,
     updateTenantMaintenanceReopen: maintenanceWorkflowApi.updateTenantMaintenanceReopen,
     updateTenantMaintenanceReworkAccess: maintenanceWorkflowApi.updateTenantMaintenanceReworkAccess,
@@ -50,9 +58,17 @@ vi.mock("react-router-dom", async () => {
 });
 
 describe("tenant maintenance pages", () => {
+  afterEach(cleanup);
   beforeEach(() => {
     vi.clearAllMocks();
     tenantAuth.getTenantToken.mockReturnValue("tenant-token");
+    maintenanceWorkflowApi.listTenantMaintenanceImages.mockResolvedValue([]);
+    maintenanceWorkflowApi.uploadTenantMaintenanceImage.mockResolvedValue({
+      attachmentId: "image-1", filename: "photo.jpg", contentType: "image/jpeg", byteSize: 100, width: 10, height: 10, createdAt: 100,
+    });
+    maintenanceWorkflowApi.deleteTenantMaintenanceImage.mockResolvedValue({ deleted: true });
+    Object.defineProperty(URL, "createObjectURL", { writable: true, value: vi.fn(() => "blob:preview") });
+    Object.defineProperty(URL, "revokeObjectURL", { writable: true, value: vi.fn() });
   });
 
   it("renders the tenant maintenance list with workflow summary", async () => {
@@ -712,5 +728,84 @@ describe("tenant maintenance pages", () => {
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith("/tenant/maintenance/maint-2");
     });
+  });
+
+  it("validates and uploads selected maintenance photos after creating the request", async () => {
+    maintenanceWorkflowApi.createTenantMaintenance.mockResolvedValue({ requestId: "maint-photos", status: "submitted" });
+    const { container } = render(<MemoryRouter><TenantMaintenanceRequestNewPage /></MemoryRouter>);
+
+    const photo = new File([new Uint8Array(512)], "leak.webp", { type: "image/webp" });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [photo] } });
+    expect(screen.getByText("leak.webp")).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText(/Leaking kitchen faucet/i), { target: { value: "Leaky faucet" } });
+    fireEvent.change(screen.getByPlaceholderText(/Describe the issue and any urgency details/i), { target: { value: "Water is dripping." } });
+    fireEvent.click(screen.getByRole("button", { name: /Submit request/i }));
+
+    await waitFor(() => expect(maintenanceWorkflowApi.uploadTenantMaintenanceImage).toHaveBeenCalledWith("maint-photos", photo));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/tenant/maintenance/maint-photos"));
+  });
+
+  it("rejects unsupported and excessive photo selections before request creation", () => {
+    const { container } = render(<MemoryRouter><TenantMaintenanceRequestNewPage /></MemoryRouter>);
+    const input = container.querySelector('input[type="file"]')!;
+    fireEvent.change(input, { target: { files: [new File(["pdf"], "unsafe.pdf", { type: "application/pdf" })] } });
+    expect(screen.getByText(/Only JPEG, PNG, and WebP images are supported/i)).toBeInTheDocument();
+
+    const images = Array.from({ length: 6 }, (_, index) => new File(["x"], `photo-${index}.jpg`, { type: "image/jpeg" }));
+    fireEvent.change(input, { target: { files: images } });
+    expect(screen.getByText(/You can attach up to 5 images/i)).toBeInTheDocument();
+    expect(maintenanceWorkflowApi.createTenantMaintenance).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized photos and lets the tenant remove a local preview", () => {
+    const { container } = render(<MemoryRouter><TenantMaintenanceRequestNewPage /></MemoryRouter>);
+    expect(screen.queryByText(/Attachments coming next/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Add photos")).toBeInTheDocument();
+    const input = container.querySelector('input[type="file"]')!;
+    const oversized = new File(["x"], "oversized.jpg", { type: "image/jpeg" });
+    Object.defineProperty(oversized, "size", { value: 10 * 1024 * 1024 + 1 });
+    fireEvent.change(input, { target: { files: [oversized] } });
+    expect(screen.getByText(/10 MB or smaller/i)).toBeInTheDocument();
+
+    const valid = new File(["x"], "removable.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [valid] } });
+    expect(screen.getByLabelText(/Selected photos/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Remove removable.png/i }));
+    expect(screen.queryByText("removable.png")).not.toBeInTheDocument();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:preview");
+  });
+
+  it("retains a created request and retries only a failed photo upload", async () => {
+    maintenanceWorkflowApi.createTenantMaintenance.mockResolvedValue({ requestId: "maint-retry", status: "submitted" });
+    maintenanceWorkflowApi.uploadTenantMaintenanceImage
+      .mockRejectedValueOnce(new Error("upload failed"))
+      .mockResolvedValueOnce({ attachmentId: "image-retry", filename: "retry.jpg", contentType: "image/jpeg", byteSize: 1, width: 1, height: 1, createdAt: 100 });
+    const { container } = render(<MemoryRouter><TenantMaintenanceRequestNewPage /></MemoryRouter>);
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [new File(["x"], "retry.jpg", { type: "image/jpeg" })] } });
+    fireEvent.change(screen.getByPlaceholderText(/Leaking kitchen faucet/i), { target: { value: "Leaky faucet" } });
+    fireEvent.change(screen.getByPlaceholderText(/Describe the issue and any urgency details/i), { target: { value: "Water is dripping." } });
+    fireEvent.click(screen.getByRole("button", { name: /Submit request/i }));
+    expect(await screen.findByText(/one or more photos could not be uploaded/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Retry photo uploads/i }));
+
+    await waitFor(() => expect(maintenanceWorkflowApi.uploadTenantMaintenanceImage).toHaveBeenCalledTimes(2));
+    expect(maintenanceWorkflowApi.createTenantMaintenance).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/tenant/maintenance/maint-retry"));
+  });
+
+  it("shows authorized tenant photo thumbnails on maintenance detail", async () => {
+    maintenanceWorkflowApi.getTenantMaintenance.mockResolvedValue({ item: {
+      id: "maint-photo-detail", title: "Leak", description: "Under sink", status: "submitted", priority: "normal", category: "plumbing",
+      assignedContractorName: null, serviceWindowStartAt: null, serviceWindowEndAt: null, accessRequired: null,
+      notifications: { tenant: { requiresAccessConfirmation: false, requiresSignoff: false, requiresReworkAwareness: false } }, createdAt: 100, updatedAt: 200,
+    } });
+    maintenanceWorkflowApi.listTenantMaintenanceImages.mockResolvedValue([
+      { attachmentId: "image-1", filename: "sink.jpg", contentType: "image/jpeg", byteSize: 1024, width: 20, height: 20, createdAt: 100 },
+    ]);
+    maintenanceWorkflowApi.getTenantMaintenanceImageAccess.mockResolvedValue({ url: "https://storage.invalid/signed", expiresAt: 999 });
+    render(<MemoryRouter initialEntries={["/tenant/maintenance/maint-photo-detail"]}><Routes><Route path="/tenant/maintenance/:id" element={<TenantMaintenanceRequestDetailPage />} /></Routes></MemoryRouter>);
+
+    expect(await screen.findByRole("button", { name: /Open sink.jpg/i })).toBeEnabled();
+    expect(maintenanceWorkflowApi.getTenantMaintenanceImageAccess).toHaveBeenCalledWith("maint-photo-detail", "image-1");
   });
 });
