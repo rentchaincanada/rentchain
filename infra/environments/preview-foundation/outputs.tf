@@ -76,3 +76,13 @@ output "vercel_preview_proxy_identity" {
   }
   sensitive = false
 }
+
+output "preview_attachment_storage" {
+  description = "Non-sensitive identifiers for the private Preview attachment storage foundation."
+  value = {
+    bucket_name             = google_storage_bucket.preview_attachments.name
+    location                = google_storage_bucket.preview_attachments.location
+    runtime_service_account = google_service_account.preview_backend_runtime.email
+  }
+  sensitive = false
+}

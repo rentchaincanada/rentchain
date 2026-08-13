@@ -386,6 +386,44 @@ check "f1_hcp_storage_control_plane_boundary" {
   }
 }
 
+check "f1_preview_attachment_storage_boundary" {
+  assert {
+    condition = (
+      google_storage_bucket.preview_attachments.project == "rentchain-preview" &&
+      google_storage_bucket.preview_attachments.name == "rentchain-preview-attachments" &&
+      lower(google_storage_bucket.preview_attachments.location) == "northamerica-northeast1" &&
+      google_storage_bucket.preview_attachments.public_access_prevention == "enforced" &&
+      google_storage_bucket.preview_attachments.uniform_bucket_level_access &&
+      !google_storage_bucket.preview_attachments.force_destroy
+    )
+    error_message = "The F1 attachment bucket must remain private, non-destructive, and isolated in the Montreal Preview project."
+  }
+
+  assert {
+    condition = (
+      google_project_iam_custom_role.preview_attachment_object_runtime.project == "rentchain-preview" &&
+      google_project_iam_custom_role.preview_attachment_object_runtime.role_id == "previewAttachmentObjectRuntime" &&
+      local.preview_attachment_object_permissions == toset([
+        "storage.objects.create",
+        "storage.objects.delete",
+        "storage.objects.get",
+      ]) &&
+      google_storage_bucket_iam_member.preview_attachment_runtime.bucket == google_storage_bucket.preview_attachments.name &&
+      google_storage_bucket_iam_member.preview_attachment_runtime.member == google_service_account.preview_backend_runtime.member
+    )
+    error_message = "Preview attachment object access must remain exact, bucket-scoped, and limited to the Preview runtime identity."
+  }
+
+  assert {
+    condition = (
+      google_service_account_iam_member.preview_runtime_self_token_creator.service_account_id == google_service_account.preview_backend_runtime.name &&
+      google_service_account_iam_member.preview_runtime_self_token_creator.role == "roles/iam.serviceAccountTokenCreator" &&
+      google_service_account_iam_member.preview_runtime_self_token_creator.member == google_service_account.preview_backend_runtime.member
+    )
+    error_message = "Preview keyless signing must remain a self-member-only binding on the exact runtime service account."
+  }
+}
+
 check "b5_image_delivery_boundary" {
   assert {
     condition = local.github_preview_image_publisher_permissions == toset([
