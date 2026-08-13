@@ -345,6 +345,47 @@ check "b6_preview_artifact_reader_boundary" {
   }
 }
 
+check "f1_hcp_storage_control_plane_boundary" {
+  assert {
+    condition = (
+      google_project_iam_custom_role.hcp_terraform_preview_storage_reader.project == "rentchain-preview" &&
+      google_project_iam_custom_role.hcp_terraform_preview_storage_reader.role_id == "hcpTerraformPreviewStorageReader" &&
+      local.hcp_terraform_preview_storage_reader_permissions == toset([
+        "storage.buckets.get",
+        "storage.buckets.getIamPolicy",
+      ]) &&
+      google_project_iam_member.hcp_terraform_preview_storage_reader.member == local.hcp_terraform_plan_member
+    )
+    error_message = "The HCP plan identity must retain exactly the two approved Preview bucket read permissions."
+  }
+
+  assert {
+    condition = (
+      google_project_iam_custom_role.terraform_preview_storage_manager.project == "rentchain-preview" &&
+      google_project_iam_custom_role.terraform_preview_storage_manager.role_id == "terraformPreviewStorageManager" &&
+      local.terraform_preview_storage_manager_permissions == toset([
+        "storage.buckets.create",
+        "storage.buckets.get",
+        "storage.buckets.getIamPolicy",
+        "storage.buckets.setIamPolicy",
+        "storage.buckets.update",
+      ]) &&
+      google_project_iam_member.terraform_preview_storage_manager.member == local.hcp_terraform_apply_member
+    )
+    error_message = "The HCP apply identity must retain exactly the five approved Preview bucket control-plane permissions."
+  }
+
+  assert {
+    condition = (
+      !contains(local.hcp_terraform_preview_storage_reader_permissions, "storage.buckets.delete") &&
+      !contains(local.terraform_preview_storage_manager_permissions, "storage.buckets.delete") &&
+      length([for permission in local.hcp_terraform_preview_storage_reader_permissions : permission if startswith(permission, "storage.objects.")]) == 0 &&
+      length([for permission in local.terraform_preview_storage_manager_permissions : permission if startswith(permission, "storage.objects.")]) == 0
+    )
+    error_message = "The HCP Storage bootstrap must exclude bucket delete and all object-data permissions."
+  }
+}
+
 check "b5_image_delivery_boundary" {
   assert {
     condition = local.github_preview_image_publisher_permissions == toset([

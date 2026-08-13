@@ -61,6 +61,19 @@ locals {
   terraform_preview_custom_role_updater_permissions = toset([
     "iam.roles.update",
   ])
+
+  hcp_terraform_preview_storage_reader_permissions = toset([
+    "storage.buckets.get",
+    "storage.buckets.getIamPolicy",
+  ])
+
+  terraform_preview_storage_manager_permissions = toset([
+    "storage.buckets.create",
+    "storage.buckets.get",
+    "storage.buckets.getIamPolicy",
+    "storage.buckets.setIamPolicy",
+    "storage.buckets.update",
+  ])
 }
 
 resource "google_project_iam_custom_role" "hcp_terraform_preview_b7_reader" {
@@ -125,6 +138,52 @@ resource "google_project_iam_custom_role" "terraform_preview_custom_role_updater
 resource "google_project_iam_member" "terraform_preview_custom_role_updater" {
   project = var.project_id
   role    = google_project_iam_custom_role.terraform_preview_custom_role_updater.name
+  member  = local.hcp_terraform_apply_member
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_project_iam_custom_role" "hcp_terraform_preview_storage_reader" {
+  project     = var.project_id
+  role_id     = "hcpTerraformPreviewStorageReader"
+  title       = "HCP Terraform Preview Storage Reader"
+  description = "Plan-phase read access for governed Preview bucket metadata and IAM policy."
+  permissions = local.hcp_terraform_preview_storage_reader_permissions
+  stage       = "GA"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_project_iam_member" "hcp_terraform_preview_storage_reader" {
+  project = var.project_id
+  role    = google_project_iam_custom_role.hcp_terraform_preview_storage_reader.name
+  member  = local.hcp_terraform_plan_member
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_project_iam_custom_role" "terraform_preview_storage_manager" {
+  project     = var.project_id
+  role_id     = "terraformPreviewStorageManager"
+  title       = "Terraform Preview Storage Manager"
+  description = "Apply-phase control-plane access for governed Preview buckets without delete or object permissions."
+  permissions = local.terraform_preview_storage_manager_permissions
+  stage       = "GA"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_project_iam_member" "terraform_preview_storage_manager" {
+  project = var.project_id
+  role    = google_project_iam_custom_role.terraform_preview_storage_manager.name
   member  = local.hcp_terraform_apply_member
 
   lifecycle {
