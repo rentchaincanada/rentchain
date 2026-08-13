@@ -395,6 +395,18 @@
   padding: 8px 4px;
 }
 
+.rc-landlord-communications-drawer-links button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+}
+
+.rc-landlord-communications-drawer-links button svg {
+  flex: 0 0 auto;
+  color: var(--rc-landlord-pine);
+}
+
 .rc-landlord-drawer-group {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

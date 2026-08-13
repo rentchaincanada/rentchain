@@ -116,6 +116,51 @@ test("keeps Communications children out of the mobile Workspace drawer and tab b
   await expect(tabbar.getByRole("button", { name: "Notices" })).toHaveCount(0);
 });
 
+test("uses the bottom Communications control as a dismissible child drawer without implicit navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installWorkspaceHarness(page);
+  await page.goto("/messages");
+
+  const tabbar = page.getByRole("navigation", { name: "Bottom navigation" });
+  const trigger = tabbar.getByRole("button", { name: "Communications" });
+  await trigger.click();
+  await expect(page).toHaveURL(/\/messages$/);
+  const drawer = page.getByRole("dialog", { name: "Communications navigation" });
+  await expect(drawer.getByRole("button")).toHaveCount(4);
+  await expect(drawer.getByRole("button", { name: "Unified Inbox" })).toBeVisible();
+  await expect(drawer.getByRole("button", { name: "Messages" })).toHaveAttribute("aria-current", "page");
+  await expect(drawer.getByRole("button", { name: "Notices" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawer).not.toBeAttached();
+  await expect(trigger).toBeFocused();
+  await expect(page).toHaveURL(/\/messages$/);
+
+  await trigger.click();
+  await page.locator(".rc-landlord-backdrop").click({ position: { x: 4, y: 4 } });
+  await expect(drawer).not.toBeAttached();
+  await expect(page).toHaveURL(/\/messages$/);
+});
+
+test("reopens the bottom Communications drawer across child navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 430, height: 932 });
+  await installWorkspaceHarness(page);
+  await page.goto("/messages");
+
+  const trigger = page.getByRole("navigation", { name: "Bottom navigation" }).getByRole("button", { name: "Communications" });
+  await trigger.click();
+  await page.getByRole("dialog", { name: "Communications navigation" }).getByRole("button", { name: "Notices" }).click();
+  await expect(page).toHaveURL(/\/notices$/);
+  await expect(trigger).toHaveAttribute("aria-current", "page");
+
+  await trigger.click();
+  await expect(page).toHaveURL(/\/notices$/);
+  const drawer = page.getByRole("dialog", { name: "Communications navigation" });
+  await expect(drawer.getByRole("button", { name: "Notices" })).toHaveAttribute("aria-current", "page");
+  await drawer.getByRole("button", { name: "Unified Inbox" }).click();
+  await expect(page).toHaveURL(/\/landlord\/unified-inbox$/);
+  await expect(drawer).not.toBeAttached();
+});
+
 for (const destination of communicationsRoutes) {
   test(`navigates to ${destination.title} from the mobile Communications menu`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -159,6 +204,13 @@ for (const viewport of [
     await expect(tabbar.getByText("More")).toBeVisible();
     await expect(tabbar.getByText("Operations")).toHaveCount(0);
     await expect(tabbar.getByRole("button", { name: "Communications" })).toHaveAttribute("aria-current", "page");
+    await tabbar.getByRole("button", { name: "Communications" }).click();
+    const communicationsDrawer = page.getByRole("dialog", { name: "Communications navigation" });
+    await expect(communicationsDrawer.getByRole("button", { name: "Unified Inbox" })).toBeVisible();
+    await expect(communicationsDrawer.getByRole("button", { name: "Messages" })).toBeVisible();
+    await expect(communicationsDrawer.getByRole("button", { name: "Notices" })).toHaveAttribute("aria-current", "page");
+    await expect(page).toHaveURL(/\/notices$/);
+    await communicationsDrawer.getByRole("button", { name: "Close menu" }).click();
     await visibleCommunicationsMenuTrigger(page).click();
     const communications = page.getByRole("menu", { name: "Communications destinations" });
     await expect(communications.getByRole("menuitem")).toHaveCount(3);

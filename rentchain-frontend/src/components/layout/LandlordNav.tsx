@@ -24,6 +24,8 @@ type Props = {
   unreadMessages?: boolean;
 };
 
+type DrawerMode = "workspace" | "communications" | null;
+
 const landlordMobileTabs = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/properties", label: "Properties", icon: Building2 },
@@ -91,9 +93,11 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const { features, loading: capsLoading } = useCapabilities();
   const [hasUnread, setHasUnread] = useState<boolean>(false);
   const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerMode, setDrawerMode] = useState<DrawerMode>(null);
+  const drawerOpen = drawerMode !== null;
   const shellRef = useRef<HTMLDivElement | null>(null);
   const stickyShellRef = useRef<HTMLDivElement | null>(null);
+  const drawerRef = useRef<HTMLElement | null>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
   const navLoading = !ready || isLoading || authStatus === "restoring" || !user || capsLoading;
   const isAdminLikeContext = React.useMemo(() => isAdminContext(user), [user]);
@@ -155,11 +159,11 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   ].filter(Boolean).join(" ");
 
   const handleDrawerNavigation = (path: string) => {
-    setDrawerOpen(false);
+    setDrawerMode(null);
     nav(path);
   };
   const closeDrawer = () => {
-    setDrawerOpen(false);
+    setDrawerMode(null);
   };
 
   useEffect(() => {
@@ -192,14 +196,14 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   }, [features?.messaging, isLandlordWorkspace, navLoading]);
 
   useEffect(() => {
-    setDrawerOpen(false);
+    setDrawerMode(null);
   }, [loc.pathname]);
 
   useEffect(() => {
     if (!drawerOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setDrawerOpen(false);
+        setDrawerMode(null);
       }
     };
     document.addEventListener("keydown", onKeyDown);
@@ -218,6 +222,14 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       document.body.style.overflow = "";
     };
   }, [drawerOpen]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const target = drawerRef.current?.querySelector<HTMLElement>(
+      drawerMode === "communications" ? '[aria-current="page"], .rc-landlord-communications-drawer-links button' : "button"
+    );
+    target?.focus();
+  }, [drawerMode, drawerOpen]);
 
   React.useLayoutEffect(() => {
     const shell = shellRef.current;
@@ -293,11 +305,11 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
           type="button"
           className="rc-landlord-mobile-menu"
           aria-label="Open menu"
-          aria-expanded={drawerOpen}
+          aria-expanded={drawerMode === "workspace"}
           aria-controls="rc-landlord-drawer"
           onClick={(event) => {
             lastFocusedRef.current = event.currentTarget;
-            setDrawerOpen(true);
+            setDrawerMode("workspace");
           }}
         >
           <Menu size={20} strokeWidth={2.2} />
@@ -317,6 +329,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
           />
 
           <aside
+            ref={drawerRef}
             id="rc-landlord-drawer"
             className={[
               "rc-landlord-drawer",
@@ -325,10 +338,10 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
             ].filter(Boolean).join(" ")}
             role="dialog"
             aria-modal="true"
-            aria-label="Navigation menu"
+            aria-label={drawerMode === "communications" ? "Communications navigation" : "Navigation menu"}
           >
             <div className="rc-landlord-drawer-header">
-              <span>Workspace</span>
+              <span>{drawerMode === "communications" ? "Communications" : "Workspace"}</span>
               <button
                 type="button"
                 onClick={(event) => {
@@ -340,8 +353,31 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                 Close
               </button>
             </div>
-            <div className="rc-landlord-drawer-scroll" tabIndex={0} aria-label="Workspace destinations">
-              {navLoading ? (
+            <div
+              className="rc-landlord-drawer-scroll"
+              tabIndex={0}
+              aria-label={drawerMode === "communications" ? "Communications destinations" : "Workspace destinations"}
+            >
+              {drawerMode === "communications" ? (
+                <div className="rc-landlord-drawer-links rc-landlord-communications-drawer-links">
+                  {communicationsItems.map((item) => {
+                    const Icon = item.icon;
+                    const active = isNavItemActive(loc.pathname, item);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleDrawerNavigation(item.to)}
+                        className={active ? "active" : ""}
+                        aria-current={active ? "page" : undefined}
+                      >
+                        {Icon ? <Icon size={20} strokeWidth={2.2} /> : null}
+                        <span>{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : navLoading ? (
                 <div className="rc-landlord-drawer-links">
                   <button type="button" disabled className="active">
                     Loading menu...
@@ -362,26 +398,28 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                   ))}
                 </div>
               )}
-              <div className="rc-landlord-drawer-divider" />
-              <button type="button" className="rc-landlord-drawer-signout" onClick={logout}>
-                Sign out
-              </button>
-              {adminDrawerItems.length ? (
-                <div className="rc-landlord-drawer-divider" />
-              ) : null}
-              {adminDrawerItems.length ? (
-                <div className="rc-landlord-drawer-links">
-                  {adminDrawerItems.map(({ id, to, label }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => handleDrawerNavigation(to)}
-                      className={loc.pathname.startsWith(to) ? "active" : ""}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+              {drawerMode === "workspace" ? (
+                <>
+                  <div className="rc-landlord-drawer-divider" />
+                  <button type="button" className="rc-landlord-drawer-signout" onClick={logout}>
+                    Sign out
+                  </button>
+                  {adminDrawerItems.length ? <div className="rc-landlord-drawer-divider" /> : null}
+                  {adminDrawerItems.length ? (
+                    <div className="rc-landlord-drawer-links">
+                      {adminDrawerItems.map(({ id, to, label }) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => handleDrawerNavigation(to)}
+                          className={loc.pathname.startsWith(to) ? "active" : ""}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
               ) : null}
             </div>
           </aside>
@@ -401,9 +439,20 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
               <button
                 key={to}
                 type="button"
-                onClick={() => nav(to)}
+                onClick={(event) => {
+                  if (label === "Communications") {
+                    lastFocusedRef.current = event.currentTarget;
+                    setDrawerMode("communications");
+                    return;
+                  }
+                  closeDrawer();
+                  nav(to);
+                }}
                 className={active ? "active" : ""}
                 aria-current={active ? "page" : undefined}
+                aria-haspopup={label === "Communications" ? "dialog" : undefined}
+                aria-expanded={label === "Communications" ? drawerMode === "communications" : undefined}
+                aria-controls={label === "Communications" && drawerMode === "communications" ? "rc-landlord-drawer" : undefined}
               >
                 <Icon size={20} strokeWidth={2.2} />
                 <span className="rc-landlord-mobile-tabbar-label">
@@ -419,14 +468,14 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
             type="button"
             onClick={(event) => {
               lastFocusedRef.current = event.currentTarget;
-              setDrawerOpen((open) => !open);
+              setDrawerMode((current) => current === "workspace" ? null : "workspace");
             }}
-            className={drawerOpen ? "active" : ""}
+            className={drawerMode === "workspace" ? "active" : ""}
             aria-label="Open workspace pages"
-            aria-expanded={drawerOpen}
+            aria-expanded={drawerMode === "workspace"}
             aria-controls="rc-landlord-drawer"
           >
-            {drawerOpen ? <X size={20} strokeWidth={2.2} /> : <Menu size={20} strokeWidth={2.2} />}
+            {drawerMode === "workspace" ? <X size={20} strokeWidth={2.2} /> : <Menu size={20} strokeWidth={2.2} />}
             <span className="rc-landlord-mobile-tabbar-label">More</span>
           </button>
         </nav>
