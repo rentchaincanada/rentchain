@@ -408,7 +408,7 @@ check "f1_preview_attachment_storage_boundary" {
         "storage.objects.delete",
         "storage.objects.get",
       ]) &&
-      google_storage_bucket_iam_member.preview_attachment_runtime.bucket == google_storage_bucket.preview_attachments.name &&
+      trimprefix(google_storage_bucket_iam_member.preview_attachment_runtime.bucket, "b/") == google_storage_bucket.preview_attachments.name &&
       google_storage_bucket_iam_member.preview_attachment_runtime.member == google_service_account.preview_backend_runtime.member
     )
     error_message = "Preview attachment object access must remain exact, bucket-scoped, and limited to the Preview runtime identity."

@@ -3,6 +3,7 @@ set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 repo_dir="$(cd "$root_dir/../../.." && pwd)"
+checks_file="$root_dir/checks.tf"
 workflow_file="$repo_dir/.github/workflows/preview-deployment-identity-validation.yml"
 dockerfile="$repo_dir/rentchain-api/Dockerfile"
 dockerignore_file="$repo_dir/rentchain-api/.dockerignore"
@@ -160,6 +161,11 @@ rg -q 'bucket = google_storage_bucket\.preview_attachments\.name' "$storage_file
 rg -q 'role   = google_project_iam_custom_role\.preview_attachment_object_runtime\.name' "$storage_file"
 rg -q 'member = google_service_account\.preview_backend_runtime\.member' "$storage_file"
 rg -U -q 'service_account_id = google_service_account\.preview_backend_runtime\.name\n  role[[:space:]]*= "roles/iam\.serviceAccountTokenCreator"\n  member[[:space:]]*= google_service_account\.preview_backend_runtime\.member' "$storage_file"
+rg -q 'trimprefix(google_storage_bucket_iam_member\.preview_attachment_runtime\.bucket, "b/") == google_storage_bucket\.preview_attachments\.name' "$checks_file"
+if rg -n 'preview_attachment_runtime\.bucket == google_storage_bucket\.preview_attachments\.name' "$checks_file"; then
+  echo "Preview attachment IAM bucket checks must normalize the provider canonical b/ prefix" >&2
+  exit 1
+fi
 
 test "$(rg -No 'roles/iam\.serviceAccountTokenCreator' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "2"
 if rg -n 'storage\.objects\.(list|update|setIamPolicy|getIamPolicy)|storage\.buckets\.(delete|create|update|setIamPolicy|getIamPolicy|get)' "$storage_file"; then
