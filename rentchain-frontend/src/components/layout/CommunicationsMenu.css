@@ -85,6 +85,22 @@
   color: #245842;
 }
 
+.rc-communications-menu__item-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 16px;
+}
+
+.rc-communications-menu__child-unread {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #a33a2f;
+}
+
 @media (max-width: 820px) {
   .rc-communications-menu--mobile .rc-communications-menu__trigger {
     min-height: 38px;

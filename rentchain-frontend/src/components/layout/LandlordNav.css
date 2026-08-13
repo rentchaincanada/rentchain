@@ -407,6 +407,15 @@
   color: var(--rc-landlord-pine);
 }
 
+.rc-landlord-communications-child-unread {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--rc-landlord-danger);
+}
+
 .rc-landlord-drawer-group {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

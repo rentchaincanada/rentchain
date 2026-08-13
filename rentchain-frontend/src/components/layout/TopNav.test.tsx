@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
   useCapabilitiesMock: vi.fn(),
   fetchLandlordConversationsMock: vi.fn(),
+  fetchUnifiedInboxMock: vi.fn(),
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -29,6 +30,10 @@ vi.mock("@/hooks/useCapabilities", () => ({
 
 vi.mock("../../api/messagesApi", () => ({
   fetchLandlordConversations: mocks.fetchLandlordConversationsMock,
+}));
+
+vi.mock("../../api/unifiedInboxApi", () => ({
+  fetchUnifiedInbox: mocks.fetchUnifiedInboxMock,
 }));
 
 vi.mock("./WorkspaceDrawer", () => ({
@@ -62,7 +67,10 @@ describe("TopNav", () => {
   beforeEach(() => {
     mocks.navigateMock.mockReset();
     mocks.logoutMock.mockReset();
+    mocks.fetchLandlordConversationsMock.mockReset();
+    mocks.fetchUnifiedInboxMock.mockReset();
     mocks.fetchLandlordConversationsMock.mockResolvedValue([]);
+    mocks.fetchUnifiedInboxMock.mockResolvedValue({ items: [], records: [] });
     mocks.useAuthMock.mockReturnValue({
       user: { id: "landlord-1", role: "landlord", actorRole: "landlord", email: "l@example.com" },
       logout: mocks.logoutMock,
@@ -156,6 +164,57 @@ describe("TopNav", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Communications (unread)" })).toBeInTheDocument();
     });
+
+    fireEvent.click(screen.getByRole("button", { name: "Communications (unread)" }));
+    expect(screen.getByRole("menuitem", { name: "Messages, unread activity" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Unified Inbox" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Notices" })).toBeInTheDocument();
+  });
+
+  it("shows an Inbox-specific indicator without inventing Messages or Notices state", async () => {
+    mocks.fetchUnifiedInboxMock.mockResolvedValue({
+      items: [{ id: "maintenance-1", status: "unread", sourceKind: "landlord.maintenance" }],
+      records: [],
+    });
+
+    renderTopNav();
+
+    const trigger = await screen.findByRole("button", { name: "Communications (unread)" });
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole("menuitem", { name: "Unified Inbox, unread activity" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Messages" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Notices" })).toBeInTheDocument();
+  });
+
+  it("shows both child indicators while leaving menu navigation non-acknowledging", async () => {
+    mocks.fetchLandlordConversationsMock.mockResolvedValue([{ id: "conv-1", hasUnread: true }]);
+    mocks.fetchUnifiedInboxMock.mockResolvedValue({
+      items: [{ id: "lease-1", status: "unread", sourceKind: "landlord.lease" }],
+      records: [],
+    });
+
+    renderTopNav();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Communications (unread)" }));
+    expect(screen.getByRole("menuitem", { name: "Unified Inbox, unread activity" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Messages, unread activity" })).toBeInTheDocument();
+    expect(mocks.fetchLandlordConversationsMock).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchUnifiedInboxMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not duplicate a shared unread message as Inbox-specific activity", async () => {
+    mocks.fetchLandlordConversationsMock.mockResolvedValue([{ id: "conv-1", hasUnread: true }]);
+    mocks.fetchUnifiedInboxMock.mockResolvedValue({
+      items: [{ id: "conv-1", status: "unread", sourceKind: "landlord.message" }],
+      records: [],
+    });
+
+    renderTopNav();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Communications (unread)" }));
+    expect(screen.getByRole("menuitem", { name: "Messages, unread activity" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Unified Inbox" })).toBeInTheDocument();
   });
 
   it("closes the Communications menu on Escape and restores trigger focus", async () => {

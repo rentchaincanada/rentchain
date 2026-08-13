@@ -6,6 +6,7 @@ import { LandlordNav } from "./LandlordNav";
 const mocks = vi.hoisted(() => ({
   logout: vi.fn(),
   fetchLandlordConversations: vi.fn(),
+  fetchUnifiedInbox: vi.fn(),
   useCapabilities: vi.fn(),
   user: { id: "landlord-1", role: "landlord", actorRole: "landlord", email: "owner@example.com" } as {
     id: string;
@@ -34,6 +35,10 @@ vi.mock("../../api/messagesApi", () => ({
   fetchLandlordConversations: mocks.fetchLandlordConversations,
 }));
 
+vi.mock("../../api/unifiedInboxApi", () => ({
+  fetchUnifiedInbox: mocks.fetchUnifiedInbox,
+}));
+
 vi.mock("./TopNav", () => ({
   default: () => <div>Top nav</div>,
 }));
@@ -47,14 +52,17 @@ function CurrentPath() {
   return <div data-testid="current-path">{location.pathname}</div>;
 }
 
-function renderLandlordNav(initialPath = "/dashboard") {
+function renderLandlordNav(
+  initialPath = "/dashboard",
+  unread?: { messages?: boolean; inbox?: boolean }
+) {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route
           path="*"
           element={
-            <LandlordNav>
+            <LandlordNav unreadMessages={unread?.messages} unreadInbox={unread?.inbox}>
               <div data-testid="page-content">Page content</div>
               <CurrentPath />
             </LandlordNav>
@@ -75,6 +83,7 @@ describe("LandlordNav mobile drawer", () => {
     mocks.user = { id: "landlord-1", role: "landlord", actorRole: "landlord", email: "owner@example.com" };
     mocks.logout.mockReset();
     mocks.fetchLandlordConversations.mockResolvedValue([]);
+    mocks.fetchUnifiedInbox.mockResolvedValue({ items: [], records: [] });
     mocks.useCapabilities.mockReturnValue({
       features: {
         messaging: true,
@@ -354,6 +363,45 @@ describe("LandlordNav mobile drawer", () => {
       "Messages",
       "Notices",
     ]);
+  });
+
+  it("shows matching Messages and Inbox indicators in the responsive drawer without a Notices indicator", () => {
+    renderLandlordNav("/dashboard", { messages: true, inbox: true });
+
+    const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
+    const communications = within(tabbar).getByRole("button", { name: "Communications" });
+    expect(communications.querySelector(".rc-landlord-mobile-tabbar-dot")).toBeInTheDocument();
+
+    fireEvent.click(communications);
+    const drawer = screen.getByRole("dialog", { name: "Communications navigation" });
+    expect(within(drawer).getByRole("button", { name: "Unified Inbox, unread activity" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "Messages, unread activity" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "Notices" })).toBeInTheDocument();
+  });
+
+  it("keeps each unread child independent across navigation and clears the parent only when neither is unread", async () => {
+    const { rerender } = renderLandlordNav("/dashboard", { messages: false, inbox: true });
+    const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
+    const communications = within(tabbar).getByRole("button", { name: "Communications" });
+
+    fireEvent.click(communications);
+    const drawer = screen.getByRole("dialog", { name: "Communications navigation" });
+    expect(within(drawer).getByRole("button", { name: "Unified Inbox, unread activity" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "Messages" })).toBeInTheDocument();
+    fireEvent.click(within(drawer).getByRole("button", { name: "Messages" }));
+    await waitFor(() => expect(screen.getByTestId("current-path")).toHaveTextContent("/messages"));
+    expect(communications.querySelector(".rc-landlord-mobile-tabbar-dot")).toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <LandlordNav unreadMessages={false} unreadInbox={false}>
+          <div>Page content</div>
+        </LandlordNav>
+      </MemoryRouter>
+    );
+    expect(
+      screen.getByRole("navigation", { name: "Bottom navigation" }).querySelector(".rc-landlord-mobile-tabbar-dot")
+    ).not.toBeInTheDocument();
   });
 
   it.each([

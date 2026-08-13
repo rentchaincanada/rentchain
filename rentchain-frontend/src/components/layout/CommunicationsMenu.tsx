@@ -13,11 +13,23 @@ const COMMUNICATION_LINKS = [
 
 type Props = {
   className?: string;
-  hasUnread?: boolean;
+  messagesUnread?: boolean;
+  inboxUnread?: boolean;
 };
 
-export function CommunicationsMenu({ className = "", hasUnread = false }: Props) {
+function destinationUnread(label: string, messagesUnread: boolean, inboxUnread: boolean) {
+  if (label === "Messages") return messagesUnread;
+  if (label === "Unified Inbox") return inboxUnread;
+  return false;
+}
+
+export function CommunicationsMenu({
+  className = "",
+  messagesUnread = false,
+  inboxUnread = false,
+}: Props) {
   const location = useLocation();
+  const hasUnread = messagesUnread || inboxUnread;
   const [open, setOpen] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const panelRef = React.useRef<HTMLDivElement | null>(null);
@@ -114,6 +126,7 @@ export function CommunicationsMenu({ className = "", hasUnread = false }: Props)
         >
           {COMMUNICATION_LINKS.map((item) => {
             const active = isActive(item);
+            const unread = destinationUnread(item.label, messagesUnread, inboxUnread);
             return (
               <Link
                 key={item.to}
@@ -121,10 +134,14 @@ export function CommunicationsMenu({ className = "", hasUnread = false }: Props)
                 role="menuitem"
                 className={active ? "is-active" : ""}
                 aria-current={active ? "page" : undefined}
+                aria-label={unread ? `${item.label}, unread activity` : item.label}
                 onClick={() => setOpen(false)}
               >
                 <span>{item.label}</span>
-                {active ? <Check size={16} aria-hidden="true" /> : null}
+                <span className="rc-communications-menu__item-state">
+                  {unread ? <span className="rc-communications-menu__child-unread" aria-hidden="true" /> : null}
+                  {active ? <Check size={16} aria-hidden="true" /> : null}
+                </span>
               </Link>
             );
           })}
