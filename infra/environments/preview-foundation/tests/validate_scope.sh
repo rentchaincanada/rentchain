@@ -30,12 +30,14 @@ google_secret_manager_secret_iam_member
 google_secret_manager_secret_version
 google_service_account
 google_service_account_iam_member
+google_storage_bucket
+google_storage_bucket_iam_member
 EOF
 )"
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "46"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "50"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|secretmanager|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "9"
@@ -76,7 +78,7 @@ if rg -n 'credentials\s*=|credentials_file|GOOGLE_APPLICATION_CREDENTIALS|servic
   exit 1
 fi
 
-if rg -n 'allUsers|allAuthenticatedUsers|google_storage_bucket|google_firestore_(document|field|index)|google_compute|google_container|google_cloudbuild' "$root_dir" --glob '*.tf'; then
+if rg -n 'allUsers|allAuthenticatedUsers|google_firestore_(document|field|index)|google_compute|google_container|google_cloudbuild' "$root_dir" --glob '*.tf'; then
   echo "Public IAM or workload resource found" >&2
   exit 1
 fi
@@ -123,8 +125,48 @@ if printf '%s\n%s\n' "$actual_storage_plan_permissions" "$actual_storage_apply_p
   exit 1
 fi
 
-if rg -n 'roles/storage\.|google_storage_bucket|google_storage_bucket_iam|allUsers|allAuthenticatedUsers' "$root_dir" --glob '*.tf'; then
-  echo "Predefined Storage role, bucket resource, bucket IAM, or public principal found in bootstrap" >&2
+if rg -n 'roles/storage\.|allUsers|allAuthenticatedUsers' "$root_dir" --glob '*.tf'; then
+  echo "Predefined Storage role or public principal found in Preview foundation" >&2
+  exit 1
+fi
+
+storage_file="$root_dir/storage.tf"
+test "$(rg -No '^resource "google_storage_bucket" "preview_attachments"' "$storage_file" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_storage_bucket_iam_member" "preview_attachment_runtime"' "$storage_file" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_project_iam_custom_role" "preview_attachment_object_runtime"' "$storage_file" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_service_account_iam_member" "preview_runtime_self_token_creator"' "$storage_file" | wc -l | tr -d ' ')" = "1"
+rg -q 'preview_attachment_bucket_name = "rentchain-preview-attachments"' "$storage_file"
+rg -q 'location[[:space:]]*= local\.preview_deployment_region' "$storage_file"
+rg -q 'public_access_prevention[[:space:]]*= "enforced"' "$storage_file"
+rg -q 'uniform_bucket_level_access[[:space:]]*= true' "$storage_file"
+rg -q 'force_destroy[[:space:]]*= false' "$storage_file"
+rg -U -q '(?s)resource "google_storage_bucket" "preview_attachments" \{.*lifecycle \{\n    prevent_destroy = true\n  \}' "$storage_file"
+
+expected_attachment_object_permissions="$(cat <<'EOF'
+storage.objects.create
+storage.objects.delete
+storage.objects.get
+EOF
+)"
+actual_attachment_object_permissions="$(
+  sed -n '/preview_attachment_object_permissions = toset(/,/])/p' "$storage_file" \
+    | rg -No '"[^"]+"' \
+    | tr -d '"'
+)"
+test "$actual_attachment_object_permissions" = "$expected_attachment_object_permissions"
+rg -q 'role_id     = "previewAttachmentObjectRuntime"' "$storage_file"
+rg -q 'bucket = google_storage_bucket\.preview_attachments\.name' "$storage_file"
+rg -q 'role   = google_project_iam_custom_role\.preview_attachment_object_runtime\.name' "$storage_file"
+rg -q 'member = google_service_account\.preview_backend_runtime\.member' "$storage_file"
+rg -U -q 'service_account_id = google_service_account\.preview_backend_runtime\.name\n  role[[:space:]]*= "roles/iam\.serviceAccountTokenCreator"\n  member[[:space:]]*= google_service_account\.preview_backend_runtime\.member' "$storage_file"
+
+test "$(rg -No 'roles/iam\.serviceAccountTokenCreator' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "2"
+if rg -n 'storage\.objects\.(list|update|setIamPolicy|getIamPolicy)|storage\.buckets\.(delete|create|update|setIamPolicy|getIamPolicy|get)' "$storage_file"; then
+  echo "Forbidden object or bucket control-plane permission found in the attachment runtime foundation" >&2
+  exit 1
+fi
+if rg -n 'vercel-preview-proxy|github-preview-deploy|hcp-terraform-preview|project-0d9658de-af29-4dc0-a99|rentchain-documents-prod' "$storage_file"; then
+  echo "Non-runtime, HCP, Production, or Production-bucket identity found in attachment storage" >&2
   exit 1
 fi
 
@@ -538,7 +580,7 @@ if rg -n 'project-0d9658de-af29-4dc0-a99|production' "$apply_permissions_file"; 
   exit 1
 fi
 
-if rg -n 'roles/(owner|editor|run\.admin|artifactregistry\.writer|cloudbuild\.builds\.editor|iam\.serviceAccountTokenCreator|storage\.admin)|google_service_account_key|principalSet://.*/workloadIdentityPools/github-preview-deploy/\*' "$root_dir" --glob '*.tf'; then
+if rg -n 'roles/(owner|editor|run\.admin|artifactregistry\.writer|cloudbuild\.builds\.editor|storage\.admin)|google_service_account_key|principalSet://.*/workloadIdentityPools/github-preview-deploy/\*' "$root_dir" --glob '*.tf'; then
   echo "Broad deployment permission, static key, or wildcard federation found" >&2
   exit 1
 fi
