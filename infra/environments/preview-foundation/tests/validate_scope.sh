@@ -137,6 +137,7 @@ test "$(rg -No '^resource "google_project_iam_custom_role" "preview_attachment_o
 test "$(rg -No '^resource "google_service_account_iam_member" "preview_runtime_self_token_creator"' "$storage_file" | wc -l | tr -d ' ')" = "1"
 rg -q 'preview_attachment_bucket_name = "rentchain-preview-attachments"' "$storage_file"
 rg -q 'location[[:space:]]*= local\.preview_deployment_region' "$storage_file"
+grep -Fq 'lower(google_storage_bucket.preview_attachments.location) == "northamerica-northeast1"' "$root_dir/checks.tf"
 rg -q 'public_access_prevention[[:space:]]*= "enforced"' "$storage_file"
 rg -q 'uniform_bucket_level_access[[:space:]]*= true' "$storage_file"
 rg -q 'force_destroy[[:space:]]*= false' "$storage_file"

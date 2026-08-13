@@ -391,7 +391,7 @@ check "f1_preview_attachment_storage_boundary" {
     condition = (
       google_storage_bucket.preview_attachments.project == "rentchain-preview" &&
       google_storage_bucket.preview_attachments.name == "rentchain-preview-attachments" &&
-      google_storage_bucket.preview_attachments.location == "northamerica-northeast1" &&
+      lower(google_storage_bucket.preview_attachments.location) == "northamerica-northeast1" &&
       google_storage_bucket.preview_attachments.public_access_prevention == "enforced" &&
       google_storage_bucket.preview_attachments.uniform_bucket_level_access &&
       !google_storage_bucket.preview_attachments.force_destroy
