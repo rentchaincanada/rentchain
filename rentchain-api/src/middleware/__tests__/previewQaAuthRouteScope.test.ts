@@ -88,6 +88,17 @@ async function invoke(options: {
 }
 
 describe("Preview QA auth route scope", () => {
+  it("bootstraps only exact PR #1525 landlord attachment GET paths before broad landlord routers", () => {
+    const appSource = readFileSync(new URL("../../app.build.ts", import.meta.url), "utf8");
+    const bootstrap = appSource.indexOf('"/api/landlord/maintenance/:id/attachments"');
+    const accessBootstrap = appSource.indexOf('"/api/landlord/maintenance/:id/attachments/:attachmentId/access"');
+    const broadLandlordMount = appSource.indexOf('app.use("/api/landlord"');
+    expect(bootstrap).toBeGreaterThan(-1);
+    expect(accessBootstrap).toBeGreaterThan(bootstrap);
+    expect(broadLandlordMount).toBeGreaterThan(accessBootstrap);
+    expect(appSource.slice(bootstrap, broadLandlordMount)).toContain('previewQaAuth("landlord-maintenance-attachment-list")');
+    expect(appSource.slice(accessBootstrap, broadLandlordMount)).toContain('previewQaAuth("landlord-maintenance-attachment-access")');
+  });
   beforeEach(enabledQaEnv);
   afterEach(() => {
     process.env = originalEnv;

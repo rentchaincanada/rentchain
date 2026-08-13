@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { authenticateJwt } from "./middleware/authMiddleware";
+import { previewQaAuth } from "./middleware/previewQaAuth";
 import { requireLandlord } from "./middleware/requireLandlord";
 import { routeSource } from "./middleware/routeSource";
 import {
@@ -520,6 +521,19 @@ app.use("/api", routeSource("landlordPortfolioScoreSharingRoutes.ts"), landlordP
 console.log("[route-mount] landlordPortfolioScoreSharingRoutes mounted at /api");
 app.use("/api/landlord/leases", routeSource("leaseNoticeLandlordRoutes.ts"), leaseNoticeLandlordRoutes);
 console.log("[route-mount] leaseNoticeLandlordRoutes mounted at /api/landlord/leases");
+// Establish only the fixed PR #1525 QA landlord principal before broad landlord
+// routers run their auth middleware. Canonical attachment ownership remains in
+// maintenanceRequestsRoutes and this middleware has no terminal handler.
+app.get(
+  "/api/landlord/maintenance/:id/attachments",
+  previewQaAuth("landlord-maintenance-attachment-list"),
+  (_req, _res, next) => next(),
+);
+app.get(
+  "/api/landlord/maintenance/:id/attachments/:attachmentId/access",
+  previewQaAuth("landlord-maintenance-attachment-access"),
+  (_req, _res, next) => next(),
+);
 app.use("/api/landlord", routeSource("landlordInboxRoutes.ts"), landlordInboxRoutes);
 console.log("[route-mount] landlordInboxRoutes mounted at /api/landlord");
 app.use("/api/landlord", routeSource("landlordDecisionInboxRoutes.ts"), landlordDecisionInboxRoutes);
