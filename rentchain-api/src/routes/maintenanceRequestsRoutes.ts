@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { db, FieldValue } from "../firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
+import { previewQaAuth } from "../middleware/previewQaAuth";
 import { verifyAuthToken } from "../auth/jwt";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
@@ -1286,7 +1287,7 @@ async function listLandlordMaintenanceImages(requestId: string) {
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
-router.get("/landlord/maintenance/:id/attachments", async (req: any, res) => {
+router.get("/landlord/maintenance/:id/attachments", previewQaAuth("landlord-maintenance-attachment-list"), async (req: any, res) => {
   const requestId = String(req.params?.id || "").trim();
   const request = requestId ? await loadLandlordAuthorizedAttachmentRequest(req, requestId) : null;
   if (!request) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
@@ -1294,7 +1295,7 @@ router.get("/landlord/maintenance/:id/attachments", async (req: any, res) => {
   return res.json({ ok: true, data: attachments.map(projectMaintenanceImageAttachment) });
 });
 
-router.get("/landlord/maintenance/:id/attachments/:attachmentId/access", async (req: any, res) => {
+router.get("/landlord/maintenance/:id/attachments/:attachmentId/access", previewQaAuth("landlord-maintenance-attachment-access"), async (req: any, res) => {
   const requestId = String(req.params?.id || "").trim();
   const attachmentId = String(req.params?.attachmentId || "").trim();
   const request = requestId ? await loadLandlordAuthorizedAttachmentRequest(req, requestId) : null;

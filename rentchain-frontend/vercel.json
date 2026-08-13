@@ -91,6 +91,10 @@
       "dest": "/api/pr1525-readiness"
     },
     {
+      "src": "^/api/pr1525-attachments/(.*)$",
+      "dest": "/api/pr1525-attachments/[...path]?path=$1"
+    },
+    {
       "src": "^/api/pr1512-notices/(.*)$",
       "dest": "/api/pr1512-notices/[...path]?path=$1"
     },

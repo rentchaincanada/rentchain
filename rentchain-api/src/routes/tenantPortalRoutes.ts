@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { Router } from "express";
 import multer from "multer";
 import { authenticateJwt } from "../middleware/authMiddleware";
+import { previewQaAuth } from "../middleware/previewQaAuth";
 import { routeSource } from "../middleware/routeSource";
 import { db, FieldValue } from "../firebase";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
@@ -6142,7 +6143,7 @@ async function listReadyMaintenanceImages(requestId: string) {
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
-router.get("/maintenance-requests/:id/attachments", requireTenantWorkspaceIdentity, async (req: any, res) => {
+router.get("/maintenance-requests/:id/attachments", previewQaAuth("tenant-maintenance-attachment-list"), requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
   const requestId = String(req.params?.id || "").trim();
@@ -6154,6 +6155,7 @@ router.get("/maintenance-requests/:id/attachments", requireTenantWorkspaceIdenti
 
 router.get(
   "/maintenance-requests/:id/attachments/:attachmentId/access",
+  previewQaAuth("tenant-maintenance-attachment-access"),
   requireTenantWorkspaceIdentity,
   async (req: any, res) => {
     const context = await resolveWorkspaceContextOrRespond(req, res);
@@ -6178,7 +6180,7 @@ router.get(
   }
 );
 
-router.post("/maintenance-requests/:id/attachments", requireTenantWorkspaceIdentity, async (req: any, res) => {
+router.post("/maintenance-requests/:id/attachments", previewQaAuth("tenant-maintenance-attachment-upload"), requireTenantWorkspaceIdentity, async (req: any, res) => {
   tenantMaintenanceImageUpload.single("file")(req, res, async (uploadError: any) => {
     const context = await resolveWorkspaceContextOrRespond(req, res);
     if (!context) return;
@@ -6291,6 +6293,7 @@ router.post("/maintenance-requests/:id/attachments", requireTenantWorkspaceIdent
 
 router.delete(
   "/maintenance-requests/:id/attachments/:attachmentId",
+  previewQaAuth("tenant-maintenance-attachment-delete"),
   requireTenantWorkspaceIdentity,
   async (req: any, res) => {
     const context = await resolveWorkspaceContextOrRespond(req, res);

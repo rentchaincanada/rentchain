@@ -7,6 +7,12 @@ import {
   PR1512_PREVIEW_QA_IDENTITY_ALIAS,
   PR1512_PREVIEW_QA_LANDLORD_ID,
   PR1512_PREVIEW_QA_SCOPE,
+  PR1525_PREVIEW_QA_FOREIGN_LANDLORD_SELECTOR,
+  PR1525_PREVIEW_QA_FOREIGN_TENANT_SELECTOR,
+  PR1525_PREVIEW_QA_LANDLORD_SELECTOR,
+  PR1525_PREVIEW_QA_SCOPE,
+  PR1525_PREVIEW_QA_SERVICE,
+  PR1525_PREVIEW_QA_TENANT_SELECTOR,
   decidePreviewQaAuth,
   isPreviewQaAuthenticatedRequest,
   previewQaAuth,
@@ -37,6 +43,13 @@ const pr1512EnabledEnv = {
   PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
 } as NodeJS.ProcessEnv;
 
+const pr1525EnabledEnv = {
+  ...enabledEnv,
+  PREVIEW_QA_AUTH_SCOPE: PR1525_PREVIEW_QA_SCOPE,
+  K_SERVICE: PR1525_PREVIEW_QA_SERVICE,
+  PREVIEW_QA_EXPECTED_SERVICE: PR1525_PREVIEW_QA_SERVICE,
+} as NodeJS.ProcessEnv;
+
 function decide(overrides: Partial<Parameters<typeof decidePreviewQaAuth>[0]> = {}) {
   return decidePreviewQaAuth({
     env: enabledEnv,
@@ -54,6 +67,7 @@ function invoke(options: {
   selector?: string;
   authorization?: string;
   headers?: Record<string, string>;
+  route?: Parameters<typeof previewQaAuth>[0];
 } = {}) {
   process.env = { ...options.env };
   const headers: Record<string, string> = { ...(options.headers || {}) };
@@ -78,7 +92,7 @@ function invoke(options: {
       return this;
     },
   };
-  previewQaAuth("landlord-inbox")(req, res, () => {
+  previewQaAuth(options.route || "landlord-inbox")(req, res, () => {
     nextCalled = true;
   });
   return { req, status, body, nextCalled };
@@ -107,6 +121,48 @@ describe("previewQaAuth", () => {
       plan: "starter",
       capabilities: ["messaging"],
     });
+  });
+
+  it.each([
+    [PR1525_PREVIEW_QA_TENANT_SELECTOR, "tenant", "qa-pr1525-tenant", "tenant-maintenance-attachment-list"],
+    [PR1525_PREVIEW_QA_FOREIGN_TENANT_SELECTOR, "tenant", "qa-pr1525-foreign-tenant", "tenant-maintenance-attachment-list"],
+    [PR1525_PREVIEW_QA_LANDLORD_SELECTOR, "landlord", "qa-pr1525-landlord", "landlord-maintenance-attachment-list"],
+    [PR1525_PREVIEW_QA_FOREIGN_LANDLORD_SELECTOR, "landlord", "qa-pr1525-foreign-landlord", "landlord-maintenance-attachment-list"],
+  ] as const)("injects fixed PR #1525 selector %s as %s", (selector, role, id, route) => {
+    const result = invoke({
+      env: pr1525EnabledEnv,
+      selector,
+      route,
+      headers: { "x-user-id": "arbitrary-user", "x-tenant-id": "arbitrary-tenant", "x-landlord-id": "arbitrary-landlord" },
+    });
+    expect(result.nextCalled).toBe(true);
+    expect(result.req.user).toMatchObject({ id, role });
+    expect(JSON.stringify(result.req.user)).not.toContain("arbitrary");
+  });
+
+  it.each([
+    ["unknown selector", pr1525EnabledEnv, "unknown", "tenant-maintenance-attachment-list"],
+    ["wrong scope", { ...pr1525EnabledEnv, PREVIEW_QA_AUTH_SCOPE: PR1512_PREVIEW_QA_SCOPE }, PR1525_PREVIEW_QA_TENANT_SELECTOR, "tenant-maintenance-attachment-list"],
+    ["Production", { ...pr1525EnabledEnv, GOOGLE_CLOUD_PROJECT: "project-0d9658de-af29-4dc0-a99" }, PR1525_PREVIEW_QA_TENANT_SELECTOR, "tenant-maintenance-attachment-list"],
+    ["permanent Preview", { ...pr1525EnabledEnv, K_SERVICE: "rentchain-preview-backend", PREVIEW_QA_EXPECTED_SERVICE: "rentchain-preview-backend" }, PR1525_PREVIEW_QA_TENANT_SELECTOR, "tenant-maintenance-attachment-list"],
+  ] as const)("rejects PR #1525 under %s", (_label, env, selector, route) => {
+    const result = invoke({ env, selector, route });
+    expect(result.nextCalled).toBe(false);
+    expect(result.status).toBe(401);
+  });
+
+  it("rejects cross-role and non-allowlisted PR #1525 operations", () => {
+    expect(decide({
+      env: pr1525EnabledEnv,
+      route: "landlord-maintenance-attachment-list",
+      selector: PR1525_PREVIEW_QA_TENANT_SELECTOR,
+    })).toEqual({ kind: "reject" });
+    expect(decide({
+      env: pr1525EnabledEnv,
+      method: "POST",
+      route: "tenant-maintenance-attachment-list",
+      selector: PR1525_PREVIEW_QA_TENANT_SELECTOR,
+    })).toEqual({ kind: "reject" });
   });
 
   it.each([

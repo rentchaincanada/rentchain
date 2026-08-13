@@ -231,6 +231,26 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
     expect(getSignedDownloadUrlMock).toHaveBeenCalledTimes(1);
   });
 
+  it("does not let the PR #1525 landlord selector bypass canonical property ownership", async () => {
+    Object.assign(process.env, {
+      PREVIEW_QA_AUTH_ENABLED: "true",
+      PREVIEW_QA_AUTH_SCOPE: "pr1525-maintenance-attachments",
+      APP_ENV: "preview",
+      GOOGLE_CLOUD_PROJECT: "rentchain-preview",
+      K_SERVICE: "rentchain-pr1525-attachments-qa-d4fe051b",
+      PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1525-attachments-qa-d4fe051b",
+      FIRESTORE_ENABLED: "true",
+      FIRESTORE_DATABASE_ID: "(default)",
+    });
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/maintenance/maint-1/attachments",
+      headers: { "x-rentchain-preview-qa-identity": "pr1525-landlord" },
+    });
+    expect(res.status).toBe(404);
+  });
+
   it("persists service window and access coordination through the landlord patch route", async () => {
     const router = (await import("../maintenanceRequestsRoutes")).default;
     const res = await invokeRouter(router, {
