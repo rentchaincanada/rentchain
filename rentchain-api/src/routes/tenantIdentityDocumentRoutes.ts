@@ -14,7 +14,6 @@ import {
   type IdentityDocumentRuntimePolicy,
 } from "../lib/identityDocuments";
 import { authenticateJwt } from "../middleware/authMiddleware";
-import { previewQaAuth } from "../middleware/previewQaAuth";
 import { resolveTenancyContext } from "../services/tenantPortal/tenancyContextService";
 
 const router = Router();
@@ -125,7 +124,7 @@ function respondError(res: any, error: unknown) {
   return res.status(500).json({ ok: false, error: "IDENTITY_DOCUMENT_OPERATION_FAILED" });
 }
 
-router.post("/identity-documents/consent", previewQaAuth("tenant-identity-consent"), async (req: any, res) => {
+router.post("/identity-documents/consent", async (req: any, res) => {
   try {
     if (forbiddenAuthorityOverride(req.body)) return res.status(400).json({ ok: false, error: "IDENTITY_OVERRIDE_NOT_ALLOWED" });
     const parsed = consentSchema.safeParse(req.body);
@@ -139,7 +138,7 @@ router.post("/identity-documents/consent", previewQaAuth("tenant-identity-consen
   }
 });
 
-router.get("/identity-documents", previewQaAuth("tenant-identity-list"), async (req: any, res) => {
+router.get("/identity-documents", async (req: any, res) => {
   try {
     const context = await resolveCanonicalSubject(req);
     if (!context) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
@@ -149,7 +148,7 @@ router.get("/identity-documents", previewQaAuth("tenant-identity-list"), async (
   }
 });
 
-router.post("/identity-documents", previewQaAuth("tenant-identity-upload"), async (req: any, res) => {
+router.post("/identity-documents", async (req: any, res) => {
   upload.single("file")(req, res, async (uploadError: any) => {
     try {
       if (uploadError) {
@@ -174,7 +173,7 @@ router.post("/identity-documents", previewQaAuth("tenant-identity-upload"), asyn
   });
 });
 
-router.post("/identity-documents/:documentId/access", previewQaAuth("tenant-identity-access"), async (req: any, res) => {
+router.post("/identity-documents/:documentId/access", async (req: any, res) => {
   try {
     const context = await resolveCanonicalSubject(req);
     if (!context) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
@@ -185,7 +184,7 @@ router.post("/identity-documents/:documentId/access", previewQaAuth("tenant-iden
   }
 });
 
-router.delete("/identity-documents/:documentId", previewQaAuth("tenant-identity-delete"), async (req: any, res) => {
+router.delete("/identity-documents/:documentId", async (req: any, res) => {
   try {
     const context = await resolveCanonicalSubject(req);
     if (!context) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });

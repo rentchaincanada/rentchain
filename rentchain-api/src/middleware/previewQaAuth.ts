@@ -10,12 +10,6 @@ export const PR1512_PREVIEW_QA_SCOPE = "pr1512-property-notices";
 export const PR1512_PREVIEW_QA_IDENTITY_ALIAS = "pr1512-landlord";
 export const PR1512_PREVIEW_QA_LANDLORD_ID = "qa-pr1512-landlord";
 export const PR1512_PREVIEW_QA_SERVICE_PATTERN = /^rentchain-pr1512-notices-qa-[a-f0-9]{8}$/;
-export const G1B_PREVIEW_QA_SCOPE = "g1b-synthetic-identity-qa-v1";
-export const G1B_PREVIEW_QA_TENANT_ALIAS = "qa-g1b-tenant";
-export const G1B_PREVIEW_QA_FOREIGN_TENANT_ALIAS = "qa-g1b-foreign-tenant";
-export const G1B_PREVIEW_QA_TENANT_ID = "qa-g1b-tenant";
-export const G1B_PREVIEW_QA_FOREIGN_TENANT_ID = "qa-g1b-foreign-tenant";
-export const G1B_PREVIEW_QA_SERVICE_PATTERN = /^rentchain-g1b-identity-qa-[a-f0-9]{8}$/;
 
 const PREVIEW_PROJECT_ID = "rentchain-preview";
 const PRODUCTION_PROJECT_ID = "project-0d9658de-af29-4dc0-a99";
@@ -40,12 +34,7 @@ export type PreviewQaRoute =
   | "tenant-maintenance-attachment-upload"
   | "tenant-maintenance-attachment-delete"
   | "landlord-maintenance-attachment-list"
-  | "landlord-maintenance-attachment-access"
-  | "tenant-identity-consent"
-  | "tenant-identity-upload"
-  | "tenant-identity-list"
-  | "tenant-identity-access"
-  | "tenant-identity-delete";
+  | "landlord-maintenance-attachment-access";
 
 type PreviewQaContract = {
   scope: string;
@@ -53,8 +42,6 @@ type PreviewQaContract = {
   selector: string;
   landlordId: string;
   email: string;
-  role?: "landlord" | "tenant";
-  tenantId?: string;
   allowedOperations: ReadonlySet<string>;
 };
 
@@ -97,25 +84,6 @@ const previewQaContracts: readonly PreviewQaContract[] = [
       "POST:landlord-notice-create",
     ]),
   },
-  ...[
-    { selector: G1B_PREVIEW_QA_TENANT_ALIAS, tenantId: G1B_PREVIEW_QA_TENANT_ID },
-    { selector: G1B_PREVIEW_QA_FOREIGN_TENANT_ALIAS, tenantId: G1B_PREVIEW_QA_FOREIGN_TENANT_ID },
-  ].map(({ selector, tenantId }): PreviewQaContract => ({
-    scope: G1B_PREVIEW_QA_SCOPE,
-    servicePattern: G1B_PREVIEW_QA_SERVICE_PATTERN,
-    selector,
-    landlordId: "",
-    tenantId,
-    role: "tenant",
-    email: `${tenantId}@example.invalid`,
-    allowedOperations: new Set([
-      "POST:tenant-identity-consent",
-      "POST:tenant-identity-upload",
-      "GET:tenant-identity-list",
-      "POST:tenant-identity-access",
-      "DELETE:tenant-identity-delete",
-    ]),
-  })),
 ];
 
 type PreviewQaDecision =
@@ -143,7 +111,7 @@ export function decidePreviewQaAuth(input: PreviewQaDecisionInput): PreviewQaDec
   const expectedService = String(input.env.PREVIEW_QA_EXPECTED_SERVICE || "").trim();
   const firestoreEnabled = String(input.env.FIRESTORE_ENABLED || "").trim().toLowerCase();
   const firestoreDatabaseId = String(input.env.FIRESTORE_DATABASE_ID || "").trim();
-  const contract = previewQaContracts.find((candidate) => candidate.scope === scope && candidate.selector === input.selector);
+  const contract = previewQaContracts.find((candidate) => candidate.scope === scope);
 
   const isolatedPreviewQa =
     enabled === "true" &&
@@ -159,6 +127,7 @@ export function decidePreviewQaAuth(input: PreviewQaDecisionInput): PreviewQaDec
     firestoreDatabaseId === "(default)";
 
   if (!isolatedPreviewQa || !contract) return { kind: "reject" };
+  if (input.selector !== contract?.selector) return { kind: "reject" };
   if (!contract.allowedOperations.has(`${input.method.toUpperCase()}:${input.route}`)) return { kind: "reject" };
   return { kind: "allow" };
 }
@@ -215,18 +184,8 @@ export function previewQaAuth(route: PreviewQaRoute): RequestHandler {
     }
 
     const scope = String(process.env.PREVIEW_QA_AUTH_SCOPE || "").trim();
-    const contract = previewQaContracts.find((candidate) => candidate.scope === scope && candidate.selector === selector);
+    const contract = previewQaContracts.find((candidate) => candidate.scope === scope);
     if (!contract) return res.status(401).json({ ok: false, error: "unauthenticated" });
-    if (contract.role === "tenant" && contract.tenantId) {
-      (req as any).user = {
-        id: contract.tenantId,
-        email: contract.email,
-        role: "tenant",
-        tenantId: contract.tenantId,
-      };
-      (req as any)[previewQaAuthenticated] = true;
-      return next();
-    }
     const entitlements = syntheticLandlordEntitlements(contract.landlordId);
     (req as any).user = {
       id: contract.landlordId,
