@@ -81,6 +81,8 @@ describe("PR #1525 attachment QA page", () => {
       const image = await screen.findByRole("img", { name: `Maintenance attachment preview: ${attachment.filename}` });
       expect(image).toHaveAttribute("src", expect.stringContaining("https://storage.googleapis.com/private-preview/"));
       expect(image).toHaveAttribute("loading", "lazy");
+      expect(image).toHaveStyle({ objectFit: "contain" });
+      expect(image.closest(".maintenance-evidence-photo-frame")).toHaveStyle({ aspectRatio: "4 / 3" });
     }
     const accessCalls = fetchMock.mock.calls.map(([input]) => String(input)).filter((url) => url.endsWith("/access"));
     expect(accessCalls).toHaveLength(3);

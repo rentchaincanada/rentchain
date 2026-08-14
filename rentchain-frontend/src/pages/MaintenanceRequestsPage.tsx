@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button, Card, Input, Section } from "../components/ui/Ui";
+import MaintenanceEvidencePhoto from "../components/maintenance/MaintenanceEvidencePhoto";
 import { useToast } from "../components/ui/ToastProvider";
 import { ResponsiveMasterDetail } from "../components/layout/ResponsiveMasterDetail";
 import {
@@ -2023,7 +2024,7 @@ export default function MaintenanceRequestsPage() {
                       <div style={{ color: text.muted, marginTop: 8 }}>No tenant photos attached.</div>
                     ) : null}
                     {requestImages.length ? (
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginTop: 10 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
                         {requestImages.map((attachment) => (
                           <button
                             key={attachment.attachmentId}
@@ -2033,11 +2034,7 @@ export default function MaintenanceRequestsPage() {
                             aria-label={`Open tenant photo ${attachment.filename}`}
                             style={{ textAlign: "left", border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: 8, background: "#fff", minWidth: 0 }}
                           >
-                            {attachment.url ? (
-                              <img src={attachment.url} alt="" style={{ width: "100%", height: 100, objectFit: "cover", borderRadius: radius.sm }} />
-                            ) : (
-                              <div style={{ height: 100, display: "grid", placeItems: "center", color: text.muted }}>Unavailable</div>
-                            )}
+                            <MaintenanceEvidencePhoto src={attachment.url} filename={attachment.filename} />
                             <div style={{ marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachment.filename}</div>
                             <div style={{ color: text.muted, fontSize: 12 }}>{(attachment.byteSize / (1024 * 1024)).toFixed(1)} MB</div>
                           </button>

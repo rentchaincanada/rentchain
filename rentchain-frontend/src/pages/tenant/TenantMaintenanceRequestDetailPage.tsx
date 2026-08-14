@@ -13,6 +13,7 @@ import {
   type MaintenanceImageAttachment,
 } from "../../api/maintenanceWorkflowApi";
 import { Button, Card, Section } from "../../components/ui/Ui";
+import MaintenanceEvidencePhoto from "../../components/maintenance/MaintenanceEvidencePhoto";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
 import { TenantSurfaceShell } from "./TenantWorkspaceShared";
@@ -407,7 +408,7 @@ export default function TenantMaintenanceRequestDetailPage() {
                   <div style={{ color: textTokens.muted, marginTop: 8 }}>No photos attached.</div>
                 ) : null}
                 {attachments.length ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginTop: 10 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
                     {attachments.map((attachment) => (
                       <button
                         key={attachment.attachmentId}
@@ -417,11 +418,7 @@ export default function TenantMaintenanceRequestDetailPage() {
                         aria-label={`Open ${attachment.filename}`}
                         style={{ textAlign: "left", border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: 8, background: "#fff", minWidth: 0 }}
                       >
-                        {attachment.url ? (
-                          <img src={attachment.url} alt="" style={{ width: "100%", height: 100, objectFit: "cover", borderRadius: radius.sm }} />
-                        ) : (
-                          <div style={{ height: 100, display: "grid", placeItems: "center", color: textTokens.muted }}>Unavailable</div>
-                        )}
+                        <MaintenanceEvidencePhoto src={attachment.url} filename={attachment.filename} />
                         <div style={{ marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachment.filename}</div>
                         <div style={{ color: textTokens.muted, fontSize: "0.8rem" }}>{(attachment.byteSize / (1024 * 1024)).toFixed(1)} MB</div>
                       </button>

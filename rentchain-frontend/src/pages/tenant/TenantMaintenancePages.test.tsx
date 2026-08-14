@@ -808,6 +808,11 @@ describe("tenant maintenance pages", () => {
     render(<MemoryRouter initialEntries={["/tenant/maintenance/maint-photo-detail"]}><Routes><Route path="/tenant/maintenance/:id" element={<TenantMaintenanceRequestDetailPage />} /></Routes></MemoryRouter>);
 
     expect(await screen.findByRole("button", { name: /Open sink.jpg/i })).toBeEnabled();
+    const image = screen.getByRole("img", { name: "Maintenance photo: sink.jpg" });
+    expect(image).toHaveStyle({ objectFit: "contain" });
+    expect(image.closest(".maintenance-evidence-photo-frame")).toHaveStyle({ aspectRatio: "4 / 3" });
+    expect(screen.getByText("sink.jpg")).toBeInTheDocument();
+    expect(screen.getByText("0.0 MB")).toBeInTheDocument();
     expect(maintenanceWorkflowApi.getTenantMaintenanceImageAccess).toHaveBeenCalledWith("maint-photo-detail", "image-1");
   });
 });

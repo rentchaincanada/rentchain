@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import MaintenanceEvidencePhoto from "../../components/maintenance/MaintenanceEvidencePhoto";
 
 type Role = "tenant" | "landlord";
 type Bootstrap = {
@@ -80,16 +81,15 @@ function AuthorizedAttachmentThumbnail({ attachment, requestAccessUrl }: Authori
       </div>
     </div>;
   }
-  return <div style={frameStyle}>
-    <img
+  return <div style={{ marginBottom: 12 }}>
+    <MaintenanceEvidencePhoto
       src={url}
-      alt={`Maintenance attachment preview: ${attachment.filename}`}
-      loading="lazy"
+      filename={attachment.filename}
+      altText={`Maintenance attachment preview: ${attachment.filename}`}
       onError={() => {
         setUrl("");
         setState("unavailable");
       }}
-      style={{ width: "100%", height: "100%", display: "block", objectFit: "cover" }}
     />
   </div>;
 }

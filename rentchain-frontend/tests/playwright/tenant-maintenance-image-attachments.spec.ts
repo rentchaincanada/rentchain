@@ -44,6 +44,18 @@ async function installTenantHarness(page: Page, uploadFails = false, application
       await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ ok: true, data: { requestId: "maintenance:69ffa10a77d4", status: "submitted" } }) });
       return;
     }
+    if (request.method() === "GET" && path.endsWith("/attachments/image-qa/access")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: { url: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", expiresInSeconds: 600 } }) });
+      return;
+    }
+    if (request.method() === "GET" && path.endsWith("/attachments")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: [{ attachmentId: "image-qa", filename: "faucet-leak.jpg", contentType: "image/jpeg", byteSize: 1227, width: 640, height: 480, createdAt: 100 }] }) });
+      return;
+    }
+    if (request.method() === "GET" && /\/api\/tenant\/maintenance-requests\/maintenance(?::|%3A)69ffa10a77d4$/.test(path)) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: { requestId: "maintenance:69ffa10a77d4", title: "Synthetic faucet leak", description: "Water is visibly leaking from the faucet.", status: "submitted", priority: "normal", category: "plumbing", notifications: { tenant: { requiresAccessConfirmation: false, requiresSignoff: false, requiresReworkAwareness: false } }, createdAt: 100, updatedAt: 200 } }) });
+      return;
+    }
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: [] }) });
   });
 }
@@ -75,6 +87,32 @@ for (const viewport of viewports) {
 
     const geometry = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
     expect(geometry.document).toBeLessThanOrEqual(geometry.viewport + 1);
+  });
+
+  test(`shows persisted maintenance evidence without cropping at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installTenantHarness(page);
+    await page.goto("/tenant/maintenance/maintenance:69ffa10a77d4", { waitUntil: "domcontentloaded" });
+
+    const image = page.getByRole("img", { name: "Maintenance photo: faucet-leak.jpg" });
+    await expect(image).toBeVisible();
+    await expect(image).toHaveCSS("object-fit", "contain");
+    const geometry = await image.evaluate((element) => {
+      const frame = element.parentElement!.getBoundingClientRect();
+      return {
+        ratio: frame.width / frame.height,
+        imageWidth: element.getBoundingClientRect().width,
+        imageHeight: element.getBoundingClientRect().height,
+        viewport: innerWidth,
+        document: document.documentElement.scrollWidth,
+      };
+    });
+    expect(geometry.ratio).toBeCloseTo(4 / 3, 1);
+    expect(geometry.imageWidth).toBeGreaterThan(0);
+    expect(geometry.imageHeight).toBeGreaterThan(0);
+    expect(geometry.document).toBeLessThanOrEqual(geometry.viewport + 1);
+    await expect(page.getByRole("button", { name: "Open faucet-leak.jpg" })).toBeEnabled();
+    await expect(page.getByText("faucet-leak.jpg", { exact: true })).toBeVisible();
   });
 }
 

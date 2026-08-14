@@ -108,6 +108,10 @@ describe("landlord maintenance workspace", () => {
     render(<MemoryRouter initialEntries={["/maintenance/maint-1"]}><Routes><Route path="/maintenance/:id" element={<MaintenanceRequestsPage />} /></Routes></MemoryRouter>);
 
     expect(await screen.findByRole("button", { name: /Open tenant photo heater.jpg/i })).toBeEnabled();
+    const image = screen.getByRole("img", { name: "Maintenance photo: heater.jpg" });
+    expect(image).toHaveStyle({ objectFit: "contain" });
+    expect(image.closest(".maintenance-evidence-photo-frame")).toHaveStyle({ aspectRatio: "4 / 3" });
+    expect(screen.getByText("heater.jpg")).toBeInTheDocument();
     expect(maintenanceWorkflowApi.getLandlordMaintenanceImageAccess).toHaveBeenCalledWith("maint-1", "image-1");
   });
 
