@@ -1,4 +1,5 @@
 export * from "./identityDocumentAuthorization";
+export * from "./identityDocumentApplicationService";
 export * from "./identityDocumentImageRuntime";
 export * from "./identityDocumentLifecycle";
 export * from "./identityDocumentSchemas";
@@ -7,3 +8,4 @@ export * from "./identityDocumentTypes";
 export * from "./identityVerificationProvider";
 export * from "./tenantIdentityRequirement";
 export * from "./gcsIdentityDocumentStorage";
+export * from "./firestoreIdentityDocumentRepository";
