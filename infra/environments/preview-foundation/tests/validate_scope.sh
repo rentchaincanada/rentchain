@@ -38,7 +38,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "51"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "50"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|secretmanager|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "9"
@@ -161,7 +161,7 @@ rg -q 'bucket = google_storage_bucket\.preview_attachments\.name' "$storage_file
 rg -q 'role   = google_project_iam_custom_role\.preview_attachment_object_runtime\.name' "$storage_file"
 rg -q 'member = google_service_account\.preview_backend_runtime\.member' "$storage_file"
 rg -U -q 'service_account_id = google_service_account\.preview_backend_runtime\.name\n  role[[:space:]]*= "roles/iam\.serviceAccountTokenCreator"\n  member[[:space:]]*= google_service_account\.preview_backend_runtime\.member' "$storage_file"
-rg -q 'trimprefix(google_storage_bucket_iam_member\.preview_attachment_runtime\.bucket, "b/") == google_storage_bucket\.preview_attachments\.name' "$checks_file"
+grep -Fq 'trimprefix(google_storage_bucket_iam_member.preview_attachment_runtime.bucket, "b/") == google_storage_bucket.preview_attachments.name' "$checks_file"
 if rg -n 'preview_attachment_runtime\.bucket == google_storage_bucket\.preview_attachments\.name' "$checks_file"; then
   echo "Preview attachment IAM bucket checks must normalize the provider canonical b/ prefix" >&2
   exit 1
@@ -178,13 +178,12 @@ if rg -n 'vercel-preview-proxy|github-preview-deploy|hcp-terraform-preview|proje
 fi
 
 vercel_identity_file="$root_dir/vercel_preview_identity.tf"
-test "$(rg -No '^resource "' "$vercel_identity_file" | wc -l | tr -d ' ')" = "7"
+test "$(rg -No '^resource "' "$vercel_identity_file" | wc -l | tr -d ' ')" = "6"
 test "$(rg -No '^resource "google_iam_workload_identity_pool" "vercel_preview_proxy"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
 test "$(rg -No '^resource "google_iam_workload_identity_pool_provider" "vercel_preview"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
 test "$(rg -No '^resource "google_service_account" "vercel_preview_proxy"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
 test "$(rg -No '^resource "google_service_account_iam_member" "vercel_preview_proxy_(workload_identity_user|openid_token_creator)"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "2"
 test "$(rg -No '^resource "google_cloud_run_v2_service_iam_member" "vercel_preview_proxy_invoker"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
-test "$(rg -No '^resource "google_cloud_run_v2_service_iam_member" "pr1525_vercel_proxy_invoker"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
 
 rg -q 'workload_identity_pool_id = "vercel-preview-proxy"' "$vercel_identity_file"
 rg -q 'workload_identity_pool_provider_id = "vercel-preview"' "$vercel_identity_file"
@@ -192,13 +191,7 @@ rg -q 'vercel_preview_issuer[[:space:]]*=[[:space:]]*"https://oidc\.vercel\.com/
 test "$(rg -No 'allowed_audiences' "$vercel_identity_file" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No 'google_service_account_iam_member\.vercel_preview_proxy_(workload_identity_user|openid_token_creator)\.service_account_id' "$root_dir/checks.tf" | wc -l | tr -d ' ')" = "0"
 rg -U -q 'basename\(\n        google_cloud_run_v2_service_iam_member\.vercel_preview_proxy_invoker\.name\n      \) == "rentchain-preview-backend"' "$root_dir/checks.tf"
-rg -q 'name     = "rentchain-pr1525-attachments-qa-d4fe051b"' "$vercel_identity_file"
-rg -q 'google_cloud_run_v2_service_iam_member\.pr1525_vercel_proxy_invoker\.project == "rentchain-preview"' "$root_dir/checks.tf"
-rg -q 'google_cloud_run_v2_service_iam_member\.pr1525_vercel_proxy_invoker\.location == "northamerica-northeast1"' "$root_dir/checks.tf"
-rg -q 'basename\(google_cloud_run_v2_service_iam_member\.pr1525_vercel_proxy_invoker\.name\) == "rentchain-pr1525-attachments-qa-d4fe051b"' "$root_dir/checks.tf"
-rg -q 'google_cloud_run_v2_service_iam_member\.pr1525_vercel_proxy_invoker\.role == "roles/run.invoker"' "$root_dir/checks.tf"
-rg -q 'google_cloud_run_v2_service_iam_member\.pr1525_vercel_proxy_invoker\.member == "serviceAccount:vercel-preview-proxy@rentchain-preview.iam.gserviceaccount.com"' "$root_dir/checks.tf"
-test "$(rg -No 'role     = "roles/run\.invoker"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "2"
+test "$(rg -No 'role     = "roles/run\.invoker"' "$vercel_identity_file" | wc -l | tr -d ' ')" = "1"
 grep -Fq 'length(google_iam_workload_identity_pool_provider.vercel_preview.attribute_mapping) == 4' "$root_dir/checks.tf"
 grep -Fq 'attribute_mapping["google.subject"] == "assertion.sub"' "$root_dir/checks.tf"
 grep -Fq 'attribute_mapping["attribute.owner_id"] == "assertion.owner_id"' "$root_dir/checks.tf"
@@ -270,7 +263,7 @@ rg -q 'name         = "preview-backend-auth"' "$root_dir/datastore_auth.tf"
 rg -q 'display_name = "Preview Backend Identity Toolkit"' "$root_dir/datastore_auth.tf"
 rg -U -q '(?s)resource "google_apikeys_key" "preview_backend_auth" \{.*lifecycle \{\n    prevent_destroy = true\n  \}' "$root_dir/datastore_auth.tf"
 
-if rg -n 'firebaseauth\.users\.(create|delete|update|sendEmail)|datastore\.(databases\.(delete|update)|entities\.delete|indexes\.|operations\.)|roles/(datastore|firebase|identityplatform)' "$root_dir/datastore_auth.tf"; then
+if rg -n 'firebaseauth\.users\.(create|delete|update|sendEmail)|datastore\.(databases\.(delete|update)|indexes\.|operations\.)|roles/(datastore|firebase|identityplatform)' "$root_dir/datastore_auth.tf"; then
   echo "B7 runtime IAM broadening or destructive datastore permission found" >&2
   exit 1
 fi

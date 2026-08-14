@@ -238,7 +238,6 @@ const TenantMagicRedeemPage = lazy(() => import("./pages/tenant/TenantMagicRedee
 const TenantInviteRedeemPage = lazy(() => import("./pages/tenant/TenantInviteRedeemPage"));
 const TenantMaintenanceRequestDetailPage = lazy(() => import("./pages/tenant/TenantMaintenanceRequestDetailPage"));
 const TenantMaintenanceRequestsPage = lazy(() => import("./pages/tenant/TenantMaintenanceRequestsPage"));
-const Pr1525AttachmentQaPage = lazy(() => import("./pages/qa/Pr1525AttachmentQaPage"));
 const TenantMaintenanceRequestNewPage = lazy(() => import("./pages/tenant/TenantMaintenanceRequestNewPage"));
 const FeedbackSubmissionPage = lazy(() => import("./pages/tenant/FeedbackSubmissionPage"));
 
@@ -416,7 +415,6 @@ function App() {
   return (
     <>
       <Routes>
-        <Route path="/__qa/pr1525/:role" element={suspensePage(<Pr1525AttachmentQaPage />)} />
         <Route path="/" element={suspensePage(<LandingPage />)} />
         <Route path="/site" element={suspensePage(<LandingPage />)} />
         <Route path="/login" element={<LoginPage />} />
