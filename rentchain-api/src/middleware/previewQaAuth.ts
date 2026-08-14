@@ -32,6 +32,9 @@ export type PreviewQaRoute =
   | "landlord-notice-list"
   | "landlord-notice-detail"
   | "landlord-notice-create"
+  | "tenant-maintenance-list"
+  | "tenant-maintenance-create"
+  | "tenant-maintenance-detail"
   | "tenant-maintenance-attachment-list"
   | "tenant-maintenance-attachment-access"
   | "tenant-maintenance-attachment-upload"
@@ -63,6 +66,16 @@ const pr1525Principals: readonly Pr1525Principal[] = [
 ];
 
 const pr1525TenantOperations = new Set([
+  "GET:tenant-maintenance-list",
+  "POST:tenant-maintenance-create",
+  "GET:tenant-maintenance-detail",
+  "GET:tenant-maintenance-attachment-list",
+  "GET:tenant-maintenance-attachment-access",
+  "POST:tenant-maintenance-attachment-upload",
+  "DELETE:tenant-maintenance-attachment-delete",
+]);
+
+const pr1525ForeignTenantOperations = new Set([
   "GET:tenant-maintenance-attachment-list",
   "GET:tenant-maintenance-attachment-access",
   "POST:tenant-maintenance-attachment-upload",
@@ -154,8 +167,10 @@ export function decidePreviewQaAuth(input: PreviewQaDecisionInput): PreviewQaDec
       firestoreDatabaseId === "(default)";
     if (!isolatedPr1525 || !principal) return { kind: "reject" };
     const operation = `${input.method.toUpperCase()}:${input.route}`;
-    const allowed = principal.role === "tenant"
+    const allowed = principal.selector === PR1525_PREVIEW_QA_TENANT_SELECTOR
       ? pr1525TenantOperations.has(operation)
+      : principal.role === "tenant"
+        ? pr1525ForeignTenantOperations.has(operation)
       : pr1525LandlordOperations.has(operation);
     return allowed ? { kind: "allow" } : { kind: "reject" };
   }

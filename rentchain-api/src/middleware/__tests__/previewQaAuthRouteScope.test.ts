@@ -88,6 +88,13 @@ async function invoke(options: {
 }
 
 describe("Preview QA auth route scope", () => {
+  it("places PR #1525 tenant real-flow QA auth before canonical tenant authorization", () => {
+    const source = readFileSync(new URL("../../routes/tenantPortalRoutes.ts", import.meta.url), "utf8");
+    expect(source).toContain('router.get("/maintenance-requests", previewQaAuth("tenant-maintenance-list"), requireTenantWorkspaceIdentity');
+    expect(source).toContain('router.post("/maintenance-requests", previewQaAuth("tenant-maintenance-create"), requireTenantWorkspaceIdentity');
+    expect(source).toContain('router.get("/maintenance-requests/:id", previewQaAuth("tenant-maintenance-detail"), requireTenant');
+  });
+
   it("bootstraps only exact PR #1525 landlord attachment GET paths before broad landlord routers", () => {
     const appSource = readFileSync(new URL("../../app.build.ts", import.meta.url), "utf8");
     const bootstrap = appSource.indexOf('"/api/landlord/maintenance/:id/attachments"');

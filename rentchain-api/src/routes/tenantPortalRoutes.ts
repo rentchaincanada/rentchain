@@ -6343,7 +6343,7 @@ router.delete(
   }
 );
 
-router.get("/maintenance-requests", requireTenantWorkspaceIdentity, async (req: any, res) => {
+router.get("/maintenance-requests", previewQaAuth("tenant-maintenance-list"), requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
   try {
@@ -6359,7 +6359,7 @@ router.get("/maintenance-requests", requireTenantWorkspaceIdentity, async (req: 
   }
 });
 
-router.post("/maintenance-requests", requireTenantWorkspaceIdentity, async (req: any, res) => {
+router.post("/maintenance-requests", previewQaAuth("tenant-maintenance-create"), requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
   if (context.authority !== "active_tenant" || !context.tenantId) {
@@ -8844,7 +8844,7 @@ async function buildTenantMaintenanceDetailResponse(docId: string, maintenanceDa
   };
 }
 
-router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => {
+router.get("/maintenance-requests/:id", previewQaAuth("tenant-maintenance-detail"), requireTenant, async (req: any, res) => {
   try {
     const tenantId = String(req.user?.tenantId || "").trim();
     const id = await resolveTenantMaintenanceDocumentIdForRequest(tenantId, String(req.params?.id || "").trim());

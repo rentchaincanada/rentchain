@@ -140,6 +140,17 @@ describe("previewQaAuth", () => {
     expect(JSON.stringify(result.req.user)).not.toContain("arbitrary");
   });
 
+  it("allows the fixed PR #1525 tenant to create a synthetic maintenance request", () => {
+    const result = invoke({
+      env: pr1525EnabledEnv,
+      method: "POST",
+      selector: PR1525_PREVIEW_QA_TENANT_SELECTOR,
+      route: "tenant-maintenance-create",
+    });
+    expect(result.nextCalled).toBe(true);
+    expect(result.req.user).toMatchObject({ id: "qa-pr1525-tenant", role: "tenant" });
+  });
+
   it.each([
     ["unknown selector", pr1525EnabledEnv, "unknown", "tenant-maintenance-attachment-list"],
     ["wrong scope", { ...pr1525EnabledEnv, PREVIEW_QA_AUTH_SCOPE: PR1512_PREVIEW_QA_SCOPE }, PR1525_PREVIEW_QA_TENANT_SELECTOR, "tenant-maintenance-attachment-list"],
@@ -162,6 +173,12 @@ describe("previewQaAuth", () => {
       method: "POST",
       route: "tenant-maintenance-attachment-list",
       selector: PR1525_PREVIEW_QA_TENANT_SELECTOR,
+    })).toEqual({ kind: "reject" });
+    expect(decide({
+      env: pr1525EnabledEnv,
+      method: "POST",
+      route: "tenant-maintenance-create",
+      selector: PR1525_PREVIEW_QA_FOREIGN_TENANT_SELECTOR,
     })).toEqual({ kind: "reject" });
   });
 
