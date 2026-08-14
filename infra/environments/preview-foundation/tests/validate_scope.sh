@@ -239,6 +239,7 @@ grep -Fq "resource.name == 'projects/\${var.project_id}/databases/\${local.previ
 expected_runtime_firestore_permissions="$(cat <<'EOF'
 datastore.databases.get
 datastore.entities.create
+datastore.entities.delete
 datastore.entities.get
 datastore.entities.list
 datastore.entities.update

@@ -43,6 +43,7 @@ check "b7_preview_datastore_boundary" {
     condition = local.preview_runtime_firestore_permissions == toset([
       "datastore.databases.get",
       "datastore.entities.create",
+      "datastore.entities.delete",
       "datastore.entities.get",
       "datastore.entities.list",
       "datastore.entities.update",
