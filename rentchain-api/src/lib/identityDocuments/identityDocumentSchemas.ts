@@ -144,6 +144,65 @@ export const IdentityDocumentConsentEventSchema = z
   .strict()
   .refine((value) => Boolean(value.applicationId || value.tenantId), "consent_workflow_context_required");
 
+const opaqueIdentityObjectId = z.string().regex(/^identity\/[0-9a-f-]{36}\/(original|sanitized)\/[0-9a-f-]{36}$/);
+
+/** Strict persisted G1B runtime shape. Unknown sensitive or delivery fields fail validation. */
+export const IdentityDocumentRuntimeRecordSchema = z
+  .object({
+    schemaVersion: z.literal("identity_document_runtime_v1"),
+    documentId: z.string().uuid(),
+    subjectId: canonicalId,
+    organizationId: canonicalId,
+    tenantId: canonicalId.nullable(),
+    applicantParticipantId: canonicalId.nullable(),
+    applicationIds: z.array(canonicalId).max(50),
+    documentType: z.enum(IDENTITY_DOCUMENT_TYPES),
+    side: z.enum(IDENTITY_DOCUMENT_SIDES),
+    issuingCountry: z.string().length(2),
+    issuingRegion: z.string().trim().min(1).max(120).nullable(),
+    originalObjectId: opaqueIdentityObjectId,
+    sanitizedObjectId: opaqueIdentityObjectId,
+    mimeType: z.enum(IDENTITY_DOCUMENT_MIME_TYPES),
+    originalByteSize: z.number().int().positive().max(MAX_IDENTITY_DOCUMENT_FILE_BYTES),
+    sanitizedByteSize: z.number().int().positive().max(MAX_IDENTITY_DOCUMENT_FILE_BYTES),
+    width: z.number().int().positive().max(MAX_IDENTITY_DOCUMENT_WIDTH),
+    height: z.number().int().positive().max(MAX_IDENTITY_DOCUMENT_HEIGHT),
+    originalChecksumSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    sanitizedChecksumSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    status: z.enum(IDENTITY_DOCUMENT_STATUSES),
+    verificationStatus: z.literal("not_started"),
+    uploadedAt: isoTimestamp,
+    uploadedBy: canonicalId,
+    consentEventId: canonicalId,
+    retentionPolicyId: canonicalId,
+    retentionPolicyVersion: canonicalId,
+    retentionClass: z.enum(["active_application", "approved_tenant"]),
+    legalHold: z.literal(false),
+    scheduledDeletionAt: isoTimestamp.nullable(),
+    version: z.number().int().positive(),
+    replacedByDocumentId: z.string().uuid().nullable(),
+    deletedAt: isoTimestamp.nullable(),
+    failureCode: z.string().trim().min(1).max(120).nullable().optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (!value.tenantId && !value.applicantParticipantId) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "identity_subject_context_required" });
+    }
+    if (value.originalObjectId === value.sanitizedObjectId) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "original_and_sanitized_objects_must_differ" });
+    }
+    if (value.width * value.height > MAX_IDENTITY_DOCUMENT_PIXELS) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "image_pixel_limit_exceeded", path: ["width"] });
+    }
+    if (value.status === "replaced" && !value.replacedByDocumentId) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "replacement_reference_required" });
+    }
+    if (value.status === "deleted" && !value.deletedAt) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "deleted_timestamp_required" });
+    }
+  });
+
 export const IdentityVerificationResultSchema = z
   .object({
     verificationId: canonicalId,

@@ -7,6 +7,9 @@ import {
   PR1512_PREVIEW_QA_IDENTITY_ALIAS,
   PR1512_PREVIEW_QA_LANDLORD_ID,
   PR1512_PREVIEW_QA_SCOPE,
+  G1B_PREVIEW_QA_FOREIGN_TENANT_ALIAS,
+  G1B_PREVIEW_QA_SCOPE,
+  G1B_PREVIEW_QA_TENANT_ALIAS,
   decidePreviewQaAuth,
   isPreviewQaAuthenticatedRequest,
   previewQaAuth,
@@ -35,6 +38,13 @@ const pr1512EnabledEnv = {
   PREVIEW_QA_AUTH_SCOPE: PR1512_PREVIEW_QA_SCOPE,
   K_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
   PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
+} as NodeJS.ProcessEnv;
+
+const g1bEnabledEnv = {
+  ...enabledEnv,
+  PREVIEW_QA_AUTH_SCOPE: G1B_PREVIEW_QA_SCOPE,
+  K_SERVICE: "rentchain-g1b-identity-qa-7b79594d",
+  PREVIEW_QA_EXPECTED_SERVICE: "rentchain-g1b-identity-qa-7b79594d",
 } as NodeJS.ProcessEnv;
 
 function decide(overrides: Partial<Parameters<typeof decidePreviewQaAuth>[0]> = {}) {
@@ -173,6 +183,41 @@ describe("previewQaAuth", () => {
       landlordId: PR1512_PREVIEW_QA_LANDLORD_ID,
       role: "landlord",
     });
+  });
+
+  it.each([G1B_PREVIEW_QA_TENANT_ALIAS, G1B_PREVIEW_QA_FOREIGN_TENANT_ALIAS])(
+    "injects only fixed G1B synthetic tenant identity %s",
+    (selector) => {
+      process.env = { ...g1bEnabledEnv };
+      const headers = { "x-rentchain-preview-qa-identity": selector, "x-tenant-id": "arbitrary" };
+      const req: any = { method: "GET", headers, header: (name: string) => headers[name.toLowerCase() as keyof typeof headers] };
+      const res: any = { status: () => res, json: () => res };
+      let nextCalled = false;
+      previewQaAuth("tenant-identity-list")(req, res, () => { nextCalled = true; });
+      expect(nextCalled).toBe(true);
+      expect(req.user).toMatchObject({ id: selector, tenantId: selector, role: "tenant" });
+      expect(req.user.tenantId).not.toBe("arbitrary");
+    },
+  );
+
+  it.each([
+    ["POST", "tenant-identity-consent"],
+    ["POST", "tenant-identity-upload"],
+    ["GET", "tenant-identity-list"],
+    ["POST", "tenant-identity-access"],
+    ["DELETE", "tenant-identity-delete"],
+  ] as const)("allows only G1B operation %s %s on its isolated service", (method, route) => {
+    expect(decide({ env: g1bEnabledEnv, method, route, selector: G1B_PREVIEW_QA_TENANT_ALIAS })).toEqual({ kind: "allow" });
+  });
+
+  it.each([
+    ["Production", { ...g1bEnabledEnv, GOOGLE_CLOUD_PROJECT: "project-0d9658de-af29-4dc0-a99" }],
+    ["permanent Preview", { ...g1bEnabledEnv, K_SERVICE: "rentchain-preview-backend", PREVIEW_QA_EXPECTED_SERVICE: "rentchain-preview-backend" }],
+    ["wrong service", { ...g1bEnabledEnv, K_SERVICE: "rentchain-g1b-identity-qa-deadbeef" }],
+    ["wrong scope", { ...g1bEnabledEnv, PREVIEW_QA_AUTH_SCOPE: PR1512_PREVIEW_QA_SCOPE }],
+    ["disabled", { ...g1bEnabledEnv, PREVIEW_QA_AUTH_ENABLED: "false" }],
+  ])("rejects G1B under %s", (_label, env) => {
+    expect(decide({ env, method: "GET", route: "tenant-identity-list", selector: G1B_PREVIEW_QA_TENANT_ALIAS })).toEqual({ kind: "reject" });
   });
 
   it.each([
