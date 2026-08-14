@@ -155,6 +155,8 @@ export type IdentityDocumentConsentEvent = {
   applicationId?: string | null;
   tenantId?: string | null;
   purpose: IdentityDocumentConsentPurpose;
+  requirementPolicyId: string;
+  requirementPolicyVersion: string;
   action: "granted" | "withdrawn";
   policyTextVersion: string;
   privacyNoticeVersion: string;
@@ -176,6 +178,9 @@ export const IDENTITY_DOCUMENT_AUDIT_EVENT_TYPES = [
   "identity_document_deletion_scheduled",
   "identity_document_deleted",
   "identity_document_legal_hold_changed",
+  "identity_requirement_exception_requested",
+  "identity_requirement_exception_approved",
+  "identity_requirement_exception_rejected",
   "identity_consent_recorded",
 ] as const;
 export type IdentityDocumentAuditEventType = (typeof IDENTITY_DOCUMENT_AUDIT_EVENT_TYPES)[number];

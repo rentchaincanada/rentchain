@@ -3,13 +3,17 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   FULL_GOVERNMENT_ID_NUMBER_STORAGE,
   G3_FACE_MATCH_NOT_STARTED,
+  DEFAULT_TENANT_GOVERNMENT_ID_REQUIREMENT_POLICY,
   IDENTITY_DOCUMENT_MIME_TYPES,
   IdentityDocumentConsentEventSchema,
   IdentityDocumentMetadataSchema,
   IdentityVerificationResultSchema,
   PDF_ID_UPLOAD_DEFERRED_UNTIL_DOCUMENT_SCANNING_FOUNDATION,
+  TENANT_GOVERNMENT_ID_UPLOAD_REQUIRED,
   authorizeIdentityDocumentOperation,
   canTransitionIdentityDocumentStatus,
+  evaluateTenantIdentityEnforcementGate,
+  evaluateTenantIdentityRequirement,
   type BiometricConsentPurpose,
   type IdentityDocumentConsentPurpose,
   type IdentityDocumentStatus,
@@ -100,6 +104,8 @@ describe("G1A identity document foundation", () => {
       organizationId: "org-1",
       applicationId: "application-1",
       purpose: "identity_document_collection",
+      requirementPolicyId: "tenant_government_photo_id_required",
+      requirementPolicyVersion: "v1",
       action: "granted",
       policyTextVersion: "identity-collection-v1",
       privacyNoticeVersion: "privacy-v4",
@@ -211,5 +217,159 @@ describe("G1A identity document foundation", () => {
     expect(result).not.toHaveProperty("faceMatch");
     expect(result).not.toHaveProperty("selfieMatch");
     expect(result.providerKey).toBe("provider-key");
+  });
+
+  it("requires a government-issued photo ID for the normal tenant workflow", () => {
+    expect(TENANT_GOVERNMENT_ID_UPLOAD_REQUIRED).toBe(true);
+    expect(DEFAULT_TENANT_GOVERNMENT_ID_REQUIREMENT_POLICY.requirement).toBe("required");
+    expect(DEFAULT_TENANT_GOVERNMENT_ID_REQUIREMENT_POLICY.requiredDocumentTypes).toEqual([
+      "drivers_license",
+      "passport",
+      "provincial_id",
+      "other_government_photo_id",
+    ]);
+  });
+
+  it("keeps a missing government ID action-required", () => {
+    const result = evaluateTenantIdentityRequirement({
+      subjectId: "subject-1",
+      policy: DEFAULT_TENANT_GOVERNMENT_ID_REQUIREMENT_POLICY,
+      documents: [],
+    });
+    expect(result).toMatchObject({
+      required: true,
+      satisfied: false,
+      status: "pending",
+      actionRequired: true,
+      blockingReason: "government_id_required",
+    });
+  });
+
+  it("satisfies collection with an accepted ready government photo ID without requiring verification", () => {
+    const result = evaluateTenantIdentityRequirement({
+      subjectId: "subject-1",
+      policy: DEFAULT_TENANT_GOVERNMENT_ID_REQUIREMENT_POLICY,
+      documents: [{ documentId: "doc-1", subjectId: "subject-1", documentType: "passport", status: "ready" }],
+    });
+    expect(result).toMatchObject({
+      satisfied: true,
+      satisfactionSource: "accepted_government_photo_id",
+      status: "satisfied",
+      satisfyingDocumentIds: ["doc-1"],
+    });
+    const gate = evaluateTenantIdentityEnforcementGate({
+      gate: "tenant_portal_onboarding",
+      requirement: result,
+      verificationStatus: "not_started",
+    });
+    expect(gate).toMatchObject({
+      governmentIdRequirementSatisfied: true,
+      verificationStatus: "not_started",
+      biometricAuthorizationRequired: false,
+      runtimeEnforced: false,
+    });
+  });
+
+  it("does not count foreign-subject or non-ready documents", () => {
+    const result = evaluateTenantIdentityRequirement({
+      subjectId: "subject-1",
+      policy: DEFAULT_TENANT_GOVERNMENT_ID_REQUIREMENT_POLICY,
+      documents: [
+        { documentId: "doc-foreign", subjectId: "subject-2", documentType: "passport", status: "ready" },
+        { documentId: "doc-replaced", subjectId: "subject-1", documentType: "provincial_id", status: "replaced" },
+      ],
+    });
+    expect(result.satisfied).toBe(false);
+  });
+
+  it("fails closed when requirement policy is missing", () => {
+    expect(
+      evaluateTenantIdentityRequirement({ subjectId: "subject-1", policy: null, documents: [] })
+    ).toMatchObject({
+      required: true,
+      satisfied: false,
+      actionRequired: true,
+      blockingReason: "requirement_policy_missing",
+    });
+  });
+
+  it("requires every exception to be explicit and auditable", () => {
+    const requested = evaluateTenantIdentityRequirement({
+      subjectId: "subject-1",
+      policy: DEFAULT_TENANT_GOVERNMENT_ID_REQUIREMENT_POLICY,
+      documents: [],
+      exceptionStatus: "requested",
+    });
+    expect(requested).toMatchObject({ status: "exception_pending", satisfied: false, auditRequired: true });
+
+    const approved = evaluateTenantIdentityRequirement({
+      subjectId: "subject-1",
+      policy: DEFAULT_TENANT_GOVERNMENT_ID_REQUIREMENT_POLICY,
+      documents: [],
+      exceptionStatus: "approved",
+    });
+    expect(approved).toMatchObject({
+      required: true,
+      status: "exception_approved",
+      satisfactionSource: "governed_exception",
+      auditRequired: true,
+    });
+  });
+
+  it("preserves requirement continuity across application, tenant, lease and move-in boundaries", () => {
+    const satisfied = evaluateTenantIdentityRequirement({
+      subjectId: "subject-1",
+      policy: DEFAULT_TENANT_GOVERNMENT_ID_REQUIREMENT_POLICY,
+      documents: [{ documentId: "doc-1", subjectId: "subject-1", documentType: "provincial_id", status: "ready" }],
+    });
+    const continuity = {
+      requirementId: "requirement-1",
+      subjectId: "subject-1",
+      sourceApplicationId: "application-1",
+      applicantParticipantId: "participant-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      status: satisfied.status,
+      verificationId: null,
+      verificationStatus: "not_started" as const,
+    };
+    expect(continuity).not.toHaveProperty("documentBytes");
+    expect(continuity).not.toHaveProperty("documentUrl");
+    expect(
+      evaluateTenantIdentityEnforcementGate({
+        gate: "move_in_readiness",
+        requirement: satisfied,
+        verificationStatus: continuity.verificationStatus,
+      })
+    ).toMatchObject({ readiness: "ready_for_future_gate", biometricAuthorizationRequired: false });
+  });
+
+  it("does not let requirement status grant raw document access", () => {
+    const metadata = authorizeIdentityDocumentOperation({
+      operation: "view_metadata",
+      actor: { actorId: "reviewer-1", role: "organization_member", organizationId: "org-1" },
+      resource: { subjectId: "subject-1", organizationId: "org-1", activeWorkflow: true },
+      context: { applicationAccess: true },
+    });
+    const raw = authorizeIdentityDocumentOperation({
+      operation: "view_raw_document",
+      actor: { actorId: "reviewer-1", role: "organization_member", organizationId: "org-1" },
+      resource: { subjectId: "subject-1", organizationId: "org-1", activeWorkflow: true },
+      context: { applicationAccess: true, purposeCode: "requirement_satisfied" },
+    });
+    expect(metadata.allowed).toBe(true);
+    expect(raw.allowed).toBe(false);
+  });
+
+  it("keeps mandatory collection separate from face-match consent and biometric processing", () => {
+    const requirement = evaluateTenantIdentityRequirement({
+      subjectId: "subject-1",
+      policy: DEFAULT_TENANT_GOVERNMENT_ID_REQUIREMENT_POLICY,
+      documents: [{ documentId: "doc-1", subjectId: "subject-1", documentType: "drivers_license", status: "ready" }],
+    });
+    expect(requirement.satisfied).toBe(true);
+    expect(requirement).not.toHaveProperty("faceMatchAuthorized");
+    expectTypeOf<IdentityDocumentConsentPurpose>().not.toEqualTypeOf<BiometricConsentPurpose>();
+    expect(G3_FACE_MATCH_NOT_STARTED).toBe(true);
   });
 });

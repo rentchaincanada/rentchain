@@ -130,6 +130,8 @@ export const IdentityDocumentConsentEventSchema = z
     applicationId: canonicalId.nullish(),
     tenantId: canonicalId.nullish(),
     purpose: z.literal("identity_document_collection"),
+    requirementPolicyId: canonicalId,
+    requirementPolicyVersion: canonicalId,
     action: z.enum(["granted", "withdrawn"]),
     policyTextVersion: canonicalId,
     privacyNoticeVersion: canonicalId,
