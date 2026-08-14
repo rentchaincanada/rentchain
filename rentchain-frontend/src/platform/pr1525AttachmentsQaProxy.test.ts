@@ -51,6 +51,13 @@ describe("PR #1525 attachment QA proxy", () => {
     )).allowed).toBe(false);
   });
 
+  it("does not expose a landlord attachment delete route", () => {
+    expect(classifyPr1525AttachmentRequest(req(
+      `/api/pr1525-attachments/landlord/api/landlord/maintenance/qa-pr1525-target-request/attachments/${attachmentId}`,
+      "DELETE",
+    )).allowed).toBe(false);
+  });
+
   it("maps the semantic actor to the fixed server-side selector", async () => {
     vi.stubEnv("VERCEL_ENV", "preview");
     vi.stubEnv("VERCEL_GIT_COMMIT_REF", "feat/tenant-maintenance-image-attachments-v1");

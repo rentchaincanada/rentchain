@@ -5357,6 +5357,190 @@ describe("tenantPortalRoutes foundation", () => {
     expect(repeated.status).toBe(204);
   });
 
+  it("keeps a failed post-object delete recoverable and finalizes it on idempotent retry", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({ id: "user-1", email: "tenant@example.com", role: "tenant", tenantId: "tenant-1" }),
+    };
+    ensureCollection("maintenanceRequests").set("maint-1", {
+      ...ensureCollection("maintenanceRequests").get("maint-1"),
+      imageAttachmentSummary: { count: 2, totalBytes: 200 },
+    });
+    for (const [id, byteSize] of [["attachment-1", 75], ["attachment-sibling", 125]] as const) {
+      ensureCollection("maintenanceRequestAttachments").set(id, {
+        attachmentId: id,
+        maintenanceRequestId: "maint-1",
+        tenantId: "tenant-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        leaseId: "lease-1",
+        uploadedByUserId: "user-1",
+        uploadedByRole: "tenant",
+        storageObjectKey: `maintenance/images/maint-1/${id}.jpg`,
+        originalFilename: `${id}.jpg`,
+        normalizedContentType: "image/jpeg",
+        byteSize,
+        width: 8,
+        height: 8,
+        checksumSha256: `checksum-${id}`,
+        status: "ready",
+        createdAt: 100,
+      });
+    }
+    vi.spyOn(dbMock, "runTransaction").mockRejectedValueOnce(new Error("metadata_delete_permission_denied"));
+
+    const failed = await invokeRouter(router, {
+      method: "DELETE", url: "/maintenance-requests/maint-1/attachments/attachment-1", headers,
+    });
+    expect(failed.status).toBe(500);
+    expect(failed.body?.error).toBe("ATTACHMENT_DELETE_FAILED");
+    expect(ensureCollection("maintenanceRequestAttachments").get("attachment-1")?.status).toBe("deleting");
+    expect(ensureCollection("maintenanceRequestAttachments").get("attachment-sibling")?.status).toBe("ready");
+    expect(ensureCollection("maintenanceRequests").get("maint-1")?.imageAttachmentSummary).toMatchObject({ count: 2, totalBytes: 200 });
+
+    const readyList = await invokeRouter(router, {
+      method: "GET", url: "/maintenance-requests/maint-1/attachments", headers,
+    });
+    expect(readyList.status).toBe(200);
+    expect(readyList.body?.data).toHaveLength(1);
+    expect(readyList.body?.data[0]?.attachmentId).toBe("attachment-sibling");
+
+    const recovered = await invokeRouter(router, {
+      method: "DELETE", url: "/maintenance-requests/maint-1/attachments/attachment-1", headers,
+    });
+    expect(recovered.status).toBe(204);
+    expect(deleteObjectFromGcsMock).toHaveBeenCalledTimes(2);
+    expect(ensureCollection("maintenanceRequestAttachments").has("attachment-1")).toBe(false);
+    expect(ensureCollection("maintenanceRequestAttachments").has("attachment-sibling")).toBe(true);
+    expect(ensureCollection("maintenanceRequests").get("maint-1")?.imageAttachmentSummary).toMatchObject({ count: 1, totalBytes: 125 });
+
+    const repeated = await invokeRouter(router, {
+      method: "DELETE", url: "/maintenance-requests/maint-1/attachments/attachment-1", headers,
+    });
+    expect(repeated.status).toBe(204);
+  });
+
+  it("keeps storage-delete failure recoverable without reporting false success", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({ id: "user-1", email: "tenant@example.com", role: "tenant", tenantId: "tenant-1" }),
+    };
+    ensureCollection("maintenanceRequests").set("maint-1", {
+      ...ensureCollection("maintenanceRequests").get("maint-1"),
+      imageAttachmentSummary: { count: 1, totalBytes: 75 },
+    });
+    ensureCollection("maintenanceRequestAttachments").set("attachment-1", {
+      attachmentId: "attachment-1",
+      maintenanceRequestId: "maint-1",
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      leaseId: "lease-1",
+      uploadedByUserId: "user-1",
+      uploadedByRole: "tenant",
+      storageObjectKey: "maintenance/images/maint-1/attachment-1.jpg",
+      originalFilename: "photo.jpg",
+      normalizedContentType: "image/jpeg",
+      byteSize: 75,
+      width: 8,
+      height: 8,
+      checksumSha256: "checksum",
+      status: "ready",
+      createdAt: 100,
+    });
+    deleteObjectFromGcsMock.mockRejectedValueOnce(new Error("object_delete_failed"));
+
+    const failed = await invokeRouter(router, {
+      method: "DELETE", url: "/maintenance-requests/maint-1/attachments/attachment-1", headers,
+    });
+    expect(failed.status).toBe(500);
+    expect(failed.body?.error).toBe("ATTACHMENT_DELETE_FAILED");
+    expect(ensureCollection("maintenanceRequestAttachments").get("attachment-1")?.status).toBe("deleting");
+    expect(ensureCollection("maintenanceRequests").get("maint-1")?.imageAttachmentSummary).toMatchObject({ count: 1, totalBytes: 75 });
+
+    const recovered = await invokeRouter(router, {
+      method: "DELETE", url: "/maintenance-requests/maint-1/attachments/attachment-1", headers,
+    });
+    expect(recovered.status).toBe(204);
+    expect(ensureCollection("maintenanceRequestAttachments").has("attachment-1")).toBe(false);
+    expect(ensureCollection("maintenanceRequests").get("maint-1")?.imageAttachmentSummary).toMatchObject({ count: 0, totalBytes: 0 });
+  });
+
+  it("reconciles metadata when the attachment object is already absent", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({ id: "user-1", email: "tenant@example.com", role: "tenant", tenantId: "tenant-1" }),
+    };
+    ensureCollection("maintenanceRequests").set("maint-1", {
+      ...ensureCollection("maintenanceRequests").get("maint-1"),
+      imageAttachmentSummary: { count: 1, totalBytes: 75 },
+    });
+    ensureCollection("maintenanceRequestAttachments").set("attachment-missing-object", {
+      attachmentId: "attachment-missing-object",
+      maintenanceRequestId: "maint-1",
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      leaseId: "lease-1",
+      uploadedByUserId: "user-1",
+      uploadedByRole: "tenant",
+      storageObjectKey: "maintenance/images/maint-1/attachment-missing-object.jpg",
+      originalFilename: "missing.jpg",
+      normalizedContentType: "image/jpeg",
+      byteSize: 75,
+      width: 8,
+      height: 8,
+      checksumSha256: "checksum",
+      status: "deleting",
+      createdAt: 100,
+    });
+
+    const recovered = await invokeRouter(router, {
+      method: "DELETE", url: "/maintenance-requests/maint-1/attachments/attachment-missing-object", headers,
+    });
+    expect(recovered.status).toBe(204);
+    expect(deleteObjectFromGcsMock).toHaveBeenCalledWith(expect.objectContaining({ ignoreNotFound: true }));
+    expect(ensureCollection("maintenanceRequestAttachments").has("attachment-missing-object")).toBe(false);
+    expect(ensureCollection("maintenanceRequests").get("maint-1")?.imageAttachmentSummary).toMatchObject({ count: 0, totalBytes: 0 });
+  });
+
+  it("denies cross-tenant attachment deletion without touching object or sibling state", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({ id: "user-1", email: "tenant@example.com", role: "tenant", tenantId: "tenant-1" }),
+    };
+    ensureCollection("maintenanceRequests").set("maint-other", {
+      tenantId: "tenant-2",
+      propertyId: "prop-1",
+      landlordId: "landlord-1",
+      status: "submitted",
+    });
+    ensureCollection("maintenanceRequestAttachments").set("attachment-other", {
+      attachmentId: "attachment-other",
+      maintenanceRequestId: "maint-other",
+      tenantId: "tenant-2",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      storageObjectKey: "maintenance/images/maint-other/attachment-other.jpg",
+      originalFilename: "other.jpg",
+      normalizedContentType: "image/jpeg",
+      byteSize: 75,
+      width: 8,
+      height: 8,
+      uploadedByUserId: "user-2",
+      uploadedByRole: "tenant",
+      status: "ready",
+      createdAt: 100,
+    });
+
+    const denied = await invokeRouter(router, {
+      method: "DELETE", url: "/maintenance-requests/maint-other/attachments/attachment-other", headers,
+    });
+    expect(denied.status).toBe(404);
+    expect(deleteObjectFromGcsMock).not.toHaveBeenCalled();
+    expect(ensureCollection("maintenanceRequestAttachments").has("attachment-other")).toBe(true);
+  });
+
   it("returns tenant maintenance without raw identifiers or cross-tenant requests", async () => {
     ensureCollection("maintenanceRequests").set("maint-other", {
       tenantId: "tenant-2",

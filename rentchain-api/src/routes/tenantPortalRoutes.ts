@@ -6312,8 +6312,8 @@ router.delete(
     if (raw.maintenanceRequestId !== requestId || raw.tenantId !== String(context.tenantId)) {
       return res.status(404).json({ ok: false, error: "NOT_FOUND" });
     }
-    await attachmentRef.set({ status: "deleting", updatedAt: Date.now() }, { merge: true });
     try {
+      await attachmentRef.set({ status: "deleting", updatedAt: Date.now() }, { merge: true });
       await deleteObjectFromGcs({ path: String(raw.storageObjectKey || ""), ignoreNotFound: true });
       await db.runTransaction(async (transaction) => {
         const currentRequest = await transaction.get(authorized.ref);
@@ -6333,7 +6333,6 @@ router.delete(
       });
       return res.status(204).send();
     } catch (error: any) {
-      await attachmentRef.set({ status: "ready", updatedAt: Date.now() }, { merge: true }).catch(() => undefined);
       console.error("[tenant/maintenance-attachments] delete failed", {
         requestReference: tenantSafeMaintenanceReferenceKey(requestId),
         attachmentReference: tenantSafeMaintenanceReferenceKey(attachmentId),
