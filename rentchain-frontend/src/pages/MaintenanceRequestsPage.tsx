@@ -1,15 +1,19 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button, Card, Input, Section } from "../components/ui/Ui";
+import MaintenanceEvidencePhoto from "../components/maintenance/MaintenanceEvidencePhoto";
 import { useToast } from "../components/ui/ToastProvider";
 import { ResponsiveMasterDetail } from "../components/layout/ResponsiveMasterDetail";
 import {
   assignLandlordMaintenance,
+  getLandlordMaintenanceImageAccess,
+  listLandlordMaintenanceImages,
   listLandlordMaintenance,
   patchLandlordMaintenance,
   type LandlordMaintenanceContractor,
   type MaintenanceWorkflowItem,
   type MaintenanceWorkflowStatus,
+  type MaintenanceImageAttachment,
 } from "../api/maintenanceWorkflowApi";
 import {
   getContractorProfileById,
@@ -198,6 +202,9 @@ export default function MaintenanceRequestsPage() {
   const [calendarMonth, setCalendarMonth] = React.useState(() => new Date());
   const [calendarExpanded, setCalendarExpanded] = React.useState(false);
   const [compactCalendarStart] = React.useState(() => startOfDay(new Date()));
+  const [requestImages, setRequestImages] = React.useState<Array<MaintenanceImageAttachment & { url?: string }>>([]);
+  const [requestImagesLoading, setRequestImagesLoading] = React.useState(false);
+  const [requestImagesError, setRequestImagesError] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -281,6 +288,37 @@ export default function MaintenanceRequestsPage() {
     () => filtered.find((item) => item.id === selectedId) || items.find((item) => item.id === selectedId) || null,
     [filtered, items, selectedId]
   );
+
+  React.useEffect(() => {
+    if (!selected?.id) {
+      setRequestImages([]);
+      return;
+    }
+    let cancelled = false;
+    setRequestImagesLoading(true);
+    setRequestImagesError(null);
+    void listLandlordMaintenanceImages(selected.id)
+      .then(async (items) => {
+        const withUrls = await Promise.all(items.map(async (item) => {
+          try {
+            const access = await getLandlordMaintenanceImageAccess(selected.id, item.attachmentId);
+            return { ...item, url: access.url };
+          } catch {
+            return item;
+          }
+        }));
+        if (!cancelled) setRequestImages(withUrls);
+      })
+      .catch((err: any) => {
+        if (!cancelled) setRequestImagesError(err?.message || "Unable to load request photos.");
+      })
+      .finally(() => {
+        if (!cancelled) setRequestImagesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.id]);
 
   React.useEffect(() => {
     if (selected) {
@@ -1974,6 +2012,33 @@ export default function MaintenanceRequestsPage() {
                     {selected.notes ? (
                       <div style={{ color: text.secondary }}>
                         <strong>Tenant notes:</strong> {selected.notes}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div style={{ border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: 12, background: colors.panel }}>
+                    <div style={{ fontWeight: 700, color: text.primary }}>Tenant photos ({requestImages.length})</div>
+                    {requestImagesLoading ? <div style={{ color: text.muted, marginTop: 8 }}>Loading photos…</div> : null}
+                    {requestImagesError ? <div role="alert" style={{ color: "#9a3412", marginTop: 8 }}>{requestImagesError}</div> : null}
+                    {!requestImagesLoading && !requestImagesError && !requestImages.length ? (
+                      <div style={{ color: text.muted, marginTop: 8 }}>No tenant photos attached.</div>
+                    ) : null}
+                    {requestImages.length ? (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
+                        {requestImages.map((attachment) => (
+                          <button
+                            key={attachment.attachmentId}
+                            type="button"
+                            disabled={!attachment.url}
+                            onClick={() => attachment.url && window.open(attachment.url, "_blank", "noopener,noreferrer")}
+                            aria-label={`Open tenant photo ${attachment.filename}`}
+                            style={{ textAlign: "left", border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: 8, background: "#fff", minWidth: 0 }}
+                          >
+                            <MaintenanceEvidencePhoto src={attachment.url} filename={attachment.filename} />
+                            <div style={{ marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachment.filename}</div>
+                            <div style={{ color: text.muted, fontSize: 12 }}>{(attachment.byteSize / (1024 * 1024)).toFixed(1)} MB</div>
+                          </button>
+                        ))}
                       </div>
                     ) : null}
                   </div>

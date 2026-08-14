@@ -36,6 +36,18 @@ describe("Vercel Preview backend route precedence", () => {
         status: 404,
       },
       {
+        src: "^/api/pr1525-readiness$",
+        dest: "/api/pr1525-readiness",
+      },
+      {
+        src: "^/api/pr1525-bootstrap/(tenant|landlord)$",
+        dest: "/api/pr1525-bootstrap/[role]?role=$1",
+      },
+      {
+        src: "^/api/pr1525-attachments/(.*)$",
+        dest: "/api/pr1525-attachments/[...path]?path=$1",
+      },
+      {
         src: "^/api/pr1512-notices/(.*)$",
         dest: "/api/pr1512-notices/[...path]?path=$1",
       },
@@ -54,25 +66,41 @@ describe("Vercel Preview backend route precedence", () => {
     "/api/preview-backend/api/me",
     "/api/preview-backend/api/auth/login",
   ])("reserves %s for the dedicated filesystem Function", (requestPath) => {
-    const functionRoute = config.routes[2];
+    const functionRoute = config.routes[5];
     const match = new RegExp(functionRoute.src as string).exec(requestPath);
 
     expect(match?.[1]).toBe(requestPath.slice("/api/preview-backend/".length));
     expect(functionRoute.dest?.replace("$1", match?.[1] ?? "")).toBe(
       `/api/preview-backend/[...path]?path=${match?.[1]}`,
     );
-    expect(config.routes[3]).toEqual({ handle: "filesystem" });
+    expect(config.routes[6]).toEqual({ handle: "filesystem" });
   });
 
   it("reserves the PR #1512 read-only QA suffix before filesystem misses", () => {
     const requestPath = "/api/pr1512-notices/api/landlord/notices";
-    const functionRoute = config.routes[1];
+    const functionRoute = config.routes[4];
     const match = new RegExp(functionRoute.src as string).exec(requestPath);
     expect(match?.[1]).toBe("api/landlord/notices");
     expect(functionRoute.dest?.replace("$1", match?.[1] ?? "")).toBe(
       "/api/pr1512-notices/[...path]?path=api/landlord/notices",
     );
     expect(existsSync(join(frontendRoot, "api/pr1512-notices/[...path].ts"))).toBe(true);
+  });
+
+  it("reserves the PR #1525 readiness proof before Production rewrites", () => {
+    const requestPath = "/api/pr1525-readiness";
+    const functionRoute = config.routes[1];
+    expect(new RegExp(functionRoute.src as string).test(requestPath)).toBe(true);
+    expect(functionRoute.dest).toBe("/api/pr1525-readiness");
+    expect(existsSync(join(frontendRoot, "api/pr1525-readiness.ts"))).toBe(true);
+  });
+
+  it("reserves the strict PR #1525 attachment QA suffix before filesystem misses", () => {
+    const requestPath = "/api/pr1525-attachments/tenant/api/tenant/maintenance-requests/qa-pr1525-target-request/attachments";
+    const functionRoute = config.routes[3];
+    const match = new RegExp(functionRoute.src as string).exec(requestPath);
+    expect(match?.[1]).toBe("tenant/api/tenant/maintenance-requests/qa-pr1525-target-request/attachments");
+    expect(existsSync(join(frontendRoot, "api/pr1525-attachments/[...path].ts"))).toBe(true);
   });
 
   it.each([

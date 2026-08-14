@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from "crypto";
 import { Router } from "express";
+import multer from "multer";
 import { authenticateJwt } from "../middleware/authMiddleware";
+import { previewQaAuth } from "../middleware/previewQaAuth";
 import { routeSource } from "../middleware/routeSource";
 import { db, FieldValue } from "../firebase";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
@@ -97,6 +99,20 @@ import {
 import { recordSystemObservabilityEvent } from "../services/observability/recordSystemObservabilityEvent";
 import { buildLeasePaymentProjection } from "../services/projections/buildLeasePaymentProjection";
 import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
+import { deleteObjectFromGcs, uploadBufferToGcs } from "../lib/gcs";
+import {
+  buildMaintenanceImageObjectKey,
+  MAINTENANCE_IMAGE_ATTACHMENT_COLLECTION,
+  MAX_MAINTENANCE_IMAGE_ATTACHMENTS,
+  MAX_MAINTENANCE_IMAGE_INPUT_BYTES,
+  MAX_MAINTENANCE_IMAGE_TOTAL_BYTES,
+  MaintenanceImageError,
+  makeMaintenanceImageAttachmentId,
+  parseMaintenanceImageAttachment,
+  processMaintenanceImage,
+  projectMaintenanceImageAttachment,
+  type MaintenanceImageAttachmentRecord,
+} from "../lib/maintenanceImageAttachments";
 import {
   getSignedLeaseDocumentDownload,
   getTenantSigningUrl,
@@ -110,6 +126,10 @@ router.use(authenticateJwt);
 const tenantPortalRouteSource = routeSource("tenantPortalRoutes.ts");
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const tenantMaintenanceImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_MAINTENANCE_IMAGE_INPUT_BYTES, files: 1 },
+});
 
 function requireTenant(req: any, res: any, next: any) {
   const user = req.user;
@@ -6096,7 +6116,237 @@ router.post("/leases/:leaseId/sign", requireTenantWorkspaceIdentity, async (req:
   }
 });
 
-router.get("/maintenance-requests", requireTenantWorkspaceIdentity, async (req: any, res) => {
+async function loadTenantAttachmentRequest(context: any, requestId: string) {
+  if (context?.authority !== "active_tenant" || !context?.tenantId || !context?.propertyId) return null;
+  const resolvedRequestId = await resolveTenantMaintenanceDocumentIdForRequest(context.tenantId, requestId);
+  if (!resolvedRequestId) return null;
+  const ref = db.collection("maintenanceRequests").doc(resolvedRequestId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const data = (snap.data() as any) || {};
+  if (String(data.tenantId || "") !== String(context.tenantId)) return null;
+  if (String(data.propertyId || "") !== String(context.propertyId)) return null;
+  if (data.leaseId && context.leaseId && String(data.leaseId) !== String(context.leaseId)) return null;
+  const property = await loadDocument("properties", String(context.propertyId));
+  const landlordId = String(property?.data?.landlordId || "").trim();
+  if (!landlordId || (data.landlordId && String(data.landlordId) !== landlordId)) return null;
+  return { ref, data: { ...data, landlordId } };
+}
+
+async function listReadyMaintenanceImages(requestId: string) {
+  const snap = await db
+    .collection(MAINTENANCE_IMAGE_ATTACHMENT_COLLECTION)
+    .where("maintenanceRequestId", "==", requestId)
+    .limit(MAX_MAINTENANCE_IMAGE_ATTACHMENTS + 1)
+    .get();
+  return snap.docs
+    .map((doc) => parseMaintenanceImageAttachment({ attachmentId: doc.id, ...(doc.data() as any) }))
+    .filter((item): item is MaintenanceImageAttachmentRecord => Boolean(item))
+    .sort((a, b) => a.createdAt - b.createdAt);
+}
+
+router.get("/maintenance-requests/:id/attachments", previewQaAuth("tenant-maintenance-attachment-list"), requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+  const requestId = String(req.params?.id || "").trim();
+  const authorized = requestId ? await loadTenantAttachmentRequest(context, requestId) : null;
+  if (!authorized) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+  const attachments = await listReadyMaintenanceImages(authorized.ref.id);
+  return res.json({ ok: true, data: attachments.map(projectMaintenanceImageAttachment) });
+});
+
+router.get(
+  "/maintenance-requests/:id/attachments/:attachmentId/access",
+  previewQaAuth("tenant-maintenance-attachment-access"),
+  requireTenantWorkspaceIdentity,
+  async (req: any, res) => {
+    const context = await resolveWorkspaceContextOrRespond(req, res);
+    if (!context) return;
+    const requestId = String(req.params?.id || "").trim();
+    const attachmentId = String(req.params?.attachmentId || "").trim();
+    const authorized = requestId ? await loadTenantAttachmentRequest(context, requestId) : null;
+    if (!authorized || !attachmentId) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const snap = await db.collection(MAINTENANCE_IMAGE_ATTACHMENT_COLLECTION).doc(attachmentId).get();
+    const attachment = parseMaintenanceImageAttachment(
+      snap.exists ? { attachmentId: snap.id, ...(snap.data() as any) } : null
+    );
+    if (!attachment || attachment.maintenanceRequestId !== authorized.ref.id) {
+      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    }
+    const url = await getSignedDownloadUrl({
+      bucket: String(process.env.GCS_UPLOAD_BUCKET || ""),
+      path: attachment.storageObjectKey,
+      expiresMinutes: 10,
+    });
+    return res.json({ ok: true, data: { url, expiresInSeconds: 600 } });
+  }
+);
+
+router.post("/maintenance-requests/:id/attachments", previewQaAuth("tenant-maintenance-attachment-upload"), requireTenantWorkspaceIdentity, async (req: any, res) => {
+  tenantMaintenanceImageUpload.single("file")(req, res, async (uploadError: any) => {
+    const context = await resolveWorkspaceContextOrRespond(req, res);
+    if (!context) return;
+    const requestId = String(req.params?.id || "").trim();
+    const authorized = requestId ? await loadTenantAttachmentRequest(context, requestId) : null;
+    if (!authorized) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    if (uploadError) {
+      if (String(uploadError?.code || "") === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({ ok: false, error: "FILE_TOO_LARGE", maxBytes: MAX_MAINTENANCE_IMAGE_INPUT_BYTES });
+      }
+      return res.status(400).json({ ok: false, error: "UPLOAD_FAILED" });
+    }
+    const file = req.file as Express.Multer.File | undefined;
+    if (!file?.buffer?.length) return res.status(400).json({ ok: false, error: "FILE_REQUIRED" });
+
+    let canonical: Awaited<ReturnType<typeof processMaintenanceImage>>;
+    try {
+      canonical = await processMaintenanceImage({ buffer: file.buffer, originalFilename: file.originalname });
+    } catch (error) {
+      if (error instanceof MaintenanceImageError) {
+        return res.status(error.code === "FILE_TOO_LARGE" ? 413 : 400).json({ ok: false, error: error.code });
+      }
+      return res.status(400).json({ ok: false, error: "IMAGE_DECODE_FAILED" });
+    }
+    if (!canonical.metadataStripped) {
+      return res.status(400).json({ ok: false, error: "IMAGE_METADATA_STRIP_FAILED" });
+    }
+
+    const attachmentId = makeMaintenanceImageAttachmentId();
+    const resolvedRequestId = authorized.ref.id;
+    const storageObjectKey = buildMaintenanceImageObjectKey(resolvedRequestId, attachmentId, canonical.format);
+    const now = Date.now();
+    const record: MaintenanceImageAttachmentRecord = {
+      attachmentId,
+      maintenanceRequestId: resolvedRequestId,
+      tenantId: String(context.tenantId),
+      landlordId: String(authorized.data.landlordId || ""),
+      propertyId: String(context.propertyId),
+      leaseId: context.leaseId ? String(context.leaseId) : null,
+      uploadedByUserId: String(req.user?.id || context.tenantId),
+      uploadedByRole: "tenant",
+      storageObjectKey,
+      originalFilename: canonical.filename,
+      normalizedContentType: canonical.contentType,
+      byteSize: canonical.buffer.length,
+      width: canonical.width,
+      height: canonical.height,
+      checksumSha256: canonical.checksumSha256,
+      status: "ready",
+      createdAt: now,
+    };
+
+    try {
+      await uploadBufferToGcs({
+        path: storageObjectKey,
+        contentType: canonical.contentType,
+        buffer: canonical.buffer,
+        metadata: {
+          attachmentId,
+          maintenanceRequestId: resolvedRequestId,
+          contentType: canonical.contentType,
+          uploadedAtMs: String(now),
+        },
+      });
+      await db.runTransaction(async (transaction) => {
+        const currentRequest = await transaction.get(authorized.ref);
+        if (!currentRequest.exists) throw Object.assign(new Error("REQUEST_NOT_FOUND"), { code: "REQUEST_NOT_FOUND" });
+        const current = (currentRequest.data() as any) || {};
+        if (
+          String(current.tenantId || "") !== String(context.tenantId) ||
+          String(current.propertyId || "") !== String(context.propertyId)
+        ) {
+          throw Object.assign(new Error("FORBIDDEN"), { code: "FORBIDDEN" });
+        }
+        const summary = current.imageAttachmentSummary || {};
+        const count = Number(summary.count || 0);
+        const totalBytes = Number(summary.totalBytes || 0);
+        if (count >= MAX_MAINTENANCE_IMAGE_ATTACHMENTS) {
+          throw Object.assign(new Error("ATTACHMENT_LIMIT_EXCEEDED"), { code: "ATTACHMENT_LIMIT_EXCEEDED" });
+        }
+        if (totalBytes + record.byteSize > MAX_MAINTENANCE_IMAGE_TOTAL_BYTES) {
+          throw Object.assign(new Error("TOTAL_ATTACHMENT_BYTES_EXCEEDED"), { code: "TOTAL_ATTACHMENT_BYTES_EXCEEDED" });
+        }
+        transaction.create(db.collection(MAINTENANCE_IMAGE_ATTACHMENT_COLLECTION).doc(attachmentId), record);
+        transaction.update(authorized.ref, {
+          imageAttachmentSummary: { count: count + 1, totalBytes: totalBytes + record.byteSize, updatedAt: now },
+          updatedAt: now,
+        });
+      });
+      return res.status(201).json({ ok: true, data: projectMaintenanceImageAttachment(record) });
+    } catch (error: any) {
+      try {
+        await deleteObjectFromGcs({ path: storageObjectKey, ignoreNotFound: true });
+      } catch (cleanupError: any) {
+        console.error("[tenant/maintenance-attachments] failed upload cleanup", {
+          requestReference: tenantSafeMaintenanceReferenceKey(requestId),
+          attachmentReference: tenantSafeMaintenanceReferenceKey(attachmentId),
+          message: cleanupError?.message || "cleanup_failed",
+        });
+      }
+      const code = String(error?.code || error?.message || "ATTACHMENT_UPLOAD_FAILED");
+      if (code === "ATTACHMENT_LIMIT_EXCEEDED" || code === "TOTAL_ATTACHMENT_BYTES_EXCEEDED") {
+        return res.status(409).json({ ok: false, error: code });
+      }
+      if (code === "REQUEST_NOT_FOUND") return res.status(404).json({ ok: false, error: code });
+      if (code === "FORBIDDEN") return res.status(403).json({ ok: false, error: code });
+      return res.status(500).json({ ok: false, error: "ATTACHMENT_UPLOAD_FAILED" });
+    }
+  });
+});
+
+router.delete(
+  "/maintenance-requests/:id/attachments/:attachmentId",
+  previewQaAuth("tenant-maintenance-attachment-delete"),
+  requireTenantWorkspaceIdentity,
+  async (req: any, res) => {
+    const context = await resolveWorkspaceContextOrRespond(req, res);
+    if (!context) return;
+    const requestId = String(req.params?.id || "").trim();
+    const attachmentId = String(req.params?.attachmentId || "").trim();
+    const authorized = requestId ? await loadTenantAttachmentRequest(context, requestId) : null;
+    if (!authorized || !attachmentId) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    if (String(authorized.data.status || "").toLowerCase() !== "submitted") {
+      return res.status(409).json({ ok: false, error: "ATTACHMENT_DELETE_NOT_ALLOWED" });
+    }
+    const attachmentRef = db.collection(MAINTENANCE_IMAGE_ATTACHMENT_COLLECTION).doc(attachmentId);
+    const attachmentSnap = await attachmentRef.get();
+    if (!attachmentSnap.exists) return res.status(204).send();
+    const raw = { attachmentId: attachmentSnap.id, ...((attachmentSnap.data() as any) || {}) } as any;
+    if (raw.maintenanceRequestId !== authorized.ref.id || raw.tenantId !== String(context.tenantId)) {
+      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    }
+    try {
+      await attachmentRef.set({ status: "deleting", updatedAt: Date.now() }, { merge: true });
+      await deleteObjectFromGcs({ path: String(raw.storageObjectKey || ""), ignoreNotFound: true });
+      await db.runTransaction(async (transaction) => {
+        const currentRequest = await transaction.get(authorized.ref);
+        const currentAttachment = await transaction.get(attachmentRef);
+        if (!currentAttachment.exists) return;
+        const current = (currentRequest.data() as any) || {};
+        const summary = current.imageAttachmentSummary || {};
+        transaction.delete(attachmentRef);
+        transaction.update(authorized.ref, {
+          imageAttachmentSummary: {
+            count: Math.max(0, Number(summary.count || 0) - 1),
+            totalBytes: Math.max(0, Number(summary.totalBytes || 0) - Number(raw.byteSize || 0)),
+            updatedAt: Date.now(),
+          },
+          updatedAt: Date.now(),
+        });
+      });
+      return res.status(204).send();
+    } catch (error: any) {
+      console.error("[tenant/maintenance-attachments] delete failed", {
+        requestReference: tenantSafeMaintenanceReferenceKey(requestId),
+        attachmentReference: tenantSafeMaintenanceReferenceKey(attachmentId),
+        message: error?.message || "delete_failed",
+      });
+      return res.status(500).json({ ok: false, error: "ATTACHMENT_DELETE_FAILED" });
+    }
+  }
+);
+
+router.get("/maintenance-requests", previewQaAuth("tenant-maintenance-list"), requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
   try {
@@ -6112,7 +6362,7 @@ router.get("/maintenance-requests", requireTenantWorkspaceIdentity, async (req: 
   }
 });
 
-router.post("/maintenance-requests", requireTenantWorkspaceIdentity, async (req: any, res) => {
+router.post("/maintenance-requests", previewQaAuth("tenant-maintenance-create"), requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
   if (context.authority !== "active_tenant" || !context.tenantId) {
@@ -8597,7 +8847,7 @@ async function buildTenantMaintenanceDetailResponse(docId: string, maintenanceDa
   };
 }
 
-router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => {
+router.get("/maintenance-requests/:id", previewQaAuth("tenant-maintenance-detail"), requireTenant, async (req: any, res) => {
   try {
     const tenantId = String(req.user?.tenantId || "").trim();
     const id = await resolveTenantMaintenanceDocumentIdForRequest(tenantId, String(req.params?.id || "").trim());

@@ -47,6 +47,17 @@ const dbMock = {
         ensureCollection(name).set(id, applyMerge(current, value));
       },
     }),
+    where: (field: string, op: string, value: any) => ({
+      limit: (count: number) => ({
+        get: async () => {
+          const docs = Array.from(ensureCollection(name).entries())
+            .filter(([, data]) => op === "==" && data?.[field] === value)
+            .slice(0, count)
+            .map(([id, data]) => ({ id, exists: true, data: () => clone(data) }));
+          return { docs, empty: docs.length === 0, size: docs.length };
+        },
+      }),
+    }),
   }),
 };
 
@@ -164,6 +175,80 @@ describe("maintenanceRequestsRoutes scheduling access", () => {
     ensureCollection("tenants").set("tenant-1", {
       email: "tenant@example.com",
     });
+    ensureCollection("properties").set("prop-1", {
+      landlordId: "landlord-1",
+      name: "123 Main St",
+    });
+  });
+
+  it("allows only the canonical landlord to list and access tenant maintenance images", async () => {
+    ensureCollection("maintenanceRequestAttachments").set("image-1", {
+      attachmentId: "image-1",
+      maintenanceRequestId: "maint-1",
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      leaseId: null,
+      uploadedByUserId: "tenant-user-1",
+      uploadedByRole: "tenant",
+      storageObjectKey: "maintenance/images/maint-1/image-1.jpg",
+      originalFilename: "kitchen.jpg",
+      normalizedContentType: "image/jpeg",
+      byteSize: 123,
+      width: 20,
+      height: 10,
+      checksumSha256: "checksum",
+      status: "ready",
+      createdAt: 100,
+    });
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({ id: "landlord-1", role: "landlord", landlordId: "landlord-1" }),
+    };
+    const list = await invokeRouter(router, {
+      method: "GET", url: "/landlord/maintenance/maint-1/attachments", headers,
+    });
+    expect(list.status).toBe(200);
+    expect(list.body?.data).toEqual([expect.objectContaining({ attachmentId: "image-1", filename: "kitchen.jpg" })]);
+    expect(JSON.stringify(list.body?.data)).not.toContain("storage");
+
+    const access = await invokeRouter(router, {
+      method: "GET", url: "/landlord/maintenance/maint-1/attachments/image-1/access", headers,
+    });
+    expect(access.status).toBe(200);
+    expect(getSignedDownloadUrlMock).toHaveBeenCalledWith({
+      bucket: "test-bucket",
+      path: "maintenance/images/maint-1/image-1.jpg",
+      expiresMinutes: 10,
+    });
+
+    const foreign = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/maintenance/maint-1/attachments/image-1/access",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-2", role: "landlord", landlordId: "landlord-2" }) },
+    });
+    expect(foreign.status).toBe(404);
+    expect(getSignedDownloadUrlMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let the PR #1525 landlord selector bypass canonical property ownership", async () => {
+    Object.assign(process.env, {
+      PREVIEW_QA_AUTH_ENABLED: "true",
+      PREVIEW_QA_AUTH_SCOPE: "pr1525-maintenance-attachments",
+      APP_ENV: "preview",
+      GOOGLE_CLOUD_PROJECT: "rentchain-preview",
+      K_SERVICE: "rentchain-pr1525-attachments-qa-d4fe051b",
+      PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1525-attachments-qa-d4fe051b",
+      FIRESTORE_ENABLED: "true",
+      FIRESTORE_DATABASE_ID: "(default)",
+    });
+    const router = (await import("../maintenanceRequestsRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/maintenance/maint-1/attachments",
+      headers: { "x-rentchain-preview-qa-identity": "pr1525-landlord" },
+    });
+    expect(res.status).toBe(404);
   });
 
   it("persists service window and access coordination through the landlord patch route", async () => {

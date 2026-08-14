@@ -1,13 +1,15 @@
 import React from "react";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import MaintenanceRequestsPage from "./MaintenanceRequestsPage";
 
 const maintenanceWorkflowApi = vi.hoisted(() => ({
   listLandlordMaintenance: vi.fn(),
   patchLandlordMaintenance: vi.fn(),
   assignLandlordMaintenance: vi.fn(),
+  listLandlordMaintenanceImages: vi.fn(),
+  getLandlordMaintenanceImageAccess: vi.fn(),
 }));
 
 const workOrdersApi = vi.hoisted(() => ({
@@ -27,6 +29,8 @@ vi.mock("../api/maintenanceWorkflowApi", async () => {
     listLandlordMaintenance: maintenanceWorkflowApi.listLandlordMaintenance,
     patchLandlordMaintenance: maintenanceWorkflowApi.patchLandlordMaintenance,
     assignLandlordMaintenance: maintenanceWorkflowApi.assignLandlordMaintenance,
+    listLandlordMaintenanceImages: maintenanceWorkflowApi.listLandlordMaintenanceImages,
+    getLandlordMaintenanceImageAccess: maintenanceWorkflowApi.getLandlordMaintenanceImageAccess,
   };
 });
 
@@ -40,8 +44,10 @@ vi.mock("../utils/printSummary", () => ({
 }));
 
 describe("landlord maintenance workspace", () => {
+  afterEach(cleanup);
   beforeEach(() => {
     vi.clearAllMocks();
+    maintenanceWorkflowApi.listLandlordMaintenanceImages.mockResolvedValue([]);
     printSummaryDocumentMock.mockReset();
     Object.defineProperty(window, "matchMedia", {
       writable: true,
@@ -92,6 +98,21 @@ describe("landlord maintenance workspace", () => {
     workOrdersApi.listContractorInvites.mockResolvedValue([]);
     workOrdersApi.submitLandlordWorkOrderCost.mockResolvedValue({});
     workOrdersApi.linkWorkOrderCostToExpense.mockResolvedValue({});
+  });
+
+  it("loads authorized tenant photos for the selected landlord request", async () => {
+    maintenanceWorkflowApi.listLandlordMaintenanceImages.mockResolvedValue([
+      { attachmentId: "image-1", filename: "heater.jpg", contentType: "image/jpeg", byteSize: 2048, width: 40, height: 30, createdAt: 100 },
+    ]);
+    maintenanceWorkflowApi.getLandlordMaintenanceImageAccess.mockResolvedValue({ url: "https://storage.invalid/landlord-signed", expiresAt: 999 });
+    render(<MemoryRouter initialEntries={["/maintenance/maint-1"]}><Routes><Route path="/maintenance/:id" element={<MaintenanceRequestsPage />} /></Routes></MemoryRouter>);
+
+    expect(await screen.findByRole("button", { name: /Open tenant photo heater.jpg/i })).toBeEnabled();
+    const image = screen.getByRole("img", { name: "Maintenance photo: heater.jpg" });
+    expect(image).toHaveStyle({ objectFit: "contain" });
+    expect(image.closest(".maintenance-evidence-photo-frame")).toHaveStyle({ aspectRatio: "4 / 3" });
+    expect(screen.getByText("heater.jpg")).toBeInTheDocument();
+    expect(maintenanceWorkflowApi.getLandlordMaintenanceImageAccess).toHaveBeenCalledWith("maint-1", "image-1");
   });
 
   it("renders the landlord maintenance workspace with lifecycle guidance", async () => {

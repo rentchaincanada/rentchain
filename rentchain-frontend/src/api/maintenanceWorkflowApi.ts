@@ -8,7 +8,14 @@ import {
   updateTenantWorkspaceReworkAccess,
   updateTenantWorkspaceReworkSignoff,
   updateTenantWorkspaceMaintenanceSignoff,
+  deleteTenantWorkspaceMaintenanceImage,
+  getTenantWorkspaceMaintenanceImageAccess,
+  listTenantWorkspaceMaintenanceImages,
+  uploadTenantWorkspaceMaintenanceImage,
+  type MaintenanceImageAttachment,
 } from "./tenantPortal";
+
+export type { MaintenanceImageAttachment } from "./tenantPortal";
 
 export type MaintenanceWorkflowStatus =
   | "submitted"
@@ -398,6 +405,25 @@ export async function createTenantMaintenance(payload: {
       readAt: typeof data?.readAt === "number" ? data.readAt : null,
     },
   };
+}
+
+export const listTenantMaintenanceImages = listTenantWorkspaceMaintenanceImages;
+export const uploadTenantMaintenanceImage = uploadTenantWorkspaceMaintenanceImage;
+export const deleteTenantMaintenanceImage = deleteTenantWorkspaceMaintenanceImage;
+export const getTenantMaintenanceImageAccess = getTenantWorkspaceMaintenanceImageAccess;
+
+export async function listLandlordMaintenanceImages(requestId: string) {
+  const res = await apiFetch<{ ok: boolean; data: MaintenanceImageAttachment[] }>(
+    `/landlord/maintenance/${encodeURIComponent(requestId)}/attachments`
+  );
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function getLandlordMaintenanceImageAccess(requestId: string, attachmentId: string) {
+  const res = await apiFetch<{ ok: boolean; data: { url: string; expiresInSeconds: number } }>(
+    `/landlord/maintenance/${encodeURIComponent(requestId)}/attachments/${encodeURIComponent(attachmentId)}/access`
+  );
+  return res.data;
 }
 
 export async function listTenantMaintenance() {

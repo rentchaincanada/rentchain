@@ -1,7 +1,11 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Input } from "../../components/ui/Ui";
-import { createTenantMaintenance } from "../../api/maintenanceWorkflowApi";
+import {
+  createTenantMaintenance,
+  deleteTenantMaintenanceImage,
+  uploadTenantMaintenanceImage,
+} from "../../api/maintenanceWorkflowApi";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
 import { TenantSurfaceShell } from "./TenantWorkspaceShared";
 
@@ -14,6 +18,65 @@ export default function TenantMaintenanceRequestNewPage() {
   const [notes, setNotes] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [createdRequestId, setCreatedRequestId] = React.useState<string | null>(null);
+  const [photos, setPhotos] = React.useState<
+    Array<{
+      key: string;
+      file: File;
+      previewUrl: string;
+      status: "pending" | "uploading" | "uploaded" | "error" | "deleting";
+      attachmentId?: string;
+    }>
+  >([]);
+
+  const selectPhotos = (files: FileList | null) => {
+    if (!files?.length) return;
+    const selected = Array.from(files);
+    const allowed = new Set(["image/jpeg", "image/png", "image/webp"]);
+    if (selected.some((file) => !allowed.has(file.type))) {
+      setError("Only JPEG, PNG, and WebP images are supported.");
+      return;
+    }
+    if (selected.some((file) => file.size > 10 * 1024 * 1024)) {
+      setError("Each image must be 10 MB or smaller.");
+      return;
+    }
+    if (photos.length + selected.length > 5) {
+      setError("You can attach up to 5 images.");
+      return;
+    }
+    if (photos.reduce((total, photo) => total + photo.file.size, 0) + selected.reduce((total, file) => total + file.size, 0) > 25 * 1024 * 1024) {
+      setError("Attachments must total 25 MB or less.");
+      return;
+    }
+    setError(null);
+    setPhotos((current) => [
+      ...current,
+      ...selected.map((file) => ({
+        key: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${file.name}-${Date.now()}-${Math.random()}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        status: "pending" as const,
+      })),
+    ]);
+  };
+
+  const removePhoto = async (key: string) => {
+    const photo = photos.find((item) => item.key === key);
+    if (!photo || photo.status === "uploading" || photo.status === "deleting") return;
+    if (createdRequestId && photo.attachmentId) {
+      setPhotos((current) => current.map((item) => item.key === key ? { ...item, status: "deleting" } : item));
+      try {
+        await deleteTenantMaintenanceImage(createdRequestId, photo.attachmentId);
+      } catch (err: any) {
+        setPhotos((current) => current.map((item) => item.key === key ? { ...item, status: "error" } : item));
+        setError(err?.message || "Unable to remove the photo.");
+        return;
+      }
+    }
+    URL.revokeObjectURL(photo.previewUrl);
+    setPhotos((current) => current.filter((item) => item.key !== key));
+  };
 
   const submit = async () => {
     if (!title.trim() || !description.trim()) {
@@ -23,15 +86,36 @@ export default function TenantMaintenanceRequestNewPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await createTenantMaintenance({
-        title: title.trim(),
-        description: description.trim(),
-        category,
-        priority,
-        notes: notes.trim(),
-      });
-      const requestId = String(res?.requestId || "").trim();
+      let requestId = createdRequestId;
+      if (!requestId) {
+        const res = await createTenantMaintenance({
+          title: title.trim(),
+          description: description.trim(),
+          category,
+          priority,
+          notes: notes.trim(),
+        });
+        requestId = String(res?.requestId || "").trim();
+        if (requestId) setCreatedRequestId(requestId);
+      }
       if (requestId) {
+        let failed = false;
+        for (const photo of photos.filter((item) => item.status !== "uploaded")) {
+          setPhotos((current) => current.map((item) => item.key === photo.key ? { ...item, status: "uploading" } : item));
+          try {
+            const uploaded = await uploadTenantMaintenanceImage(requestId, photo.file);
+            setPhotos((current) => current.map((item) => item.key === photo.key
+              ? { ...item, status: "uploaded", attachmentId: uploaded.attachmentId }
+              : item));
+          } catch {
+            failed = true;
+            setPhotos((current) => current.map((item) => item.key === photo.key ? { ...item, status: "error" } : item));
+          }
+        }
+        if (failed) {
+          setError("Your request was saved, but one or more photos could not be uploaded. Retry the failed uploads or remove them.");
+          return;
+        }
         navigate(`/tenant/maintenance/${requestId}`);
       } else {
         navigate("/tenant/maintenance");
@@ -160,27 +244,64 @@ export default function TenantMaintenanceRequestNewPage() {
         />
       </label>
 
-      <label style={{ display: "grid", gap: 6 }}>
-        <span style={{ color: textTokens.muted }}>Attachments</span>
+      <label style={{ display: "grid", gap: 8 }}>
+        <span style={{ color: textTokens.primary, fontWeight: 700 }}>Add photos</span>
         <input
           type="file"
-          disabled
-          aria-disabled="true"
+          accept="image/jpeg,image/png,image/webp"
+          multiple
+          onChange={(event) => {
+            selectPhotos(event.target.files);
+            event.target.value = "";
+          }}
+          aria-describedby="maintenance-photo-guidance"
           style={{
             padding: "9px 10px",
             borderRadius: radius.md,
             border: `1px solid ${colors.border}`,
-            background: "#f8fafc",
-            color: textTokens.muted,
-            cursor: "not-allowed",
+            background: colors.panel,
+            color: textTokens.primary,
           }}
         />
-        <span style={{ color: textTokens.muted, fontSize: "0.9rem" }}>Attachments coming soon.</span>
+        <span id="maintenance-photo-guidance" style={{ color: textTokens.muted, fontSize: "0.9rem" }}>
+          Up to 5 JPEG, PNG, or WebP images, 10 MB each and 25 MB total.
+        </span>
       </label>
+
+      {photos.length ? (
+        <div aria-label="Selected photos" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: spacing.sm }}>
+          {photos.map((photo) => (
+            <div key={photo.key} style={{ border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: 8, minWidth: 0 }}>
+              <div style={{ width: "100%", aspectRatio: "4 / 3", overflow: "hidden", borderRadius: radius.sm, background: colors.background }}>
+                <img
+                  src={photo.previewUrl}
+                  alt={`Selected maintenance photo preview: ${photo.file.name}`}
+                  style={{ width: "100%", height: "100%", display: "block", objectFit: "contain" }}
+                />
+              </div>
+              <div title={photo.file.name} style={{ marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.85rem" }}>
+                {photo.file.name}
+              </div>
+              <div aria-live="polite" style={{ color: textTokens.muted, fontSize: "0.8rem" }}>
+                {(photo.file.size / (1024 * 1024)).toFixed(1)} MB · {photo.status}
+              </div>
+              <button
+                type="button"
+                onClick={() => void removePhoto(photo.key)}
+                disabled={photo.status === "uploading" || photo.status === "deleting"}
+                aria-label={`Remove ${photo.file.name}`}
+                style={{ marginTop: 6 }}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
         <Button onClick={() => void submit()} disabled={submitting}>
-          {submitting ? "Submitting..." : "Submit request"}
+          {submitting ? "Submitting..." : createdRequestId ? "Retry photo uploads" : "Submit request"}
         </Button>
         <Button variant="secondary" onClick={() => navigate("/tenant/maintenance")}>
           Back to requests
