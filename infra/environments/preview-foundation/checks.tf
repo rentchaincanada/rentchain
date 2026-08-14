@@ -43,6 +43,7 @@ check "b7_preview_datastore_boundary" {
     condition = local.preview_runtime_firestore_permissions == toset([
       "datastore.databases.get",
       "datastore.entities.create",
+      "datastore.entities.delete",
       "datastore.entities.get",
       "datastore.entities.list",
       "datastore.entities.update",
@@ -345,6 +346,85 @@ check "b6_preview_artifact_reader_boundary" {
   }
 }
 
+check "f1_hcp_storage_control_plane_boundary" {
+  assert {
+    condition = (
+      google_project_iam_custom_role.hcp_terraform_preview_storage_reader.project == "rentchain-preview" &&
+      google_project_iam_custom_role.hcp_terraform_preview_storage_reader.role_id == "hcpTerraformPreviewStorageReader" &&
+      local.hcp_terraform_preview_storage_reader_permissions == toset([
+        "storage.buckets.get",
+        "storage.buckets.getIamPolicy",
+      ]) &&
+      google_project_iam_member.hcp_terraform_preview_storage_reader.member == local.hcp_terraform_plan_member
+    )
+    error_message = "The HCP plan identity must retain exactly the two approved Preview bucket read permissions."
+  }
+
+  assert {
+    condition = (
+      google_project_iam_custom_role.terraform_preview_storage_manager.project == "rentchain-preview" &&
+      google_project_iam_custom_role.terraform_preview_storage_manager.role_id == "terraformPreviewStorageManager" &&
+      local.terraform_preview_storage_manager_permissions == toset([
+        "storage.buckets.create",
+        "storage.buckets.get",
+        "storage.buckets.getIamPolicy",
+        "storage.buckets.setIamPolicy",
+        "storage.buckets.update",
+      ]) &&
+      google_project_iam_member.terraform_preview_storage_manager.member == local.hcp_terraform_apply_member
+    )
+    error_message = "The HCP apply identity must retain exactly the five approved Preview bucket control-plane permissions."
+  }
+
+  assert {
+    condition = (
+      !contains(local.hcp_terraform_preview_storage_reader_permissions, "storage.buckets.delete") &&
+      !contains(local.terraform_preview_storage_manager_permissions, "storage.buckets.delete") &&
+      length([for permission in local.hcp_terraform_preview_storage_reader_permissions : permission if startswith(permission, "storage.objects.")]) == 0 &&
+      length([for permission in local.terraform_preview_storage_manager_permissions : permission if startswith(permission, "storage.objects.")]) == 0
+    )
+    error_message = "The HCP Storage bootstrap must exclude bucket delete and all object-data permissions."
+  }
+}
+
+check "f1_preview_attachment_storage_boundary" {
+  assert {
+    condition = (
+      google_storage_bucket.preview_attachments.project == "rentchain-preview" &&
+      google_storage_bucket.preview_attachments.name == "rentchain-preview-attachments" &&
+      lower(google_storage_bucket.preview_attachments.location) == "northamerica-northeast1" &&
+      google_storage_bucket.preview_attachments.public_access_prevention == "enforced" &&
+      google_storage_bucket.preview_attachments.uniform_bucket_level_access &&
+      !google_storage_bucket.preview_attachments.force_destroy
+    )
+    error_message = "The F1 attachment bucket must remain private, non-destructive, and isolated in the Montreal Preview project."
+  }
+
+  assert {
+    condition = (
+      google_project_iam_custom_role.preview_attachment_object_runtime.project == "rentchain-preview" &&
+      google_project_iam_custom_role.preview_attachment_object_runtime.role_id == "previewAttachmentObjectRuntime" &&
+      local.preview_attachment_object_permissions == toset([
+        "storage.objects.create",
+        "storage.objects.delete",
+        "storage.objects.get",
+      ]) &&
+      trimprefix(google_storage_bucket_iam_member.preview_attachment_runtime.bucket, "b/") == google_storage_bucket.preview_attachments.name &&
+      google_storage_bucket_iam_member.preview_attachment_runtime.member == google_service_account.preview_backend_runtime.member
+    )
+    error_message = "Preview attachment object access must remain exact, bucket-scoped, and limited to the Preview runtime identity."
+  }
+
+  assert {
+    condition = (
+      google_service_account_iam_member.preview_runtime_self_token_creator.service_account_id == google_service_account.preview_backend_runtime.name &&
+      google_service_account_iam_member.preview_runtime_self_token_creator.role == "roles/iam.serviceAccountTokenCreator" &&
+      google_service_account_iam_member.preview_runtime_self_token_creator.member == google_service_account.preview_backend_runtime.member
+    )
+    error_message = "Preview keyless signing must remain a self-member-only binding on the exact runtime service account."
+  }
+}
+
 check "b5_image_delivery_boundary" {
   assert {
     condition = local.github_preview_image_publisher_permissions == toset([
@@ -416,5 +496,18 @@ check "b7_vercel_preview_proxy_identity_boundary" {
       google_cloud_run_v2_service_iam_member.vercel_preview_proxy_invoker.member == "serviceAccount:vercel-preview-proxy@rentchain-preview.iam.gserviceaccount.com"
     )
     error_message = "Run Invoker must remain service-scoped to the private Preview backend and dedicated Vercel proxy identity."
+  }
+}
+
+check "pr1525_vercel_preview_proxy_invoker_boundary" {
+  assert {
+    condition = (
+      google_cloud_run_v2_service_iam_member.pr1525_vercel_proxy_invoker.project == "rentchain-preview" &&
+      google_cloud_run_v2_service_iam_member.pr1525_vercel_proxy_invoker.location == "northamerica-northeast1" &&
+      basename(google_cloud_run_v2_service_iam_member.pr1525_vercel_proxy_invoker.name) == "rentchain-pr1525-attachments-qa-d4fe051b" &&
+      google_cloud_run_v2_service_iam_member.pr1525_vercel_proxy_invoker.role == "roles/run.invoker" &&
+      google_cloud_run_v2_service_iam_member.pr1525_vercel_proxy_invoker.member == "serviceAccount:vercel-preview-proxy@rentchain-preview.iam.gserviceaccount.com"
+    )
+    error_message = "PR #1525 Vercel Invoker must remain service-scoped to the exact isolated attachment QA service and existing proxy identity."
   }
 }

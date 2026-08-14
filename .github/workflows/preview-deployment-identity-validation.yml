@@ -113,11 +113,22 @@ jobs:
             git cat-file -e "${EXPECTED_BASE_SHA}^{commit}"
             git merge-base --is-ancestor "${EXPECTED_BASE_SHA}" "${SOURCE_SHA}"
             git merge-base --is-ancestor "${EXPECTED_BASE_SHA}" "${WORKFLOW_SHA}"
-            git diff --quiet "${WORKFLOW_SHA}" "${SOURCE_SHA}" -- rentchain-api/Dockerfile rentchain-api/package.json rentchain-api/package-lock.json
+            trusted_policy="${RUNNER_TEMP}/validate-runtime-dependency-policy.mjs"
+            trusted_package="${RUNNER_TEMP}/trusted-package.json"
+            trusted_lock="${RUNNER_TEMP}/trusted-package-lock.json"
+            git show "${WORKFLOW_SHA}:scripts/preview-deployment/validate-runtime-dependency-policy.mjs" > "${trusted_policy}"
+            git show "${WORKFLOW_SHA}:rentchain-api/package.json" > "${trusted_package}"
+            git show "${WORKFLOW_SHA}:rentchain-api/package-lock.json" > "${trusted_lock}"
+            node "${trusted_policy}" protected-files "${GITHUB_WORKSPACE}" "${WORKFLOW_SHA}" "${SOURCE_SHA}"
           fi
           git checkout --detach "${SOURCE_SHA}"
           checked_out_sha="$(git rev-parse HEAD)"
           test "${checked_out_sha}" = "${SOURCE_SHA}"
+          if test "${MODE}" = pr; then
+            node "${trusted_policy}" dependencies "${trusted_package}" "${trusted_lock}" rentchain-api/package.json rentchain-api/package-lock.json
+            npm ci --ignore-scripts --prefix rentchain-api
+            git diff --exit-code -- rentchain-api/package.json rentchain-api/package-lock.json
+          fi
           printf 'Checked out source: %s\n' "${checked_out_sha}"
 
       - name: Reverify authorized PR head before build
@@ -140,6 +151,8 @@ jobs:
           docker buildx build \
             --file rentchain-api/Dockerfile \
             --platform linux/amd64 \
+            --label "org.opencontainers.image.revision=${SOURCE_SHA}" \
+            --label "org.opencontainers.image.source=https://github.com/rentchaincanada/rentchain" \
             --tag "${VALIDATION_IMAGE}" \
             --load \
             rentchain-api
@@ -165,11 +178,13 @@ jobs:
           entrypoint="$(jq -c '.[0].Config.Entrypoint' <<<"${image_inspect}")"
           command="$(jq -c '.[0].Config.Cmd' <<<"${image_inspect}")"
           ports="$(jq -c '.[0].Config.ExposedPorts' <<<"${image_inspect}")"
+          source_revision="$(jq -r '.[0].Config.Labels["org.opencontainers.image.revision"]' <<<"${image_inspect}")"
           printf 'Image metadata: id=%s workingDir=%s user=%s entrypoint=%s cmd=%s ports=%s architecture=%s\n' \
             "$(jq -r '.[0].Id' <<<"${image_inspect}")" "${working_dir}" "${runtime_user}" "${entrypoint}" "${command}" "${ports}" "${platform}"
           [[ "${working_dir}" == /app ]] || { echo "expected WORKDIR /app, observed ${working_dir}" >&2; exit 1; }
           [[ "${command}" == '["node","dist/index.build.js"]' ]] || { echo "expected CMD node dist/index.build.js, observed ${command}" >&2; exit 1; }
           [[ "${ports}" == *'"8080/tcp"'* ]] || { echo "expected exposed port 8080/tcp, observed ${ports}" >&2; exit 1; }
+          test "${source_revision}" = "${SOURCE_SHA}"
 
           container_id="$(docker create "${VALIDATION_IMAGE}")"
           rootfs="${RUNNER_TEMP}/preview-backend-rootfs"
@@ -244,6 +259,18 @@ jobs:
           printf '%s\n' 'Validated command: node dist/index.build.js'
           printf '%s\n' 'Validated exposed port: 8080/tcp'
           printf '%s\n' 'Embedded-file and credential checks: passed'
+
+      - name: Validate native runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if jq -e '.dependencies.sharp != null' rentchain-api/package.json >/dev/null; then
+            docker run --rm --entrypoint node "${VALIDATION_IMAGE}" -e '
+              const sharp = require("sharp");
+              if (!sharp?.versions?.sharp || !sharp?.versions?.vips) process.exit(1);
+              console.log(`sharp=${sharp.versions.sharp} libvips=${sharp.versions.vips}`);
+            '
+          fi
 
       - name: Smoke-test the validated image
         shell: bash
