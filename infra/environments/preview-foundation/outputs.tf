@@ -86,3 +86,13 @@ output "preview_attachment_storage" {
   }
   sensitive = false
 }
+
+output "preview_identity_document_storage" {
+  description = "Non-sensitive identifiers for the private Preview identity-document storage foundation."
+  value = {
+    bucket_name             = google_storage_bucket.preview_identity_documents.name
+    location                = google_storage_bucket.preview_identity_documents.location
+    runtime_service_account = google_service_account.preview_backend_runtime.email
+  }
+  sensitive = false
+}

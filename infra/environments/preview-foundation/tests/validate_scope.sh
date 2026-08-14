@@ -38,7 +38,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "50"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "53"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|secretmanager|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "9"
@@ -174,6 +174,35 @@ if rg -n 'storage\.objects\.(list|update|setIamPolicy|getIamPolicy)|storage\.buc
 fi
 if rg -n 'vercel-preview-proxy|github-preview-deploy|hcp-terraform-preview|project-0d9658de-af29-4dc0-a99|rentchain-documents-prod' "$storage_file"; then
   echo "Non-runtime, HCP, Production, or Production-bucket identity found in attachment storage" >&2
+  exit 1
+fi
+
+test "$(rg -No '^resource "google_storage_bucket" "preview_identity_documents"' "$storage_file" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_storage_bucket_iam_member" "preview_identity_document_runtime"' "$storage_file" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_project_iam_custom_role" "preview_identity_document_object_runtime"' "$storage_file" | wc -l | tr -d ' ')" = "1"
+rg -q 'preview_identity_document_bucket_name = "rentchain-preview-identity-documents"' "$storage_file"
+grep -Fq 'lower(google_storage_bucket.preview_identity_documents.location) == "northamerica-northeast1"' "$checks_file"
+rg -U -q '(?s)resource "google_storage_bucket" "preview_identity_documents" \{.*public_access_prevention[[:space:]]*= "enforced".*uniform_bucket_level_access[[:space:]]*= true.*force_destroy[[:space:]]*= false.*lifecycle \{\n    prevent_destroy = true\n  \}' "$storage_file"
+
+expected_identity_document_object_permissions="$(cat <<'EOF'
+storage.objects.create
+storage.objects.delete
+storage.objects.get
+EOF
+)"
+actual_identity_document_object_permissions="$(
+  sed -n '/preview_identity_document_object_permissions = toset(/,/])/p' "$storage_file" \
+    | rg -No '"[^"]+"' \
+    | tr -d '"'
+)"
+test "$actual_identity_document_object_permissions" = "$expected_identity_document_object_permissions"
+rg -q 'role_id     = "previewIdentityDocumentObjectRuntime"' "$storage_file"
+rg -q 'bucket = google_storage_bucket\.preview_identity_documents\.name' "$storage_file"
+rg -q 'role   = google_project_iam_custom_role\.preview_identity_document_object_runtime\.name' "$storage_file"
+rg -q 'member = google_service_account\.preview_backend_runtime\.member' "$storage_file"
+grep -Fq 'trimprefix(google_storage_bucket_iam_member.preview_identity_document_runtime.bucket, "b/") == google_storage_bucket.preview_identity_documents.name' "$checks_file"
+if printf '%s\n' "$actual_identity_document_object_permissions" | rg -n 'storage\.objects\.(list|update|setIamPolicy|getIamPolicy)|storage\.buckets\.'; then
+  echo "Forbidden list, update, IAM, or bucket control-plane permission found in the identity-document runtime foundation" >&2
   exit 1
 fi
 

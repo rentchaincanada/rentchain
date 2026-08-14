@@ -425,6 +425,35 @@ check "f1_preview_attachment_storage_boundary" {
   }
 }
 
+check "g1b_preview_identity_document_storage_boundary" {
+  assert {
+    condition = (
+      google_storage_bucket.preview_identity_documents.project == "rentchain-preview" &&
+      google_storage_bucket.preview_identity_documents.name == "rentchain-preview-identity-documents" &&
+      lower(google_storage_bucket.preview_identity_documents.location) == "northamerica-northeast1" &&
+      google_storage_bucket.preview_identity_documents.public_access_prevention == "enforced" &&
+      google_storage_bucket.preview_identity_documents.uniform_bucket_level_access &&
+      !google_storage_bucket.preview_identity_documents.force_destroy
+    )
+    error_message = "The G1B identity-document bucket must remain private, non-destructive, and isolated in the Montreal Preview project."
+  }
+
+  assert {
+    condition = (
+      google_project_iam_custom_role.preview_identity_document_object_runtime.project == "rentchain-preview" &&
+      google_project_iam_custom_role.preview_identity_document_object_runtime.role_id == "previewIdentityDocumentObjectRuntime" &&
+      local.preview_identity_document_object_permissions == toset([
+        "storage.objects.create",
+        "storage.objects.delete",
+        "storage.objects.get",
+      ]) &&
+      trimprefix(google_storage_bucket_iam_member.preview_identity_document_runtime.bucket, "b/") == google_storage_bucket.preview_identity_documents.name &&
+      google_storage_bucket_iam_member.preview_identity_document_runtime.member == google_service_account.preview_backend_runtime.member
+    )
+    error_message = "Preview identity-document object access must remain exact, bucket-scoped, and limited to the Preview runtime identity."
+  }
+}
+
 check "b5_image_delivery_boundary" {
   assert {
     condition = local.github_preview_image_publisher_permissions == toset([
