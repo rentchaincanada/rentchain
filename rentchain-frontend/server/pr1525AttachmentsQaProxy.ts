@@ -31,8 +31,9 @@ const auth: PreviewAuthConfig = {
   expectedSpikeCommit: "",
 };
 
-const TENANT_PATH = /^\/api\/tenant\/maintenance-requests\/qa-pr1525-(?:target|foreign)-request\/attachments(?:\/qa-pr1525-attachment-[a-z0-9-]+(?:\/access)?)?$/;
-const LANDLORD_PATH = /^\/api\/landlord\/maintenance\/qa-pr1525-(?:target|foreign)-request\/attachments(?:\/qa-pr1525-attachment-[a-z0-9-]+\/access)?$/;
+const ATTACHMENT_ID = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+const TENANT_PATH = new RegExp(`^/api/tenant/maintenance-requests/qa-pr1525-(?:target|foreign)-request/attachments(?:/${ATTACHMENT_ID}(?:/access)?)?$`, "i");
+const LANDLORD_PATH = new RegExp(`^/api/landlord/maintenance/qa-pr1525-(?:target|foreign)-request/attachments(?:/${ATTACHMENT_ID}/access)?$`, "i");
 const SAFE_RESPONSE_HEADERS = new Set(["cache-control", "content-type", "x-request-id", "x-route-source"]);
 
 function fail(res: any, status: number, error: string) {

@@ -22,12 +22,14 @@ function response() {
 }
 
 describe("PR #1525 attachment QA proxy", () => {
+  const attachmentId = "123e4567-e89b-42d3-a456-426614174000";
+
   afterEach(() => vi.unstubAllEnvs());
 
   it.each([
     ["tenant", "GET", "/api/tenant/maintenance-requests/qa-pr1525-target-request/attachments"],
     ["tenant", "POST", "/api/tenant/maintenance-requests/qa-pr1525-target-request/attachments"],
-    ["foreignTenant", "DELETE", "/api/tenant/maintenance-requests/qa-pr1525-target-request/attachments/qa-pr1525-attachment-one"],
+    ["foreignTenant", "DELETE", `/api/tenant/maintenance-requests/qa-pr1525-target-request/attachments/${attachmentId}`],
     ["landlord", "GET", "/api/landlord/maintenance/qa-pr1525-target-request/attachments"],
     ["foreignLandlord", "GET", "/api/landlord/maintenance/qa-pr1525-foreign-request/attachments"],
   ])("allows fixed actor %s for %s", (actor, method, path) => {
@@ -40,6 +42,13 @@ describe("PR #1525 attachment QA proxy", () => {
     "/api/pr1525-attachments/tenant/api/landlord/maintenance/qa-pr1525-target-request/attachments",
   ])("rejects arbitrary identity or resource input", (url) => {
     expect(classifyPr1525AttachmentRequest(req(url)).allowed).toBe(false);
+  });
+
+  it("rejects non-UUID attachment identifiers", () => {
+    expect(classifyPr1525AttachmentRequest(req(
+      "/api/pr1525-attachments/tenant/api/tenant/maintenance-requests/qa-pr1525-target-request/attachments/qa-pr1525-attachment-one",
+      "DELETE",
+    )).allowed).toBe(false);
   });
 
   it("maps the semantic actor to the fixed server-side selector", async () => {
