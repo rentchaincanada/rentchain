@@ -10,12 +10,6 @@ export const PR1512_PREVIEW_QA_SCOPE = "pr1512-property-notices";
 export const PR1512_PREVIEW_QA_IDENTITY_ALIAS = "pr1512-landlord";
 export const PR1512_PREVIEW_QA_LANDLORD_ID = "qa-pr1512-landlord";
 export const PR1512_PREVIEW_QA_SERVICE_PATTERN = /^rentchain-pr1512-notices-qa-[a-f0-9]{8}$/;
-export const PR1525_PREVIEW_QA_SCOPE = "pr1525-maintenance-attachments";
-export const PR1525_PREVIEW_QA_SERVICE = "rentchain-pr1525-attachments-qa-d4fe051b";
-export const PR1525_PREVIEW_QA_TENANT_SELECTOR = "pr1525-tenant";
-export const PR1525_PREVIEW_QA_LANDLORD_SELECTOR = "pr1525-landlord";
-export const PR1525_PREVIEW_QA_FOREIGN_TENANT_SELECTOR = "pr1525-foreign-tenant";
-export const PR1525_PREVIEW_QA_FOREIGN_LANDLORD_SELECTOR = "pr1525-foreign-landlord";
 
 const PREVIEW_PROJECT_ID = "rentchain-preview";
 const PRODUCTION_PROJECT_ID = "project-0d9658de-af29-4dc0-a99";
@@ -50,42 +44,6 @@ type PreviewQaContract = {
   email: string;
   allowedOperations: ReadonlySet<string>;
 };
-
-type Pr1525Principal = {
-  selector: string;
-  id: string;
-  role: "tenant" | "landlord";
-  email: string;
-};
-
-const pr1525Principals: readonly Pr1525Principal[] = [
-  { selector: PR1525_PREVIEW_QA_TENANT_SELECTOR, id: "qa-pr1525-tenant", role: "tenant", email: "qa-pr1525-tenant@example.invalid" },
-  { selector: PR1525_PREVIEW_QA_LANDLORD_SELECTOR, id: "qa-pr1525-landlord", role: "landlord", email: "qa-pr1525-landlord@example.invalid" },
-  { selector: PR1525_PREVIEW_QA_FOREIGN_TENANT_SELECTOR, id: "qa-pr1525-foreign-tenant", role: "tenant", email: "qa-pr1525-foreign-tenant@example.invalid" },
-  { selector: PR1525_PREVIEW_QA_FOREIGN_LANDLORD_SELECTOR, id: "qa-pr1525-foreign-landlord", role: "landlord", email: "qa-pr1525-foreign-landlord@example.invalid" },
-];
-
-const pr1525TenantOperations = new Set([
-  "GET:tenant-maintenance-list",
-  "POST:tenant-maintenance-create",
-  "GET:tenant-maintenance-detail",
-  "GET:tenant-maintenance-attachment-list",
-  "GET:tenant-maintenance-attachment-access",
-  "POST:tenant-maintenance-attachment-upload",
-  "DELETE:tenant-maintenance-attachment-delete",
-]);
-
-const pr1525ForeignTenantOperations = new Set([
-  "GET:tenant-maintenance-attachment-list",
-  "GET:tenant-maintenance-attachment-access",
-  "POST:tenant-maintenance-attachment-upload",
-  "DELETE:tenant-maintenance-attachment-delete",
-]);
-
-const pr1525LandlordOperations = new Set([
-  "GET:landlord-maintenance-attachment-list",
-  "GET:landlord-maintenance-attachment-access",
-]);
 
 const previewQaContracts: readonly PreviewQaContract[] = [
   {
@@ -155,26 +113,6 @@ export function decidePreviewQaAuth(input: PreviewQaDecisionInput): PreviewQaDec
   const firestoreDatabaseId = String(input.env.FIRESTORE_DATABASE_ID || "").trim();
   const contract = previewQaContracts.find((candidate) => candidate.scope === scope);
 
-  if (scope === PR1525_PREVIEW_QA_SCOPE) {
-    const principal = pr1525Principals.find((candidate) => candidate.selector === input.selector);
-    const isolatedPr1525 =
-      enabled === "true" &&
-      appEnvironment === "preview" &&
-      projectId === PREVIEW_PROJECT_ID &&
-      service === PR1525_PREVIEW_QA_SERVICE &&
-      expectedService === PR1525_PREVIEW_QA_SERVICE &&
-      firestoreEnabled === "true" &&
-      firestoreDatabaseId === "(default)";
-    if (!isolatedPr1525 || !principal) return { kind: "reject" };
-    const operation = `${input.method.toUpperCase()}:${input.route}`;
-    const allowed = principal.selector === PR1525_PREVIEW_QA_TENANT_SELECTOR
-      ? pr1525TenantOperations.has(operation)
-      : principal.role === "tenant"
-        ? pr1525ForeignTenantOperations.has(operation)
-      : pr1525LandlordOperations.has(operation);
-    return allowed ? { kind: "allow" } : { kind: "reject" };
-  }
-
   const isolatedPreviewQa =
     enabled === "true" &&
     Boolean(contract) &&
@@ -225,16 +163,6 @@ function syntheticLandlordEntitlements(landlordId: string): UserEntitlements {
   };
 }
 
-function syntheticPr1525Entitlements(principal: Pr1525Principal): UserEntitlements {
-  return {
-    userId: principal.id,
-    role: principal.role,
-    plan: "starter",
-    capabilities: [],
-    landlordId: principal.role === "landlord" ? principal.id : null,
-  };
-}
-
 export function previewQaAuth(route: PreviewQaRoute): RequestHandler {
   return (req, res, next) => {
     const readHeader = (name: string) => {
@@ -257,26 +185,6 @@ export function previewQaAuth(route: PreviewQaRoute): RequestHandler {
 
     const scope = String(process.env.PREVIEW_QA_AUTH_SCOPE || "").trim();
     const contract = previewQaContracts.find((candidate) => candidate.scope === scope);
-    const pr1525Principal = scope === PR1525_PREVIEW_QA_SCOPE
-      ? pr1525Principals.find((candidate) => candidate.selector === selector)
-      : undefined;
-    if (pr1525Principal) {
-      const entitlements = syntheticPr1525Entitlements(pr1525Principal);
-      (req as any).user = {
-        id: pr1525Principal.id,
-        email: pr1525Principal.email,
-        role: pr1525Principal.role,
-        ...(pr1525Principal.role === "tenant"
-          ? { tenantId: pr1525Principal.id }
-          : { landlordId: pr1525Principal.id }),
-        plan: "starter",
-        capabilities: [],
-        entitlements,
-      };
-      (req as any).entitlements = entitlements;
-      (req as any)[previewQaAuthenticated] = true;
-      return next();
-    }
     if (!contract) return res.status(401).json({ ok: false, error: "unauthenticated" });
     const entitlements = syntheticLandlordEntitlements(contract.landlordId);
     (req as any).user = {

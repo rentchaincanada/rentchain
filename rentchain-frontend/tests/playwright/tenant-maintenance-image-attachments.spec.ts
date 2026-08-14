@@ -21,10 +21,10 @@ async function installTenantHarness(page: Page, uploadFails = false, application
     sessionStorage.setItem("rentchain_tenant_token", token);
     localStorage.setItem("dev_auth_unlocked", "1");
   }, { token: tenantToken });
-  await page.route(/\/api\/(?:pr1525-attachments\/tenant\/api\/)?tenant\//, async (route) => {
+  await page.route(/\/api\/tenant\//, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    const path = url.pathname.replace("/api/pr1525-attachments/tenant", "");
+    const path = url.pathname;
     applicationRequests.push({ url: request.url(), method: request.method() });
     if (path.endsWith("/api/tenant/workspace")) {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: { context: { authority: "active_tenant", tenantId: "tenant-image-qa", propertyId: "property-qa", leaseId: "lease-qa" }, tenant: { id: "tenant-image-qa", status: "active" }, landlord: { name: "Synthetic Landlord" }, property: { id: "property-qa", name: "QA Property" }, unit: { id: "unit-qa", label: "Unit 1" }, lease: { id: "lease-qa", status: "active" }, application: null, maintenance: [] } }) });
@@ -127,7 +127,7 @@ test("preserves a created request when a synthetic image upload fails", async ({
   await expect(page.getByRole("button", { name: "Retry photo uploads" })).toBeVisible();
 });
 
-test("submits the real tenant form through the PR same-origin proxy using the created request reference", async ({ page }) => {
+test("submits the real tenant form through the same-origin API using the created request reference", async ({ page }) => {
   const applicationRequests: Array<{ url: string; method: string }> = [];
   await installTenantHarness(page, false, applicationRequests);
   await page.goto("/tenant/maintenance/new", { waitUntil: "domcontentloaded" });
@@ -136,7 +136,7 @@ test("submits the real tenant form through the PR same-origin proxy using the cr
     { name: "pipe.png", mimeType: "image/png", buffer: Buffer.from("synthetic-png") },
   ]);
   await page.getByPlaceholder("Leaking kitchen faucet").fill("Synthetic governed upload");
-  await page.getByPlaceholder(/Describe the issue/).fill("Synthetic PR1525 real tenant form verification");
+  await page.getByPlaceholder(/Describe the issue/).fill("Synthetic real tenant form verification");
   await page.getByRole("button", { name: "Submit request" }).click();
   await expect.poll(() => applicationRequests.filter((request) => request.method === "POST" && request.url.endsWith("/attachments")).length).toBe(2);
   const uploadUrls = applicationRequests
@@ -147,7 +147,7 @@ test("submits the real tenant form through the PR same-origin proxy using the cr
     const url = new URL(requestUrl);
     expect(url.origin).toBe(new URL(page.url()).origin);
     expect(url.hostname).not.toContain("run.app");
-    expect(url.pathname).toContain("/api/pr1525-attachments/tenant/api/tenant/maintenance-requests/maintenance%3A69ffa10a77d4/attachments");
+    expect(url.pathname).toContain("/api/tenant/maintenance-requests/maintenance%3A69ffa10a77d4/attachments");
   }
   await expect(page).toHaveURL(/\/tenant\/maintenance\/maintenance(?::|%3A)69ffa10a77d4$/);
 });

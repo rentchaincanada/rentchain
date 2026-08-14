@@ -5282,27 +5282,6 @@ describe("tenantPortalRoutes foundation", () => {
     expect(uploadBufferToGcsMock).not.toHaveBeenCalled();
   });
 
-  it("does not let the PR #1525 tenant selector bypass canonical workspace ownership", async () => {
-    Object.assign(process.env, {
-      PREVIEW_QA_AUTH_ENABLED: "true",
-      PREVIEW_QA_AUTH_SCOPE: "pr1525-maintenance-attachments",
-      APP_ENV: "preview",
-      GOOGLE_CLOUD_PROJECT: "rentchain-preview",
-      K_SERVICE: "rentchain-pr1525-attachments-qa-d4fe051b",
-      PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1525-attachments-qa-d4fe051b",
-      FIRESTORE_ENABLED: "true",
-      FIRESTORE_DATABASE_ID: "(default)",
-    });
-    const router = (await import("../tenantPortalRoutes")).default;
-    const res = await invokeRouter(router, {
-      method: "GET",
-      url: "/maintenance-requests/maint-1/attachments",
-      headers: { "x-rentchain-preview-qa-identity": "pr1525-tenant" },
-    });
-    expect(res.status).toBe(409);
-    expect(res.body?.ok).toBe(false);
-  });
-
   it("enforces attachment count and aggregate byte limits and cleans the uploaded object", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const file = await sharp({ create: { width: 8, height: 8, channels: 3, background: "green" } }).webp().toBuffer();
