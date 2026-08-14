@@ -6118,7 +6118,9 @@ router.post("/leases/:leaseId/sign", requireTenantWorkspaceIdentity, async (req:
 
 async function loadTenantAttachmentRequest(context: any, requestId: string) {
   if (context?.authority !== "active_tenant" || !context?.tenantId || !context?.propertyId) return null;
-  const ref = db.collection("maintenanceRequests").doc(requestId);
+  const resolvedRequestId = await resolveTenantMaintenanceDocumentIdForRequest(context.tenantId, requestId);
+  if (!resolvedRequestId) return null;
+  const ref = db.collection("maintenanceRequests").doc(resolvedRequestId);
   const snap = await ref.get();
   if (!snap.exists) return null;
   const data = (snap.data() as any) || {};
@@ -6149,7 +6151,7 @@ router.get("/maintenance-requests/:id/attachments", previewQaAuth("tenant-mainte
   const requestId = String(req.params?.id || "").trim();
   const authorized = requestId ? await loadTenantAttachmentRequest(context, requestId) : null;
   if (!authorized) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
-  const attachments = await listReadyMaintenanceImages(requestId);
+  const attachments = await listReadyMaintenanceImages(authorized.ref.id);
   return res.json({ ok: true, data: attachments.map(projectMaintenanceImageAttachment) });
 });
 
@@ -6168,7 +6170,7 @@ router.get(
     const attachment = parseMaintenanceImageAttachment(
       snap.exists ? { attachmentId: snap.id, ...(snap.data() as any) } : null
     );
-    if (!attachment || attachment.maintenanceRequestId !== requestId) {
+    if (!attachment || attachment.maintenanceRequestId !== authorized.ref.id) {
       return res.status(404).json({ ok: false, error: "NOT_FOUND" });
     }
     const url = await getSignedDownloadUrl({
@@ -6210,11 +6212,12 @@ router.post("/maintenance-requests/:id/attachments", previewQaAuth("tenant-maint
     }
 
     const attachmentId = makeMaintenanceImageAttachmentId();
-    const storageObjectKey = buildMaintenanceImageObjectKey(requestId, attachmentId, canonical.format);
+    const resolvedRequestId = authorized.ref.id;
+    const storageObjectKey = buildMaintenanceImageObjectKey(resolvedRequestId, attachmentId, canonical.format);
     const now = Date.now();
     const record: MaintenanceImageAttachmentRecord = {
       attachmentId,
-      maintenanceRequestId: requestId,
+      maintenanceRequestId: resolvedRequestId,
       tenantId: String(context.tenantId),
       landlordId: String(authorized.data.landlordId || ""),
       propertyId: String(context.propertyId),
@@ -6239,7 +6242,7 @@ router.post("/maintenance-requests/:id/attachments", previewQaAuth("tenant-maint
         buffer: canonical.buffer,
         metadata: {
           attachmentId,
-          maintenanceRequestId: requestId,
+          maintenanceRequestId: resolvedRequestId,
           contentType: canonical.contentType,
           uploadedAtMs: String(now),
         },
@@ -6309,7 +6312,7 @@ router.delete(
     const attachmentSnap = await attachmentRef.get();
     if (!attachmentSnap.exists) return res.status(204).send();
     const raw = { attachmentId: attachmentSnap.id, ...((attachmentSnap.data() as any) || {}) } as any;
-    if (raw.maintenanceRequestId !== requestId || raw.tenantId !== String(context.tenantId)) {
+    if (raw.maintenanceRequestId !== authorized.ref.id || raw.tenantId !== String(context.tenantId)) {
       return res.status(404).json({ ok: false, error: "NOT_FOUND" });
     }
     try {

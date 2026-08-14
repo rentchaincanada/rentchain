@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
+import { tenantSafeMaintenanceReferenceKey } from "../../services/tenantPortal/tenantProjectionService";
 
 const getSignedDownloadUrlMock = vi.fn();
 const uploadBufferToGcsMock = vi.fn();
@@ -5197,6 +5198,48 @@ describe("tenantPortalRoutes foundation", () => {
     const stored = Array.from(ensureCollection("maintenanceRequestAttachments").values())[0];
     expect(stored).toEqual(expect.objectContaining({ tenantId: "tenant-1", landlordId: "landlord-1", propertyId: "prop-1" }));
     expect(JSON.stringify(stored)).not.toContain("forged");
+  });
+
+  it("resolves tenant-safe maintenance references across the attachment lifecycle", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const file = await sharp({ create: { width: 20, height: 10, channels: 3, background: "blue" } }).jpeg().toBuffer();
+    const headers = {
+      "x-test-user": JSON.stringify({ id: "user-1", email: "tenant@example.com", role: "tenant", tenantId: "tenant-1" }),
+    };
+    const safeRequestId = tenantSafeMaintenanceReferenceKey("maint-1");
+
+    const uploaded = await invokeRouter(router, {
+      method: "POST",
+      url: `/maintenance-requests/${safeRequestId}/attachments`,
+      headers,
+      file: { buffer: file, originalname: "safe-reference.jpg" },
+    });
+    expect(uploaded.status).toBe(201);
+    const attachmentId = uploaded.body?.data?.attachmentId;
+    expect(attachmentId).toBeTruthy();
+    expect(ensureCollection("maintenanceRequestAttachments").get(attachmentId)?.maintenanceRequestId).toBe("maint-1");
+    expect(uploadBufferToGcsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ path: expect.stringContaining("maintenance/images/maint-1/") })
+    );
+
+    const listed = await invokeRouter(router, {
+      method: "GET", url: `/maintenance-requests/${safeRequestId}/attachments`, headers,
+    });
+    expect(listed.status).toBe(200);
+    expect(listed.body?.data).toHaveLength(1);
+    expect(listed.body?.data[0]?.attachmentId).toBe(attachmentId);
+
+    const accessed = await invokeRouter(router, {
+      method: "GET", url: `/maintenance-requests/${safeRequestId}/attachments/${attachmentId}/access`, headers,
+    });
+    expect(accessed.status).toBe(200);
+    expect(getSignedDownloadUrlMock).toHaveBeenCalled();
+
+    const deleted = await invokeRouter(router, {
+      method: "DELETE", url: `/maintenance-requests/${safeRequestId}/attachments/${attachmentId}`, headers,
+    });
+    expect(deleted.status).toBe(204);
+    expect(ensureCollection("maintenanceRequestAttachments").has(attachmentId)).toBe(false);
   });
 
   it("rejects cross-tenant, unauthenticated, wrong-role, and ended-relationship uploads before storage", async () => {
