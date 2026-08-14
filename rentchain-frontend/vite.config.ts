@@ -7,6 +7,9 @@ export default defineConfig(({ mode }) => {
   const isTdzDebug = mode === "tdzdebug";
 
   return {
+    define: {
+      __VERCEL_GIT_COMMIT_REF__: JSON.stringify(process.env.VERCEL_GIT_COMMIT_REF || ""),
+    },
     plugins: [
       react(),
       VitePWA({

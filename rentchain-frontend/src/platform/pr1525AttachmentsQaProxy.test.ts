@@ -27,6 +27,9 @@ describe("PR #1525 attachment QA proxy", () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it.each([
+    ["tenant", "POST", "/api/tenant/maintenance-requests"],
+    ["tenant", "GET", "/api/tenant/maintenance-requests/maintenance%3A69ffa10a77d4"],
+    ["tenant", "POST", "/api/tenant/maintenance-requests/maintenance%3A69ffa10a77d4/attachments"],
     ["tenant", "GET", "/api/tenant/maintenance-requests/qa-pr1525-target-request/attachments"],
     ["tenant", "POST", "/api/tenant/maintenance-requests/qa-pr1525-target-request/attachments"],
     ["foreignTenant", "DELETE", `/api/tenant/maintenance-requests/qa-pr1525-target-request/attachments/${attachmentId}`],
@@ -56,6 +59,15 @@ describe("PR #1525 attachment QA proxy", () => {
       `/api/pr1525-attachments/landlord/api/landlord/maintenance/qa-pr1525-target-request/attachments/${attachmentId}`,
       "DELETE",
     )).allowed).toBe(false);
+  });
+
+  it.each([
+    ["foreignTenant", "POST", "/api/tenant/maintenance-requests"],
+    ["tenant", "DELETE", "/api/tenant/maintenance-requests"],
+    ["tenant", "POST", "/api/tenant/maintenance-requests/maintenance%3A69ffa10a77d4"],
+    ["tenant", "GET", "/api/tenant/maintenance-requests/maintenance%3Azzzzzzzzzzzz/attachments"],
+  ])("rejects method or runtime-resource widening for %s %s", (actor, method, path) => {
+    expect(classifyPr1525AttachmentRequest(req(`/api/pr1525-attachments/${actor}${path}`, method)).allowed).toBe(false);
   });
 
   it("maps the semantic actor to the fixed server-side selector", async () => {

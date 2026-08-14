@@ -32,7 +32,12 @@ const auth: PreviewAuthConfig = {
 };
 
 const ATTACHMENT_ID = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
-const TENANT_PATH = new RegExp(`^/api/tenant/maintenance-requests/qa-pr1525-(?:target|foreign)-request/attachments(?:/${ATTACHMENT_ID}(?:/access)?)?$`, "i");
+const TENANT_FIXED_REQUEST = "qa-pr1525-(?:target|foreign)-request";
+const TENANT_RUNTIME_REQUEST = "maintenance(?::|%3a)[0-9a-f]{12}";
+const TENANT_REQUEST = `(?:${TENANT_FIXED_REQUEST}|${TENANT_RUNTIME_REQUEST})`;
+const TENANT_COLLECTION_PATH = /^\/api\/tenant\/maintenance-requests$/i;
+const TENANT_REQUEST_PATH = new RegExp(`^/api/tenant/maintenance-requests/${TENANT_REQUEST}$`, "i");
+const TENANT_ATTACHMENT_PATH = new RegExp(`^/api/tenant/maintenance-requests/${TENANT_REQUEST}/attachments(?:/${ATTACHMENT_ID}(?:/access)?)?$`, "i");
 const LANDLORD_PATH = new RegExp(`^/api/landlord/maintenance/qa-pr1525-(?:target|foreign)-request/attachments(?:/${ATTACHMENT_ID}/access)?$`, "i");
 const SAFE_RESPONSE_HEADERS = new Set(["cache-control", "content-type", "x-request-id", "x-route-source"]);
 
@@ -54,9 +59,13 @@ export function classifyPr1525AttachmentRequest(req: any) {
   const method = String(req?.method || "GET").toUpperCase();
   const tenantActor = actor === "tenant" || actor === "foreignTenant";
   const landlordActor = actor === "landlord" || actor === "foreignLandlord";
-  const allowedMethod = tenantActor ? ["GET", "POST", "DELETE"].includes(method) : method === "GET";
-  const allowedPath = (tenantActor && TENANT_PATH.test(backendPath)) || (landlordActor && LANDLORD_PATH.test(backendPath));
-  if (!selector || !allowedMethod || !allowedPath) return { allowed: false as const, status: allowedPath ? 405 : 404 };
+  const tenantCollectionAllowed = actor === "tenant" && TENANT_COLLECTION_PATH.test(backendPath) && ["GET", "POST"].includes(method);
+  const tenantRequestAllowed = actor === "tenant" && TENANT_REQUEST_PATH.test(backendPath) && method === "GET";
+  const tenantAttachmentAllowed = tenantActor && TENANT_ATTACHMENT_PATH.test(backendPath) && ["GET", "POST", "DELETE"].includes(method);
+  const landlordAllowed = landlordActor && LANDLORD_PATH.test(backendPath) && method === "GET";
+  const allowedPath = tenantCollectionAllowed || tenantRequestAllowed || tenantAttachmentAllowed || landlordAllowed;
+  const knownPath = TENANT_COLLECTION_PATH.test(backendPath) || TENANT_REQUEST_PATH.test(backendPath) || TENANT_ATTACHMENT_PATH.test(backendPath) || LANDLORD_PATH.test(backendPath);
+  if (!selector || !allowedPath) return { allowed: false as const, status: knownPath ? 405 : 404 };
   return { allowed: true as const, actor, selector, backendPath, method };
 }
 

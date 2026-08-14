@@ -737,6 +737,8 @@ describe("tenant maintenance pages", () => {
     const photo = new File([new Uint8Array(512)], "leak.webp", { type: "image/webp" });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [photo] } });
     expect(screen.getByText("leak.webp")).toBeInTheDocument();
+    const preview = screen.getByRole("img", { name: "Selected maintenance photo preview: leak.webp" });
+    expect(preview).toHaveStyle({ width: "100%", height: "100%", objectFit: "contain" });
     fireEvent.change(screen.getByPlaceholderText(/Leaking kitchen faucet/i), { target: { value: "Leaky faucet" } });
     fireEvent.change(screen.getByPlaceholderText(/Describe the issue and any urgency details/i), { target: { value: "Water is dripping." } });
     fireEvent.click(screen.getByRole("button", { name: /Submit request/i }));

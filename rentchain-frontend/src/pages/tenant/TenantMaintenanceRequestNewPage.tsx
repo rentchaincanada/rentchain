@@ -269,10 +269,16 @@ export default function TenantMaintenanceRequestNewPage() {
       </label>
 
       {photos.length ? (
-        <div aria-label="Selected photos" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: spacing.sm }}>
+        <div aria-label="Selected photos" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: spacing.sm }}>
           {photos.map((photo) => (
             <div key={photo.key} style={{ border: `1px solid ${colors.border}`, borderRadius: radius.md, padding: 8, minWidth: 0 }}>
-              <img src={photo.previewUrl} alt="" style={{ width: "100%", height: 110, objectFit: "cover", borderRadius: radius.sm }} />
+              <div style={{ width: "100%", aspectRatio: "4 / 3", overflow: "hidden", borderRadius: radius.sm, background: colors.background }}>
+                <img
+                  src={photo.previewUrl}
+                  alt={`Selected maintenance photo preview: ${photo.file.name}`}
+                  style={{ width: "100%", height: "100%", display: "block", objectFit: "contain" }}
+                />
+              </div>
               <div title={photo.file.name} style={{ marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.85rem" }}>
                 {photo.file.name}
               </div>
