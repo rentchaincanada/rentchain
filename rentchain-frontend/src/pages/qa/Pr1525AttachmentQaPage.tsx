@@ -17,12 +17,81 @@ type Attachment = {
   height: number;
 };
 
+type AuthorizedAttachmentThumbnailProps = {
+  attachment: Attachment;
+  requestAccessUrl: (attachmentId: string) => Promise<string>;
+};
+
 export const PR1525_SESSION_KEY = "rentchain.qa.pr1525.fixed-session";
 
 function attachmentPath(role: Role, requestId: string) {
   return role === "tenant"
     ? `/api/tenant/maintenance-requests/${requestId}/attachments`
     : `/api/landlord/maintenance/${requestId}/attachments`;
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function AuthorizedAttachmentThumbnail({ attachment, requestAccessUrl }: AuthorizedAttachmentThumbnailProps) {
+  const [state, setState] = useState<"loading" | "loaded" | "unavailable">("loading");
+  const [url, setUrl] = useState("");
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void requestAccessUrl(attachment.attachmentId)
+      .then((nextUrl) => {
+        if (cancelled) return;
+        setUrl(nextUrl);
+        setState("loaded");
+      })
+      .catch(() => {
+        if (!cancelled) setState("unavailable");
+      });
+    return () => { cancelled = true; };
+  }, [attachment.attachmentId, attempt, requestAccessUrl]);
+
+  const frameStyle: React.CSSProperties = {
+    aspectRatio: "4 / 3",
+    width: "100%",
+    marginBottom: 12,
+    borderRadius: 8,
+    overflow: "hidden",
+    background: "#eef2f7",
+    border: "1px solid #d6dbe5",
+    display: "grid",
+    placeItems: "center",
+  };
+
+  if (state === "loading") {
+    return <div aria-label={`Loading preview for ${attachment.filename}`} role="status" style={frameStyle}>Loading preview…</div>;
+  }
+  if (state === "unavailable" || !url) {
+    return <div style={{ ...frameStyle, padding: 12, textAlign: "center" }}>
+      <div>
+        <p style={{ margin: "0 0 8px" }}>Preview unavailable</p>
+        <button type="button" onClick={() => {
+          setState("loading");
+          setUrl("");
+          setAttempt((value) => value + 1);
+        }}>Retry thumbnail</button>
+      </div>
+    </div>;
+  }
+  return <div style={frameStyle}>
+    <img
+      src={url}
+      alt={`Maintenance attachment preview: ${attachment.filename}`}
+      loading="lazy"
+      onError={() => {
+        setUrl("");
+        setState("unavailable");
+      }}
+      style={{ width: "100%", height: "100%", display: "block", objectFit: "cover" }}
+    />
+  </div>;
 }
 
 export default function Pr1525AttachmentQaPage() {
@@ -61,9 +130,9 @@ export default function Pr1525AttachmentQaPage() {
         setBootstrap(value);
         await refresh(value);
         if (!cancelled) setStatus("Fixed synthetic session active");
-      } catch (error: any) {
+      } catch (error: unknown) {
         window.sessionStorage.removeItem(PR1525_SESSION_KEY);
-        if (!cancelled) setStatus(error?.message || "Bootstrap unavailable");
+        if (!cancelled) setStatus(errorMessage(error, "Bootstrap unavailable"));
       }
     })();
     return () => { cancelled = true; };
@@ -81,8 +150,8 @@ export default function Pr1525AttachmentQaPage() {
       if (!response.ok) throw new Error(payload?.error || `Upload failed (${response.status})`);
       await refresh(bootstrap);
       setStatus(`${file.name} uploaded`);
-    } catch (error: any) {
-      setStatus(error?.message || "Upload failed");
+    } catch (error: unknown) {
+      setStatus(errorMessage(error, "Upload failed"));
     } finally { setBusy(false); }
   }
 
@@ -94,17 +163,27 @@ export default function Pr1525AttachmentQaPage() {
       if (!response.ok && response.status !== 204) throw new Error(`Delete failed (${response.status})`);
       await refresh(bootstrap);
       setStatus("Attachment removed");
-    } catch (error: any) { setStatus(error?.message || "Delete failed"); }
+    } catch (error: unknown) { setStatus(errorMessage(error, "Delete failed")); }
     finally { setBusy(false); }
   }
 
   async function openAttachment(attachmentId: string) {
     if (!bootstrap) return;
+    try {
+      const url = await requestAttachmentAccessUrl(attachmentId);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error: unknown) {
+      setStatus(errorMessage(error, "Access denied"));
+    }
+  }
+
+  const requestAttachmentAccessUrl = useCallback(async (attachmentId: string) => {
+    if (!bootstrap) throw new Error("Access denied");
     const response = await fetch(`${apiBase}${attachmentPath(bootstrap.session.role, bootstrap.requestId)}/${encodeURIComponent(attachmentId)}/access`);
     const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.data?.url) { setStatus(payload?.error || "Access denied"); return; }
-    window.open(payload.data.url, "_blank", "noopener,noreferrer");
-  }
+    if (!response.ok || !payload?.data?.url) throw new Error(payload?.error || "Access denied");
+    return String(payload.data.url);
+  }, [apiBase, bootstrap]);
 
   function reset() {
     window.sessionStorage.removeItem(PR1525_SESSION_KEY);
@@ -139,7 +218,8 @@ export default function Pr1525AttachmentQaPage() {
           }} style={{ display: "block", marginTop: 8 }} />
         </label>}
         <ul style={{ listStyle: "none", padding: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12, marginTop: 20 }}>
-          {attachments.map((item) => <li key={item.attachmentId} style={{ border: "1px solid #d6dbe5", borderRadius: 10, padding: 12, overflowWrap: "anywhere" }}>
+          {attachments.map((item) => <li key={item.attachmentId} style={{ border: "1px solid #d6dbe5", borderRadius: 10, padding: 12, overflowWrap: "anywhere", minWidth: 0 }}>
+            <AuthorizedAttachmentThumbnail attachment={item} requestAccessUrl={requestAttachmentAccessUrl} />
             <strong>{item.filename}</strong>
             <p>{item.contentType} · {item.width}×{item.height} · {item.byteSize} bytes</p>
             <button type="button" onClick={() => void openAttachment(item.attachmentId)}>Open photo</button>{" "}
