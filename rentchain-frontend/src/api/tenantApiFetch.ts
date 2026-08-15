@@ -1,10 +1,24 @@
 import { API_BASE_URL } from "./config";
 import { getTenantToken } from "../lib/tenantAuth";
+import { hasG1cQaSession } from "../platform/g1cQaSession";
 
 type Jsonish = Record<string, any>;
 type TenantApiInit = Omit<RequestInit, "body"> & { body?: BodyInit | Jsonish };
 
+export class G1cQaTenantApiSuppressedError extends Error {
+  readonly code = "G1C_QA_TENANT_API_SUPPRESSED";
+
+  constructor(readonly path: string) {
+    super("This Tenant Portal request is unavailable in the fixed G1C synthetic QA session.");
+    this.name = "G1cQaTenantApiSuppressedError";
+  }
+}
+
 export async function tenantApiFetch<T = any>(path: string, init: TenantApiInit = {}): Promise<T> {
+  // G1C has one deliberately narrow same-origin proxy for identity-document QA.
+  // Fail closed before resolving the legacy absolute API base so unrelated shell
+  // and navigation requests cannot reach Production or any direct run.app host.
+  if (hasG1cQaSession()) throw new G1cQaTenantApiSuppressedError(path);
   if (!API_BASE_URL) throw new Error("API_BASE_URL is not configured");
   const base = API_BASE_URL.replace(/\/$/, "").replace(/\/api$/i, "");
 

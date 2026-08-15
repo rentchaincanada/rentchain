@@ -7,6 +7,8 @@ import {
   PR1512_PREVIEW_QA_IDENTITY_ALIAS,
   PR1512_PREVIEW_QA_LANDLORD_ID,
   PR1512_PREVIEW_QA_SCOPE,
+  G1C_PREVIEW_QA_SCOPE,
+  G1C_PREVIEW_QA_TENANT_ALIAS,
   decidePreviewQaAuth,
   isPreviewQaAuthenticatedRequest,
   previewQaAuth,
@@ -35,6 +37,13 @@ const pr1512EnabledEnv = {
   PREVIEW_QA_AUTH_SCOPE: PR1512_PREVIEW_QA_SCOPE,
   K_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
   PREVIEW_QA_EXPECTED_SERVICE: "rentchain-pr1512-notices-qa-590e0ecb",
+} as NodeJS.ProcessEnv;
+
+const g1cEnabledEnv = {
+  ...enabledEnv,
+  PREVIEW_QA_AUTH_SCOPE: G1C_PREVIEW_QA_SCOPE,
+  K_SERVICE: "rentchain-g1c-identity-qa-v1",
+  PREVIEW_QA_EXPECTED_SERVICE: "rentchain-g1c-identity-qa-v1",
 } as NodeJS.ProcessEnv;
 
 function decide(overrides: Partial<Parameters<typeof decidePreviewQaAuth>[0]> = {}) {
@@ -85,6 +94,38 @@ function invoke(options: {
 }
 
 describe("previewQaAuth", () => {
+  it("injects only the fixed G1C synthetic tenant identity", () => {
+    process.env = { ...g1cEnabledEnv };
+    const headers = { "x-rentchain-preview-qa-identity": G1C_PREVIEW_QA_TENANT_ALIAS, "x-tenant-id": "arbitrary" };
+    const req: any = { method: "GET", headers, header: (name: string) => headers[name.toLowerCase() as keyof typeof headers] };
+    const res: any = { status: () => res, json: () => res };
+    let nextCalled = false;
+    previewQaAuth("tenant-identity-status")(req, res, () => { nextCalled = true; });
+    expect(nextCalled).toBe(true);
+    expect(req.user).toMatchObject({ id: "qa-g1c-tenant", tenantId: "qa-g1c-tenant", role: "tenant" });
+    expect(req.user.tenantId).not.toBe("arbitrary");
+  });
+
+  it.each([
+    ["GET", "tenant-identity-status"],
+    ["POST", "tenant-identity-consent"],
+    ["POST", "tenant-identity-upload"],
+    ["GET", "tenant-identity-list"],
+    ["POST", "tenant-identity-access"],
+    ["DELETE", "tenant-identity-delete"],
+  ] as const)("allows only G1C operation %s %s", (method, route) => {
+    expect(decide({ env: g1cEnabledEnv, method, route, selector: G1C_PREVIEW_QA_TENANT_ALIAS })).toEqual({ kind: "allow" });
+  });
+
+  it.each([
+    ["Production", { ...g1cEnabledEnv, GOOGLE_CLOUD_PROJECT: "project-0d9658de-af29-4dc0-a99" }],
+    ["permanent Preview", { ...g1cEnabledEnv, K_SERVICE: "rentchain-preview-backend", PREVIEW_QA_EXPECTED_SERVICE: "rentchain-preview-backend" }],
+    ["wrong service", { ...g1cEnabledEnv, K_SERVICE: "rentchain-g1c-identity-qa-v2" }],
+    ["wrong scope", { ...g1cEnabledEnv, PREVIEW_QA_AUTH_SCOPE: PR1512_PREVIEW_QA_SCOPE }],
+    ["disabled", { ...g1cEnabledEnv, PREVIEW_QA_AUTH_ENABLED: "false" }],
+  ])("rejects G1C under %s", (_label, env) => {
+    expect(decide({ env, method: "GET", route: "tenant-identity-status", selector: G1C_PREVIEW_QA_TENANT_ALIAS })).toEqual({ kind: "reject" });
+  });
   const originalEnv = process.env;
 
   beforeEach(() => {

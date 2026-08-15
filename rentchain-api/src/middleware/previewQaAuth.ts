@@ -10,6 +10,10 @@ export const PR1512_PREVIEW_QA_SCOPE = "pr1512-property-notices";
 export const PR1512_PREVIEW_QA_IDENTITY_ALIAS = "pr1512-landlord";
 export const PR1512_PREVIEW_QA_LANDLORD_ID = "qa-pr1512-landlord";
 export const PR1512_PREVIEW_QA_SERVICE_PATTERN = /^rentchain-pr1512-notices-qa-[a-f0-9]{8}$/;
+export const G1C_PREVIEW_QA_SCOPE = "g1c-synthetic-identity-qa-v1";
+export const G1C_PREVIEW_QA_TENANT_ALIAS = "qa-g1c-tenant";
+export const G1C_PREVIEW_QA_TENANT_ID = "qa-g1c-tenant";
+export const G1C_PREVIEW_QA_SERVICE_PATTERN = /^rentchain-g1c-identity-qa-v1$/;
 
 const PREVIEW_PROJECT_ID = "rentchain-preview";
 const PRODUCTION_PROJECT_ID = "project-0d9658de-af29-4dc0-a99";
@@ -34,7 +38,13 @@ export type PreviewQaRoute =
   | "tenant-maintenance-attachment-upload"
   | "tenant-maintenance-attachment-delete"
   | "landlord-maintenance-attachment-list"
-  | "landlord-maintenance-attachment-access";
+  | "landlord-maintenance-attachment-access"
+  | "tenant-identity-status"
+  | "tenant-identity-consent"
+  | "tenant-identity-upload"
+  | "tenant-identity-list"
+  | "tenant-identity-access"
+  | "tenant-identity-delete";
 
 type PreviewQaContract = {
   scope: string;
@@ -42,6 +52,8 @@ type PreviewQaContract = {
   selector: string;
   landlordId: string;
   email: string;
+  role?: "landlord" | "tenant";
+  tenantId?: string;
   allowedOperations: ReadonlySet<string>;
 };
 
@@ -82,6 +94,23 @@ const previewQaContracts: readonly PreviewQaContract[] = [
       "GET:landlord-notice-list",
       "GET:landlord-notice-detail",
       "POST:landlord-notice-create",
+    ]),
+  },
+  {
+    scope: G1C_PREVIEW_QA_SCOPE,
+    servicePattern: G1C_PREVIEW_QA_SERVICE_PATTERN,
+    selector: G1C_PREVIEW_QA_TENANT_ALIAS,
+    landlordId: "",
+    tenantId: G1C_PREVIEW_QA_TENANT_ID,
+    role: "tenant",
+    email: "qa-g1c-tenant@example.invalid",
+    allowedOperations: new Set([
+      "GET:tenant-identity-status",
+      "POST:tenant-identity-consent",
+      "POST:tenant-identity-upload",
+      "GET:tenant-identity-list",
+      "POST:tenant-identity-access",
+      "DELETE:tenant-identity-delete",
     ]),
   },
 ];
@@ -186,6 +215,16 @@ export function previewQaAuth(route: PreviewQaRoute): RequestHandler {
     const scope = String(process.env.PREVIEW_QA_AUTH_SCOPE || "").trim();
     const contract = previewQaContracts.find((candidate) => candidate.scope === scope);
     if (!contract) return res.status(401).json({ ok: false, error: "unauthenticated" });
+    if (contract.role === "tenant" && contract.tenantId) {
+      (req as any).user = {
+        id: contract.tenantId,
+        email: contract.email,
+        role: "tenant",
+        tenantId: contract.tenantId,
+      };
+      (req as any)[previewQaAuthenticated] = true;
+      return next();
+    }
     const entitlements = syntheticLandlordEntitlements(contract.landlordId);
     (req as any).user = {
       id: contract.landlordId,

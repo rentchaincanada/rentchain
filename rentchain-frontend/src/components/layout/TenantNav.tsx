@@ -20,6 +20,7 @@ const navItems = [
   { label: "Access", to: "/tenant/access" },
   { label: "Application", to: "/tenant/application" },
   { label: "Documents", to: "/tenant/documents" },
+  { label: "Identity", to: "/tenant/identity" },
   { label: "Payments", to: "/tenant/payments" },
   { label: "History", to: "/tenant/activity" },
   { label: "Lease", to: "/tenant/lease" },
