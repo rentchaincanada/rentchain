@@ -74,6 +74,7 @@ import { buildTenantWorkspaceModeView } from "./tenantWorkspaceMode";
 import { buildActiveTenancyWorkspaceState } from "./activeTenancyWorkspaceState";
 import { buildTenantCommunicationsWorkspaceState } from "./tenantCommunicationsWorkspaceState";
 import TenantWorkspaceModeBanner from "./TenantWorkspaceModeBanner";
+import TenantIdentityRequirementCard from "./TenantIdentityRequirementCard";
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
 import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
@@ -1023,6 +1024,7 @@ export default function TenantWorkspacePage() {
       }
     >
       <TenantWorkspaceModeBanner view={modeView} />
+      <TenantIdentityRequirementCard />
 
       <TenantInfoCard heading="Active tenancy" accent="#7c3aed">
         <div style={{ display: "grid", gap: spacing.sm }}>

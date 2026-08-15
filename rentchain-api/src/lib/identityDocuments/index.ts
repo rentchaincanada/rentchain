@@ -7,5 +7,6 @@ export * from "./identityDocumentStorage";
 export * from "./identityDocumentTypes";
 export * from "./identityVerificationProvider";
 export * from "./tenantIdentityRequirement";
+export * from "./tenantIdentityRequirementStatus";
 export * from "./gcsIdentityDocumentStorage";
 export * from "./firestoreIdentityDocumentRepository";

@@ -10,6 +10,7 @@ import {
   IdentityDocumentApplicationService,
   IdentityDocumentImageError,
   MAX_IDENTITY_DOCUMENT_FILE_BYTES,
+  buildTenantIdentityRequirementStatus,
   type CanonicalIdentitySubjectContext,
   type IdentityDocumentRuntimePolicy,
 } from "../lib/identityDocuments";
@@ -143,6 +144,21 @@ router.get("/identity-documents", async (req: any, res) => {
     const context = await resolveCanonicalSubject(req);
     if (!context) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
     return res.json({ ok: true, data: await service().list(context) });
+  } catch (error) {
+    return respondError(res, error);
+  }
+});
+
+router.get("/identity-documents/status", async (req: any, res) => {
+  try {
+    const context = await resolveCanonicalSubject(req);
+    if (!context) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    const runtimePolicy = identityDocumentRuntimePolicyFromEnvironment();
+    const documents = await service().list(context);
+    return res.json({
+      ok: true,
+      data: buildTenantIdentityRequirementStatus({ context, policy: runtimePolicy, documents }),
+    });
   } catch (error) {
     return respondError(res, error);
   }

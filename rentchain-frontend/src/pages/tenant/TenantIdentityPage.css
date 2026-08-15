@@ -1,0 +1,42 @@
+.tenant-identity-summary,
+.tenant-identity-panel { background: #fff; border: 1px solid rgba(15,23,42,.1); border-radius: 16px; padding: 20px; box-shadow: 0 8px 24px rgba(15,23,42,.04); }
+.tenant-identity-summary { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; border-left: 5px solid #7c3aed; }
+.tenant-identity-summary h2,.tenant-identity-panel h2 { margin: 0 0 8px; color: #0f172a; }
+.tenant-identity-summary p,.tenant-identity-panel p { margin: 0; color: #475569; line-height: 1.55; }
+.tenant-identity-continuity { margin-top: 8px !important; font-size: 14px; }
+.tenant-identity-eyebrow { color: #6d28d9 !important; text-transform: uppercase; font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+.tenant-identity-statuses { display: grid; gap: 8px; min-width: 190px; }
+.tenant-identity-statuses span { padding: 8px 10px; border-radius: 999px; background: #f3e8ff; color: #5b21b6; font-size: 13px; font-weight: 800; text-align: center; }
+.tenant-identity-document-grid { display: grid; gap: 16px; margin-top: 16px; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); }
+.tenant-identity-document { border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; display: grid; background: #f8fafc; }
+.tenant-identity-document img,.tenant-identity-placeholder,.tenant-identity-local-preview { width: 100%; aspect-ratio: 4/3; object-fit: contain; background: #e2e8f0; }
+.tenant-identity-placeholder { display: grid; place-items: center; color: #475569; font-weight: 700; }
+.tenant-identity-document-copy { display: grid; gap: 5px; padding: 14px; color: #475569; font-size: 14px; }
+.tenant-identity-document-copy strong { color: #0f172a; font-size: 16px; }
+.tenant-identity-actions,.tenant-identity-submit-row,.tenant-identity-file-fields { display: flex; flex-wrap: wrap; gap: 10px; }
+.tenant-identity-actions { padding: 0 14px 14px; }
+.tenant-identity-actions button,.tenant-identity-submit-row button,.tenant-identity-file-button { border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 13px; background: #fff; color: #1e293b; font-weight: 750; cursor: pointer; }
+.tenant-identity-actions .danger { color: #b91c1c; }
+.tenant-identity-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin-top: 20px; }
+.tenant-identity-form > label:not(.tenant-identity-consent):not(.tenant-identity-file-button) { display: grid; gap: 7px; font-weight: 750; color: #334155; }
+.tenant-identity-form select,.tenant-identity-form input:not([type=file]):not([type=checkbox]) { min-height: 44px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 9px 11px; font: inherit; }
+.tenant-identity-file-fields,.tenant-identity-consent,.tenant-identity-message,.tenant-identity-progress,.tenant-identity-submit-row,.tenant-identity-local-preview,.tenant-identity-selected-file { grid-column: 1/-1; }
+.tenant-identity-selected-file { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+.tenant-identity-selected-file button { border:1px solid #cbd5e1; border-radius:10px; background:#fff; padding:9px 12px; font-weight:750; }
+.tenant-identity-file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.tenant-identity-consent { display: flex; gap: 12px; align-items: flex-start; color: #334155; line-height: 1.5; }
+.tenant-identity-consent input { width: 20px; height: 20px; flex: 0 0 auto; }
+.tenant-identity-message { border-radius: 10px; padding: 11px 13px; color: #334155; background: #eef2ff; }
+.tenant-identity-progress { height: 6px; overflow: hidden; background: #ddd6fe; border-radius: 99px; }
+.tenant-identity-progress::after { content:""; display:block; width:40%; height:100%; background:#7c3aed; animation:tenant-identity-progress 1s infinite ease-in-out; }
+.tenant-identity-submit-row { justify-content: flex-end; }
+.tenant-identity-submit-row .primary { background: #6d28d9; border-color: #6d28d9; color: #fff; }
+@keyframes tenant-identity-progress { from { transform:translateX(-100%); } to { transform:translateX(350%); } }
+@media (prefers-reduced-motion: reduce) { .tenant-identity-progress::after { animation:none; width:100%; } }
+@media (max-width: 640px) {
+  .tenant-identity-summary { display:grid; padding:16px; }
+  .tenant-identity-statuses { min-width:0; }
+  .tenant-identity-panel { padding:16px; }
+  .tenant-identity-form { grid-template-columns:1fr; }
+  .tenant-identity-actions button,.tenant-identity-submit-row button,.tenant-identity-file-button { width:100%; text-align:center; }
+}

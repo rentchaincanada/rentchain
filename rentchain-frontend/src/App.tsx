@@ -228,6 +228,7 @@ const TenantLedgerPage = lazy(() => import("./pages/tenant/TenantLedgerPage"));
 const TenantActivityPage = lazy(() => import("./pages/tenant/TenantActivityPage"));
 const TenantParticipationPage = lazy(() => import("./pages/TenantParticipationPage"));
 const TenantAttachmentsPage = lazy(() => import("./pages/tenant/TenantAttachmentsPage"));
+const TenantIdentityPage = lazy(() => import("./pages/tenant/TenantIdentityPage"));
 const TenantNoticesCenterPage = lazy(() => import("./pages/tenant/TenantNoticesCenterPage"));
 const TenantProfilePage = lazy(() => import("./pages/tenant/TenantProfilePage"));
 const TenantAccessPage = lazy(() => import("./pages/tenant/TenantAccessPage"));
@@ -1910,6 +1911,10 @@ function App() {
         <Route
           path="/tenant/documents"
           element={renderTenantShell(suspensePage(<TenantAttachmentsPage />))}
+        />
+        <Route
+          path="/tenant/identity"
+          element={renderTenantShell(suspensePage(<TenantIdentityPage />))}
         />
         <Route
           path="/tenant/notices"

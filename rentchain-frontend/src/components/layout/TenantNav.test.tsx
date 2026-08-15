@@ -110,6 +110,7 @@ describe("TenantNav mobile bottom navigation", () => {
     const menu = screen.getByRole("dialog", { name: "Tenant menu" });
     expect(menu).toHaveClass("is-open");
     expect(within(menu).getByRole("button", { name: "Profile" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Identity" })).toBeInTheDocument();
     expect(within(menu).getByRole("button", { name: "Maintenance" })).toBeInTheDocument();
     expect(within(menu).queryByRole("button", { name: "Properties" })).not.toBeInTheDocument();
     expect(within(menu).queryByRole("button", { name: "Admin" })).not.toBeInTheDocument();
