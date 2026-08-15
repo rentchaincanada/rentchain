@@ -1,16 +1,7 @@
 import { tenantApiFetch } from "./tenantApiFetch";
+import { G1C_QA_SESSION_KEY, hasG1cQaSession } from "../platform/g1cQaSession";
 
-export const G1C_QA_SESSION_KEY = "rentchain.qa.g1c.fixed-session";
-
-function hasG1cQaSession() {
-  if (typeof window === "undefined") return false;
-  try {
-    const value = JSON.parse(window.sessionStorage.getItem(G1C_QA_SESSION_KEY) || "null");
-    return value?.scope === "g1c-synthetic-identity-qa-v1" && value?.session?.principalId === "qa-g1c-tenant";
-  } catch {
-    return false;
-  }
-}
+export { G1C_QA_SESSION_KEY } from "../platform/g1cQaSession";
 
 async function tenantIdentityFetch<T = any>(path: string, init: { method?: string; body?: any } = {}): Promise<T> {
   if (!hasG1cQaSession()) return tenantApiFetch<T>(path, init);

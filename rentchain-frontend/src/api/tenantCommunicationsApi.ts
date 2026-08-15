@@ -1,5 +1,6 @@
 import { tenantApiFetch } from "./tenantApiFetch";
 import type { TenantSafeProjectionMetadata } from "./tenantPortal";
+import { hasG1cQaSession } from "../platform/g1cQaSession";
 
 export type TenantCommunicationType = "notice" | "message" | "maintenance_update" | "screening_update" | "system";
 export type TenantCommunicationPriority = "low" | "normal" | "high";
@@ -93,6 +94,18 @@ export async function markTenantScreeningUpdateRead(requestId: string) {
 }
 
 export async function getTenantCommunicationSummary() {
+  if (hasG1cQaSession()) {
+    return {
+      ok: true,
+      unreadMessages: 0,
+      unreadNotices: 0,
+      unreadMaintenanceUpdates: 0,
+      unreadScreeningUpdates: 0,
+      unreadTotal: 0,
+      latestMessagePreview: null,
+      latestMessageAt: null,
+    } satisfies TenantCommunicationSummary;
+  }
   return tenantApiFetch<TenantCommunicationSummary>("/tenant/communication/summary");
 }
 
