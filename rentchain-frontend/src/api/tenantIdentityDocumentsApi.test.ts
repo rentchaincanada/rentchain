@@ -13,7 +13,7 @@ describe("tenant identity documents API", () => {
 
   it("loads the canonical tenant requirement without a client-selected subject", async () => {
     await getTenantIdentityRequirement();
-    expect(mocks.tenantApiFetch).toHaveBeenCalledWith("/tenant/identity-documents/status");
+    expect(mocks.tenantApiFetch).toHaveBeenCalledWith("/tenant/identity-documents/status", {});
     expect(JSON.stringify(mocks.tenantApiFetch.mock.calls)).not.toContain("subjectId");
   });
 

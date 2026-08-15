@@ -32,6 +32,14 @@ describe("Vercel Preview backend route precedence", () => {
   it("routes the complete Preview suffix to the existing Function before filesystem misses", () => {
     expect(config.routes).toEqual([
       {
+        src: "^/api/g1c-bootstrap$",
+        dest: "/api/g1c-bootstrap",
+      },
+      {
+        src: "^/api/g1c-identity/(.*)$",
+        dest: "/api/g1c-identity/[...path]?path=$1",
+      },
+      {
         src: "^/api/pr1516-(?:bootstrap|notices(?:/.*)?)$",
         status: 404,
       },
@@ -54,19 +62,19 @@ describe("Vercel Preview backend route precedence", () => {
     "/api/preview-backend/api/me",
     "/api/preview-backend/api/auth/login",
   ])("reserves %s for the dedicated filesystem Function", (requestPath) => {
-    const functionRoute = config.routes[2];
+    const functionRoute = config.routes[4];
     const match = new RegExp(functionRoute.src as string).exec(requestPath);
 
     expect(match?.[1]).toBe(requestPath.slice("/api/preview-backend/".length));
     expect(functionRoute.dest?.replace("$1", match?.[1] ?? "")).toBe(
       `/api/preview-backend/[...path]?path=${match?.[1]}`,
     );
-    expect(config.routes[3]).toEqual({ handle: "filesystem" });
+    expect(config.routes[5]).toEqual({ handle: "filesystem" });
   });
 
   it("reserves the PR #1512 read-only QA suffix before filesystem misses", () => {
     const requestPath = "/api/pr1512-notices/api/landlord/notices";
-    const functionRoute = config.routes[1];
+    const functionRoute = config.routes[3];
     const match = new RegExp(functionRoute.src as string).exec(requestPath);
     expect(match?.[1]).toBe("api/landlord/notices");
     expect(functionRoute.dest?.replace("$1", match?.[1] ?? "")).toBe(
@@ -79,10 +87,17 @@ describe("Vercel Preview backend route precedence", () => {
     "/api/pr1516-bootstrap",
     "/api/pr1516-notices/api/landlord/notices/recipients",
   ])("fails the retired PR #1516 QA path closed before Production rewrites: %s", (requestPath) => {
-    const retiredRoute = config.routes[0];
+    const retiredRoute = config.routes[2];
     expect(new RegExp(retiredRoute.src as string).test(requestPath)).toBe(true);
     expect(retiredRoute).toMatchObject({ status: 404 });
     expect(retiredRoute.dest).toBeUndefined();
+  });
+
+  it("reserves strict G1C bootstrap and identity proxy functions before Production rewrites", () => {
+    expect(config.routes[0]).toEqual({ src: "^/api/g1c-bootstrap$", dest: "/api/g1c-bootstrap" });
+    expect(config.routes[1]).toEqual({ src: "^/api/g1c-identity/(.*)$", dest: "/api/g1c-identity/[...path]?path=$1" });
+    expect(existsSync(join(frontendRoot, "api/g1c-bootstrap.ts"))).toBe(true);
+    expect(existsSync(join(frontendRoot, "api/g1c-identity/[...path].ts"))).toBe(true);
   });
 
   it.each(["/api/properties", "/api/tenants"])(

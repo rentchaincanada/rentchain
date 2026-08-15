@@ -83,6 +83,14 @@
   ],
   "routes": [
     {
+      "src": "^/api/g1c-bootstrap$",
+      "dest": "/api/g1c-bootstrap"
+    },
+    {
+      "src": "^/api/g1c-identity/(.*)$",
+      "dest": "/api/g1c-identity/[...path]?path=$1"
+    },
+    {
       "src": "^/api/pr1516-(?:bootstrap|notices(?:/.*)?)$",
       "status": 404
     },
