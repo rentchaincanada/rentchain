@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
-import { execFileSync } from "node:child_process";
-
-export const PROTECTED_BUILD_FILES = Object.freeze(["rentchain-api/Dockerfile"]);
 
 const readJson = (path) => JSON.parse(fs.readFileSync(path, "utf8"));
 const canonical = (value) => {
@@ -21,12 +18,6 @@ function withoutDependencies(manifest) {
   delete copy.devDependencies;
   delete copy.optionalDependencies;
   return copy;
-}
-
-export function validateProtectedFiles({ repository, trustedSha, sourceSha }) {
-  execFileSync("git", ["-C", repository, "diff", "--quiet", trustedSha, sourceSha, "--", ...PROTECTED_BUILD_FILES], {
-    stdio: "pipe",
-  });
 }
 
 export function validateRuntimeDependencyFiles({ trustedPackagePath, trustedLockPath, candidatePackagePath, candidateLockPath }) {
@@ -66,12 +57,10 @@ export function validateRuntimeDependencyFiles({ trustedPackagePath, trustedLock
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   try {
     const [mode, ...args] = process.argv.slice(2);
-    if (mode === "protected-files" && args.length === 3) {
-      validateProtectedFiles({ repository: args[0], trustedSha: args[1], sourceSha: args[2] });
-    } else if (mode === "dependencies" && args.length === 4) {
+    if (mode === "dependencies" && args.length === 4) {
       validateRuntimeDependencyFiles({ trustedPackagePath: args[0], trustedLockPath: args[1], candidatePackagePath: args[2], candidateLockPath: args[3] });
     } else {
-      throw new Error("usage: validate-runtime-dependency-policy.mjs <protected-files repo trusted-sha source-sha | dependencies trusted-package trusted-lock candidate-package candidate-lock>");
+      throw new Error("usage: validate-runtime-dependency-policy.mjs dependencies <trusted-package> <trusted-lock> <candidate-package> <candidate-lock>");
     }
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

@@ -4,9 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import {
-  validateProtectedFiles,
   validateRuntimeDependencyFiles,
 } from "../validate-runtime-dependency-policy.mjs";
 
@@ -53,26 +51,6 @@ try {
   expectFailure(() => validate(candidateFile, noIntegrity), /Missing sha512 integrity/);
   const installScript = write("install-script-lock.json", { ...lock, packages: { ...lock.packages, "node_modules/sharp": { ...lock.packages["node_modules/sharp"], hasInstallScript: true } } });
   expectFailure(() => validate(candidateFile, installScript), /install scripts/);
-
-  const repo = path.join(root, "repo");
-  fs.mkdirSync(path.join(repo, "rentchain-api"), { recursive: true });
-  execFileSync("git", ["init", "-q"], { cwd: repo });
-  execFileSync("git", ["config", "user.email", "qa@invalid.example"], { cwd: repo });
-  execFileSync("git", ["config", "user.name", "QA"], { cwd: repo });
-  fs.writeFileSync(path.join(repo, "rentchain-api/Dockerfile"), "FROM node:20\n");
-  execFileSync("git", ["add", "."], { cwd: repo });
-  execFileSync("git", ["commit", "-qm", "trusted"], { cwd: repo });
-  const trustedSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
-  fs.writeFileSync(path.join(repo, "app.js"), "feature\n");
-  execFileSync("git", ["add", "."], { cwd: repo });
-  execFileSync("git", ["commit", "-qm", "application"], { cwd: repo });
-  const allowedSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
-  validateProtectedFiles({ repository: repo, trustedSha, sourceSha: allowedSha });
-  fs.writeFileSync(path.join(repo, "rentchain-api/Dockerfile"), "FROM attacker\n");
-  execFileSync("git", ["add", "."], { cwd: repo });
-  execFileSync("git", ["commit", "-qm", "unsafe"], { cwd: repo });
-  const unsafeSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
-  expectFailure(() => validateProtectedFiles({ repository: repo, trustedSha, sourceSha: unsafeSha }), /Command failed/);
 
   console.log("Preview runtime dependency policy validation passed: positive and negative cases");
 } finally {
