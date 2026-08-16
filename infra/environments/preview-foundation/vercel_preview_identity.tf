@@ -92,13 +92,3 @@ resource "google_cloud_run_v2_service_iam_member" "vercel_preview_proxy_invoker"
   role     = "roles/run.invoker"
   member   = google_service_account.vercel_preview_proxy.member
 }
-
-# Temporary service-level access for G1C mandatory Tenant Portal government-ID
-# browser QA. Remove through Terraform/HCP after the PR QA/release lifecycle.
-resource "google_cloud_run_v2_service_iam_member" "g1c_vercel_proxy_invoker" {
-  project  = var.project_id
-  location = local.preview_deployment_region
-  name     = "rentchain-g1c-identity-qa-v1"
-  role     = "roles/run.invoker"
-  member   = google_service_account.vercel_preview_proxy.member
-}
