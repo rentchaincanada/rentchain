@@ -131,13 +131,13 @@ The repo includes registry, compliance, property trust, and identity-readiness w
 
 ## Node.js Requirement
 
-This repo requires Node.js **20.x** and is pinned locally to **20.11.1**.
+This repo requires Node.js **24.x** and is pinned locally to **24.19.0**.
 
 Quick setup:
 
 ```bash
-nvm install 20.11.1
-nvm use 20.11.1
+nvm install 24.19.0
+nvm use 24.19.0
 ```
 
 The repo includes `.nvmrc`, `.node-version`, and package preflight checks that fail fast on unsupported Node versions.

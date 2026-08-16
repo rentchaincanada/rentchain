@@ -6,7 +6,7 @@ Local RentChain development and backend tests must use the Firestore emulator by
 
 ## Requirements
 
-- Node 20.x for backend commands.
+- Node 24.x for backend commands.
 - Java 21 or newer for Firebase emulators.
 - Firebase CLI installed locally or available through `npx firebase-tools`.
 - No local service account credential path unless an operator explicitly approves a diagnostic override.

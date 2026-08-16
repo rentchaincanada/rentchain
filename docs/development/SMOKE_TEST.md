@@ -15,7 +15,7 @@ The storage state system has three layers:
 
 ### Prerequisites
 
-- Node 20.11.1 (pinned)
+- Node 24.19.0 (pinned)
 - Playwright 1.58.2+
 
 ### Generate Storage State Files

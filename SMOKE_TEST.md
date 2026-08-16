@@ -39,7 +39,7 @@ All fixture identifiers are test-prefixed and intended for isolated test environ
 
 ## Required Environment
 
-Use Node 20.x.
+Use Node 24.x.
 
 Backend:
 

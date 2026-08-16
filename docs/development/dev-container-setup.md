@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The dev container provides a reproducible Node 20.11.1 environment with Playwright browsers and common command-line tools installed. It is optional: local development with `nvm use 20.11.1` and package-level `npm ci` remains supported.
+The dev container provides a reproducible Node 24.19.0 environment with Playwright browsers and common command-line tools installed. It is optional: local development with `nvm use 24.19.0` and package-level `npm ci` remains supported.
 
 ## Container Quickstart
 
@@ -17,7 +17,7 @@ npm --version
 npx playwright --version
 ```
 
-Expected Node version: `v20.11.1`.
+Expected Node version: `v24.19.0`.
 
 ## Manual Container Build
 
@@ -29,7 +29,7 @@ docker build -f docker/Dockerfile.dev -t rentchain-dev .
 
 The image installs:
 
-- Node 20.11.1
+- Node 24.19.0
 - Playwright 1.58.2
 - Chromium, Firefox, and WebKit browser binaries
 - `curl`, `jq`, `git`, and OpenSSH client tools

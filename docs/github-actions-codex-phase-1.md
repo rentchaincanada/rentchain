@@ -48,7 +48,7 @@ Behavior:
 
 1. checks out the base branch
 2. validates the mission spec and guidance files exist
-3. installs backend and frontend dependencies with Node 20
+3. installs backend and frontend dependencies with Node 24
 4. checks out or creates the requested target branch
 5. runs Codex with `AGENTS.md`, `PROCESS.md`, `codex.md`, and the mission spec as the core prompt context
 6. commits only if there are changes
@@ -70,11 +70,11 @@ Purpose:
 Jobs:
 
 - backend
-  - Node 20
+  - Node 24
   - install dependencies using the existing lockfile-aware pattern
   - `npm run build`
 - frontend
-  - Node 20
+  - Node 24
   - `npm ci`
   - `npm run test`
   - `npm run build`

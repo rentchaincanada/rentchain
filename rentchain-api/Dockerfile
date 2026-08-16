@@ -1,4 +1,4 @@
-FROM node:20.20.2-slim AS build
+FROM node:24.19.0-slim AS build
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:20.20.2-slim AS runtime
+FROM node:24.19.0-slim AS runtime
 
 WORKDIR /app
 

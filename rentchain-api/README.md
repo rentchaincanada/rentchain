@@ -2,7 +2,7 @@
 
 ## Troubleshooting
 
-- **Node version**: Requires Node 20.x. If you are on a different version, use nvm-windows or Volta to switch to Node 20.
+- **Node version**: Requires Node 24.x. If you are on a different version, use nvm-windows or Volta to switch to Node 24.
 
 - **Windows EPERM (esbuild.exe lock) during npm ci**:
   - Close VSCode terminals that may be holding file locks.
