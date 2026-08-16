@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 workflow="${repo_root}/.github/workflows/preview-deployment-identity-validation.yml"
 validator="${repo_root}/scripts/preview-deployment/validate-pr-head-request.mjs"
 dockerfile_policy="${repo_root}/scripts/preview-deployment/validate-backend-dockerfile-policy.mjs"
+manifest_policy="${repo_root}/scripts/preview-deployment/validate-runtime-dependency-policy.mjs"
 document="${repo_root}/docs/operations/preview-pr-head-image-publication.md"
 fixtures="$(mktemp -d)"
 trap 'rm -rf "${fixtures}"' EXIT
@@ -56,6 +57,10 @@ check "Dockerfile uses trusted centralized policy" contains "${workflow}" 'node 
 check "Dockerfile validator is loaded from trusted main" contains "${workflow}" 'git show "${WORKFLOW_SHA}:scripts/preview-deployment/validate-backend-dockerfile-policy.mjs" > "${trusted_dockerfile_policy}"'
 check "Dockerfile path remains fixed" contains "${dockerfile_policy}" 'const DOCKERFILE = "rentchain-api/Dockerfile"'
 check "package files use trusted dependency validation" contains "${workflow}" 'node "${trusted_policy}" dependencies "${trusted_package}" "${trusted_lock}" rentchain-api/package.json rentchain-api/package-lock.json'
+check "Node engine transition is exact and trusted" contains "${manifest_policy}" 'new Set([">=20 <21->>=24 <25"])'
+check "engineStrict remains required" contains "${manifest_policy}" 'trusted.engineStrict !== true || candidate.engineStrict !== true'
+check "lockfile root engines must match manifest" contains "${manifest_policy}" 'Lockfile root engines must match package.json'
+check "unrelated lockfile root metadata remains protected" contains "${manifest_policy}" 'Unrelated lockfile root metadata may not differ from the trusted lockfile'
 check "clean lockfile install runs before authentication" bash -c "test \"\$(grep -n 'npm ci --ignore-scripts --prefix rentchain-api' '${workflow}' | cut -d: -f1)\" -lt \"\$(grep -n 'Authenticate to the isolated Preview project' '${workflow}' | cut -d: -f1)\""
 check "Sharp native runtime is validated" contains "${workflow}" 'const sharp = require("sharp");'
 check "runtime dependency policy positive and negative tests pass" node "${repo_root}/scripts/preview-deployment/tests/validate-runtime-dependency-policy.mjs"
