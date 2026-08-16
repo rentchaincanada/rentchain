@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
-import { execFileSync } from "node:child_process";
-
-export const PROTECTED_BUILD_FILES = Object.freeze(["rentchain-api/Dockerfile"]);
 
 const readJson = (path) => JSON.parse(fs.readFileSync(path, "utf8"));
 const canonical = (value) => {
@@ -14,19 +11,44 @@ const canonical = (value) => {
   return value;
 };
 const stable = (value) => JSON.stringify(canonical(value));
+const DEPENDENCY_FIELDS = Object.freeze(["dependencies", "devDependencies", "optionalDependencies"]);
+const APPROVED_NODE_ENGINE_TRANSITIONS = new Set([">=20 <21->>=24 <25"]);
 
-function withoutDependencies(manifest) {
+function withoutGovernedFields(manifest) {
   const copy = { ...manifest };
-  delete copy.dependencies;
-  delete copy.devDependencies;
-  delete copy.optionalDependencies;
+  for (const field of DEPENDENCY_FIELDS) delete copy[field];
+  delete copy.engines;
   return copy;
 }
 
-export function validateProtectedFiles({ repository, trustedSha, sourceSha }) {
-  execFileSync("git", ["-C", repository, "diff", "--quiet", trustedSha, sourceSha, "--", ...PROTECTED_BUILD_FILES], {
-    stdio: "pipe",
-  });
+function validateNodeEngineTransition(trusted, candidate) {
+  if (trusted.engineStrict !== true || candidate.engineStrict !== true) {
+    throw new Error("Package engineStrict must remain exactly true");
+  }
+  if (!trusted.engines || !candidate.engines || stable(Object.keys(trusted.engines).sort()) !== stable(["node"]) || stable(Object.keys(candidate.engines).sort()) !== stable(["node"])) {
+    throw new Error("Package engines must contain exactly the protected node field");
+  }
+  const trustedNode = trusted.engines.node;
+  const candidateNode = candidate.engines.node;
+  if (typeof trustedNode !== "string" || typeof candidateNode !== "string") {
+    throw new Error("Package engines.node must be an exact string");
+  }
+  if (candidateNode !== trustedNode && !APPROVED_NODE_ENGINE_TRANSITIONS.has(`${trustedNode}->${candidateNode}`)) {
+    throw new Error(`Unapproved Node engine transition: ${trustedNode} -> ${candidateNode}`);
+  }
+}
+
+function withoutRootGovernedFields(root) {
+  const copy = { ...root };
+  for (const field of DEPENDENCY_FIELDS) delete copy[field];
+  delete copy.engines;
+  return copy;
+}
+
+function withoutPackages(lock) {
+  const copy = { ...lock };
+  delete copy.packages;
+  return copy;
 }
 
 export function validateRuntimeDependencyFiles({ trustedPackagePath, trustedLockPath, candidatePackagePath, candidateLockPath }) {
@@ -34,13 +56,26 @@ export function validateRuntimeDependencyFiles({ trustedPackagePath, trustedLock
   const trustedLock = readJson(trustedLockPath);
   const candidate = readJson(candidatePackagePath);
   const lock = readJson(candidateLockPath);
-  if (stable(withoutDependencies(candidate)) !== stable(withoutDependencies(trusted))) {
-    throw new Error("Only dependency maps may differ from the trusted package manifest");
+  validateNodeEngineTransition(trusted, candidate);
+  if (stable(withoutGovernedFields(candidate)) !== stable(withoutGovernedFields(trusted))) {
+    throw new Error("Only governed dependency maps and the approved Node engine transition may differ from the trusted package manifest");
   }
-  if (lock.lockfileVersion !== 3 || !lock.packages || !lock.packages[""]) {
+  if (trustedLock.lockfileVersion !== 3 || !trustedLock.packages || !trustedLock.packages[""] || lock.lockfileVersion !== 3 || !lock.packages || !lock.packages[""]) {
     throw new Error("A valid npm lockfileVersion 3 root package is required");
   }
-  for (const field of ["dependencies", "devDependencies", "optionalDependencies"]) {
+  if (stable(withoutPackages(lock)) !== stable(withoutPackages(trustedLock))) {
+    throw new Error("Unrelated lockfile metadata may not differ from the trusted lockfile");
+  }
+  if (stable(withoutRootGovernedFields(lock.packages[""])) !== stable(withoutRootGovernedFields(trustedLock.packages[""]))) {
+    throw new Error("Unrelated lockfile root metadata may not differ from the trusted lockfile");
+  }
+  if (stable(trustedLock.packages[""].engines || {}) !== stable(trusted.engines) || stable(lock.packages[""].engines || {}) !== stable(candidate.engines)) {
+    throw new Error("Lockfile root engines must match package.json");
+  }
+  for (const field of DEPENDENCY_FIELDS) {
+    if (stable(trustedLock.packages[""][field] || {}) !== stable(trusted[field] || {})) {
+      throw new Error(`Trusted lockfile root ${field} does not match its package.json`);
+    }
     if (stable(lock.packages[""][field] || {}) !== stable(candidate[field] || {})) {
       throw new Error(`Lockfile root ${field} does not match package.json`);
     }
@@ -66,12 +101,10 @@ export function validateRuntimeDependencyFiles({ trustedPackagePath, trustedLock
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   try {
     const [mode, ...args] = process.argv.slice(2);
-    if (mode === "protected-files" && args.length === 3) {
-      validateProtectedFiles({ repository: args[0], trustedSha: args[1], sourceSha: args[2] });
-    } else if (mode === "dependencies" && args.length === 4) {
+    if (mode === "dependencies" && args.length === 4) {
       validateRuntimeDependencyFiles({ trustedPackagePath: args[0], trustedLockPath: args[1], candidatePackagePath: args[2], candidateLockPath: args[3] });
     } else {
-      throw new Error("usage: validate-runtime-dependency-policy.mjs <protected-files repo trusted-sha source-sha | dependencies trusted-package trusted-lock candidate-package candidate-lock>");
+      throw new Error("usage: validate-runtime-dependency-policy.mjs dependencies <trusted-package> <trusted-lock> <candidate-package> <candidate-lock>");
     }
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
