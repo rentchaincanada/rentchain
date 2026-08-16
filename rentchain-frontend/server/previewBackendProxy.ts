@@ -149,7 +149,7 @@ function requestBody(req: any, method: string): BodyInit | undefined {
   const input = req?.body;
   if (input == null) return undefined;
 
-  let body: string | Uint8Array;
+  let body: string | ArrayBuffer;
   if (typeof input === "string") {
     const contentType = String(req?.headers?.["content-type"] || "").toLowerCase();
     if (contentType.includes("application/json")) {
@@ -161,9 +161,11 @@ function requestBody(req: any, method: string): BodyInit | undefined {
     }
     body = input;
   } else if (ArrayBuffer.isView(input)) {
-    body = new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+    body = Uint8Array.from(
+      new Uint8Array(input.buffer, input.byteOffset, input.byteLength),
+    ).buffer;
   } else if (input instanceof ArrayBuffer) {
-    body = new Uint8Array(input);
+    body = input.slice(0);
   } else {
     try {
       body = JSON.stringify(input);
