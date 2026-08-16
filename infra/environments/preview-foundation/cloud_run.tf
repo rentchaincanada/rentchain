@@ -55,7 +55,17 @@ resource "google_cloud_run_v2_service" "preview_backend" {
 
       env {
         name  = "FIRESTORE_ENABLED"
-        value = "false"
+        value = "true"
+      }
+
+      env {
+        name  = "GCS_UPLOAD_BUCKET"
+        value = google_storage_bucket.preview_attachments.name
+      }
+
+      env {
+        name  = "GCS_IDENTITY_DOCUMENT_BUCKET"
+        value = google_storage_bucket.preview_identity_documents.name
       }
 
       env {

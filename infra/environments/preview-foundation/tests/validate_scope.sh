@@ -297,7 +297,10 @@ if rg -n 'firebaseauth\.users\.(create|delete|update|sendEmail)|datastore\.(data
   exit 1
 fi
 
-rg -U -q 'name  = "FIRESTORE_ENABLED"\n        value = "false"' "$root_dir/cloud_run.tf"
+rg -U -q 'name  = "FIRESTORE_ENABLED"\n        value = "true"' "$root_dir/cloud_run.tf"
+rg -U -q 'name  = "GCS_UPLOAD_BUCKET"\n        value = google_storage_bucket\.preview_attachments\.name' "$root_dir/cloud_run.tf"
+rg -U -q 'name  = "GCS_IDENTITY_DOCUMENT_BUCKET"\n        value = google_storage_bucket\.preview_identity_documents\.name' "$root_dir/cloud_run.tf"
+test "$(rg -No 'name  = "(FIRESTORE_ENABLED|GCS_UPLOAD_BUCKET|GCS_IDENTITY_DOCUMENT_BUCKET)"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "3"
 test "$(rg -No 'name = "FIREBASE_API_KEY"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "1"
 rg -U -q 'env \{\n        name = "FIREBASE_API_KEY"\n\n        value_source \{\n          secret_key_ref \{\n            secret  = google_secret_manager_secret\.preview_backend_identity_toolkit\[0\]\.secret_id\n            version = "1"\n          \}\n        \}\n      \}' "$root_dir/cloud_run.tf"
 grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor,' "$root_dir/cloud_run.tf"
