@@ -140,9 +140,25 @@ check "b7_preview_backend_auth_secret_injection_boundary" {
       one([
         for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
         if env.name == "FIRESTORE_ENABLED"
-      ]).value == "false"
+      ]).value == "true" &&
+      length([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "GCS_UPLOAD_BUCKET"
+      ]) == 1 &&
+      one([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "GCS_UPLOAD_BUCKET"
+      ]).value == google_storage_bucket.preview_attachments.name &&
+      length([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "GCS_IDENTITY_DOCUMENT_BUCKET"
+      ]) == 1 &&
+      one([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "GCS_IDENTITY_DOCUMENT_BUCKET"
+      ]).value == google_storage_bucket.preview_identity_documents.name
     ) : true
-    error_message = "The Preview backend must receive only explicit version 1 of the governed Identity Toolkit secret while Firestore remains disabled."
+    error_message = "The Preview backend must receive explicit Identity Toolkit secret version 1, enabled Firestore, and only the governed Preview storage buckets."
   }
 }
 
