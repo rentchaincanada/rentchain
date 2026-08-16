@@ -45,19 +45,17 @@ describe("Preview governed fetch", () => {
     expect(originalFetch.mock.calls[1][1]?.method).toBe("POST");
   });
 
-  it("rejects Request paths and init method overrides before credentials", async () => {
+  it("rejects raw same-origin API paths but permits method overrides inside the proxy", async () => {
     const { originalFetch, getAuthToken, governedFetch } = setup();
     expect(() =>
       governedFetch(new Request(`${ORIGIN}/api/auth/login`, { method: "POST" }))
     ).toThrow(expect.objectContaining({ code: "PREVIEW_API_ROUTE_NOT_AVAILABLE" }));
-    expect(() =>
-      governedFetch(
-        new Request(`${PROXY}/api/auth/login`, { method: "POST" }),
-        { method: "GET" }
-      )
-    ).toThrow(expect.objectContaining({ code: "PREVIEW_API_ROUTE_NOT_AVAILABLE" }));
-    expect(getAuthToken).not.toHaveBeenCalled();
-    expect(originalFetch).not.toHaveBeenCalled();
+    await governedFetch(
+      new Request(`${PROXY}/api/auth/login`, { method: "POST" }),
+      { method: "GET" }
+    );
+    expect(getAuthToken).toHaveBeenCalledOnce();
+    expect(originalFetch).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -95,17 +93,13 @@ describe("Preview governed fetch", () => {
     expect(originalFetch).not.toHaveBeenCalled();
   });
 
-  it("passes authorized login and me and rejects their wrong methods", async () => {
+  it("passes application API paths and lets the backend authorize each method", async () => {
     const { originalFetch, governedFetch } = setup();
     await governedFetch("/api/preview-backend/api/auth/login", { method: "POST" });
     await governedFetch("/api/preview-backend/api/me", { method: "GET" });
-    expect(() =>
-      governedFetch("/api/preview-backend/api/auth/login", { method: "GET" })
-    ).toThrow(expect.objectContaining({ code: "PREVIEW_API_ROUTE_NOT_AVAILABLE" }));
-    expect(() =>
-      governedFetch("/api/preview-backend/api/me", { method: "POST" })
-    ).toThrow(expect.objectContaining({ code: "PREVIEW_API_ROUTE_NOT_AVAILABLE" }));
-    expect(originalFetch).toHaveBeenCalledTimes(2);
+    await governedFetch("/api/preview-backend/api/auth/login", { method: "GET" });
+    await governedFetch("/api/preview-backend/api/me", { method: "POST" });
+    expect(originalFetch).toHaveBeenCalledTimes(4);
   });
 
   it("attaches the token only to relative or exact same-origin Preview proxy URLs", async () => {
@@ -137,13 +131,11 @@ describe("Preview governed fetch", () => {
     expect(originalFetch.mock.calls[0][1]).toBeUndefined();
   });
 
-  it("rejects same-origin unsupported proxy paths before token access", () => {
+  it("allows same-origin product API paths and attaches application credentials", async () => {
     const { originalFetch, getAuthToken, governedFetch } = setup();
-    expect(() =>
-      governedFetch("/api/preview-backend/api/properties", { method: "GET" })
-    ).toThrow(expect.objectContaining({ code: "PREVIEW_API_ROUTE_NOT_AVAILABLE" }));
-    expect(getAuthToken).not.toHaveBeenCalled();
-    expect(originalFetch).not.toHaveBeenCalled();
+    await governedFetch("/api/preview-backend/api/properties", { method: "GET" });
+    expect(getAuthToken).toHaveBeenCalledOnce();
+    expect(originalFetch).toHaveBeenCalledOnce();
   });
 
   it.each(["production", "development"])("does not apply Preview blocking in %s", async (env) => {

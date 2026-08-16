@@ -151,8 +151,7 @@ export function getApiBaseUrlForRequest(input: string, method = "GET"): string {
     throw new PreviewApiRouteUnavailableError(input, method);
   }
   if (configuredBase !== PREVIEW_API_BASE_URL) return configuredBase;
-  if (isPreviewAuthRequest(input, method)) return PREVIEW_API_BASE_URL;
-  throw new PreviewApiRouteUnavailableError(input, method);
+  return PREVIEW_API_BASE_URL;
 }
 
 export function getApiBaseUrlForPath(input: string): string {
@@ -189,7 +188,7 @@ export function assertPreviewBrowserRequestAvailable(inputUrl: string, method = 
   if (parsed.origin === origin && parsed.pathname.startsWith(prefix)) {
     const backendPath = parsed.pathname.slice(configuredBase.length);
     if (configuredBase === PR1512_NOTICES_QA_API_BASE_URL && isPr1512QaReadRequest(backendPath, method)) return;
-    if (configuredBase === PREVIEW_API_BASE_URL && isPreviewAuthRequest(backendPath, method)) return;
+    if (configuredBase === PREVIEW_API_BASE_URL && normalizeBackendPath(backendPath).startsWith("/api/")) return;
     throw new PreviewApiRouteUnavailableError(backendPath, method);
   }
 

@@ -44,7 +44,7 @@ describe("Preview login-to-dashboard isolation", () => {
     vi.restoreAllMocks();
   });
 
-  it("mounts the dashboard while rejecting every unsupported loader before fetch", async () => {
+  it("mounts the dashboard with every application loader on the same-origin proxy", async () => {
     const [{ default: DashboardPage }, { LoginPage }] = await Promise.all([
       import("../../pages/DashboardPage"),
       import("../../pages/LoginPage"),
@@ -66,7 +66,10 @@ describe("Preview login-to-dashboard isolation", () => {
           headers: { "content-type": "application/json" },
         });
       }
-      throw new Error(`Dashboard request reached fetch: ${url}`);
+      return new Response(JSON.stringify({ error: "synthetic-unavailable" }), {
+        status: 503,
+        headers: { "content-type": "application/json" },
+      });
     });
     global.fetch = fetchMock as typeof fetch;
 
@@ -92,26 +95,18 @@ describe("Preview login-to-dashboard isolation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByTestId("dashboard-operational-grid")).toBeInTheDocument();
-    await waitFor(() =>
-      expect(
-        screen.getAllByText(
-          "This operation is not available in the current Preview environment."
-        ).length
-      ).toBeGreaterThan(0)
+    await waitFor(() => expect(captured.length).toBeGreaterThan(2));
+    expect(captured).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ url: `${PREVIEW_PROXY}/api/auth/login` }),
+        expect.objectContaining({ url: `${PREVIEW_PROXY}/api/me` }),
+      ])
     );
 
-    expect(
-      captured.map(({ url, init }) => [String(init.method || "GET").toUpperCase(), url])
-    ).toEqual([
-      ["POST", `${PREVIEW_PROXY}/api/auth/login`],
-      ["GET", `${PREVIEW_PROXY}/api/me`],
-    ]);
-
     for (const { url } of captured) {
+      expect(url.startsWith(PREVIEW_PROXY)).toBe(true);
       expect(url.startsWith(PRODUCTION_API)).toBe(false);
-      expect(url).not.toMatch(
-        /\/api\/(?:landlord\/(?:portfolio-status-financial|decision-queue|maintenance|inbox)|applications|tenants|work-orders)/
-      );
+      expect(url).not.toContain(".run.app");
     }
   });
 });
