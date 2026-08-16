@@ -59,6 +59,11 @@ resource "google_cloud_run_v2_service" "preview_backend" {
       }
 
       env {
+        name  = "FIRESTORE_DATABASE_ID"
+        value = "(default)"
+      }
+
+      env {
         name  = "GCS_UPLOAD_BUCKET"
         value = google_storage_bucket.preview_attachments.name
       }
