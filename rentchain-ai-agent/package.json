@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "engines": {
-    "node": ">=20 <21"
+    "node": ">=24 <25"
   },
   "engineStrict": true,
   "scripts": {

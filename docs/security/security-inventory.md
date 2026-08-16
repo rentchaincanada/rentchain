@@ -122,7 +122,7 @@ Backend local scripts set Firestore emulator variables for dev and test commands
 
 Local environment template audit records fake placeholder defaults, local development requirements, and production requirements for required and recommended variables without weakening boot validation. It confirms no real credentials, no live Stripe keys, no production URLs, no production email addresses, and no production environment variable changes in that template mission (`docs/qa/local-env-template-audit-v1.md:19-65`, `docs/qa/local-env-template-audit-v1.md:89-100`).
 
-CI runs backend build and frontend tests/builds under Node 20, with frontend tests receiving a local API base URL (`.github/workflows/ci.yml:24-75`). Merge gate requires backend CI, frontend CI, and two Vercel checks before it is satisfied (`.github/workflows/merge-gate.yml:52-163`).
+CI runs backend build and frontend tests/builds under Node 24, with frontend tests receiving a local API base URL (`.github/workflows/ci.yml:24-75`). Merge gate requires backend CI, frontend CI, and two Vercel checks before it is satisfied (`.github/workflows/merge-gate.yml:52-163`).
 
 Current risk posture: local development and test isolation are documented and enforced by scripts plus the Firestore guard. This inventory did not find committed `.env.production` files at the mission-listed frontend or backend paths.
 

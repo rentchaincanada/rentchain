@@ -14,7 +14,7 @@ Never use relative `/api/` paths - they 404 on Vercel.
 - TypeScript only (no .js in src/)
 - Conventional commits: feat:, fix:, chore:, docs:
 - No commits without human approval
-- Node 20.11.1 pinned - do not upgrade
+- Node 24.19.0 pinned - do not upgrade outside a governed runtime migration
 
 ## Scope limits
 Do not modify: *.tf, cloudbuild.yaml, Dockerfile, vercel.json, package.json,

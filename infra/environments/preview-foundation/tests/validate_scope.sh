@@ -703,7 +703,7 @@ if rg -n 'credentials_json|service_account_key|private_key([[:space:]]*:|_data)|
   exit 1
 fi
 
-test "$(rg -No '^FROM node:20\.20\.2-slim AS (build|runtime)$' "$dockerfile" | wc -l | tr -d ' ')" = "2"
+test "$(rg -No '^FROM node:24\.19\.0-slim AS (build|runtime)$' "$dockerfile" | wc -l | tr -d ' ')" = "2"
 rg -q '^RUN npm ci$' "$dockerfile"
 rg -q '^RUN npm ci --omit=dev && npm cache clean --force$' "$dockerfile"
 rg -q '^COPY --from=build /app/dist ./dist$' "$dockerfile"
