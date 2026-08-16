@@ -298,13 +298,14 @@ if rg -n 'firebaseauth\.users\.(create|delete|update|sendEmail)|datastore\.(data
 fi
 
 rg -U -q 'name  = "FIRESTORE_ENABLED"\n        value = "true"' "$root_dir/cloud_run.tf"
+rg -U -q 'name  = "FIRESTORE_DATABASE_ID"\n        value = "\(default\)"' "$root_dir/cloud_run.tf"
 rg -U -q 'name  = "GCS_UPLOAD_BUCKET"\n        value = google_storage_bucket\.preview_attachments\.name' "$root_dir/cloud_run.tf"
 rg -U -q 'name  = "GCS_IDENTITY_DOCUMENT_BUCKET"\n        value = google_storage_bucket\.preview_identity_documents\.name' "$root_dir/cloud_run.tf"
-test "$(rg -No 'name  = "(FIRESTORE_ENABLED|GCS_UPLOAD_BUCKET|GCS_IDENTITY_DOCUMENT_BUCKET)"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "3"
+test "$(rg -No 'name  = "(FIRESTORE_ENABLED|FIRESTORE_DATABASE_ID|GCS_UPLOAD_BUCKET|GCS_IDENTITY_DOCUMENT_BUCKET)"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "4"
 test "$(rg -No 'name = "FIREBASE_API_KEY"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "1"
 rg -U -q 'env \{\n        name = "FIREBASE_API_KEY"\n\n        value_source \{\n          secret_key_ref \{\n            secret  = google_secret_manager_secret\.preview_backend_identity_toolkit\[0\]\.secret_id\n            version = "1"\n          \}\n        \}\n      \}' "$root_dir/cloud_run.tf"
 grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor,' "$root_dir/cloud_run.tf"
-if rg -n 'FIRESTORE_DATABASE_ID|PREVIEW_AUTH_ENABLED|FIREBASE_PROJECT_ID|google_apikeys_key|key_string|version\s*=\s*"latest"' "$root_dir/cloud_run.tf"; then
+if rg -n 'PREVIEW_AUTH_ENABLED|FIREBASE_PROJECT_ID|google_apikeys_key|key_string|version\s*=\s*"latest"' "$root_dir/cloud_run.tf"; then
   echo "B7 Cloud Run secret injection contains a prohibited activation field, direct key reference, or mutable secret version" >&2
   exit 1
 fi
