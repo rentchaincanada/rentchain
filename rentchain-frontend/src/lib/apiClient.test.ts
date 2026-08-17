@@ -1,10 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  PREVIEW_API_BASE_URL,
-  PREVIEW_API_ROUTE_NOT_AVAILABLE,
-  PRODUCTION_API_BASE_URL,
-  PreviewApiRouteUnavailableError,
-} from "../api/baseUrl";
+import { PREVIEW_API_BASE_URL, PRODUCTION_API_BASE_URL } from "../api/baseUrl";
 import * as authToken from "./authToken";
 import * as firebaseAuthToken from "./firebaseAuthToken";
 import {
@@ -39,9 +34,9 @@ describe("resolveApiUrl", () => {
     ["/api/auth/logout", "GET"],
     ["/api/me", "POST"],
     ["/api/auth/me", "POST"],
-  ])("fails closed for unauthorized Preview auth operation %s %s", (path, method) => {
+  ])("routes application methods through Preview for backend authorization: %s %s", (path, method) => {
     usePreviewEnvironment();
-    expect(() => resolveApiUrl(path, method)).toThrow(PreviewApiRouteUnavailableError);
+    expect(resolveApiUrl(path, method)).toBe(`${PREVIEW_API_BASE_URL}${path}`);
   });
 
   it("preserves query strings without duplicating the proxy prefix", () => {
@@ -58,13 +53,6 @@ describe("resolveApiUrl", () => {
     );
   });
 
-  it("fails closed for unrelated Preview calls", () => {
-    usePreviewEnvironment();
-    expect(() => resolveApiUrl("/api/properties")).toThrow(
-      "not available in the current Preview environment"
-    );
-  });
-
   it.each([
     "/api/properties",
     "/api/tenants",
@@ -73,22 +61,9 @@ describe("resolveApiUrl", () => {
     "/api/landlord/portfolio-status-financial",
     "/api/landlord/decision-queue",
     "/api/landlord/inbox",
-  ])("rejects unsupported Preview request %s before credentials or fetch", async (path) => {
+  ])("routes supported Preview application request %s through the same-origin proxy", (path) => {
     usePreviewEnvironment();
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const firebaseSpy = vi.spyOn(firebaseAuthToken, "getFirebaseIdToken");
-    const bearerSpy = vi.spyOn(authToken, "getAuthToken");
-
-    await expect(apiFetch(path, { method: "GET" })).rejects.toMatchObject({
-      code: PREVIEW_API_ROUTE_NOT_AVAILABLE,
-      path,
-      method: "GET",
-      message: "This operation is not available in the current Preview environment.",
-    });
-
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(firebaseSpy).not.toHaveBeenCalled();
-    expect(bearerSpy).not.toHaveBeenCalled();
+    expect(resolveApiUrl(path, "GET")).toBe(`${PREVIEW_API_BASE_URL}${path}`);
   });
 
   it("preserves normal Production URL construction", () => {

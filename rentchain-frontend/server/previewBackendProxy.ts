@@ -30,16 +30,11 @@ export const PREVIEW_PROXY_AUTH_CONFIG: PreviewAuthConfig = {
   expectedSpikeCommit: "",
 };
 
-export const PREVIEW_PROXY_BODY_LIMIT_BYTES = 16 * 1024;
+export const PREVIEW_PROXY_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
 export const PREVIEW_PROXY_TOKEN_TIMEOUT_MS = 5_000;
 export const PREVIEW_PROXY_UPSTREAM_TIMEOUT_MS = 10_000;
 
-const ROUTE_METHODS = new Map<string, ReadonlySet<string>>([
-  ["/api/auth/login", new Set(["POST"])],
-  ["/api/auth/logout", new Set(["POST"])],
-  ["/api/me", new Set(["GET"])],
-  ["/api/auth/me", new Set(["GET"])],
-]);
+const ALLOWED_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
 
 const RESPONSE_HEADERS = new Set([
   "cache-control",
@@ -122,7 +117,7 @@ export function resolvePreviewBackendPath(req: any): {
   }
 
   const backendPath = `/${decodedSuffix}`;
-  if (!ROUTE_METHODS.has(backendPath)) {
+  if (!backendPath.startsWith("/api/")) {
     throw new PreviewBackendProxyError("PREVIEW_PROXY_ROUTE_NOT_ALLOWED", 404);
   }
 
@@ -130,13 +125,13 @@ export function resolvePreviewBackendPath(req: any): {
 }
 
 function assertMethod(backendPath: string, method: string) {
-  if (!ROUTE_METHODS.get(backendPath)?.has(method)) {
+  if (!backendPath.startsWith("/api/") || !ALLOWED_METHODS.has(method)) {
     throw new PreviewBackendProxyError("PREVIEW_PROXY_METHOD_NOT_ALLOWED", 405);
   }
 }
 
-function requestBody(req: any, method: string): BodyInit | undefined {
-  if (method === "GET") return undefined;
+async function requestBody(req: any, method: string): Promise<BodyInit | undefined> {
+  if (method === "GET" || method === "HEAD") return undefined;
 
   const declaredLength = Number(req?.headers?.["content-length"] || 0);
   if (
@@ -147,6 +142,19 @@ function requestBody(req: any, method: string): BodyInit | undefined {
   }
 
   const input = req?.body;
+  if (input == null && req && typeof req[Symbol.asyncIterator] === "function") {
+    const chunks: Buffer[] = [];
+    let byteLength = 0;
+    for await (const chunk of req) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      byteLength += buffer.byteLength;
+      if (byteLength > PREVIEW_PROXY_BODY_LIMIT_BYTES) {
+        throw new PreviewBackendProxyError("PREVIEW_PROXY_BODY_TOO_LARGE", 413);
+      }
+      chunks.push(buffer);
+    }
+    return chunks.length ? Buffer.concat(chunks) : undefined;
+  }
   if (input == null) return undefined;
 
   let body: string | ArrayBuffer;
@@ -166,6 +174,8 @@ function requestBody(req: any, method: string): BodyInit | undefined {
     ).buffer;
   } else if (input instanceof ArrayBuffer) {
     body = input.slice(0);
+  } else if (Buffer.isBuffer(input)) {
+    body = Uint8Array.from(input).buffer;
   } else {
     try {
       body = JSON.stringify(input);
@@ -249,10 +259,12 @@ export async function handlePreviewBackendProxy(
     route = resolvePreviewBackendPath(req);
     method = String(req?.method || "GET").toUpperCase();
     assertMethod(route.backendPath, method);
-    body = requestBody(req, method);
+    body = await requestBody(req, method);
   } catch (error) {
     if (error instanceof PreviewBackendProxyError) {
-      if (error.status === 405) res.setHeader("allow", "GET, POST");
+      if (error.status === 405) {
+        res.setHeader("allow", Array.from(ALLOWED_METHODS).join(", "));
+      }
       return jsonError(res, error.status, error.code);
     }
     return jsonError(res, 400, "PREVIEW_PROXY_BODY_INVALID");

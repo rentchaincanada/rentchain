@@ -61,7 +61,6 @@ describe("legacy apiFetch URL parity", () => {
   it.each([
     "/api/api/auth/login",
     "api/api/auth/login",
-    "/api/properties",
   ])("rejects malformed or unsupported Preview input %s before credentials", async (input) => {
     vi.stubEnv("VITE_DEPLOY_ENV", "preview");
     vi.stubEnv("VITE_API_BASE_URL", "/api/preview-backend");
@@ -74,6 +73,25 @@ describe("legacy apiFetch URL parity", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(mocks.getFirebaseIdToken).not.toHaveBeenCalled();
     expect(mocks.getAuthToken).not.toHaveBeenCalled();
+  });
+
+  it("routes ordinary Preview application requests through the same-origin proxy", async () => {
+    vi.stubEnv("VITE_DEPLOY_ENV", "preview");
+    vi.stubEnv("VITE_API_BASE_URL", "/api/preview-backend");
+    const fetchMock = vi.fn(async () =>
+      new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+    global.fetch = fetchMock as typeof fetch;
+
+    await apiFetch("/api/properties", { method: "POST" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/preview-backend/api/properties",
+      expect.any(Object)
+    );
   });
 
   it("does not duplicate the Preview proxy prefix", async () => {

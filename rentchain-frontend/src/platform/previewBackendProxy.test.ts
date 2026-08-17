@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -142,9 +143,6 @@ describe("Preview backend proxy", () => {
   });
 
   it.each([
-    "/api/preview-backend/api/admin/users",
-    "/api/preview-backend/api/auth/signup",
-    "/api/preview-backend/api/auth/login/extra",
     "/api/preview-backend/api/preview-backend/api/auth/login",
     "/api/preview-backend//api/auth/login",
     "/api/preview-backend/https://example.invalid",
@@ -154,6 +152,15 @@ describe("Preview backend proxy", () => {
     expect(() => resolvePreviewBackendPath(request(url, "GET"))).toThrow(
       "PREVIEW_PROXY_ROUTE_NOT_ALLOWED",
     );
+  });
+
+  it.each([
+    ["/api/preview-backend/api/properties", "/api/properties"],
+    ["/api/preview-backend/api/tenant/identity-documents/status", "/api/tenant/identity-documents/status"],
+    ["/api/preview-backend/api/landlord/maintenance/request-1/attachments", "/api/landlord/maintenance/request-1/attachments"],
+    ["/api/preview-backend/api/admin/users", "/api/admin/users"],
+  ])("forwards normalized fixed-backend application path %s", (url, backendPath) => {
+    expect(resolvePreviewBackendPath(request(url, "GET"))).toEqual({ backendPath, query: "" });
   });
 
   it.each([
@@ -171,7 +178,7 @@ describe("Preview backend proxy", () => {
   it("rejects unsupported methods", async () => {
     const res = responseRecorder();
     await handlePreviewBackendProxy(
-      request("/api/preview-backend/api/auth/login", "GET"),
+      request("/api/preview-backend/api/auth/login", "CONNECT"),
       res,
       successfulDependencies().dependencies,
     );
@@ -180,6 +187,35 @@ describe("Preview backend proxy", () => {
       ok: false,
       error: "PREVIEW_PROXY_METHOD_NOT_ALLOWED",
     });
+    expect(res.headers.get("allow")).toBe("GET, HEAD, POST, PUT, PATCH, DELETE");
+  });
+
+  it("streams an unparsed multipart upload without exposing Google credentials", async () => {
+    const boundary = "rentchain-preview-upload";
+    const uploadBody = Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="id.png"\r\nContent-Type: image/png\r\n\r\nsynthetic-image\r\n--${boundary}--\r\n`,
+    );
+    const req = Readable.from([uploadBody]) as any;
+    Object.assign(req, request("/api/preview-backend/api/tenant/identity-documents", "POST", {
+      headers: {
+        authorization: "Bearer synthetic-tenant-session",
+        "content-type": `multipart/form-data; boundary=${boundary}`,
+        "content-length": String(uploadBody.byteLength),
+      },
+      body: undefined,
+    }));
+    const { requests, dependencies } = successfulDependencies();
+    const res = responseRecorder();
+
+    await handlePreviewBackendProxy(req, res, dependencies);
+
+    expect(res.statusCode).toBe(200);
+    expect(requests[2].init?.body).toEqual(uploadBody);
+    expect(requests[2].init?.headers).toMatchObject({
+      authorization: "Bearer synthetic-tenant-session",
+      "content-type": `multipart/form-data; boundary=${boundary}`,
+    });
+    expect(JSON.stringify(requests[2].init?.headers)).not.toContain("vercel-oidc");
   });
 
   it("uses exact identity constants and preserves application authorization separately", async () => {
@@ -345,6 +381,22 @@ describe("Preview backend proxy", () => {
     expect(
       fs.existsSync(path.join(frontendRoot, "api/preview-backend/[...path].ts")),
     ).toBe(true);
+  });
+
+  it("forces ordinary Vercel Preview builds through the same-origin backend proxy", () => {
+    const buildScript = fs.readFileSync(path.resolve(process.cwd(), "scripts/build.mjs"), "utf8");
+    expect(buildScript).toContain('process.env.VERCEL_ENV === "preview"');
+    expect(buildScript).toContain('env.VITE_DEPLOY_ENV = "preview"');
+    expect(buildScript).toContain('env.VITE_API_BASE_URL = "/api/preview-backend"');
+    expect(buildScript).toContain('env.VITE_API_BASE_URL = "/api/pr1512-notices"');
+  });
+
+  it("disables Vercel body parsing so binary uploads reach the proxy unchanged", () => {
+    const entrypoint = fs.readFileSync(
+      path.resolve(process.cwd(), "api/preview-backend/[...path].ts"),
+      "utf8",
+    );
+    expect(entrypoint).toContain("bodyParser: false");
   });
 
   it("does not introduce the Preview Cloud Run URL into browser source", () => {
