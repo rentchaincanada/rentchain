@@ -137,6 +137,22 @@ check "b7_preview_backend_auth_secret_injection_boundary" {
         for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
         if env.name == "FIREBASE_API_KEY"
       ]).value_source[0].secret_key_ref[0].version == "1" &&
+      length([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "PREVIEW_AUTH_ENABLED"
+      ]) == 1 &&
+      one([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "PREVIEW_AUTH_ENABLED"
+      ]).value == "true" &&
+      length([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "FIREBASE_PROJECT_ID"
+      ]) == 1 &&
+      one([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "FIREBASE_PROJECT_ID"
+      ]).value == "rentchain-preview" &&
       one([
         for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
         if env.name == "FIRESTORE_ENABLED"
@@ -166,7 +182,7 @@ check "b7_preview_backend_auth_secret_injection_boundary" {
         if env.name == "GCS_IDENTITY_DOCUMENT_BUCKET"
       ]).value == google_storage_bucket.preview_identity_documents.name
     ) : true
-    error_message = "The Preview backend must receive explicit Identity Toolkit secret version 1, enabled default Firestore database, and only the governed Preview storage buckets."
+    error_message = "The Preview backend must receive exact Preview authentication activation, Identity Toolkit secret version 1, enabled default Firestore database, and only the governed Preview storage buckets."
   }
 }
 

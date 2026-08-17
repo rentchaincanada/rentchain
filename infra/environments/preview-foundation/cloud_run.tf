@@ -54,6 +54,16 @@ resource "google_cloud_run_v2_service" "preview_backend" {
       }
 
       env {
+        name  = "PREVIEW_AUTH_ENABLED"
+        value = "true"
+      }
+
+      env {
+        name  = "FIREBASE_PROJECT_ID"
+        value = var.project_id
+      }
+
+      env {
         name  = "FIRESTORE_ENABLED"
         value = "true"
       }
