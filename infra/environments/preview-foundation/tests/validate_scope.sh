@@ -38,7 +38,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "54"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "56"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|secretmanager|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "9"
@@ -317,8 +317,13 @@ rg -U -q 'env \{
         \}
       \}' "$root_dir/cloud_run.tf"
 grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_jwt_accessor,' "$root_dir/cloud_run.tf"
+grep -Fq 'preview_backend_service_name = "rentchain-preview-backend"' "$root_dir/cloud_run.tf"
 if rg -n 'PREVIEW_AUTH_ENABLED|FIREBASE_PROJECT_ID|google_apikeys_key|key_string|version\s*=\s*"latest"' "$root_dir/cloud_run.tf"; then
   echo "B7 Cloud Run secret injection contains a prohibited activation field, direct key reference, or mutable secret version" >&2
+  exit 1
+fi
+if rg -U -n 'name = "JWT_SECRET"\n[[:space:]]+value[[:space:]]*=' "$root_dir/cloud_run.tf"; then
+  echo "Preview JWT_SECRET must use a secret-backed value source, not a literal value" >&2
   exit 1
 fi
 if rg -U -n 'name = "FIREBASE_API_KEY"\n[[:space:]]+value[[:space:]]*=' "$root_dir/cloud_run.tf"; then
@@ -471,7 +476,15 @@ rg -U -q 'resource "google_secret_manager_secret_iam_member" "preview_backend_jw
   role      = "roles/secretmanager\.secretAccessor"
   member    = google_service_account\.preview_backend_runtime\.member
 \}' "$root_dir/secret_manager.tf"
-grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.secret_id == google_secret_manager_secret.preview_backend_jwt.id' "$root_dir/checks.tf"
+grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.secret_id == google_secret_manager_secret.preview_backend_jwt.secret_id' "$root_dir/checks.tf"
+if rg -n 'preview_backend_jwt_accessor\.secret_id == google_secret_manager_secret\.preview_backend_jwt\.(id|name)' "$root_dir/checks.tf"; then
+  echo "Preview JWT boundary check must use the plan-time-known configured secret_id" >&2
+  exit 1
+fi
+if rg -n 'project-0d9658de-af29-4dc0-a99|rentchain-landlord-api|JWT_SECRET.*value[[:space:]]*=' "$root_dir/secret_manager.tf" "$root_dir/cloud_run.tf" "$root_dir/checks.tf"; then
+  echo "Production reference or plaintext JWT configuration found in the Preview JWT boundary" >&2
+  exit 1
+fi
 test "$(rg -No 'secret_data_wo\s*=' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "2"
 if rg -n '(^|[[:space:]])secret_data[[:space:]]*=' "$root_dir" --glob '*.tf'; then
   echo "Ordinary Secret Manager secret_data found; write-only delivery is required" >&2
