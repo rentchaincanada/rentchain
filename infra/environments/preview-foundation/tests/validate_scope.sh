@@ -38,7 +38,7 @@ EOF
 actual_resources="$(rg -No 'resource "[^"]+"' "$root_dir" --glob '*.tf' | sed -E 's/.*resource "([^"]+)"/\1/' | sort -u)"
 test "$actual_resources" = "$expected_resources"
 
-test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "54"
+test "$(rg -No '^resource "[^"]+"' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "56"
 
 test "$(rg -No 'service\s*=\s*"[^"]+\.googleapis\.com"' "$root_dir/services.tf" | wc -l | tr -d ' ')" = "0"
 test "$(rg -No '"(apikeys|artifactregistry|cloudresourcemanager|firestore|iam|identitytoolkit|run|secretmanager|serviceusage)\.googleapis\.com"' "$root_dir/services.tf" | sort -u | wc -l | tr -d ' ')" = "9"
@@ -299,14 +299,58 @@ fi
 
 rg -U -q 'name  = "FIRESTORE_ENABLED"\n        value = "true"' "$root_dir/cloud_run.tf"
 rg -U -q 'name  = "FIRESTORE_DATABASE_ID"\n        value = "\(default\)"' "$root_dir/cloud_run.tf"
+rg -U -q 'name  = "PREVIEW_AUTH_ENABLED"\n        value = "true"' "$root_dir/cloud_run.tf"
+rg -U -q 'name  = "FIREBASE_PROJECT_ID"\n        value = var\.project_id' "$root_dir/cloud_run.tf"
+test "$(rg -No 'name  = "PREVIEW_AUTH_ENABLED"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No 'name  = "FIREBASE_PROJECT_ID"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "1"
+grep -Fq 'if env.name == "PREVIEW_AUTH_ENABLED"' "$root_dir/checks.tf"
+grep -Fq ']).value == "true"' "$root_dir/checks.tf"
+grep -Fq 'if env.name == "FIREBASE_PROJECT_ID"' "$root_dir/checks.tf"
+grep -Fq ']).value == "rentchain-preview"' "$root_dir/checks.tf"
 rg -U -q 'name  = "GCS_UPLOAD_BUCKET"\n        value = google_storage_bucket\.preview_attachments\.name' "$root_dir/cloud_run.tf"
 rg -U -q 'name  = "GCS_IDENTITY_DOCUMENT_BUCKET"\n        value = google_storage_bucket\.preview_identity_documents\.name' "$root_dir/cloud_run.tf"
 test "$(rg -No 'name  = "(FIRESTORE_ENABLED|FIRESTORE_DATABASE_ID|GCS_UPLOAD_BUCKET|GCS_IDENTITY_DOCUMENT_BUCKET)"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "4"
 test "$(rg -No 'name = "FIREBASE_API_KEY"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No 'name = "JWT_SECRET"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "1"
 rg -U -q 'env \{\n        name = "FIREBASE_API_KEY"\n\n        value_source \{\n          secret_key_ref \{\n            secret  = google_secret_manager_secret\.preview_backend_identity_toolkit\[0\]\.secret_id\n            version = "1"\n          \}\n        \}\n      \}' "$root_dir/cloud_run.tf"
 grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor,' "$root_dir/cloud_run.tf"
-if rg -n 'PREVIEW_AUTH_ENABLED|FIREBASE_PROJECT_ID|google_apikeys_key|key_string|version\s*=\s*"latest"' "$root_dir/cloud_run.tf"; then
-  echo "B7 Cloud Run secret injection contains a prohibited activation field, direct key reference, or mutable secret version" >&2
+rg -U -q 'env \{
+        name = "JWT_SECRET"
+
+        value_source \{
+          secret_key_ref \{
+            secret  = google_secret_manager_secret\.preview_backend_jwt\.secret_id
+            version = "1"
+          \}
+        \}
+      \}' "$root_dir/cloud_run.tf"
+grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_jwt_accessor,' "$root_dir/cloud_run.tf"
+grep -Fq 'preview_backend_service_name = "rentchain-preview-backend"' "$root_dir/cloud_run.tf"
+if rg -n 'google_apikeys_key|key_string|version\s*=\s*"latest"' "$root_dir/cloud_run.tf"; then
+  echo "B7 Cloud Run secret injection contains a direct key reference or mutable secret version" >&2
+  exit 1
+fi
+
+preview_auth_env_is_exact() {
+  local enabled_value="${1:-}"
+  local project_value="${2:-}"
+  test "$enabled_value" = "true" && test "$project_value" = "rentchain-preview"
+}
+
+preview_auth_env_is_exact "true" "rentchain-preview"
+for rejected_auth_env in \
+  "false|rentchain-preview" \
+  "|rentchain-preview" \
+  "true|other-preview" \
+  "true|project-0d9658de-af29-4dc0-a99"; do
+  IFS='|' read -r rejected_enabled rejected_project <<< "$rejected_auth_env"
+  if preview_auth_env_is_exact "$rejected_enabled" "$rejected_project"; then
+    echo "Preview authentication environment accepted a prohibited value pair: $rejected_auth_env" >&2
+    exit 1
+  fi
+done
+if rg -U -n 'name = "JWT_SECRET"\n[[:space:]]+value[[:space:]]*=' "$root_dir/cloud_run.tf"; then
+  echo "Preview JWT_SECRET must use a secret-backed value source, not a literal value" >&2
   exit 1
 fi
 if rg -U -n 'name = "FIREBASE_API_KEY"\n[[:space:]]+value[[:space:]]*=' "$root_dir/cloud_run.tf"; then
@@ -394,6 +438,7 @@ secretmanager.secrets.get
 secretmanager.secrets.getIamPolicy
 secretmanager.secrets.setIamPolicy
 secretmanager.versions.add
+secretmanager.versions.enable
 secretmanager.versions.get
 serviceusage.services.use
 EOF
@@ -405,6 +450,15 @@ actual_b7_manager_base_permissions="$(
     | sort -u
 )"
 test "$actual_b7_manager_base_permissions" = "$expected_b7_manager_base_permissions"
+test "$(rg -No 'secretmanager\.versions\.enable' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "2"
+if rg -n 'secretmanager\.versions\.enable' "$root_dir" --glob '*.tf' | rg -v '/(iam|checks)\.tf:'; then
+  echo "Secret-version enablement escaped the exact HCP apply role and its boundary check" >&2
+  exit 1
+fi
+if sed -n '/resource "google_project_iam_member" "terraform_preview_b7_manager"/,/^}/p' "$root_dir/iam.tf" | rg -v 'hcp_terraform_apply_member' | rg -n 'preview_backend_runtime|roles/secretmanager|allUsers|allAuthenticatedUsers'; then
+  echo "B7 manager binding widened to a runtime, predefined Secret Manager, or public principal" >&2
+  exit 1
+fi
 grep -Fq 'var.b7_phase2_recovery_stage >= 2 ? toset(["firebase.projects.update"]) : toset([])' "$root_dir/iam.tf"
 
 rg -q 'role_id     = "terraformPreviewCustomRoleUpdater"' "$root_dir/iam.tf"
@@ -423,15 +477,15 @@ if printf '%s\n%s\n%s\n' "$actual_b7_reader_permissions" "$actual_b7_manager_bas
   exit 1
 fi
 
-test "$(rg -No 'roles/secretmanager\.[A-Za-z]+' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "2"
+test "$(rg -No 'roles/secretmanager\.[A-Za-z]+' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "4"
 if rg -n 'roles/secretmanager\.' "$root_dir" --glob '*.tf' | rg -v '(secret_manager|checks)\.tf:.*roles/secretmanager\.secretAccessor'; then
   echo "Secret Manager predefined role found outside the exact secret-level runtime accessor" >&2
   exit 1
 fi
 
-test "$(rg -No '^resource "google_secret_manager_secret"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
-test "$(rg -No '^resource "google_secret_manager_secret_iam_member"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
-test "$(rg -No '^resource "google_secret_manager_secret_version"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_secret_manager_secret"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "2"
+test "$(rg -No '^resource "google_secret_manager_secret_iam_member"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "2"
+test "$(rg -No '^resource "google_secret_manager_secret_version"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "2"
 rg -q 'secret_id = "preview-backend-identity-toolkit-api-key"' "$root_dir/secret_manager.tf"
 rg -U -q 'replication \{\n    auto \{\}\n  \}' "$root_dir/secret_manager.tf"
 rg -q 'deletion_protection = true' "$root_dir/secret_manager.tf"
@@ -442,7 +496,74 @@ rg -q 'deletion_policy        = "DISABLE"' "$root_dir/secret_manager.tf"
 rg -U -q '(?s)resource "google_secret_manager_secret_version" "preview_backend_identity_toolkit" \{.*lifecycle \{\n    create_before_destroy = true\n  \}' "$root_dir/secret_manager.tf"
 rg -U -q 'resource "google_secret_manager_secret_iam_member" "preview_backend_identity_toolkit_accessor" \{\n  count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_restricted_api_key_activation \? 1 : 0\n\n  project   = var\.project_id\n  secret_id = google_secret_manager_secret\.preview_backend_identity_toolkit\[0\]\.secret_id\n  role      = "roles/secretmanager\.secretAccessor"\n  member    = google_service_account\.preview_backend_runtime\.member\n\}' "$root_dir/secret_manager.tf"
 grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor[0].secret_id == google_secret_manager_secret.preview_backend_identity_toolkit[0].id' "$root_dir/checks.tf"
-test "$(rg -No 'secret_data_wo\s*=' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
+rg -q 'secret_id = "preview-backend-jwt-secret"' "$root_dir/secret_manager.tf"
+grep -Fq 'secret_data_wo         = var.preview_backend_jwt_secret' "$root_dir/secret_manager.tf"
+rg -U -q 'variable "preview_backend_jwt_secret" \{
+  description = "Dedicated high-entropy Preview-only JWT signing secret supplied as a sensitive HCP Terraform workspace variable\."
+  type        = string
+  sensitive   = true
+  nullable    = false' "$root_dir/variables.tf"
+if rg -n 'preview_backend_jwt_secret' "$root_dir/terraform.tfvars.example"; then
+  echo "Preview JWT secret must not be placed in the example tfvars file" >&2
+  exit 1
+fi
+rg -U -q 'resource "google_secret_manager_secret_iam_member" "preview_backend_jwt_accessor" \{
+  project   = var\.project_id
+  secret_id = google_secret_manager_secret\.preview_backend_jwt\.secret_id
+  role      = "roles/secretmanager\.secretAccessor"
+  member    = google_service_account\.preview_backend_runtime\.member
+\}' "$root_dir/secret_manager.tf"
+grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.project == google_secret_manager_secret.preview_backend_jwt.project' "$root_dir/checks.tf"
+rg -U -q 'contains\(\[
+        google_secret_manager_secret\.preview_backend_jwt\.secret_id,
+        "projects/\$\{google_secret_manager_secret\.preview_backend_jwt\.project\}/secrets/\$\{google_secret_manager_secret\.preview_backend_jwt\.secret_id\}",
+      \], google_secret_manager_secret_iam_member\.preview_backend_jwt_accessor\.secret_id\)' "$root_dir/checks.tf"
+
+preview_jwt_binding_is_exact() {
+  local candidate_project="$1"
+  local candidate_secret_id="$2"
+  local candidate_role="$3"
+  local candidate_member="$4"
+  test "$candidate_project" = "rentchain-preview" || return 1
+  test "$candidate_role" = "roles/secretmanager.secretAccessor" || return 1
+  test "$candidate_member" = "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com" || return 1
+  case "$candidate_secret_id" in
+    "preview-backend-jwt-secret"|"projects/rentchain-preview/secrets/preview-backend-jwt-secret") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+preview_jwt_binding_is_exact "rentchain-preview" "preview-backend-jwt-secret" "roles/secretmanager.secretAccessor" "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com"
+preview_jwt_binding_is_exact "rentchain-preview" "projects/rentchain-preview/secrets/preview-backend-jwt-secret" "roles/secretmanager.secretAccessor" "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com"
+for rejected_secret_id in \
+  "wrong-preview-backend-jwt-secret" \
+  "projects/rentchain-preview/secrets/wrong-preview-backend-jwt-secret" \
+  "projects/project-0d9658de-af29-4dc0-a99/secrets/preview-backend-jwt-secret" \
+  "preview-backend-jwt-secret-suffix" \
+  "prefix-preview-backend-jwt-secret"; do
+  if preview_jwt_binding_is_exact "rentchain-preview" "$rejected_secret_id" "roles/secretmanager.secretAccessor" "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com"; then
+    echo "Preview JWT boundary accepted an unauthorized secret identifier: $rejected_secret_id" >&2
+    exit 1
+  fi
+done
+if preview_jwt_binding_is_exact "rentchain-preview" "preview-backend-jwt-secret" "roles/secretmanager.admin" "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com"; then
+  echo "Preview JWT boundary accepted an unauthorized IAM role" >&2
+  exit 1
+fi
+if preview_jwt_binding_is_exact "rentchain-preview" "preview-backend-jwt-secret" "roles/secretmanager.secretAccessor" "serviceAccount:wrong-runtime@rentchain-preview.iam.gserviceaccount.com"; then
+  echo "Preview JWT boundary accepted an unauthorized member" >&2
+  exit 1
+fi
+
+if rg -n 'preview_backend_jwt_accessor\.secret_id\s*==' "$root_dir/checks.tf"; then
+  echo "Preview JWT boundary check must use exact configured-or-canonical identity matching" >&2
+  exit 1
+fi
+if rg -n 'project-0d9658de-af29-4dc0-a99|rentchain-landlord-api|JWT_SECRET.*value[[:space:]]*=' "$root_dir/secret_manager.tf" "$root_dir/cloud_run.tf" "$root_dir/checks.tf"; then
+  echo "Production reference or plaintext JWT configuration found in the Preview JWT boundary" >&2
+  exit 1
+fi
+test "$(rg -No 'secret_data_wo\s*=' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "2"
 if rg -n '(^|[[:space:]])secret_data[[:space:]]*=' "$root_dir" --glob '*.tf'; then
   echo "Ordinary Secret Manager secret_data found; write-only delivery is required" >&2
   exit 1
@@ -453,6 +574,31 @@ if rg -n 'google_project_iam_(member|binding).*secretmanager' "$root_dir" --glob
 fi
 if rg -n 'FIREBASE_API_KEY' "$root_dir" --glob '*.tf' | rg -v '/(cloud_run|checks)\.tf:'; then
   echo "FIREBASE_API_KEY found outside the governed Cloud Run resource or its check" >&2
+  exit 1
+fi
+
+expected_identity_policy_environment="$(cat <<'EOF'
+IDENTITY_DOCUMENT_POLICY_TEXT_VERSION=identity_collection_v1
+IDENTITY_DOCUMENT_PRIVACY_NOTICE_VERSION=privacy_v1
+IDENTITY_DOCUMENT_REQUIREMENT_POLICY_ID=tenant_government_photo_id_required
+IDENTITY_DOCUMENT_REQUIREMENT_POLICY_VERSION=v1
+IDENTITY_DOCUMENT_RETENTION_POLICY_ID=identity_retention
+IDENTITY_DOCUMENT_RETENTION_POLICY_VERSION=v1
+EOF
+)"
+actual_identity_policy_environment="$(
+  sed -n '/preview_identity_policy_environment = {/,/  }/p' "$root_dir/cloud_run.tf" \
+    | rg -No 'IDENTITY_DOCUMENT_[A-Z_]+\s*=\s*"[^"]+"' \
+    | sed -E 's/[[:space:]]*=[[:space:]]*/=/' \
+    | sort
+)"
+test "$actual_identity_policy_environment" = "$expected_identity_policy_environment"
+test "$(printf '%s\n' "$actual_identity_policy_environment" | wc -l | tr -d ' ')" = "6"
+rg -U -q 'dynamic "env" \{\n        for_each = local\.preview_identity_policy_environment' "$root_dir/cloud_run.tf"
+rg -q 'check "preview_identity_policy_runtime_boundary"' "$root_dir/checks.tf"
+grep -Fq '== local.preview_identity_policy_environment' "$root_dir/checks.tf"
+if printf '%s\n' "$actual_identity_policy_environment" | rg -n 'project-0d9658de-af29-4dc0-a99|rentchain-landlord-api|secret|token|password'; then
+  echo "Preview identity policy configuration contains a Production reference or secret-like value" >&2
   exit 1
 fi
 
@@ -599,12 +745,13 @@ secretmanager.secrets.get
 secretmanager.secrets.getIamPolicy
 secretmanager.secrets.setIamPolicy
 secretmanager.versions.add
+secretmanager.versions.enable
 secretmanager.versions.get
 serviceusage.services.use
 EOF
 )"
 test "$(sort -u "$b7_apply_delta_file")" = "$expected_b7_apply_delta"
-test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "17"
+test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "18"
 
 if rg -n '(delete|undelete|users\.(create|delete|update|sendEmail)|getSecret|getHashConfig|serviceAccountKeys|signBlob|signJwt|getAccessToken|generateAccessToken|run\.|storage\.|billing|secretmanager\.versions\.(access|disable|destroy|list)|secretmanager\.secrets\.(delete|list))' "$b7_plan_delta_file" "$b7_apply_delta_file"; then
   echo "Forbidden B7 HCP permission delta found" >&2

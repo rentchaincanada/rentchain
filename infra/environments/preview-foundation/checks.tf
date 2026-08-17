@@ -137,6 +137,22 @@ check "b7_preview_backend_auth_secret_injection_boundary" {
         for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
         if env.name == "FIREBASE_API_KEY"
       ]).value_source[0].secret_key_ref[0].version == "1" &&
+      length([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "PREVIEW_AUTH_ENABLED"
+      ]) == 1 &&
+      one([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "PREVIEW_AUTH_ENABLED"
+      ]).value == "true" &&
+      length([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "FIREBASE_PROJECT_ID"
+      ]) == 1 &&
+      one([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "FIREBASE_PROJECT_ID"
+      ]).value == "rentchain-preview" &&
       one([
         for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
         if env.name == "FIRESTORE_ENABLED"
@@ -166,7 +182,63 @@ check "b7_preview_backend_auth_secret_injection_boundary" {
         if env.name == "GCS_IDENTITY_DOCUMENT_BUCKET"
       ]).value == google_storage_bucket.preview_identity_documents.name
     ) : true
-    error_message = "The Preview backend must receive explicit Identity Toolkit secret version 1, enabled default Firestore database, and only the governed Preview storage buckets."
+    error_message = "The Preview backend must receive exact Preview authentication activation, Identity Toolkit secret version 1, enabled default Firestore database, and only the governed Preview storage buckets."
+  }
+}
+
+check "preview_identity_policy_runtime_boundary" {
+  assert {
+    condition = var.enable_preview_backend_service ? (
+      length([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if contains(keys(local.preview_identity_policy_environment), env.name)
+      ]) == 6 &&
+      {
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env.name => env.value
+        if contains(keys(local.preview_identity_policy_environment), env.name)
+      } == local.preview_identity_policy_environment
+    ) : true
+    error_message = "The permanent Preview backend must receive the exact six non-secret identity-policy values derived from the merged G1 contracts."
+  }
+}
+
+check "preview_backend_jwt_secret_boundary" {
+  assert {
+    condition = (
+      google_secret_manager_secret.preview_backend_jwt.project == "rentchain-preview" &&
+      google_secret_manager_secret.preview_backend_jwt.secret_id == "preview-backend-jwt-secret" &&
+      google_secret_manager_secret.preview_backend_jwt.deletion_protection &&
+      google_secret_manager_secret_version.preview_backend_jwt.secret_data_wo_version == 1 &&
+      google_secret_manager_secret_version.preview_backend_jwt.deletion_policy == "DISABLE" &&
+      google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.project == google_secret_manager_secret.preview_backend_jwt.project &&
+      contains([
+        google_secret_manager_secret.preview_backend_jwt.secret_id,
+        "projects/${google_secret_manager_secret.preview_backend_jwt.project}/secrets/${google_secret_manager_secret.preview_backend_jwt.secret_id}",
+      ], google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.secret_id) &&
+      google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.role == "roles/secretmanager.secretAccessor" &&
+      google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.member == google_service_account.preview_backend_runtime.member
+    )
+    error_message = "The Preview JWT signing secret must remain Preview-only, write-only provisioned, deletion-protected, and accessible only through the exact runtime secret-level binding."
+  }
+}
+
+check "preview_backend_jwt_secret_injection_boundary" {
+  assert {
+    condition = var.enable_preview_backend_service ? (
+      length([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "JWT_SECRET"
+      ]) == 1 &&
+      one([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "JWT_SECRET"
+      ]).value_source[0].secret_key_ref[0].secret == google_secret_manager_secret.preview_backend_jwt.secret_id &&
+      one([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "JWT_SECRET"
+      ]).value_source[0].secret_key_ref[0].version == "1"
+    ) : true
+    error_message = "The permanent Preview backend must receive exactly one JWT_SECRET from version 1 of the dedicated Preview JWT secret."
   }
 }
 
@@ -214,6 +286,7 @@ check "b7_hcp_bootstrap_iam_boundary" {
         "secretmanager.secrets.getIamPolicy",
         "secretmanager.secrets.setIamPolicy",
         "secretmanager.versions.add",
+        "secretmanager.versions.enable",
         "secretmanager.versions.get",
         "serviceusage.services.use",
       ]) &&
@@ -223,7 +296,7 @@ check "b7_hcp_bootstrap_iam_boundary" {
       ) &&
       google_project_iam_member.terraform_preview_b7_manager.member == local.hcp_terraform_apply_member
     )
-    error_message = "The B7 apply manager must remain at sixteen permissions in recovery stage 1 and add only firebase.projects.update in stage 2."
+    error_message = "The B7 apply manager must remain at seventeen permissions in recovery stage 1 and add only firebase.projects.update in stage 2."
   }
 
   assert {
@@ -294,7 +367,7 @@ check "b6_preview_backend_boundary" {
   assert {
     condition = (
       local.preview_backend_service_name == "rentchain-preview-backend" &&
-      local.preview_backend_image_digest == "northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend@sha256:bfd6f231432abdce497bceac81c4c8e1b32b230e1cf46a225b2ce7d116df583c" &&
+      local.preview_backend_image_digest == "northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend@sha256:54700c92b15f0e95ed3c3aea2266d2030a90fcff972006c6a2de8332fa6f8b0c" &&
       local.preview_backend_source_sha == "d28c61991131e9a76874d5eb92adceac048f9417" &&
       !var.enable_preview_backend_service || (
         google_cloud_run_v2_service.preview_backend[0].project == "rentchain-preview" &&

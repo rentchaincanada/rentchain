@@ -1,7 +1,15 @@
 locals {
   preview_backend_service_name = "rentchain-preview-backend"
-  preview_backend_image_digest = "northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend@sha256:bfd6f231432abdce497bceac81c4c8e1b32b230e1cf46a225b2ce7d116df583c"
+  preview_backend_image_digest = "northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend@sha256:54700c92b15f0e95ed3c3aea2266d2030a90fcff972006c6a2de8332fa6f8b0c"
   preview_backend_source_sha   = "d28c61991131e9a76874d5eb92adceac048f9417"
+  preview_identity_policy_environment = {
+    IDENTITY_DOCUMENT_REQUIREMENT_POLICY_ID      = "tenant_government_photo_id_required"
+    IDENTITY_DOCUMENT_REQUIREMENT_POLICY_VERSION = "v1"
+    IDENTITY_DOCUMENT_POLICY_TEXT_VERSION        = "identity_collection_v1"
+    IDENTITY_DOCUMENT_PRIVACY_NOTICE_VERSION     = "privacy_v1"
+    IDENTITY_DOCUMENT_RETENTION_POLICY_ID        = "identity_retention"
+    IDENTITY_DOCUMENT_RETENTION_POLICY_VERSION   = "v1"
+  }
 }
 
 resource "google_cloud_run_v2_service" "preview_backend" {
@@ -54,6 +62,16 @@ resource "google_cloud_run_v2_service" "preview_backend" {
       }
 
       env {
+        name  = "PREVIEW_AUTH_ENABLED"
+        value = "true"
+      }
+
+      env {
+        name  = "FIREBASE_PROJECT_ID"
+        value = var.project_id
+      }
+
+      env {
         name  = "FIRESTORE_ENABLED"
         value = "true"
       }
@@ -73,12 +91,32 @@ resource "google_cloud_run_v2_service" "preview_backend" {
         value = google_storage_bucket.preview_identity_documents.name
       }
 
+      dynamic "env" {
+        for_each = local.preview_identity_policy_environment
+
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
+
       env {
         name = "FIREBASE_API_KEY"
 
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.preview_backend_identity_toolkit[0].secret_id
+            version = "1"
+          }
+        }
+      }
+
+      env {
+        name = "JWT_SECRET"
+
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.preview_backend_jwt.secret_id
             version = "1"
           }
         }
@@ -106,5 +144,6 @@ resource "google_cloud_run_v2_service" "preview_backend" {
   depends_on = [
     google_project_service.approved_management["run.googleapis.com"],
     google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor,
+    google_secret_manager_secret_iam_member.preview_backend_jwt_accessor,
   ]
 }
