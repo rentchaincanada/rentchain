@@ -49,6 +49,7 @@ locals {
     "secretmanager.secrets.getIamPolicy",
     "secretmanager.secrets.setIamPolicy",
     "secretmanager.versions.add",
+    "secretmanager.versions.enable",
     "secretmanager.versions.get",
     "serviceusage.services.use",
   ])

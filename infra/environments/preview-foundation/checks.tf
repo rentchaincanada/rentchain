@@ -178,7 +178,11 @@ check "preview_backend_jwt_secret_boundary" {
       google_secret_manager_secret.preview_backend_jwt.deletion_protection &&
       google_secret_manager_secret_version.preview_backend_jwt.secret_data_wo_version == 1 &&
       google_secret_manager_secret_version.preview_backend_jwt.deletion_policy == "DISABLE" &&
-      google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.secret_id == google_secret_manager_secret.preview_backend_jwt.secret_id &&
+      google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.project == google_secret_manager_secret.preview_backend_jwt.project &&
+      contains([
+        google_secret_manager_secret.preview_backend_jwt.secret_id,
+        "projects/${google_secret_manager_secret.preview_backend_jwt.project}/secrets/${google_secret_manager_secret.preview_backend_jwt.secret_id}",
+      ], google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.secret_id) &&
       google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.role == "roles/secretmanager.secretAccessor" &&
       google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.member == google_service_account.preview_backend_runtime.member
     )
@@ -250,6 +254,7 @@ check "b7_hcp_bootstrap_iam_boundary" {
         "secretmanager.secrets.getIamPolicy",
         "secretmanager.secrets.setIamPolicy",
         "secretmanager.versions.add",
+        "secretmanager.versions.enable",
         "secretmanager.versions.get",
         "serviceusage.services.use",
       ]) &&
@@ -259,7 +264,7 @@ check "b7_hcp_bootstrap_iam_boundary" {
       ) &&
       google_project_iam_member.terraform_preview_b7_manager.member == local.hcp_terraform_apply_member
     )
-    error_message = "The B7 apply manager must remain at sixteen permissions in recovery stage 1 and add only firebase.projects.update in stage 2."
+    error_message = "The B7 apply manager must remain at seventeen permissions in recovery stage 1 and add only firebase.projects.update in stage 2."
   }
 
   assert {

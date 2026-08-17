@@ -411,6 +411,7 @@ secretmanager.secrets.get
 secretmanager.secrets.getIamPolicy
 secretmanager.secrets.setIamPolicy
 secretmanager.versions.add
+secretmanager.versions.enable
 secretmanager.versions.get
 serviceusage.services.use
 EOF
@@ -422,6 +423,15 @@ actual_b7_manager_base_permissions="$(
     | sort -u
 )"
 test "$actual_b7_manager_base_permissions" = "$expected_b7_manager_base_permissions"
+test "$(rg -No 'secretmanager\.versions\.enable' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "2"
+if rg -n 'secretmanager\.versions\.enable' "$root_dir" --glob '*.tf' | rg -v '/(iam|checks)\.tf:'; then
+  echo "Secret-version enablement escaped the exact HCP apply role and its boundary check" >&2
+  exit 1
+fi
+if sed -n '/resource "google_project_iam_member" "terraform_preview_b7_manager"/,/^}/p' "$root_dir/iam.tf" | rg -v 'hcp_terraform_apply_member' | rg -n 'preview_backend_runtime|roles/secretmanager|allUsers|allAuthenticatedUsers'; then
+  echo "B7 manager binding widened to a runtime, predefined Secret Manager, or public principal" >&2
+  exit 1
+fi
 grep -Fq 'var.b7_phase2_recovery_stage >= 2 ? toset(["firebase.projects.update"]) : toset([])' "$root_dir/iam.tf"
 
 rg -q 'role_id     = "terraformPreviewCustomRoleUpdater"' "$root_dir/iam.tf"
@@ -476,9 +486,50 @@ rg -U -q 'resource "google_secret_manager_secret_iam_member" "preview_backend_jw
   role      = "roles/secretmanager\.secretAccessor"
   member    = google_service_account\.preview_backend_runtime\.member
 \}' "$root_dir/secret_manager.tf"
-grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.secret_id == google_secret_manager_secret.preview_backend_jwt.secret_id' "$root_dir/checks.tf"
-if rg -n 'preview_backend_jwt_accessor\.secret_id == google_secret_manager_secret\.preview_backend_jwt\.(id|name)' "$root_dir/checks.tf"; then
-  echo "Preview JWT boundary check must use the plan-time-known configured secret_id" >&2
+grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.project == google_secret_manager_secret.preview_backend_jwt.project' "$root_dir/checks.tf"
+rg -U -q 'contains\(\[
+        google_secret_manager_secret\.preview_backend_jwt\.secret_id,
+        "projects/\$\{google_secret_manager_secret\.preview_backend_jwt\.project\}/secrets/\$\{google_secret_manager_secret\.preview_backend_jwt\.secret_id\}",
+      \], google_secret_manager_secret_iam_member\.preview_backend_jwt_accessor\.secret_id\)' "$root_dir/checks.tf"
+
+preview_jwt_binding_is_exact() {
+  local candidate_project="$1"
+  local candidate_secret_id="$2"
+  local candidate_role="$3"
+  local candidate_member="$4"
+  test "$candidate_project" = "rentchain-preview" || return 1
+  test "$candidate_role" = "roles/secretmanager.secretAccessor" || return 1
+  test "$candidate_member" = "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com" || return 1
+  case "$candidate_secret_id" in
+    "preview-backend-jwt-secret"|"projects/rentchain-preview/secrets/preview-backend-jwt-secret") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+preview_jwt_binding_is_exact "rentchain-preview" "preview-backend-jwt-secret" "roles/secretmanager.secretAccessor" "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com"
+preview_jwt_binding_is_exact "rentchain-preview" "projects/rentchain-preview/secrets/preview-backend-jwt-secret" "roles/secretmanager.secretAccessor" "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com"
+for rejected_secret_id in \
+  "wrong-preview-backend-jwt-secret" \
+  "projects/rentchain-preview/secrets/wrong-preview-backend-jwt-secret" \
+  "projects/project-0d9658de-af29-4dc0-a99/secrets/preview-backend-jwt-secret" \
+  "preview-backend-jwt-secret-suffix" \
+  "prefix-preview-backend-jwt-secret"; do
+  if preview_jwt_binding_is_exact "rentchain-preview" "$rejected_secret_id" "roles/secretmanager.secretAccessor" "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com"; then
+    echo "Preview JWT boundary accepted an unauthorized secret identifier: $rejected_secret_id" >&2
+    exit 1
+  fi
+done
+if preview_jwt_binding_is_exact "rentchain-preview" "preview-backend-jwt-secret" "roles/secretmanager.admin" "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com"; then
+  echo "Preview JWT boundary accepted an unauthorized IAM role" >&2
+  exit 1
+fi
+if preview_jwt_binding_is_exact "rentchain-preview" "preview-backend-jwt-secret" "roles/secretmanager.secretAccessor" "serviceAccount:wrong-runtime@rentchain-preview.iam.gserviceaccount.com"; then
+  echo "Preview JWT boundary accepted an unauthorized member" >&2
+  exit 1
+fi
+
+if rg -n 'preview_backend_jwt_accessor\.secret_id\s*==' "$root_dir/checks.tf"; then
+  echo "Preview JWT boundary check must use exact configured-or-canonical identity matching" >&2
   exit 1
 fi
 if rg -n 'project-0d9658de-af29-4dc0-a99|rentchain-landlord-api|JWT_SECRET.*value[[:space:]]*=' "$root_dir/secret_manager.tf" "$root_dir/cloud_run.tf" "$root_dir/checks.tf"; then
@@ -642,12 +693,13 @@ secretmanager.secrets.get
 secretmanager.secrets.getIamPolicy
 secretmanager.secrets.setIamPolicy
 secretmanager.versions.add
+secretmanager.versions.enable
 secretmanager.versions.get
 serviceusage.services.use
 EOF
 )"
 test "$(sort -u "$b7_apply_delta_file")" = "$expected_b7_apply_delta"
-test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "17"
+test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "18"
 
 if rg -n '(delete|undelete|users\.(create|delete|update|sendEmail)|getSecret|getHashConfig|serviceAccountKeys|signBlob|signJwt|getAccessToken|generateAccessToken|run\.|storage\.|billing|secretmanager\.versions\.(access|disable|destroy|list)|secretmanager\.secrets\.(delete|list))' "$b7_plan_delta_file" "$b7_apply_delta_file"; then
   echo "Forbidden B7 HCP permission delta found" >&2
