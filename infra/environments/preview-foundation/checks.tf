@@ -351,7 +351,7 @@ check "b6_preview_backend_boundary" {
   assert {
     condition = (
       local.preview_backend_service_name == "rentchain-preview-backend" &&
-      local.preview_backend_image_digest == "northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend@sha256:bfd6f231432abdce497bceac81c4c8e1b32b230e1cf46a225b2ce7d116df583c" &&
+      local.preview_backend_image_digest == "northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend@sha256:54700c92b15f0e95ed3c3aea2266d2030a90fcff972006c6a2de8332fa6f8b0c" &&
       local.preview_backend_source_sha == "d28c61991131e9a76874d5eb92adceac048f9417" &&
       !var.enable_preview_backend_service || (
         google_cloud_run_v2_service.preview_backend[0].project == "rentchain-preview" &&
