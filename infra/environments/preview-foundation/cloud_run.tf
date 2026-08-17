@@ -1,6 +1,6 @@
 locals {
   preview_backend_service_name = "rentchain-preview-backend"
-  preview_backend_image_digest = "northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend@sha256:bfd6f231432abdce497bceac81c4c8e1b32b230e1cf46a225b2ce7d116df583c"
+  preview_backend_image_digest = "northamerica-northeast1-docker.pkg.dev/rentchain-preview/rentchain-preview/backend@sha256:54700c92b15f0e95ed3c3aea2266d2030a90fcff972006c6a2de8332fa6f8b0c"
   preview_backend_source_sha   = "d28c61991131e9a76874d5eb92adceac048f9417"
 }
 
