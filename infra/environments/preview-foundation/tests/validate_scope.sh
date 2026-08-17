@@ -299,6 +299,14 @@ fi
 
 rg -U -q 'name  = "FIRESTORE_ENABLED"\n        value = "true"' "$root_dir/cloud_run.tf"
 rg -U -q 'name  = "FIRESTORE_DATABASE_ID"\n        value = "\(default\)"' "$root_dir/cloud_run.tf"
+rg -U -q 'name  = "PREVIEW_AUTH_ENABLED"\n        value = "true"' "$root_dir/cloud_run.tf"
+rg -U -q 'name  = "FIREBASE_PROJECT_ID"\n        value = var\.project_id' "$root_dir/cloud_run.tf"
+test "$(rg -No 'name  = "PREVIEW_AUTH_ENABLED"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No 'name  = "FIREBASE_PROJECT_ID"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "1"
+grep -Fq 'if env.name == "PREVIEW_AUTH_ENABLED"' "$root_dir/checks.tf"
+grep -Fq ']).value == "true"' "$root_dir/checks.tf"
+grep -Fq 'if env.name == "FIREBASE_PROJECT_ID"' "$root_dir/checks.tf"
+grep -Fq ']).value == "rentchain-preview"' "$root_dir/checks.tf"
 rg -U -q 'name  = "GCS_UPLOAD_BUCKET"\n        value = google_storage_bucket\.preview_attachments\.name' "$root_dir/cloud_run.tf"
 rg -U -q 'name  = "GCS_IDENTITY_DOCUMENT_BUCKET"\n        value = google_storage_bucket\.preview_identity_documents\.name' "$root_dir/cloud_run.tf"
 test "$(rg -No 'name  = "(FIRESTORE_ENABLED|FIRESTORE_DATABASE_ID|GCS_UPLOAD_BUCKET|GCS_IDENTITY_DOCUMENT_BUCKET)"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "4"
@@ -318,10 +326,29 @@ rg -U -q 'env \{
       \}' "$root_dir/cloud_run.tf"
 grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_jwt_accessor,' "$root_dir/cloud_run.tf"
 grep -Fq 'preview_backend_service_name = "rentchain-preview-backend"' "$root_dir/cloud_run.tf"
-if rg -n 'PREVIEW_AUTH_ENABLED|FIREBASE_PROJECT_ID|google_apikeys_key|key_string|version\s*=\s*"latest"' "$root_dir/cloud_run.tf"; then
-  echo "B7 Cloud Run secret injection contains a prohibited activation field, direct key reference, or mutable secret version" >&2
+if rg -n 'google_apikeys_key|key_string|version\s*=\s*"latest"' "$root_dir/cloud_run.tf"; then
+  echo "B7 Cloud Run secret injection contains a direct key reference or mutable secret version" >&2
   exit 1
 fi
+
+preview_auth_env_is_exact() {
+  local enabled_value="${1:-}"
+  local project_value="${2:-}"
+  test "$enabled_value" = "true" && test "$project_value" = "rentchain-preview"
+}
+
+preview_auth_env_is_exact "true" "rentchain-preview"
+for rejected_auth_env in \
+  "false|rentchain-preview" \
+  "|rentchain-preview" \
+  "true|other-preview" \
+  "true|project-0d9658de-af29-4dc0-a99"; do
+  IFS='|' read -r rejected_enabled rejected_project <<< "$rejected_auth_env"
+  if preview_auth_env_is_exact "$rejected_enabled" "$rejected_project"; then
+    echo "Preview authentication environment accepted a prohibited value pair: $rejected_auth_env" >&2
+    exit 1
+  fi
+done
 if rg -U -n 'name = "JWT_SECRET"\n[[:space:]]+value[[:space:]]*=' "$root_dir/cloud_run.tf"; then
   echo "Preview JWT_SECRET must use a secret-backed value source, not a literal value" >&2
   exit 1
