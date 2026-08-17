@@ -40,3 +40,40 @@ resource "google_secret_manager_secret_iam_member" "preview_backend_identity_too
   role      = "roles/secretmanager.secretAccessor"
   member    = google_service_account.preview_backend_runtime.member
 }
+
+resource "google_secret_manager_secret" "preview_backend_jwt" {
+  project   = var.project_id
+  secret_id = "preview-backend-jwt-secret"
+
+  replication {
+    auto {}
+  }
+
+  deletion_protection = true
+
+  depends_on = [
+    google_project_service.approved_management["secretmanager.googleapis.com"],
+  ]
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_secret_manager_secret_version" "preview_backend_jwt" {
+  secret                 = google_secret_manager_secret.preview_backend_jwt.id
+  secret_data_wo         = var.preview_backend_jwt_secret
+  secret_data_wo_version = 1
+  deletion_policy        = "DISABLE"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "preview_backend_jwt_accessor" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.preview_backend_jwt.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = google_service_account.preview_backend_runtime.member
+}
