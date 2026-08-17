@@ -411,6 +411,7 @@ secretmanager.secrets.get
 secretmanager.secrets.getIamPolicy
 secretmanager.secrets.setIamPolicy
 secretmanager.versions.add
+secretmanager.versions.enable
 secretmanager.versions.get
 serviceusage.services.use
 EOF
@@ -422,6 +423,15 @@ actual_b7_manager_base_permissions="$(
     | sort -u
 )"
 test "$actual_b7_manager_base_permissions" = "$expected_b7_manager_base_permissions"
+test "$(rg -No 'secretmanager\.versions\.enable' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "2"
+if rg -n 'secretmanager\.versions\.enable' "$root_dir" --glob '*.tf' | rg -v '/(iam|checks)\.tf:'; then
+  echo "Secret-version enablement escaped the exact HCP apply role and its boundary check" >&2
+  exit 1
+fi
+if sed -n '/resource "google_project_iam_member" "terraform_preview_b7_manager"/,/^}/p' "$root_dir/iam.tf" | rg -v 'hcp_terraform_apply_member' | rg -n 'preview_backend_runtime|roles/secretmanager|allUsers|allAuthenticatedUsers'; then
+  echo "B7 manager binding widened to a runtime, predefined Secret Manager, or public principal" >&2
+  exit 1
+fi
 grep -Fq 'var.b7_phase2_recovery_stage >= 2 ? toset(["firebase.projects.update"]) : toset([])' "$root_dir/iam.tf"
 
 rg -q 'role_id     = "terraformPreviewCustomRoleUpdater"' "$root_dir/iam.tf"
@@ -642,12 +652,13 @@ secretmanager.secrets.get
 secretmanager.secrets.getIamPolicy
 secretmanager.secrets.setIamPolicy
 secretmanager.versions.add
+secretmanager.versions.enable
 secretmanager.versions.get
 serviceusage.services.use
 EOF
 )"
 test "$(sort -u "$b7_apply_delta_file")" = "$expected_b7_apply_delta"
-test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "17"
+test "$(wc -l < "$b7_apply_delta_file" | tr -d ' ')" = "18"
 
 if rg -n '(delete|undelete|users\.(create|delete|update|sendEmail)|getSecret|getHashConfig|serviceAccountKeys|signBlob|signJwt|getAccessToken|generateAccessToken|run\.|storage\.|billing|secretmanager\.versions\.(access|disable|destroy|list)|secretmanager\.secrets\.(delete|list))' "$b7_plan_delta_file" "$b7_apply_delta_file"; then
   echo "Forbidden B7 HCP permission delta found" >&2

@@ -250,6 +250,7 @@ check "b7_hcp_bootstrap_iam_boundary" {
         "secretmanager.secrets.getIamPolicy",
         "secretmanager.secrets.setIamPolicy",
         "secretmanager.versions.add",
+        "secretmanager.versions.enable",
         "secretmanager.versions.get",
         "serviceusage.services.use",
       ]) &&
@@ -259,7 +260,7 @@ check "b7_hcp_bootstrap_iam_boundary" {
       ) &&
       google_project_iam_member.terraform_preview_b7_manager.member == local.hcp_terraform_apply_member
     )
-    error_message = "The B7 apply manager must remain at sixteen permissions in recovery stage 1 and add only firebase.projects.update in stage 2."
+    error_message = "The B7 apply manager must remain at seventeen permissions in recovery stage 1 and add only firebase.projects.update in stage 2."
   }
 
   assert {
