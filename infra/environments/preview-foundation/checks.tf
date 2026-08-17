@@ -178,7 +178,7 @@ check "preview_backend_jwt_secret_boundary" {
       google_secret_manager_secret.preview_backend_jwt.deletion_protection &&
       google_secret_manager_secret_version.preview_backend_jwt.secret_data_wo_version == 1 &&
       google_secret_manager_secret_version.preview_backend_jwt.deletion_policy == "DISABLE" &&
-      google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.secret_id == google_secret_manager_secret.preview_backend_jwt.id &&
+      google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.secret_id == google_secret_manager_secret.preview_backend_jwt.secret_id &&
       google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.role == "roles/secretmanager.secretAccessor" &&
       google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.member == google_service_account.preview_backend_runtime.member
     )
