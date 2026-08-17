@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const collections = new Map<string, Map<string, any>>();
 const orderedQueries: Array<{ collection: string; filters: Array<{ field: string; value: any }>; field?: string }> = [];
+let queryGetError: Error | null = null;
 const authState = vi.hoisted(() => ({
   user: { id: "landlord-1", landlordId: "landlord-1", role: "landlord" } as any,
 }));
@@ -18,6 +19,7 @@ function buildQuery(name: string, filters: Array<{ field: string; value: any }> 
     );
   return {
     get: async () => {
+      if (queryGetError) throw queryGetError;
       const docs = applyFilters().map(([docId, data]) => ({
         id: docId,
         data: () => data,
@@ -117,6 +119,7 @@ describe("paymentsRoutes exports", () => {
   beforeEach(async () => {
     collections.clear();
     orderedQueries.length = 0;
+    queryGetError = null;
     authState.user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord" };
     ensureCollection("tenants").set("tenant-1", {
       id: "tenant-1",
@@ -1148,5 +1151,52 @@ describe("paymentsRoutes exports", () => {
       filters: [{ field: "tenantId", value: "tenant-empty" }],
       field: "paidAt",
     });
+  });
+
+  it("keeps monthly payments tenant-scoped and ordered newest first", async () => {
+    ensureCollection("payments").set("payment-2", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amount: 900,
+      paidAt: "2026-04-20",
+      method: "e-transfer",
+      status: "Recorded",
+    });
+    ensureCollection("payments").set("foreign-payment", {
+      landlordId: "landlord-2",
+      tenantId: "tenant-2",
+      propertyId: "prop-2",
+      amount: 5000,
+      paidAt: "2026-04-30",
+      method: "e-transfer",
+      status: "Recorded",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/payments/tenant/tenant-1/monthly?year=2026&month=4",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.payments.map((payment: any) => payment.id)).toEqual(["payment-2", "payment-1"]);
+    expect(res.body.total).toBe(2700);
+    expect(res.body.payments).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ tenantId: "tenant-2" })])
+    );
+  });
+
+  it("preserves the monthly backend error contract for query failures", async () => {
+    queryGetError = new Error("query unavailable");
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/payments/tenant/tenant-1/monthly?year=2026&month=4",
+    });
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ ok: false, error: "PAYMENTS_MONTHLY_FAILED" });
   });
 });
