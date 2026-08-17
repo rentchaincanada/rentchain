@@ -486,9 +486,50 @@ rg -U -q 'resource "google_secret_manager_secret_iam_member" "preview_backend_jw
   role      = "roles/secretmanager\.secretAccessor"
   member    = google_service_account\.preview_backend_runtime\.member
 \}' "$root_dir/secret_manager.tf"
-grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.secret_id == google_secret_manager_secret.preview_backend_jwt.secret_id' "$root_dir/checks.tf"
-if rg -n 'preview_backend_jwt_accessor\.secret_id == google_secret_manager_secret\.preview_backend_jwt\.(id|name)' "$root_dir/checks.tf"; then
-  echo "Preview JWT boundary check must use the plan-time-known configured secret_id" >&2
+grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.project == google_secret_manager_secret.preview_backend_jwt.project' "$root_dir/checks.tf"
+rg -U -q 'contains\(\[
+        google_secret_manager_secret\.preview_backend_jwt\.secret_id,
+        "projects/\$\{google_secret_manager_secret\.preview_backend_jwt\.project\}/secrets/\$\{google_secret_manager_secret\.preview_backend_jwt\.secret_id\}",
+      \], google_secret_manager_secret_iam_member\.preview_backend_jwt_accessor\.secret_id\)' "$root_dir/checks.tf"
+
+preview_jwt_binding_is_exact() {
+  local candidate_project="$1"
+  local candidate_secret_id="$2"
+  local candidate_role="$3"
+  local candidate_member="$4"
+  test "$candidate_project" = "rentchain-preview" || return 1
+  test "$candidate_role" = "roles/secretmanager.secretAccessor" || return 1
+  test "$candidate_member" = "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com" || return 1
+  case "$candidate_secret_id" in
+    "preview-backend-jwt-secret"|"projects/rentchain-preview/secrets/preview-backend-jwt-secret") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+preview_jwt_binding_is_exact "rentchain-preview" "preview-backend-jwt-secret" "roles/secretmanager.secretAccessor" "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com"
+preview_jwt_binding_is_exact "rentchain-preview" "projects/rentchain-preview/secrets/preview-backend-jwt-secret" "roles/secretmanager.secretAccessor" "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com"
+for rejected_secret_id in \
+  "wrong-preview-backend-jwt-secret" \
+  "projects/rentchain-preview/secrets/wrong-preview-backend-jwt-secret" \
+  "projects/project-0d9658de-af29-4dc0-a99/secrets/preview-backend-jwt-secret" \
+  "preview-backend-jwt-secret-suffix" \
+  "prefix-preview-backend-jwt-secret"; do
+  if preview_jwt_binding_is_exact "rentchain-preview" "$rejected_secret_id" "roles/secretmanager.secretAccessor" "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com"; then
+    echo "Preview JWT boundary accepted an unauthorized secret identifier: $rejected_secret_id" >&2
+    exit 1
+  fi
+done
+if preview_jwt_binding_is_exact "rentchain-preview" "preview-backend-jwt-secret" "roles/secretmanager.admin" "serviceAccount:preview-backend-runtime@rentchain-preview.iam.gserviceaccount.com"; then
+  echo "Preview JWT boundary accepted an unauthorized IAM role" >&2
+  exit 1
+fi
+if preview_jwt_binding_is_exact "rentchain-preview" "preview-backend-jwt-secret" "roles/secretmanager.secretAccessor" "serviceAccount:wrong-runtime@rentchain-preview.iam.gserviceaccount.com"; then
+  echo "Preview JWT boundary accepted an unauthorized member" >&2
+  exit 1
+fi
+
+if rg -n 'preview_backend_jwt_accessor\.secret_id\s*==' "$root_dir/checks.tf"; then
+  echo "Preview JWT boundary check must use exact configured-or-canonical identity matching" >&2
   exit 1
 fi
 if rg -n 'project-0d9658de-af29-4dc0-a99|rentchain-landlord-api|JWT_SECRET.*value[[:space:]]*=' "$root_dir/secret_manager.tf" "$root_dir/cloud_run.tf" "$root_dir/checks.tf"; then
