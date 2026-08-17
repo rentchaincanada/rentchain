@@ -104,3 +104,15 @@ variable "b7_restricted_api_key_activation" {
   type        = bool
   default     = true
 }
+
+variable "preview_backend_jwt_secret" {
+  description = "Dedicated high-entropy Preview-only JWT signing secret supplied as a sensitive HCP Terraform workspace variable."
+  type        = string
+  sensitive   = true
+  nullable    = false
+
+  validation {
+    condition     = length(var.preview_backend_jwt_secret) >= 64
+    error_message = "preview_backend_jwt_secret must contain at least 64 characters of high-entropy secret material."
+  }
+}

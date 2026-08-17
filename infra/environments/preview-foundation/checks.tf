@@ -170,6 +170,42 @@ check "b7_preview_backend_auth_secret_injection_boundary" {
   }
 }
 
+check "preview_backend_jwt_secret_boundary" {
+  assert {
+    condition = (
+      google_secret_manager_secret.preview_backend_jwt.project == "rentchain-preview" &&
+      google_secret_manager_secret.preview_backend_jwt.secret_id == "preview-backend-jwt-secret" &&
+      google_secret_manager_secret.preview_backend_jwt.deletion_protection &&
+      google_secret_manager_secret_version.preview_backend_jwt.secret_data_wo_version == 1 &&
+      google_secret_manager_secret_version.preview_backend_jwt.deletion_policy == "DISABLE" &&
+      google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.secret_id == google_secret_manager_secret.preview_backend_jwt.id &&
+      google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.role == "roles/secretmanager.secretAccessor" &&
+      google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.member == google_service_account.preview_backend_runtime.member
+    )
+    error_message = "The Preview JWT signing secret must remain Preview-only, write-only provisioned, deletion-protected, and accessible only through the exact runtime secret-level binding."
+  }
+}
+
+check "preview_backend_jwt_secret_injection_boundary" {
+  assert {
+    condition = var.enable_preview_backend_service ? (
+      length([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "JWT_SECRET"
+      ]) == 1 &&
+      one([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "JWT_SECRET"
+      ]).value_source[0].secret_key_ref[0].secret == google_secret_manager_secret.preview_backend_jwt.secret_id &&
+      one([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if env.name == "JWT_SECRET"
+      ]).value_source[0].secret_key_ref[0].version == "1"
+    ) : true
+    error_message = "The permanent Preview backend must receive exactly one JWT_SECRET from version 1 of the dedicated Preview JWT secret."
+  }
+}
+
 check "b7_hcp_bootstrap_iam_boundary" {
   assert {
     condition = (

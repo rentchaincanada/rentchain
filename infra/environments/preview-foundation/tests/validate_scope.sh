@@ -303,8 +303,20 @@ rg -U -q 'name  = "GCS_UPLOAD_BUCKET"\n        value = google_storage_bucket\.pr
 rg -U -q 'name  = "GCS_IDENTITY_DOCUMENT_BUCKET"\n        value = google_storage_bucket\.preview_identity_documents\.name' "$root_dir/cloud_run.tf"
 test "$(rg -No 'name  = "(FIRESTORE_ENABLED|FIRESTORE_DATABASE_ID|GCS_UPLOAD_BUCKET|GCS_IDENTITY_DOCUMENT_BUCKET)"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "4"
 test "$(rg -No 'name = "FIREBASE_API_KEY"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No 'name = "JWT_SECRET"' "$root_dir/cloud_run.tf" | wc -l | tr -d ' ')" = "1"
 rg -U -q 'env \{\n        name = "FIREBASE_API_KEY"\n\n        value_source \{\n          secret_key_ref \{\n            secret  = google_secret_manager_secret\.preview_backend_identity_toolkit\[0\]\.secret_id\n            version = "1"\n          \}\n        \}\n      \}' "$root_dir/cloud_run.tf"
 grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor,' "$root_dir/cloud_run.tf"
+rg -U -q 'env \{
+        name = "JWT_SECRET"
+
+        value_source \{
+          secret_key_ref \{
+            secret  = google_secret_manager_secret\.preview_backend_jwt\.secret_id
+            version = "1"
+          \}
+        \}
+      \}' "$root_dir/cloud_run.tf"
+grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_jwt_accessor,' "$root_dir/cloud_run.tf"
 if rg -n 'PREVIEW_AUTH_ENABLED|FIREBASE_PROJECT_ID|google_apikeys_key|key_string|version\s*=\s*"latest"' "$root_dir/cloud_run.tf"; then
   echo "B7 Cloud Run secret injection contains a prohibited activation field, direct key reference, or mutable secret version" >&2
   exit 1
@@ -423,15 +435,15 @@ if printf '%s\n%s\n%s\n' "$actual_b7_reader_permissions" "$actual_b7_manager_bas
   exit 1
 fi
 
-test "$(rg -No 'roles/secretmanager\.[A-Za-z]+' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "2"
+test "$(rg -No 'roles/secretmanager\.[A-Za-z]+' "$root_dir" --glob '*.tf' | wc -l | tr -d ' ')" = "4"
 if rg -n 'roles/secretmanager\.' "$root_dir" --glob '*.tf' | rg -v '(secret_manager|checks)\.tf:.*roles/secretmanager\.secretAccessor'; then
   echo "Secret Manager predefined role found outside the exact secret-level runtime accessor" >&2
   exit 1
 fi
 
-test "$(rg -No '^resource "google_secret_manager_secret"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
-test "$(rg -No '^resource "google_secret_manager_secret_iam_member"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
-test "$(rg -No '^resource "google_secret_manager_secret_version"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
+test "$(rg -No '^resource "google_secret_manager_secret"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "2"
+test "$(rg -No '^resource "google_secret_manager_secret_iam_member"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "2"
+test "$(rg -No '^resource "google_secret_manager_secret_version"' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "2"
 rg -q 'secret_id = "preview-backend-identity-toolkit-api-key"' "$root_dir/secret_manager.tf"
 rg -U -q 'replication \{\n    auto \{\}\n  \}' "$root_dir/secret_manager.tf"
 rg -q 'deletion_protection = true' "$root_dir/secret_manager.tf"
@@ -442,7 +454,25 @@ rg -q 'deletion_policy        = "DISABLE"' "$root_dir/secret_manager.tf"
 rg -U -q '(?s)resource "google_secret_manager_secret_version" "preview_backend_identity_toolkit" \{.*lifecycle \{\n    create_before_destroy = true\n  \}' "$root_dir/secret_manager.tf"
 rg -U -q 'resource "google_secret_manager_secret_iam_member" "preview_backend_identity_toolkit_accessor" \{\n  count = var\.b7_foundation_phase >= 2 && var\.b7_phase2_recovery_stage >= 2 && var\.b7_restricted_api_key_activation \? 1 : 0\n\n  project   = var\.project_id\n  secret_id = google_secret_manager_secret\.preview_backend_identity_toolkit\[0\]\.secret_id\n  role      = "roles/secretmanager\.secretAccessor"\n  member    = google_service_account\.preview_backend_runtime\.member\n\}' "$root_dir/secret_manager.tf"
 grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_identity_toolkit_accessor[0].secret_id == google_secret_manager_secret.preview_backend_identity_toolkit[0].id' "$root_dir/checks.tf"
-test "$(rg -No 'secret_data_wo\s*=' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "1"
+rg -q 'secret_id = "preview-backend-jwt-secret"' "$root_dir/secret_manager.tf"
+grep -Fq 'secret_data_wo         = var.preview_backend_jwt_secret' "$root_dir/secret_manager.tf"
+rg -U -q 'variable "preview_backend_jwt_secret" \{
+  description = "Dedicated high-entropy Preview-only JWT signing secret supplied as a sensitive HCP Terraform workspace variable\."
+  type        = string
+  sensitive   = true
+  nullable    = false' "$root_dir/variables.tf"
+if rg -n 'preview_backend_jwt_secret' "$root_dir/terraform.tfvars.example"; then
+  echo "Preview JWT secret must not be placed in the example tfvars file" >&2
+  exit 1
+fi
+rg -U -q 'resource "google_secret_manager_secret_iam_member" "preview_backend_jwt_accessor" \{
+  project   = var\.project_id
+  secret_id = google_secret_manager_secret\.preview_backend_jwt\.secret_id
+  role      = "roles/secretmanager\.secretAccessor"
+  member    = google_service_account\.preview_backend_runtime\.member
+\}' "$root_dir/secret_manager.tf"
+grep -Fq 'google_secret_manager_secret_iam_member.preview_backend_jwt_accessor.secret_id == google_secret_manager_secret.preview_backend_jwt.id' "$root_dir/checks.tf"
+test "$(rg -No 'secret_data_wo\s*=' "$root_dir/secret_manager.tf" | wc -l | tr -d ' ')" = "2"
 if rg -n '(^|[[:space:]])secret_data[[:space:]]*=' "$root_dir" --glob '*.tf'; then
   echo "Ordinary Secret Manager secret_data found; write-only delivery is required" >&2
   exit 1
