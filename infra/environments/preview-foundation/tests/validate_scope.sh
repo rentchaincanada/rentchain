@@ -577,6 +577,31 @@ if rg -n 'FIREBASE_API_KEY' "$root_dir" --glob '*.tf' | rg -v '/(cloud_run|check
   exit 1
 fi
 
+expected_identity_policy_environment="$(cat <<'EOF'
+IDENTITY_DOCUMENT_POLICY_TEXT_VERSION=identity_collection_v1
+IDENTITY_DOCUMENT_PRIVACY_NOTICE_VERSION=privacy_v1
+IDENTITY_DOCUMENT_REQUIREMENT_POLICY_ID=tenant_government_photo_id_required
+IDENTITY_DOCUMENT_REQUIREMENT_POLICY_VERSION=v1
+IDENTITY_DOCUMENT_RETENTION_POLICY_ID=identity_retention
+IDENTITY_DOCUMENT_RETENTION_POLICY_VERSION=v1
+EOF
+)"
+actual_identity_policy_environment="$(
+  sed -n '/preview_identity_policy_environment = {/,/  }/p' "$root_dir/cloud_run.tf" \
+    | rg -No 'IDENTITY_DOCUMENT_[A-Z_]+\s*=\s*"[^"]+"' \
+    | sed -E 's/[[:space:]]*=[[:space:]]*/=/' \
+    | sort
+)"
+test "$actual_identity_policy_environment" = "$expected_identity_policy_environment"
+test "$(printf '%s\n' "$actual_identity_policy_environment" | wc -l | tr -d ' ')" = "6"
+rg -U -q 'dynamic "env" \{\n        for_each = local\.preview_identity_policy_environment' "$root_dir/cloud_run.tf"
+rg -q 'check "preview_identity_policy_runtime_boundary"' "$root_dir/checks.tf"
+grep -Fq '== local.preview_identity_policy_environment' "$root_dir/checks.tf"
+if printf '%s\n' "$actual_identity_policy_environment" | rg -n 'project-0d9658de-af29-4dc0-a99|rentchain-landlord-api|secret|token|password'; then
+  echo "Preview identity policy configuration contains a Production reference or secret-like value" >&2
+  exit 1
+fi
+
 if rg -n 'roles/serviceusage\.serviceUsageConsumer' "$root_dir" --glob '*.tf'; then
   echo "Predefined Service Usage role found in Preview foundation" >&2
   exit 1

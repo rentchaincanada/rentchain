@@ -186,6 +186,22 @@ check "b7_preview_backend_auth_secret_injection_boundary" {
   }
 }
 
+check "preview_identity_policy_runtime_boundary" {
+  assert {
+    condition = var.enable_preview_backend_service ? (
+      length([
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env
+        if contains(keys(local.preview_identity_policy_environment), env.name)
+      ]) == 6 &&
+      {
+        for env in google_cloud_run_v2_service.preview_backend[0].template[0].containers[0].env : env.name => env.value
+        if contains(keys(local.preview_identity_policy_environment), env.name)
+      } == local.preview_identity_policy_environment
+    ) : true
+    error_message = "The permanent Preview backend must receive the exact six non-secret identity-policy values derived from the merged G1 contracts."
+  }
+}
+
 check "preview_backend_jwt_secret_boundary" {
   assert {
     condition = (
