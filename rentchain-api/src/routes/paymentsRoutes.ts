@@ -278,10 +278,15 @@ async function listPersistedPayments(
       .sort((a, b) => paymentDateMillis(b) - paymentDateMillis(a));
   }
 
-  const query = tenantId
-    ? base.where("tenantId", "==", tenantId).orderBy("paidAt", "desc").limit(200)
-    : base.orderBy("paidAt", "desc").limit(500);
-  const snap = await query.get();
+  if (tenantId) {
+    const snap = await base.where("tenantId", "==", tenantId).get();
+    return snap.docs
+      .map((doc: any) => normalizePersistedPayment(doc.id, doc.data() as any))
+      .sort((a, b) => paymentDateMillis(b) - paymentDateMillis(a))
+      .slice(0, 200);
+  }
+
+  const snap = await base.orderBy("paidAt", "desc").limit(500).get();
   return snap.docs.map((doc: any) => normalizePersistedPayment(doc.id, doc.data() as any));
 }
 

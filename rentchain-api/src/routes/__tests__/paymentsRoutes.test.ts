@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const collections = new Map<string, Map<string, any>>();
+const orderedQueries: Array<{ collection: string; filters: Array<{ field: string; value: any }>; field?: string }> = [];
 const authState = vi.hoisted(() => ({
   user: { id: "landlord-1", landlordId: "landlord-1", role: "landlord" } as any,
 }));
@@ -16,6 +17,13 @@ function buildQuery(name: string, filters: Array<{ field: string; value: any }> 
       filters.every((filter) => data?.[filter.field] === filter.value)
     );
   return {
+    get: async () => {
+      const docs = applyFilters().map(([docId, data]) => ({
+        id: docId,
+        data: () => data,
+      }));
+      return { docs };
+    },
     where: (field: string, _op: string, value: any) =>
       buildQuery(name, [...filters, { field, value }]),
     limit: (_count?: number) => ({
@@ -27,19 +35,22 @@ function buildQuery(name: string, filters: Array<{ field: string; value: any }> 
         return { docs };
       },
     }),
-    orderBy: (_orderField?: string, _direction?: string) => ({
-      limit: (_count?: number) => ({
-        get: async () => {
-          const docs = applyFilters()
-            .sort((a, b) => String(b[1]?.paidAt || "").localeCompare(String(a[1]?.paidAt || "")))
-            .map(([docId, data]) => ({
-              id: docId,
-              data: () => data,
-            }));
-          return { docs };
-        },
-      }),
-    }),
+    orderBy: (_orderField?: string, _direction?: string) => {
+      orderedQueries.push({ collection: name, filters, field: _orderField });
+      return {
+        limit: (_count?: number) => ({
+          get: async () => {
+            const docs = applyFilters()
+              .sort((a, b) => String(b[1]?.paidAt || "").localeCompare(String(a[1]?.paidAt || "")))
+              .map(([docId, data]) => ({
+                id: docId,
+                data: () => data,
+              }));
+            return { docs };
+          },
+        }),
+      };
+    },
   };
 }
 
@@ -105,6 +116,7 @@ vi.mock("../../services/leaseService", () => ({
 describe("paymentsRoutes exports", () => {
   beforeEach(async () => {
     collections.clear();
+    orderedQueries.length = 0;
     authState.user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord" };
     ensureCollection("tenants").set("tenant-1", {
       id: "tenant-1",
@@ -1112,6 +1124,29 @@ describe("paymentsRoutes exports", () => {
         }),
       ],
       total: 1800,
+    });
+    expect(orderedQueries).not.toContainEqual({
+      collection: "payments",
+      filters: [{ field: "tenantId", value: "tenant-1" }],
+      field: "paidAt",
+    });
+  });
+
+  it("returns an empty monthly result without an index-dependent ordered query", async () => {
+    ensureCollection("payments").clear();
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/payments/tenant/tenant-empty/monthly?year=2026&month=8",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ payments: [], total: 0 });
+    expect(orderedQueries).not.toContainEqual({
+      collection: "payments",
+      filters: [{ field: "tenantId", value: "tenant-empty" }],
+      field: "paidAt",
     });
   });
 });
