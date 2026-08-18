@@ -368,4 +368,17 @@ describe("TenantDetailPanel", () => {
     expect(screen.queryByText("Apr 29, 2027")).not.toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchLeaseLedger).toHaveBeenCalledWith("lease-1"));
   });
+
+  it("uses canonical expired, review-needed occupancy, and review-needed relationship labels", async () => {
+    mocks.useTenantDetail.mockReturnValue({ loading: false, error: null, bundle: {
+      tenant: { id: "tenant-1", fullName: "Taylor Tenant", status: "Current", propertyName: "Harbour View", unit: "101" },
+      currentLease: { id: "lease-past", tenantId: "tenant-1", propertyName: "Harbour View", unit: "101", leaseStart: "2025-05-01", leaseEnd: "2026-04-30", monthlyRent: 1850, status: "active" },
+      canonicalState: { leaseTermState: "past", occupancyState: "review_needed", tenantRelationshipState: "occupancy_unresolved", supportingLeaseId: null, reasons: ["OCCUPIED_WITHOUT_CURRENT_LEASE"] },
+      property: { id: "prop-1", name: "Harbour View" }, unit: { id: "unit-1", unitNumber: "101" }, moveInReadiness: null,
+    }});
+    render(<MemoryRouter><TenantDetailPanel tenantId="tenant-1" /></MemoryRouter>);
+    expect((await screen.findAllByText("Expired")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Review needed").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("Current")).not.toBeInTheDocument();
+  });
 });

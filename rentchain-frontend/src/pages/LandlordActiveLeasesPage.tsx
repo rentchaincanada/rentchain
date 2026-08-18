@@ -27,6 +27,7 @@ import { LockedFeature } from "@/components/billing/LockedFeature";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { isUpgradeRequiredError } from "@/lib/gatedFeatureErrors";
 import "./LandlordActiveLeasesPage.css";
+import { canonicalLeaseTermLabel, canonicalOccupancyLabel } from "@/lib/leases/canonicalStatePresentation";
 
 function formatCurrency(value: number | null | undefined) {
   const amount = typeof value === "number" ? value : 0;
@@ -204,6 +205,7 @@ function formatCoherenceToken(value: string | null | undefined) {
 }
 
 function occupancyDisplayLabel(lease: LandlordActiveLease) {
+  if (lease.canonicalState) return canonicalOccupancyLabel(lease.canonicalState.occupancyState);
   const coherence = lease.stateCoherence;
   if (!coherence) return null;
   if (coherence.flags?.requiresReview || coherence.occupancyState === "review_required" || coherence.occupancyState === "unknown") {
@@ -1042,7 +1044,7 @@ export default function LandlordActiveLeasesPage() {
                       <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>{lease.tenantEmail || "No email on file"}</div>
                     </td>
                     <td style={{ padding: 12 }}>
-                      <div>{statusBadge(lease.status)}</div>
+                      <div>{statusBadge(lease.canonicalState ? canonicalLeaseTermLabel(lease.canonicalState.leaseTermState) : lease.status)}</div>
                       {renderOccupancyDisplay(lease)}
                       {lease.leaseExecution ? (
                         <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
@@ -1151,7 +1153,7 @@ export default function LandlordActiveLeasesPage() {
               <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
                 <div>
                   <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>Status</div>
-                  <div style={{ marginTop: 6 }}>{statusBadge(lease.status)}</div>
+                  <div style={{ marginTop: 6 }}>{statusBadge(lease.canonicalState ? canonicalLeaseTermLabel(lease.canonicalState.leaseTermState) : lease.status)}</div>
                   {renderOccupancyDisplay(lease)}
                 </div>
                 <div>

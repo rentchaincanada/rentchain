@@ -70,6 +70,11 @@ import { computeNoResponseState } from "../services/leaseNoticeWorkflowService";
 import { deriveLeaseLifecycleSummary } from "../services/leaseLifecycle/deriveLeaseLifecycleSummary";
 import { deriveLeaseLifecycleState } from "../lib/leases/leaseLifecycle";
 import { deriveLeaseOccupancyCoherence } from "../lib/leases/deriveLeaseOccupancyCoherence";
+import {
+  buildCanonicalLeaseOccupancyProjection,
+  toCanonicalLeaseStateInput,
+} from "../lib/leases/canonicalLeaseOccupancyProjection";
+import { deriveCanonicalLeaseTermState } from "../lib/leases/canonicalLeaseOccupancyState";
 import { evaluateJurisdictionPolicy } from "../lib/jurisdiction/operationalPolicyEvaluator";
 import { formatInternalReference, slugifyOperationalReference } from "../lib/identityReferences";
 import { syncPropertyUnitOccupancyForTenantContext } from "../services/tenantPortal/tenantOccupancySyncService";
@@ -1644,8 +1649,25 @@ async function listLandlordLeaseRows(landlordId: string, opts?: { archived?: boo
   return mergedLeases.map((lease: any) => {
     const rawLease = rawLeaseById.get(String(lease?.id || "").trim()) || null;
     const latestNotice = latestNoticeByLeaseId.get(String(lease?.id || "").trim()) || null;
+    const unitId = String(lease?.unitId || lease?.unitNumber || lease?.unitLabel || "").trim();
+    const propertyId = String(lease?.propertyId || "").trim();
+    const relatedLeases = mergedLeases.filter((candidate: any) =>
+      String(candidate?.propertyId || "").trim() === propertyId &&
+      String(candidate?.unitId || candidate?.unitNumber || candidate?.unitLabel || "").trim() === unitId
+    );
+    const canonicalState = buildCanonicalLeaseOccupancyProjection({
+      leases: relatedLeases,
+      context: { landlordId, propertyId, unitId },
+      persistedUnitOccupancy: lease?.stateCoherence?.sourceFields?.unitStatus,
+      persistedTenancyStatus: lease?.stateCoherence?.sourceFields?.occupancyStatus,
+      currentLeasePointerId: lease?.stateCoherence?.sourceFields?.currentLeaseId,
+      tenantId: lease?.primaryTenantId || lease?.tenantId || lease?.tenantIds?.[0],
+      persistedTenantStatus: lease?.stateCoherence?.sourceFields?.tenantStatus,
+    });
+    canonicalState.leaseTermState = deriveCanonicalLeaseTermState(toCanonicalLeaseStateInput(lease)).state;
     return {
       ...lease,
+      canonicalState,
       ...buildLeaseWorkflowGuidanceProjection(lease, rawLease, latestNotice),
     };
   });
@@ -3595,7 +3617,19 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
     // Occupancy and rent roll consumers must operate on lease agreements, not per-tenant rows.
     const summaryLeases = mergeLeaseRows(combinedRows.filter((lease) => winnerIds.has(lease.id)));
     const displayLeases = summaryLeases.map((lease) => hydrateLeaseUnitDisplayFieldsFromUnits(lease, units));
-    const response: any = { leases: displayLeases };
+    const canonicalUnitStates = Object.fromEntries(
+      units.map((unit: any) => {
+        const unitId = String(unit?.id || "").trim();
+        const relatedLeases = groupedWinners.filter((lease: any) => String(lease?.unitId || "").trim() === unitId);
+        return [unitId, buildCanonicalLeaseOccupancyProjection({
+          leases: relatedLeases,
+          context: { landlordId, propertyId, unitId },
+          persistedUnitOccupancy: unit?.occupancyStatus || unit?.status,
+          currentLeasePointerId: unit?.currentLeaseId,
+        })];
+      }).filter(([unitId]) => Boolean(unitId))
+    );
+    const response: any = { leases: displayLeases, canonicalUnitStates };
     response.credibilitySummary = await loadPropertyCredibilitySummary({
       firestore: db as any,
       propertyId,

@@ -1,6 +1,7 @@
 import { apiJson } from "@/api/http";
 import type { LeaseRiskSnapshot } from "@/types/leaseRisk";
 import type { PropertyCredibilitySummary } from "@/types/credibilitySummary";
+import type { CanonicalLeaseOccupancyState } from "@/lib/leases/canonicalStatePresentation";
 
 export type LeaseStatus = "active" | "notice_pending" | "renewal_pending" | "renewal_accepted" | "move_out_pending" | "ended" | "archived";
 export type LeaseRenewalStatus = "unknown" | "offered" | "accepted" | "declined";
@@ -46,6 +47,7 @@ export interface Lease {
   riskConfidence?: number | null;
   createdAt: string;
   updatedAt: string;
+  canonicalState?: CanonicalLeaseOccupancyState | null;
 }
 
 export type LeaseStateCoherence = {
@@ -465,8 +467,8 @@ export async function getLeasesForTenant(
 
 export async function getLeasesForProperty(
   propertyId: string
-): Promise<{ leases: Lease[]; diagnostics?: PropertyLeaseDiagnostic[]; credibilitySummary?: PropertyCredibilitySummary | null }> {
-  return apiJson<{ leases: Lease[]; diagnostics?: PropertyLeaseDiagnostic[]; credibilitySummary?: PropertyCredibilitySummary | null }>(
+): Promise<{ leases: Lease[]; canonicalUnitStates?: Record<string, CanonicalLeaseOccupancyState>; diagnostics?: PropertyLeaseDiagnostic[]; credibilitySummary?: PropertyCredibilitySummary | null }> {
+  return apiJson<{ leases: Lease[]; canonicalUnitStates?: Record<string, CanonicalLeaseOccupancyState>; diagnostics?: PropertyLeaseDiagnostic[]; credibilitySummary?: PropertyCredibilitySummary | null }>(
     `/leases/property/${encodeURIComponent(propertyId)}`
   );
 }
