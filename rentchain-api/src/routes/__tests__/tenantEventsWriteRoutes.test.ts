@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const tenantDocs = new Map<string, any>();
 const createdEvents: any[] = [];
+let tenantEventQueryDocs: any[] = [];
+let tenantEventQueryError: Error | null = null;
 
 vi.mock("../../firebase", () => ({
   Timestamp: {
@@ -30,7 +32,10 @@ vi.mock("../../firebase", () => ({
             where: () => ({
               orderBy: () => ({
                 limit: () => ({
-                  get: async () => ({ docs: [] }),
+                  get: async () => {
+                    if (tenantEventQueryError) throw tenantEventQueryError;
+                    return { docs: tenantEventQueryDocs };
+                  },
                 }),
               }),
             }),
@@ -69,6 +74,7 @@ async function invokeRouter(router: any, options: {
   body?: any;
 }) {
   return await new Promise<{ status: number; body: any }>((resolve, reject) => {
+    const [, queryString = ""] = options.url.split("?");
     const req: any = {
       method: options.method,
       url: options.url,
@@ -76,7 +82,7 @@ async function invokeRouter(router: any, options: {
       path: options.url,
       body: options.body ?? {},
       headers: {},
-      query: {},
+      query: Object.fromEntries(new URLSearchParams(queryString).entries()),
       params: {},
     };
     const res: any = {
@@ -106,6 +112,8 @@ describe("tenantEventsWriteRoutes", () => {
   beforeEach(() => {
     tenantDocs.clear();
     createdEvents.length = 0;
+    tenantEventQueryDocs = [];
+    tenantEventQueryError = null;
     tenantDocs.set("tenant-1", {
       landlordId: "landlord-1",
       fullName: "Taylor Tenant",
@@ -159,5 +167,59 @@ describe("tenantEventsWriteRoutes", () => {
         currency: "CAD",
       })
     );
+  });
+
+  it("returns an empty page for an authorized tenant with no event history", async () => {
+    const router = (await import("../tenantEventsWriteRoutes")).default;
+    const result = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant-events?tenantId=tenant-1&limit=25",
+    });
+
+    expect(result).toEqual({
+      status: 200,
+      body: { ok: true, items: [], nextCursor: null },
+    });
+  });
+
+  it("returns populated tenant event history", async () => {
+    const createdAt = { toMillis: () => 1_725_000_000_000 };
+    tenantEventQueryDocs = [
+      {
+        id: "event-1",
+        data: () => ({ tenantId: "tenant-1", type: "NOTE_ADDED", createdAt }),
+      },
+    ];
+    const router = (await import("../tenantEventsWriteRoutes")).default;
+    const result = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant-events?tenantId=tenant-1&limit=25",
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body.items).toEqual([
+      { id: "event-1", tenantId: "tenant-1", type: "NOTE_ADDED", createdAt },
+    ]);
+    expect(result.body.nextCursor).toBe(1_725_000_000_000);
+  });
+
+  it("returns a bounded error when the tenant event query fails", async () => {
+    tenantEventQueryError = new Error("FAILED_PRECONDITION: query requires an index");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const router = (await import("../tenantEventsWriteRoutes")).default;
+    const result = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant-events?tenantId=tenant-1&limit=25",
+    });
+
+    expect(result).toEqual({
+      status: 500,
+      body: { error: "Failed to load tenant events" },
+    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[tenant-events GET /tenant-events] error",
+      tenantEventQueryError
+    );
+    errorSpy.mockRestore();
   });
 });

@@ -283,6 +283,16 @@
       ]
     },
     {
+      "collectionGroup": "tenantEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "landlordId", "order": "ASCENDING" },
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "registryImports",
       "queryScope": "COLLECTION",
       "fields": [
