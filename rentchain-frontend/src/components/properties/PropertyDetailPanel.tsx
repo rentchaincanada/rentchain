@@ -55,6 +55,7 @@ import {
 } from "@/lib/leases/leaseLifecycle";
 import { getUnitsNeedingOccupancySetup } from "./occupancyPrompt";
 import type { CanonicalLeaseOccupancyState } from "@/lib/leases/canonicalStatePresentation";
+import { ResolveOccupancyDrawer } from "@/components/occupancy/ResolveOccupancyDrawer";
 
 interface PropertyDetailPanelProps {
   property: Property | null;
@@ -322,6 +323,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     currentPlan === "elite";
   const [leases, setLeases] = useState<Lease[]>([]);
   const [canonicalUnitStates, setCanonicalUnitStates] = useState<Record<string, CanonicalLeaseOccupancyState>>({});
+  const [resolvingOccupancyUnit, setResolvingOccupancyUnit] = useState<any | null>(null);
+  const [occupancyRefreshKey, setOccupancyRefreshKey] = useState(0);
   const [credibilitySummary, setCredibilitySummary] = useState<PropertyCredibilitySummary | null>(null);
   const [isLeasesLoading, setIsLeasesLoading] = useState(false);
   const [leasesError, setLeasesError] = useState<string | null>(null);
@@ -755,7 +758,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [propertyId]);
+  }, [propertyId, occupancyRefreshKey]);
 
   // no plan fetch needed; starter supports unlimited units
 
@@ -1916,6 +1919,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                           {occupancyView.reviewReason ? (
                             <div style={{ fontSize: "0.78rem", color: "#92400e" }}>
                               {occupancyView.reviewReason}
+                              <div><button type="button" onClick={() => setResolvingOccupancyUnit(u)}>Resolve occupancy</button></div>
                             </div>
                           ) : null}
                           {(u as any).leaseDocument?.fileName ? (
@@ -2065,6 +2069,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                     {occupancyView.reviewReason ? (
                       <div style={{ fontSize: "0.78rem", color: "#92400e", marginTop: 4 }}>
                         {occupancyView.reviewReason}
+                        <div><button type="button" onClick={() => setResolvingOccupancyUnit(u)}>Resolve occupancy</button></div>
                       </div>
                     ) : null}
                     {(u as any).leaseDocument?.fileName ? (
@@ -2458,6 +2463,16 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         issues={unitCsvIssues}
         isImporting={isImporting}
       />
+      {propertyId && resolvingOccupancyUnit ? (
+        <ResolveOccupancyDrawer
+          open
+          propertyId={propertyId}
+          unitId={String(resolvingOccupancyUnit.id || resolvingOccupancyUnit.unitId || "")}
+          tenantId={String(resolvingOccupancyUnit.currentTenantId || resolvingOccupancyUnit.tenantId || "") || null}
+          onClose={() => setResolvingOccupancyUnit(null)}
+          onResolved={async () => { setOccupancyRefreshKey((value) => value + 1); await onRefresh?.(); }}
+        />
+      ) : null}
     </>
   );
 };

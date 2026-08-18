@@ -93,6 +93,7 @@ import landlordApplicationLinksRoutes from "./routes/landlordApplicationLinksRou
 import publicApplicationLinksRoutes from "./routes/publicApplicationLinksRoutes";
 import tenantsRoutes from "./routes/tenantsRoutes";
 import tenanciesRoutes from "./routes/tenanciesRoutes";
+import occupancyResolutionRoutes from "./routes/occupancyResolutionRoutes";
 import messagesRoutes, { previewQaComposeRoutes } from "./routes/messagesRoutes";
 import propertyNoticesRoutes, { previewQaPropertyNoticesRoutes } from "./routes/propertyNoticesRoutes";
 import rentalApplicationsRoutes from "./routes/rentalApplicationsRoutes";
@@ -646,6 +647,7 @@ app.use("/api/compliance", routeSource("complianceRoutes.ts"), complianceRoutes)
 app.use("/api/decisions", routeSource("decisionRoutes.ts"), decisionRoutes);
 app.get("/api/leases/:leaseId/document-url", routeSource("leaseRoutes.ts"), requireLandlord, handleLeaseDocumentUrl);
 app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes);
+app.use("/api/occupancy-resolutions", routeSource("occupancyResolutionRoutes.ts"), occupancyResolutionRoutes);
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api", routeSource("tenanciesRoutes.ts"), tenanciesRoutes);
 
