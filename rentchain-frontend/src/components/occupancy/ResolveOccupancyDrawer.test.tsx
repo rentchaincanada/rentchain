@@ -112,7 +112,7 @@ describe("ResolveOccupancyDrawer", () => {
   });
 
   it.each(["Close Resolve Occupancy", "Review later"])(
-    "%s restores focus to the opener",
+    "%s dismisses the controlled drawer and restores focus to the opener",
     async (buttonName) => {
       render(<DrawerHarness />);
       const opener = screen.getByRole("button", { name: "Resolve occupancy" });
@@ -120,6 +120,7 @@ describe("ResolveOccupancyDrawer", () => {
       fireEvent.click(opener);
       fireEvent.click(await screen.findByRole("button", { name: buttonName }));
 
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
       await waitFor(() => expect(opener).toHaveFocus());
       expect(submit).not.toHaveBeenCalled();
     }

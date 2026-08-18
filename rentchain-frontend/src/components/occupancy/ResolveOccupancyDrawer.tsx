@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   getOccupancyResolutionContext,
   submitOccupancyResolution,
@@ -142,8 +143,8 @@ export function ResolveOccupancyDrawer(props: {
     }
   };
 
-  return (
-    <div role="presentation" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15,23,42,.45)", display: "flex", justifyContent: "flex-end" }}>
+  return createPortal((
+    <div role="presentation" style={{ position: "fixed", inset: 0, zIndex: 4030, background: "rgba(15,23,42,.45)", display: "flex", justifyContent: "flex-end" }}>
       <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="resolve-occupancy-title" tabIndex={-1} onKeyDown={handleDialogKeyDown} style={{ width: "min(100%, 520px)", maxWidth: "100vw", height: "100dvh", maxHeight: "100dvh", boxSizing: "border-box", overflowX: "hidden", overflowY: "auto", overscrollBehavior: "contain", background: "#fffaf1", padding: 24, boxShadow: "-12px 0 32px rgba(15,23,42,.18)", display: "grid", alignContent: "start", gap: 18 }}>
         <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
           <div><h2 id="resolve-occupancy-title" style={{ margin: 0 }}>Resolve Occupancy</h2><p style={{ margin: "6px 0 0", color: "#63594d" }}>Reconcile operational records without making a legal tenancy determination.</p></div>
@@ -163,5 +164,5 @@ export function ResolveOccupancyDrawer(props: {
         </> : null}
       </section>
     </div>
-  );
+  ), document.body);
 }

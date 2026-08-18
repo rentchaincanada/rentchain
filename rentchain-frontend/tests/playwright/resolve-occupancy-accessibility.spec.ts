@@ -152,3 +152,29 @@ test("traps keyboard focus and returns it to the opener", async ({ page }) => {
   await expect(dialog).toBeHidden();
   await expect(trigger).toBeFocused();
 });
+
+test("Close dismisses through native click, Enter, and Space activation without mutation", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await installOccupancyHarness(page);
+  const mutationRequests: string[] = [];
+  page.on("request", (request) => {
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method())) {
+      mutationRequests.push(`${request.method()} ${request.url()}`);
+    }
+  });
+
+  for (const activation of ["click", "Enter", "Space"] as const) {
+    const trigger = await openDrawer(page);
+    const dialog = page.getByRole("dialog", { name: "Resolve Occupancy" });
+    const closeButton = page.getByRole("button", { name: "Close Resolve Occupancy" });
+    await expect(closeButton).toBeFocused();
+
+    if (activation === "click") await closeButton.click();
+    else await page.keyboard.press(activation);
+
+    await expect(dialog).not.toBeVisible();
+    await expect(trigger).toBeFocused();
+  }
+
+  expect(mutationRequests).toEqual([]);
+});
