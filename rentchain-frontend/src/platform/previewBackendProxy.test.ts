@@ -8,6 +8,9 @@ import {
   PREVIEW_PROXY_AUTH_CONFIG,
   PREVIEW_PROXY_BODY_LIMIT_BYTES,
   PREVIEW_PROXY_CONFIG,
+  PREVIEW_BACKEND_TARGET_KEYS,
+  resolvePreviewBackendTarget,
+  assertPreviewBackendTarget,
   resolvePreviewBackendPath,
 } from "../../server/previewBackendProxy";
 
@@ -92,15 +95,110 @@ function successfulDependencies(upstreamStatus = 200) {
 
 describe("Preview backend proxy", () => {
   const originalVercelEnv = process.env.VERCEL_ENV;
+  const originalPreviewBackendTarget = process.env.PREVIEW_BACKEND_TARGET;
 
   beforeEach(() => {
     process.env.VERCEL_ENV = "preview";
+    delete process.env.PREVIEW_BACKEND_TARGET;
     vi.restoreAllMocks();
   });
 
   afterEach(() => {
     if (originalVercelEnv == null) delete process.env.VERCEL_ENV;
     else process.env.VERCEL_ENV = originalVercelEnv;
+    if (originalPreviewBackendTarget == null) delete process.env.PREVIEW_BACKEND_TARGET;
+    else process.env.PREVIEW_BACKEND_TARGET = originalPreviewBackendTarget;
+  });
+
+  it("keeps the permanent Preview backend as the default target", () => {
+    expect(resolvePreviewBackendTarget({ vercelEnvironment: "preview", targetKey: undefined })).toEqual({
+      key: "permanent",
+      cloudRunServiceUrl: PREVIEW_PROXY_CONFIG.cloudRunServiceUrl,
+      cloudRunIdTokenAudience: PREVIEW_PROXY_CONFIG.cloudRunServiceUrl,
+      temporary: false,
+    });
+  });
+
+  it("couples the authorized PR #1555 service URL and audience internally", () => {
+    const target = resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: PREVIEW_BACKEND_TARGET_KEYS.pr1555,
+    });
+    expect(target).toEqual({
+      key: "pr1555-c99145e5",
+      cloudRunServiceUrl: "https://rentchain-pr1555-qa-c99145e5-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience: "https://rentchain-pr1555-qa-c99145e5-glistw4pya-nn.a.run.app",
+      temporary: true,
+    });
+  });
+
+  it.each([
+    ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
+    ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
+    ["preview", ""],
+    ["preview", "unknown"],
+    ["preview", "https://metadata.google.internal"],
+    ["preview", "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app"],
+    ["preview", "rentchain-pr1555-qa-wrong-region"],
+    ["preview", "rentchain-pr1555-qa-cross-project"],
+  ])("rejects unsafe target selection for %s / %s", (vercelEnvironment, targetKey) => {
+    expect(() => resolvePreviewBackendTarget({ vercelEnvironment, targetKey })).toThrow(
+      "PREVIEW_PROXY_TARGET_REJECTED",
+    );
+  });
+
+  it.each([
+    ["mismatched audience", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1555,
+      cloudRunServiceUrl: "https://rentchain-pr1555-qa-c99145e5-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience: "https://rentchain-preview-backend-glistw4pya-nn.a.run.app",
+      temporary: true,
+    }],
+    ["Production Cloud Run host", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1555,
+      cloudRunServiceUrl: "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app",
+      cloudRunIdTokenAudience: "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app",
+      temporary: true,
+    }],
+    ["cross-project host", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1555,
+      cloudRunServiceUrl: "https://rentchain-pr1555-qa-c99145e5-other-project.a.run.app",
+      cloudRunIdTokenAudience: "https://rentchain-pr1555-qa-c99145e5-other-project.a.run.app",
+      temporary: true,
+    }],
+    ["wrong-region host", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1555,
+      cloudRunServiceUrl: "https://rentchain-pr1555-qa-c99145e5-uc.a.run.app",
+      cloudRunIdTokenAudience: "https://rentchain-pr1555-qa-c99145e5-uc.a.run.app",
+      temporary: true,
+    }],
+  ])("rejects a tampered trusted mapping: %s", (_label, target) => {
+    expect(() => assertPreviewBackendTarget(target, "preview")).toThrow(
+      "PREVIEW_PROXY_TARGET_REJECTED",
+    );
+  });
+
+  it("routes the authorized target using the same URL for ID-token audience and upstream", async () => {
+    process.env.PREVIEW_BACKEND_TARGET = PREVIEW_BACKEND_TARGET_KEYS.pr1555;
+    const { requests, dependencies } = successfulDependencies();
+    const res = responseRecorder();
+    await handlePreviewBackendProxy(
+      request("/api/preview-backend/api/me", "GET", {
+        headers: {
+          "x-preview-backend-target": "https://attacker.invalid",
+          cookie: "PREVIEW_BACKEND_TARGET=https://attacker.invalid",
+        },
+        query: { target: "https://attacker.invalid" },
+        body: { target: "https://attacker.invalid" },
+      }),
+      res,
+      dependencies,
+    );
+
+    const expected = "https://rentchain-pr1555-qa-c99145e5-glistw4pya-nn.a.run.app";
+    expect(requests[1].init?.body).toBe(JSON.stringify({ audience: expected, includeEmail: false }));
+    expect(requests[2].url).toBe(`${expected}/api/me`);
+    expect(requests.every(({ url }) => !url.includes("attacker.invalid"))).toBe(true);
   });
 
   it("accepts only Preview and rejects Production or Development", async () => {

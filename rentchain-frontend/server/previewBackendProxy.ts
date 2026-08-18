@@ -16,6 +16,72 @@ export const PREVIEW_PROXY_CONFIG = {
     "https://rentchain-preview-backend-glistw4pya-nn.a.run.app",
 } as const;
 
+export const PREVIEW_BACKEND_TARGET_KEYS = {
+  permanent: "permanent",
+  pr1555: "pr1555-c99145e5",
+} as const;
+
+export type PreviewBackendTarget = {
+  key: string;
+  cloudRunServiceUrl: string;
+  cloudRunIdTokenAudience: string;
+  temporary: boolean;
+};
+
+const PREVIEW_BACKEND_TARGETS: Record<string, PreviewBackendTarget> = {
+  [PREVIEW_BACKEND_TARGET_KEYS.permanent]: {
+    key: PREVIEW_BACKEND_TARGET_KEYS.permanent,
+    cloudRunServiceUrl: PREVIEW_PROXY_CONFIG.cloudRunServiceUrl,
+    cloudRunIdTokenAudience: PREVIEW_PROXY_CONFIG.cloudRunServiceUrl,
+    temporary: false,
+  },
+  [PREVIEW_BACKEND_TARGET_KEYS.pr1555]: {
+    key: PREVIEW_BACKEND_TARGET_KEYS.pr1555,
+    cloudRunServiceUrl:
+      "https://rentchain-pr1555-qa-c99145e5-glistw4pya-nn.a.run.app",
+    cloudRunIdTokenAudience:
+      "https://rentchain-pr1555-qa-c99145e5-glistw4pya-nn.a.run.app",
+    temporary: true,
+  },
+};
+
+export function assertPreviewBackendTarget(
+  target: PreviewBackendTarget,
+  environment: string,
+): void {
+  const expected = PREVIEW_BACKEND_TARGETS[target.key];
+  if (
+    !expected ||
+    target.cloudRunServiceUrl !== expected.cloudRunServiceUrl ||
+    target.cloudRunIdTokenAudience !== expected.cloudRunIdTokenAudience ||
+    target.cloudRunServiceUrl !== target.cloudRunIdTokenAudience ||
+    target.temporary !== expected.temporary ||
+    (target.temporary && environment !== "preview")
+  ) {
+    throw new Error("PREVIEW_PROXY_TARGET_REJECTED");
+  }
+}
+
+export function resolvePreviewBackendTarget(input: {
+  vercelEnvironment: unknown;
+  targetKey: unknown;
+}): PreviewBackendTarget {
+  const environment = typeof input.vercelEnvironment === "string"
+    ? input.vercelEnvironment.trim()
+    : "";
+  const hasExplicitTarget = input.targetKey !== undefined && input.targetKey !== null;
+  const key = hasExplicitTarget && typeof input.targetKey === "string"
+    ? input.targetKey.trim()
+    : PREVIEW_BACKEND_TARGET_KEYS.permanent;
+  const target = PREVIEW_BACKEND_TARGETS[key];
+
+  if (!key || !target) {
+    throw new Error("PREVIEW_PROXY_TARGET_REJECTED");
+  }
+  assertPreviewBackendTarget(target, environment);
+  return target;
+}
+
 const PROVIDER_PATH =
   `projects/${PREVIEW_PROXY_CONFIG.projectNumber}/locations/global/` +
   `workloadIdentityPools/${PREVIEW_PROXY_CONFIG.workloadIdentityPoolId}/` +
@@ -29,6 +95,14 @@ export const PREVIEW_PROXY_AUTH_CONFIG: PreviewAuthConfig = {
   cloudRunServiceUrl: PREVIEW_PROXY_CONFIG.cloudRunServiceUrl,
   expectedSpikeCommit: "",
 };
+
+function previewAuthConfigForTarget(target: PreviewBackendTarget): PreviewAuthConfig {
+  return {
+    ...PREVIEW_PROXY_AUTH_CONFIG,
+    cloudRunIdTokenAudience: target.cloudRunIdTokenAudience,
+    cloudRunServiceUrl: target.cloudRunServiceUrl,
+  };
+}
 
 export const PREVIEW_PROXY_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
 export const PREVIEW_PROXY_TOKEN_TIMEOUT_MS = 5_000;
@@ -252,6 +326,17 @@ export async function handlePreviewBackendProxy(
     return jsonError(res, 403, "PREVIEW_PROXY_ENVIRONMENT_REJECTED");
   }
 
+  let target: PreviewBackendTarget;
+  try {
+    target = resolvePreviewBackendTarget({
+      vercelEnvironment: process.env.VERCEL_ENV,
+      targetKey: process.env.PREVIEW_BACKEND_TARGET,
+    });
+  } catch {
+    return jsonError(res, 502, "PREVIEW_PROXY_TARGET_REJECTED");
+  }
+  const authConfig = previewAuthConfigForTarget(target);
+
   let route: { backendPath: string; query: string };
   let method: string;
   let body: BodyInit | undefined;
@@ -288,7 +373,7 @@ export async function handlePreviewBackendProxy(
   let googleIdToken: string;
   try {
     vercelOidcToken = await acquireVercelOidcToken(
-      PREVIEW_PROXY_AUTH_CONFIG,
+      authConfig,
       dependencies.getVercelOidcToken,
     );
     if (!vercelOidcToken) {
@@ -301,13 +386,13 @@ export async function handlePreviewBackendProxy(
   try {
     const federatedAccessToken = await exchangeVercelToken(
       vercelOidcToken,
-      PREVIEW_PROXY_AUTH_CONFIG,
+      authConfig,
       stsFetch,
     );
     googleIdToken = await generateCloudRunIdToken(
       federatedAccessToken,
-      PREVIEW_PROXY_AUTH_CONFIG,
-      PREVIEW_PROXY_AUTH_CONFIG.cloudRunIdTokenAudience,
+      authConfig,
+      authConfig.cloudRunIdTokenAudience,
       iamFetch,
     );
   } catch (error) {
@@ -316,7 +401,7 @@ export async function handlePreviewBackendProxy(
   }
 
   const targetUrl =
-    `${PREVIEW_PROXY_CONFIG.cloudRunServiceUrl}${route.backendPath}` +
+    `${target.cloudRunServiceUrl}${route.backendPath}` +
     (route.query ? `?${route.query}` : "");
 
   try {
