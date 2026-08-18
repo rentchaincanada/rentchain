@@ -34,7 +34,9 @@ import {
 import { deriveLeaseOccupancyCoherence } from "../lib/leases/deriveLeaseOccupancyCoherence";
 import {
   buildCanonicalLeaseOccupancyProjection,
+  resolveCanonicalUnitProjectionInputs,
   toCanonicalLeaseStateInput,
+  type CanonicalLeaseOccupancyProjection,
 } from "../lib/leases/canonicalLeaseOccupancyProjection";
 import { selectCanonicalCurrentLease } from "../lib/leases/canonicalLeaseOccupancyState";
 import { getSignedLeaseDocumentDownload } from "./signing/leaseSigningService";
@@ -68,6 +70,7 @@ export interface TenantRecord {
   source?: string | null;
   createdAt?: string | number | null;
   lifecycle?: TenantLifecycleResult;
+  canonicalState?: CanonicalLeaseOccupancyProjection;
 }
 
 export interface TenantLease {
@@ -506,10 +509,6 @@ async function loadTenantLeaseResolution(tenant: TenantRecord | null, landlordId
   }
 }
 
-async function loadCurrentLeaseSnapshot(tenant: TenantRecord | null, landlordId?: string | null) {
-  return (await loadTenantLeaseResolution(tenant, landlordId)).displayLease;
-}
-
 async function loadPropertyRecord(propertyId: string | null | undefined) {
   const target = String(propertyId || "").trim();
   if (!target) return null;
@@ -707,7 +706,8 @@ async function loadApplicationRawById(applicationId: string | null | undefined) 
 
 async function hydrateTenantDisplayFields(tenant: TenantRecord, landlordId?: string | null): Promise<TenantRecord> {
   const hydrated: TenantRecord = { ...tenant };
-  const canonicalLease = await loadCurrentLeaseSnapshot(hydrated, landlordId);
+  const leaseResolution = await loadTenantLeaseResolution(hydrated, landlordId);
+  const displayLease = leaseResolution.displayLease;
   const property = await loadPropertyRecord(hydrated.propertyId || null);
   const unit = await loadUnitRecord(
     hydrated.propertyId || null,
@@ -715,6 +715,24 @@ async function hydrateTenantDisplayFields(tenant: TenantRecord, landlordId?: str
     hydrated.unit || null,
     landlordId
   );
+  const unitInputs = resolveCanonicalUnitProjectionInputs(unit || {});
+  const canonicalState = buildCanonicalLeaseOccupancyProjection({
+    leases: leaseResolution.leases,
+    context: {
+      landlordId: hydrated.landlordId || landlordId,
+      propertyId: displayLease?.propertyId || hydrated.propertyId,
+      unitId: displayLease?.unitId || hydrated.unitId,
+      tenantId: hydrated.id,
+    },
+    ...unitInputs,
+    persistedTenantStatus: hydrated.status,
+    currentLeasePointerId: hydrated.currentLeaseId,
+    tenantId: hydrated.id,
+  });
+  hydrated.canonicalState = canonicalState;
+  const canonicalLease = canonicalState.supportingLeaseId
+    ? leaseResolution.leases.find((lease) => lease.id === canonicalState.supportingLeaseId) || null
+    : null;
 
   const propertyName = pickString(hydrated.propertyName, property?.name);
   if (propertyName) hydrated.propertyName = propertyName;
@@ -907,7 +925,7 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
       unitId: currentLeaseRecord?.unitId || tenant?.unitId,
       tenantId,
     },
-    persistedUnitOccupancy: unit?.occupancyStatus || unit?.status,
+    ...resolveCanonicalUnitProjectionInputs(unit || {}),
     persistedTenancyStatus: currentTenancy?.status,
     persistedTenantStatus: tenant?.status,
     currentLeasePointerId: tenant?.currentLeaseId,
@@ -945,7 +963,7 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
   return {
     tenant,
     lease,
-    currentLease: lease,
+    currentLease: canonicalState.supportingLeaseId === lease?.id ? lease : null,
     property,
     unit: unit
       ? {

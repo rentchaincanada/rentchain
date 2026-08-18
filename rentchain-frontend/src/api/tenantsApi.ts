@@ -2,6 +2,7 @@ import { apiJson, getAuthToken, resolveApiUrl } from "@/lib/apiClient";
 import { getFirebaseIdToken } from "@/lib/firebaseAuthToken";
 import { createPdfExportTimer, errorCodeFromUnknown, recordPdfExportEvent } from "@/lib/pdfExportObservability";
 import { apiFetch } from "./http";
+import type { CanonicalLeaseOccupancyState } from "@/lib/leases/canonicalStatePresentation";
 
 type TenantListResponse = TenantApiModel[] | { tenants?: TenantApiModel[] };
 type TenanciesResponse = TenancyApiModel[] | { tenancies?: TenancyApiModel[] };
@@ -90,6 +91,7 @@ export interface TenantApiModel {
   hiddenFromActiveLists?: boolean;
   tenancies?: TenancyApiModel[];
   lifecycle?: TenantLifecycle;
+  canonicalState?: CanonicalLeaseOccupancyState;
 }
 
 /**

@@ -386,6 +386,14 @@ describe("TenantsPage", () => {
         unit: "Unit 4",
         unitId: "unit-4",
         currentLeaseId: "lease-signed-1",
+        status: "active",
+        canonicalState: {
+          leaseTermState: "active",
+          occupancyState: "occupied",
+          tenantRelationshipState: "current_occupant",
+          supportingLeaseId: "lease-signed-1",
+          reasons: [],
+        },
       },
     ]);
     mocks.fetchTenantTenanciesMock.mockResolvedValue([
@@ -501,6 +509,14 @@ describe("TenantsPage", () => {
         unit: "Unit 4",
         unitId: "unit-4",
         currentLeaseId: "lease-signed-1",
+        status: "active",
+        canonicalState: {
+          leaseTermState: "active",
+          occupancyState: "occupied",
+          tenantRelationshipState: "current_occupant",
+          supportingLeaseId: "lease-signed-1",
+          reasons: [],
+        },
       },
     ]);
     mocks.fetchTenantTenanciesMock.mockResolvedValue([]);
@@ -519,6 +535,13 @@ describe("TenantsPage", () => {
           monthlyRent: 1850,
           status: "active",
         },
+        canonicalState: {
+          leaseTermState: "active",
+          occupancyState: "occupied",
+          tenantRelationshipState: "current_occupant",
+          supportingLeaseId: "lease-signed-1",
+          reasons: [],
+        },
       },
       loading: false,
       error: null,
@@ -531,6 +554,7 @@ describe("TenantsPage", () => {
     );
 
     expect(await screen.findByText("Tenant actions")).toBeInTheDocument();
+    expect(screen.getAllByText("Current occupant").length).toBeGreaterThanOrEqual(2);
     expect(
       screen.getByText(
         "Current lease links this tenant to the active lease and unit; no separate active tenancy registration is recorded yet."
@@ -542,6 +566,77 @@ describe("TenantsPage", () => {
     expect(registeredUnitsCard).not.toBeNull();
     expect(within(registeredUnitsCard as HTMLElement).getByText("1")).toBeInTheDocument();
     expect(screen.queryByText("No active tenancy registrations are linked to this tenant.")).not.toBeInTheDocument();
+  });
+
+  it("uses canonical review state and fails closed on an expired historical lease", async () => {
+    mocks.useCapabilitiesMock.mockReturnValue({ features: { tenant_invites: true } });
+    mocks.fetchTenantsMock.mockResolvedValue([
+      {
+        id: "tenant-ref",
+        fullName: "Preview QA Expired Tenant",
+        propertyName: "PR1555 Canonical QA Property",
+        propertyId: "property-1",
+        unit: "REF-EXPIRED",
+        unitId: "unit-ref",
+        currentLeaseId: null,
+        status: "active",
+        lifecycle: { lifecycleLabel: "Active" },
+        canonicalState: {
+          leaseTermState: "past",
+          occupancyState: "review_needed",
+          tenantRelationshipState: "occupancy_unresolved",
+          supportingLeaseId: null,
+          reasons: ["OCCUPIED_WITHOUT_CURRENT_LEASE"],
+        },
+      },
+    ]);
+    mocks.fetchTenantTenanciesMock.mockResolvedValue([
+      { id: "tenancy-stale", tenantId: "tenant-ref", status: "active", unitLabel: "REF-EXPIRED" },
+    ]);
+    mocks.useTenantDetailMock.mockReturnValue({
+      bundle: {
+        tenant: { id: "tenant-ref", fullName: "Preview QA Expired Tenant", status: "active" },
+        currentLease: null,
+        lease: {
+          id: "lease-ref",
+          tenantId: "tenant-ref",
+          propertyId: "property-1",
+          propertyName: "PR1555 Canonical QA Property",
+          unitId: "unit-ref",
+          unit: "REF-EXPIRED",
+          leaseStart: "2025-05-01",
+          leaseEnd: "2026-04-30",
+          monthlyRent: 1800,
+          status: "active",
+        },
+        canonicalState: {
+          leaseTermState: "past",
+          occupancyState: "review_needed",
+          tenantRelationshipState: "occupancy_unresolved",
+          supportingLeaseId: null,
+          reasons: ["OCCUPIED_WITHOUT_CURRENT_LEASE"],
+        },
+      },
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-ref"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Tenant actions")).toBeInTheDocument();
+    expect(screen.getAllByText("Review needed").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("No current lease linked").length).toBeGreaterThanOrEqual(1);
+    const registeredUnitsCard = screen.getByText("Active registered units").parentElement;
+    expect(registeredUnitsCard).not.toBeNull();
+    expect(within(registeredUnitsCard as HTMLElement).getByText("0")).toBeInTheDocument();
+    expect(
+      screen.getByText("Canonical occupancy requires review; historical property, unit, and lease links are not treated as current.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Current lease links this tenant to the active lease and unit/)).not.toBeInTheDocument();
   });
 
   it("shows no current lease linked when neither list nor detail has a current lease", async () => {
