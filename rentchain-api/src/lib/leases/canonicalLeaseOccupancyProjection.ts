@@ -19,6 +19,49 @@ export type CanonicalLeaseOccupancyProjection = {
   reasons: CanonicalLeaseConflictReason[];
 };
 
+export type CanonicalUnitProjectionInputs = {
+  persistedUnitOccupancy?: unknown;
+  persistedTenancyStatus?: unknown;
+  persistedTenantStatus?: unknown;
+  currentLeasePointerId?: unknown;
+  tenantId?: unknown;
+};
+
+function firstStatusEvidence(...values: unknown[]): unknown {
+  for (const candidate of values) {
+    if (typeof candidate === "boolean") return candidate ? "occupied" : "vacant";
+    if (typeof candidate === "string" && candidate.trim()) return candidate;
+  }
+  return undefined;
+}
+
+function firstIdentifierEvidence(...values: unknown[]): unknown {
+  for (const candidate of values) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate;
+  }
+  return undefined;
+}
+
+export function resolveCanonicalUnitProjectionInputs(
+  unit: Record<string, any>
+): CanonicalUnitProjectionInputs {
+  const raw = unit?.raw && typeof unit.raw === "object" ? unit.raw : {};
+  return {
+    persistedUnitOccupancy:
+      firstStatusEvidence(unit?.occupancyStatus, unit?.status, unit?.isOccupied, unit?.occupied) ??
+      firstStatusEvidence(raw?.occupancyStatus, raw?.status, raw?.isOccupied, raw?.occupied),
+    persistedTenancyStatus:
+      firstStatusEvidence(unit?.tenancyStatus) ?? firstStatusEvidence(raw?.tenancyStatus),
+    persistedTenantStatus:
+      firstStatusEvidence(unit?.tenantStatus) ?? firstStatusEvidence(raw?.tenantStatus),
+    currentLeasePointerId:
+      firstIdentifierEvidence(unit?.currentLeaseId) ?? firstIdentifierEvidence(raw?.currentLeaseId),
+    tenantId:
+      firstIdentifierEvidence(unit?.currentTenantId, unit?.tenantId) ??
+      firstIdentifierEvidence(raw?.currentTenantId, raw?.tenantId),
+  };
+}
+
 export function canonicalLeaseMatchesUnit(raw: Record<string, any>, unitId: unknown): boolean {
   const expectedUnitId = String(unitId || "").trim();
   if (!expectedUnitId) return false;

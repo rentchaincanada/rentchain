@@ -73,6 +73,7 @@ import { deriveLeaseOccupancyCoherence } from "../lib/leases/deriveLeaseOccupanc
 import {
   buildCanonicalLeaseOccupancyProjection,
   canonicalLeaseMatchesUnit,
+  resolveCanonicalUnitProjectionInputs,
   toCanonicalLeaseStateInput,
 } from "../lib/leases/canonicalLeaseOccupancyProjection";
 import { deriveCanonicalLeaseTermState } from "../lib/leases/canonicalLeaseOccupancyState";
@@ -3622,11 +3623,11 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
       units.map((unit: any) => {
         const unitId = String(unit?.id || "").trim();
         const relatedLeases = groupedWinners.filter((lease: any) => canonicalLeaseMatchesUnit(lease, unitId));
+        const unitInputs = resolveCanonicalUnitProjectionInputs(unit);
         return [unitId, buildCanonicalLeaseOccupancyProjection({
           leases: relatedLeases,
-          context: { landlordId, propertyId, unitId },
-          persistedUnitOccupancy: unit?.occupancyStatus || unit?.status,
-          currentLeasePointerId: unit?.currentLeaseId,
+          context: { landlordId, propertyId, unitId, tenantId: unitInputs.tenantId },
+          ...unitInputs,
         })];
       }).filter(([unitId]) => Boolean(unitId))
     );
