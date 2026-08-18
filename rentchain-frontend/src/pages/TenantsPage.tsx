@@ -27,6 +27,10 @@ import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { isTargetedHiddenTenantId } from "@/lib/testDataVisibilityTargets";
 import { isPlanAtLeast, normalizePlan } from "@/lib/plan";
 import type { TenantLeaseSummary } from "@/api/tenantDetail";
+import {
+  canonicalTenantRelationshipLabel,
+  type CanonicalLeaseOccupancyState,
+} from "@/lib/leases/canonicalStatePresentation";
 import "./TenantsPage.css";
 
 type TenantWithTenancies = TenantApiModel & { tenancies?: TenancyApiModel[] };
@@ -140,7 +144,11 @@ function tenancyStatusLabel(status?: string | null): "Active" | "Inactive" {
   return String(status || "").toLowerCase() === "inactive" ? "Inactive" : "Active";
 }
 
-function tenantLifecycleLabel(tenant?: TenantApiModel | null): string {
+function tenantLifecycleLabel(
+  tenant?: TenantApiModel | null,
+  canonicalState: CanonicalLeaseOccupancyState | null | undefined = tenant?.canonicalState
+): string {
+  if (canonicalState) return canonicalTenantRelationshipLabel(canonicalState.tenantRelationshipState);
   return tenant?.lifecycle?.lifecycleLabel || tenant?.status || "Unknown";
 }
 
@@ -166,20 +174,31 @@ function getErrorMessage(error: unknown, fallback: string): string {
 
 function describeTenantLinkage(
   tenant: TenantApiModel & { tenancies?: TenancyApiModel[] },
-  currentLease?: TenantLeaseSummary | null
+  currentLease?: TenantLeaseSummary | null,
+  canonicalState?: CanonicalLeaseOccupancyState | null
 ) {
   const tenancies = Array.isArray(tenant.tenancies) ? tenant.tenancies : [];
   const activeTenancies = tenancies.filter((tenancy) => tenancy.status !== "inactive");
   const primaryProperty = tenant.propertyName || tenant.propertyId || "No property linked";
   const primaryUnit = tenant.unit || tenant.unitLabel || tenant.unitId || "No unit linked";
-  const currentLeaseId = String(currentLease?.id || "").trim();
+  const candidateLeaseId = String(currentLease?.id || "").trim();
+  const currentLeaseId = canonicalState
+    ? canonicalState.supportingLeaseId === candidateLeaseId
+      ? candidateLeaseId
+      : ""
+    : candidateLeaseId;
   const hasCurrentLeaseLink = Boolean(currentLeaseId);
   const leaseLabel = currentLeaseId
     ? [primaryProperty !== "No property linked" ? primaryProperty : null, primaryUnit !== "No unit linked" ? primaryUnit : null, "Lease"]
         .filter(Boolean)
         .join(" · ")
     : "No current lease linked";
-  const activeTenancyCount = activeTenancies.length || (hasCurrentLeaseLink ? 1 : 0);
+  const canonicalCurrentRelationship = canonicalState?.tenantRelationshipState === "current_occupant";
+  const activeTenancyCount = canonicalState
+    ? canonicalCurrentRelationship
+      ? activeTenancies.length || (hasCurrentLeaseLink ? 1 : 0)
+      : 0
+    : activeTenancies.length || (hasCurrentLeaseLink ? 1 : 0);
 
   return {
     propertyLabel: primaryProperty,
@@ -188,7 +207,9 @@ function describeTenantLinkage(
     leaseId: currentLeaseId || null,
     activeTenancyCount,
     linkageNote:
-      !tenant.propertyId && !tenant.unitId && !currentLeaseId
+      canonicalState && !canonicalCurrentRelationship
+        ? "Canonical occupancy requires review; historical property, unit, and lease links are not treated as current."
+        : !tenant.propertyId && !tenant.unitId && !currentLeaseId
         ? "This tenant record has no canonical property, unit, or current lease linkage yet."
         : activeTenancies.length === 0
         ? hasCurrentLeaseLink
@@ -550,11 +571,12 @@ const loadTenants = useCallback(async () => {
     : null;
   const tenantExists = Boolean(selectedTenant);
   const { bundle: selectedTenantDetailBundle } = useTenantDetail(tenantExists ? selectedTenantId : null);
-  const selectedCurrentLease =
-    selectedTenantDetailBundle?.currentLease || selectedTenantDetailBundle?.lease || null;
+  const selectedCanonicalState =
+    selectedTenantDetailBundle?.canonicalState || selectedTenant?.canonicalState || null;
+  const selectedCurrentLease = selectedTenantDetailBundle?.currentLease || null;
   const selectedCurrentLeaseId = getTenantCurrentLeaseId(selectedTenant, selectedCurrentLease);
   const selectedTenantLinkage = selectedTenant
-    ? describeTenantLinkage(selectedTenant, selectedCurrentLease)
+    ? describeTenantLinkage(selectedTenant, selectedCurrentLease, selectedCanonicalState)
     : null;
   const selectedLeaseLedgerPath = selectedCurrentLeaseId
     ? `/leases/${encodeURIComponent(selectedCurrentLeaseId)}/ledger`
@@ -1038,7 +1060,7 @@ const loadTenants = useCallback(async () => {
                       <Card style={tenantWorkspaceCardStyle}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Lifecycle</div>
                         <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
-                          {tenantLifecycleLabel(selectedTenant)}
+                          {tenantLifecycleLabel(selectedTenant, selectedCanonicalState)}
                         </div>
                       </Card>
                       <Card style={tenantWorkspaceCardStyle}>

@@ -35,6 +35,12 @@ export type PropertyCredibilityLeaseRecord = {
   riskConfidence?: number | null;
 };
 
+type CanonicalUnitState = {
+  leaseTermState?: string | null;
+  occupancyState?: string | null;
+  supportingLeaseId?: string | null;
+};
+
 type TenantCredibilityRecord = {
   id: string;
   tenantScoreValue: number | null;
@@ -84,8 +90,24 @@ export function computePropertyCredibilitySummary(input: {
   propertyId: string;
   leases: PropertyCredibilityLeaseRecord[];
   tenants: TenantCredibilityRecord[];
+  canonicalUnitStates?: Record<string, CanonicalUnitState>;
 }): PropertyCredibilitySummary {
-  const activeLeases = input.leases.filter((lease) => isActiveLeaseStatus(lease.status));
+  const canonicalStates = input.canonicalUnitStates
+    ? Object.values(input.canonicalUnitStates)
+    : null;
+  const canonicalActiveLeaseIds = canonicalStates
+    ? new Set(
+        canonicalStates
+          .filter((state) => state.leaseTermState === "active" && asTrimmedString(state.supportingLeaseId))
+          .map((state) => asTrimmedString(state.supportingLeaseId))
+      )
+    : null;
+  const activeLeases = canonicalActiveLeaseIds
+    ? input.leases.filter((lease) => canonicalActiveLeaseIds.has(lease.id))
+    : input.leases.filter((lease) => isActiveLeaseStatus(lease.status));
+  const occupancyReviewCount = canonicalStates
+    ? canonicalStates.filter((state) => state.occupancyState === "review_needed").length
+    : 0;
   const uniqueTenantIds = Array.from(new Set(activeLeases.flatMap((lease) => toTenantIds(lease))));
   const tenantMap = new Map(input.tenants.map((tenant) => [tenant.id, tenant]));
 
@@ -118,7 +140,7 @@ export function computePropertyCredibilitySummary(input: {
   const activeLeaseCount = activeLeases.length;
   const tenantsWithScoreCount = tenantScores.length;
   const leasesWithRiskCount = leaseScores.length;
-  const lowConfidenceCount = leaseConfidenceCount + tenantConfidenceCount;
+  const lowConfidenceCount = leaseConfidenceCount + tenantConfidenceCount + occupancyReviewCount;
   const missingCredibilityCount = leaseMissingCount + tenantMissingCount;
   const totalEvidenceSlots = activeLeaseCount + uniqueTenantIds.length;
   const usableEvidenceCount = tenantsWithScoreCount + leasesWithRiskCount;
@@ -155,6 +177,7 @@ export async function loadPropertyCredibilitySummary(options: {
   propertyId: string;
   landlordId?: string | null;
   leases: PropertyCredibilityLeaseRecord[];
+  canonicalUnitStates?: Record<string, CanonicalUnitState>;
 }): Promise<PropertyCredibilitySummary> {
   const { included: scopedLeases, excluded } = filterPropertyScopedLeases({
     leases: options.leases,
@@ -193,5 +216,6 @@ export async function loadPropertyCredibilitySummary(options: {
     propertyId: options.propertyId,
     leases: scopedLeases,
     tenants: tenantSnapshots.filter((tenant): tenant is TenantCredibilityRecord => Boolean(tenant)),
+    canonicalUnitStates: options.canonicalUnitStates,
   });
 }

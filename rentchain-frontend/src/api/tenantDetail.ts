@@ -2,6 +2,7 @@
 import type { TenantApiModel, TenantLifecycle } from "./tenants";
 import type { CredibilityInsights } from "@/types/credibilityInsights";
 import type { LeaseStateCoherence } from "./leasesApi";
+import type { CanonicalLeaseOccupancyState } from "@/lib/leases/canonicalStatePresentation";
 import { apiFetch } from "./http";
 
 export interface TenantDetailTenant extends TenantApiModel {
@@ -246,6 +247,7 @@ export interface TenantDetailBundle {
   moveInReadiness?: MoveInReadiness | null;
   lifecycle?: TenantLifecycle | null;
   stateCoherence?: LeaseStateCoherence | null;
+  canonicalState?: CanonicalLeaseOccupancyState | null;
 }
 
 export async function fetchTenantDetail(tenantId: string): Promise<TenantDetailBundle> {

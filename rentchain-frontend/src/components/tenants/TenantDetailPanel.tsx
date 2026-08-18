@@ -30,6 +30,11 @@ import { FinancialActivityPanel } from "./FinancialActivityPanel";
 import { FeatureGate } from "@/components/billing/FeatureGate";
 import { LockedFeature } from "@/components/billing/LockedFeature";
 import { printSummaryDocument } from "@/utils/printSummary";
+import {
+  canonicalLeaseTermLabel,
+  canonicalOccupancyLabel,
+  canonicalTenantRelationshipLabel,
+} from "@/lib/leases/canonicalStatePresentation";
 
 interface TenantDetailPanelProps {
   tenantId: string | null;
@@ -167,6 +172,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
   const lease = bundle.currentLease || bundle.lease;
   const lifecycle = bundle.lifecycle || tenant.lifecycle || null;
   const stateCoherence = bundle.stateCoherence || null;
+  const canonicalState = bundle.canonicalState || null;
   const property = bundle.property || null;
   const unit = bundle.unit || null;
   const activeOccupantWithoutLease = !lease && [unit?.status, unit?.occupancyStatus].some((value) =>
@@ -594,9 +600,10 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
         />
         <DetailField
           label="Lease Status"
-          value={lease?.status ? formatLeaseStatus(lease.status) : activeOccupantWithoutLease ? "Active occupant — no lease linked" : "--"}
+          value={canonicalState ? canonicalLeaseTermLabel(canonicalState.leaseTermState) : lease?.status ? formatLeaseStatus(lease.status) : activeOccupantWithoutLease ? "Active occupant — no lease linked" : "--"}
         />
-        <DetailField label="Lifecycle" value={lifecycle?.lifecycleLabel ?? "--"} />
+        <DetailField label="Lifecycle" value={canonicalState ? canonicalLeaseTermLabel(canonicalState.leaseTermState) : lifecycle?.lifecycleLabel ?? "--"} />
+        {canonicalState ? <DetailField label="Occupancy" value={canonicalOccupancyLabel(canonicalState.occupancyState)} /> : null}
         {stateCoherence ? (
           <DetailField
             label="State Coherence"
@@ -615,7 +622,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
             tenant.balance != null ? `$${Number(tenant.balance).toLocaleString()}` : "$0"
           }
         />
-        <DetailField label="Tenant Status" value={tenant.status ?? "--"} />
+        <DetailField label="Tenant Status" value={canonicalState ? canonicalTenantRelationshipLabel(canonicalState.tenantRelationshipState) : tenant.status ?? "--"} />
         {lifecycle?.flags?.hasStateConflict ? (
           <DetailField label="Lifecycle Review" value="Source status conflict detected" />
         ) : null}
@@ -644,7 +651,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
             <DetailField label="Email" value={tenant.email ?? "--"} />
             <DetailField label="Phone" value={tenant.phone ?? "--"} />
-            <DetailField label="Current lease status" value={formatLeaseStatus(lease?.status)} />
+            <DetailField label="Current lease status" value={canonicalState ? canonicalLeaseTermLabel(canonicalState.leaseTermState) : formatLeaseStatus(lease?.status)} />
             <DetailField
               label="Monthly rent"
               value={
@@ -655,7 +662,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
             />
             <DetailField label="Lease start" value={formatDateLabel(tenant.leaseStart ?? lease?.leaseStart)} />
             <DetailField label="Lease end" value={formatDateLabel(tenant.leaseEnd ?? lease?.leaseEnd)} />
-            <DetailField label="Lifecycle" value={lifecycle?.lifecycleLabel ?? "--"} />
+            <DetailField label="Lifecycle" value={canonicalState ? canonicalLeaseTermLabel(canonicalState.leaseTermState) : lifecycle?.lifecycleLabel ?? "--"} />
             <DetailField label="Risk level" value={riskLevel} />
           </div>
           <section style={{ display: "grid", gap: 6 }}>

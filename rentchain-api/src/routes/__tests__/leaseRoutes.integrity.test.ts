@@ -130,18 +130,25 @@ vi.mock("../../services/leaseCanonicalizationService", () => ({
       candidateIds: unit ? [unit.id] : [],
     };
   }),
-  toCanonicalLeaseRecord: vi.fn((id: string, raw: any) => ({
+  toCanonicalLeaseRecord: vi.fn((id: string, raw: any, units: any[]) => ({
     id,
+    landlordId: String(raw?.landlordId || "").trim() || null,
     status: String(raw?.status || "").trim().toLowerCase(),
     unitId: String(raw?.unitId || "").trim() || null,
+    resolvedUnitId: units.find((unit) => unit.id === raw?.unitId)?.id || null,
     unitNumber: String(raw?.unitNumber || raw?.unit || "").trim() || null,
     propertyId: String(raw?.propertyId || "").trim() || null,
+    tenantId: String(raw?.tenantId || "").trim() || null,
+    primaryTenantId: String(raw?.primaryTenantId || raw?.tenantId || "").trim() || null,
+    startDate: raw?.startDate,
+    endDate: raw?.endDate,
+    executionStatus: raw?.executionStatus,
   })),
 }));
 
 vi.mock("../../services/leasePartyConsolidationService", () => ({
   evaluateSameLeaseAgreement: vi.fn(() => ({ decision: "separate" })),
-  groupLeaseAgreementCandidates: vi.fn(() => ({ mergeGroups: [], ambiguousGroups: [], singles: [] })),
+  groupLeaseAgreementCandidates: vi.fn((candidates: any[]) => ({ mergeGroups: [], ambiguousGroups: [], singles: candidates })),
   pickAgreementWinner: vi.fn((candidate: any) => candidate),
 }));
 
@@ -1077,5 +1084,65 @@ describe("leaseRoutes integrity repairs", () => {
     const notesRes = await request(app).get("/lease-1/notes");
     expect(notesRes.status).toBe(200);
     expect(notesRes.body?.notes?.[0]?.note).toBe("Keep this for audit.");
+  });
+
+  it("projects raw unit occupancy/current linkage when normalized property inputs are absent", async () => {
+    seedDoc("units", "unit-ref", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "REF-EXPIRED",
+      occupancyStatus: "occupied",
+      status: "occupied",
+      currentLeaseId: "lease-ref",
+      currentTenantId: "tenant-ref",
+    });
+    seedDoc("units", "unit-control", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "CTRL-ACTIVE",
+      occupancyStatus: "occupied",
+      status: "occupied",
+      currentLeaseId: "lease-control",
+      currentTenantId: "tenant-control",
+    });
+    seedDoc("leases", "lease-ref", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-ref",
+      tenantId: "tenant-ref",
+      primaryTenantId: "tenant-ref",
+      startDate: "2025-05-01",
+      endDate: "2026-04-30",
+      executionStatus: "fully_executed",
+      status: "active",
+    });
+    seedDoc("leases", "lease-control", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-control",
+      tenantId: "tenant-control",
+      primaryTenantId: "tenant-control",
+      startDate: "2026-05-01",
+      endDate: "2027-04-30",
+      executionStatus: "fully_executed",
+      status: "active",
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/property/prop-1");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.canonicalUnitStates?.["unit-ref"]).toMatchObject({
+      leaseTermState: "past",
+      occupancyState: "review_needed",
+      tenantRelationshipState: "occupancy_unresolved",
+      supportingLeaseId: null,
+    });
+    expect(res.body?.canonicalUnitStates?.["unit-control"]).toMatchObject({
+      leaseTermState: "active",
+      occupancyState: "occupied",
+      tenantRelationshipState: "current_occupant",
+      supportingLeaseId: "lease-control",
+    });
   });
 });

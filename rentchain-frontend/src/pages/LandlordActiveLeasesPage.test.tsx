@@ -1231,4 +1231,18 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.getByRole("button", { name: "Archive lease" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Enable rent collection/i })).toBeInTheDocument();
   });
+
+  it("uses canonical expired and review-needed labels instead of a stale active status", async () => {
+    mocks.getActiveLeasesForLandlord.mockResolvedValue({
+      leases: [{
+        id: "lease-past", propertyId: "prop-1", propertyName: "Harbour View", unitNumber: "101",
+        monthlyRent: 1850, startDate: "2025-05-01", endDate: "2026-04-30", status: "active",
+        tenantName: "Jane Tenant", tenantEmail: "jane@example.com",
+        canonicalState: { leaseTermState: "past", occupancyState: "review_needed", tenantRelationshipState: "occupancy_unresolved", supportingLeaseId: null, reasons: ["OCCUPIED_WITHOUT_CURRENT_LEASE"] },
+      }],
+    });
+    render(<MemoryRouter><LandlordActiveLeasesPage /></MemoryRouter>);
+    expect((await screen.findAllByText("Expired")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Review needed").length).toBeGreaterThan(0);
+  });
 });

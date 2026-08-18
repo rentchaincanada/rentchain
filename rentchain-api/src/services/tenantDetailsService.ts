@@ -13,7 +13,6 @@ import {
 import {
   groupLeaseAgreementCandidates,
   pickAgreementWinner,
-  pickTenantWinningAgreement,
 } from "./leasePartyConsolidationService";
 import { buildCredibilityInsights, type CredibilityInsights } from "./risk/credibilityInsights";
 import { buildMoveInRequirements, type MoveInRequirements } from "./moveInRequirements";
@@ -33,6 +32,13 @@ import {
   type TenantLifecycleResult,
 } from "../lib/tenants/deriveTenantLifecycle";
 import { deriveLeaseOccupancyCoherence } from "../lib/leases/deriveLeaseOccupancyCoherence";
+import {
+  buildCanonicalLeaseOccupancyProjection,
+  resolveCanonicalUnitProjectionInputs,
+  toCanonicalLeaseStateInput,
+  type CanonicalLeaseOccupancyProjection,
+} from "../lib/leases/canonicalLeaseOccupancyProjection";
+import { selectCanonicalCurrentLease } from "../lib/leases/canonicalLeaseOccupancyState";
 import { getSignedLeaseDocumentDownload } from "./signing/leaseSigningService";
 
 export interface TenantRecord {
@@ -64,6 +70,7 @@ export interface TenantRecord {
   source?: string | null;
   createdAt?: string | number | null;
   lifecycle?: TenantLifecycleResult;
+  canonicalState?: CanonicalLeaseOccupancyProjection;
 }
 
 export interface TenantLease {
@@ -205,30 +212,16 @@ function normalizeTenantEmail(value: any): string | null {
 }
 
 const TENANT_PROFILE_LEASE_STATUSES = new Set([
-  "active",
-  "current",
-  "notice_pending",
-  "renewal_pending",
-  "renewal_accepted",
-  "move_out_pending",
-  "signed",
-  "signed_future",
-  "fully_executed",
-  "pending_signature",
-  "sent",
-  "ready_for_tenant_signature",
-  "tenant_signed",
-  "ready_for_landlord_signature",
-  "landlord_signed",
+  "active", "current", "notice_pending", "renewal_pending", "renewal_accepted", "move_out_pending",
+  "signed", "signed_future", "fully_executed", "pending_signature", "sent",
+  "ready_for_tenant_signature", "tenant_signed", "ready_for_landlord_signature", "landlord_signed",
 ]);
 
 function isTenantProfileLeaseCandidate(raw: Record<string, unknown>): boolean {
   const status = normalizeIdentityString((raw as any)?.status);
   const signingStatus = normalizeIdentityString(
-    (raw as any)?.currentSigningStatus ||
-      (raw as any)?.signingStatus ||
-      (raw as any)?.leaseSigningStatus ||
-      (raw as any)?.providerSigningStatus
+    (raw as any)?.currentSigningStatus || (raw as any)?.signingStatus ||
+    (raw as any)?.leaseSigningStatus || (raw as any)?.providerSigningStatus
   );
   return isCurrentLeaseStatus(status) || TENANT_PROFILE_LEASE_STATUSES.has(status) || TENANT_PROFILE_LEASE_STATUSES.has(signingStatus);
 }
@@ -435,9 +428,9 @@ async function loadTenantRecord(tenantId: string, landlordId?: string | null): P
   return null;
 }
 
-async function loadCurrentLeaseSnapshot(tenant: TenantRecord | null, landlordId?: string | null) {
+async function loadTenantLeaseResolution(tenant: TenantRecord | null, landlordId?: string | null) {
   const tenantId = String(tenant?.id || "").trim();
-  if (!tenantId) return null;
+  if (!tenantId) return { displayLease: null, leases: [] as any[] };
   try {
     const leasesRef = db.collection("leases");
     const hintedLeaseId = String(tenant?.currentLeaseId || "").trim();
@@ -464,9 +457,9 @@ async function loadCurrentLeaseSnapshot(tenant: TenantRecord | null, landlordId?
       const tenantMatch = Array.isArray((raw as any)?.tenantIds)
         ? (raw as any).tenantIds.map((value: any) => String(value || "").trim()).includes(tenantId)
         : String((raw as any)?.tenantId || (raw as any)?.primaryTenantId || "").trim() === tenantId;
-      return landlordMatch && tenantMatch && isTenantProfileLeaseCandidate(raw);
+      return landlordMatch && tenantMatch;
     });
-    if (!currentEntries.length) return null;
+    if (!currentEntries.length) return { displayLease: null, leases: [] as any[] };
 
     const propertyIds = Array.from(
       new Set(
@@ -490,20 +483,29 @@ async function loadCurrentLeaseSnapshot(tenant: TenantRecord | null, landlordId?
       };
     });
     const grouped = groupLeaseAgreementCandidates(agreementCandidates);
-    const tenantGroup = pickTenantWinningAgreement([...grouped.mergeGroups, ...grouped.ambiguousGroups], tenantId);
-    if (tenantGroup) {
-      return pickAgreementWinner(tenantGroup.candidates).lease;
-    }
-
-    const directMatch = agreementCandidates.find((candidate) =>
-      Array.isArray((candidate.raw as any)?.tenantIds)
-        ? (candidate.raw as any).tenantIds.map((value: any) => String(value || "").trim()).includes(tenantId)
-        : String((candidate.raw as any)?.tenantId || "").trim() === tenantId
-    );
-    return directMatch?.lease || pickAgreementWinner(agreementCandidates).lease;
+    const representatives = [
+      ...grouped.mergeGroups.map((group) => pickAgreementWinner(group.candidates).lease),
+      ...grouped.ambiguousGroups.map((group) => pickAgreementWinner(group.candidates).lease),
+      ...grouped.singles.map((candidate) => candidate.lease),
+    ];
+    const selection = selectCanonicalCurrentLease(representatives.map(toCanonicalLeaseStateInput), {
+      landlordId,
+      tenantId,
+    });
+    const selectedLease = selection.lease
+      ? representatives.find((lease) => lease.id === selection.lease?.id) || null
+      : null;
+    const displayCandidates = representatives.filter((lease) => isTenantProfileLeaseCandidate(lease));
+    const hintedLease = displayCandidates.find((lease) => lease.id === hintedLeaseId) || null;
+    return {
+      displayLease: selectedLease || hintedLease || (displayCandidates.length
+        ? pickAgreementWinner(displayCandidates.map((lease) => ({ lease, raw: lease }))).lease
+        : null),
+      leases: representatives,
+    };
   } catch (err) {
-    console.error("[tenantDetailsService] loadCurrentLeaseSnapshot error", err);
-    return null;
+    console.error("[tenantDetailsService] loadTenantLeaseResolution error", err);
+    return { displayLease: null, leases: [] as any[] };
   }
 }
 
@@ -704,7 +706,8 @@ async function loadApplicationRawById(applicationId: string | null | undefined) 
 
 async function hydrateTenantDisplayFields(tenant: TenantRecord, landlordId?: string | null): Promise<TenantRecord> {
   const hydrated: TenantRecord = { ...tenant };
-  const canonicalLease = await loadCurrentLeaseSnapshot(hydrated, landlordId);
+  const leaseResolution = await loadTenantLeaseResolution(hydrated, landlordId);
+  const displayLease = leaseResolution.displayLease;
   const property = await loadPropertyRecord(hydrated.propertyId || null);
   const unit = await loadUnitRecord(
     hydrated.propertyId || null,
@@ -712,6 +715,24 @@ async function hydrateTenantDisplayFields(tenant: TenantRecord, landlordId?: str
     hydrated.unit || null,
     landlordId
   );
+  const unitInputs = resolveCanonicalUnitProjectionInputs(unit || {});
+  const canonicalState = buildCanonicalLeaseOccupancyProjection({
+    leases: leaseResolution.leases,
+    context: {
+      landlordId: hydrated.landlordId || landlordId,
+      propertyId: displayLease?.propertyId || hydrated.propertyId,
+      unitId: displayLease?.unitId || hydrated.unitId,
+      tenantId: hydrated.id,
+    },
+    ...unitInputs,
+    persistedTenantStatus: hydrated.status,
+    currentLeasePointerId: hydrated.currentLeaseId,
+    tenantId: hydrated.id,
+  });
+  hydrated.canonicalState = canonicalState;
+  const canonicalLease = canonicalState.supportingLeaseId
+    ? leaseResolution.leases.find((lease) => lease.id === canonicalState.supportingLeaseId) || null
+    : null;
 
   const propertyName = pickString(hydrated.propertyName, property?.name);
   if (propertyName) hydrated.propertyName = propertyName;
@@ -759,7 +780,8 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
       FALLBACK_TENANTS[0];
   }
 
-  const currentLeaseRecord = await loadCurrentLeaseSnapshot(tenant, landlordId);
+  const leaseResolution = await loadTenantLeaseResolution(tenant, landlordId);
+  const currentLeaseRecord = leaseResolution.displayLease;
   const baseCurrentLeaseRaw = await loadLeaseRawById(currentLeaseRecord?.id || null);
   const [tenantInviteState, tenantTenancies, applicationRaw, latestSigningRequest, latestSigningSignedEvent] = await Promise.all([
     loadLatestTenantInviteState(tenant, landlordId),
@@ -893,6 +915,22 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     archivedAt: (tenant as any)?.archivedAt || (currentLeaseRaw as any)?.archivedAt,
     isArchived: (tenant as any)?.isArchived || (currentLeaseRaw as any)?.isArchived,
   });
+  const canonicalState = buildCanonicalLeaseOccupancyProjection({
+    leases: leaseResolution.leases.map((candidate) =>
+      candidate.id === currentLeaseRecord?.id ? { ...currentLeaseRaw, ...candidate } : candidate
+    ),
+    context: {
+      landlordId: tenant?.landlordId || landlordId,
+      propertyId: currentLeaseRecord?.propertyId || tenant?.propertyId,
+      unitId: currentLeaseRecord?.unitId || tenant?.unitId,
+      tenantId,
+    },
+    ...resolveCanonicalUnitProjectionInputs(unit || {}),
+    persistedTenancyStatus: currentTenancy?.status,
+    persistedTenantStatus: tenant?.status,
+    currentLeasePointerId: tenant?.currentLeaseId,
+    tenantId,
+  });
   const insights: any[] = [];
   const credibilityInsights = buildCredibilityInsights({ tenant, leaseRaw: currentLeaseRaw });
   const moveInRequirements = buildMoveInRequirements({
@@ -925,7 +963,7 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
   return {
     tenant,
     lease,
-    currentLease: lease,
+    currentLease: canonicalState.supportingLeaseId === lease?.id ? lease : null,
     property,
     unit: unit
       ? {
@@ -945,5 +983,6 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     ledgerSummary,
     lifecycle,
     stateCoherence,
+    canonicalState,
   };
 }

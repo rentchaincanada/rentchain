@@ -54,6 +54,7 @@ import {
   type UnitOccupancyStatus,
 } from "@/lib/leases/leaseLifecycle";
 import { getUnitsNeedingOccupancySetup } from "./occupancyPrompt";
+import type { CanonicalLeaseOccupancyState } from "@/lib/leases/canonicalStatePresentation";
 
 interface PropertyDetailPanelProps {
   property: Property | null;
@@ -320,6 +321,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     currentPlan === "pro" ||
     currentPlan === "elite";
   const [leases, setLeases] = useState<Lease[]>([]);
+  const [canonicalUnitStates, setCanonicalUnitStates] = useState<Record<string, CanonicalLeaseOccupancyState>>({});
   const [credibilitySummary, setCredibilitySummary] = useState<PropertyCredibilitySummary | null>(null);
   const [isLeasesLoading, setIsLeasesLoading] = useState(false);
   const [leasesError, setLeasesError] = useState<string | null>(null);
@@ -709,6 +711,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     const currentId = propertyId;
     if (!property) {
       setLeases([]);
+      setCanonicalUnitStates({});
       setCredibilitySummary(null);
       setLeasesLoadingStates(false, null);
       setPayments([]);
@@ -725,6 +728,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         if (!cancelled) {
           if (currentId === propertyId) {
             setLeases(data.leases);
+            setCanonicalUnitStates(data.canonicalUnitStates ?? {});
             setCredibilitySummary(data.credibilitySummary ?? null);
             setLeasesError(null);
           }
@@ -733,6 +737,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         console.error("[PropertyDetailPanel] Failed to load leases", err);
         if (!cancelled) {
           setLeases([]);
+          setCanonicalUnitStates({});
           setCredibilitySummary(null);
           setLeasesError("Leases could not be loaded");
         }
@@ -835,8 +840,29 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const collectionRate =
     currentOccupiedRentTotal > 0 ? totalCollectedThisMonth / currentOccupiedRentTotal : 0;
   const getUnitOccupancy = useCallback(
-    (unit: any) => applySavedUnitOccupancy(unit, deriveUnitOccupancyFromLeases(unit, leases)),
-    [leases]
+    (unit: any): UnitOccupancy => {
+      const unitId = String(unit?.id || unit?.unitId || "").trim();
+      const canonical = canonicalUnitStates[unitId];
+      if (!canonical) return applySavedUnitOccupancy(unit, deriveUnitOccupancyFromLeases(unit, leases));
+      const supportingLease = canonical.supportingLeaseId
+        ? leases.find((lease) => lease.id === canonical.supportingLeaseId) || null
+        : null;
+      if (canonical.occupancyState === "occupied") {
+        return { status: "occupied", label: "Occupied", lease: supportingLease };
+      }
+      if (canonical.occupancyState === "review_needed") {
+        return {
+          status: "review_required",
+          label: "Review needed",
+          lease: supportingLease,
+          reason: canonical.leaseTermState === "past"
+            ? "Past lease · Occupancy requires review"
+            : "Lease and occupancy records require review",
+        };
+      }
+      return { status: "vacant", label: "Vacant", lease: null };
+    },
+    [canonicalUnitStates, leases]
   );
   const getUnitOccupancyView = useCallback(
     (unit: any) => buildUnitOccupancyView(unit, getUnitOccupancy(unit)),

@@ -266,6 +266,87 @@ describe("getTenantsList", () => {
     });
   });
 
+  it("projects an expired occupied tenant as review-needed without a canonical current lease", async () => {
+    tenantDocs.clear();
+    tenantDocs.set("tenant-ref", {
+      landlordId: "landlord-1",
+      fullName: "Expired Tenant",
+      propertyId: "property-1",
+      unitId: "unit-ref",
+      currentLeaseId: "lease-ref",
+      status: "active",
+    });
+    propertyDocs.set("property-1", { landlordId: "landlord-1", name: "Canonical Property" });
+    unitDocs.set("unit-ref", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "REF-EXPIRED",
+      occupancyStatus: "occupied",
+      currentLeaseId: "lease-ref",
+      currentTenantId: "tenant-ref",
+    });
+    leaseDocs.set("lease-ref", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-ref",
+      propertyId: "property-1",
+      unitId: "unit-ref",
+      status: "active",
+      startDate: "2025-05-01",
+      endDate: "2026-04-30",
+    });
+
+    const { getTenantsList } = await import("../tenantDetailsService");
+    const [tenant] = await getTenantsList({ landlordId: "landlord-1" });
+
+    expect(tenant.currentLeaseId).toBeNull();
+    expect(tenant.canonicalState).toMatchObject({
+      leaseTermState: "past",
+      occupancyState: "review_needed",
+      tenantRelationshipState: "occupancy_unresolved",
+      supportingLeaseId: null,
+    });
+  });
+
+  it("preserves the canonical current lease for a genuine active tenant", async () => {
+    tenantDocs.clear();
+    tenantDocs.set("tenant-control", {
+      landlordId: "landlord-1",
+      fullName: "Active Tenant",
+      propertyId: "property-1",
+      unitId: "unit-control",
+      currentLeaseId: "lease-control",
+      status: "active",
+    });
+    unitDocs.set("unit-control", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "CTRL-ACTIVE",
+      occupancyStatus: "occupied",
+      currentLeaseId: "lease-control",
+      currentTenantId: "tenant-control",
+    });
+    leaseDocs.set("lease-control", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-control",
+      propertyId: "property-1",
+      unitId: "unit-control",
+      status: "active",
+      startDate: "2026-05-01",
+      endDate: "2027-04-30",
+    });
+
+    const { getTenantsList } = await import("../tenantDetailsService");
+    const [tenant] = await getTenantsList({ landlordId: "landlord-1" });
+
+    expect(tenant.currentLeaseId).toBe("lease-control");
+    expect(tenant.canonicalState).toMatchObject({
+      leaseTermState: "active",
+      occupancyState: "occupied",
+      tenantRelationshipState: "current_occupant",
+      supportingLeaseId: "lease-control",
+    });
+  });
+
   it("preserves fallback tenants when no tenant records exist outside landlord scope", async () => {
     tenantDocs.clear();
 
@@ -326,11 +407,61 @@ describe("getTenantDetailBundle", () => {
     expect(bundle.stateCoherence?.occupancyState).toBe("review_required");
   });
 
+  it("retains an expired lease as history without exposing it as current", async () => {
+    tenantDocs.set("tenant-ref", {
+      landlordId: "landlord-1",
+      fullName: "Expired Tenant",
+      propertyId: "property-1",
+      unitId: "unit-ref",
+      currentLeaseId: "lease-ref",
+      status: "active",
+    });
+    propertyDocs.set("property-1", { landlordId: "landlord-1", name: "Canonical Property" });
+    unitDocs.set("unit-ref", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "REF-EXPIRED",
+      occupancyStatus: "occupied",
+      currentLeaseId: "lease-ref",
+      currentTenantId: "tenant-ref",
+    });
+    leaseDocs.set("lease-ref", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-ref",
+      propertyId: "property-1",
+      unitId: "unit-ref",
+      status: "active",
+      startDate: "2025-05-01",
+      endDate: "2026-04-30",
+    });
+
+    const { getTenantDetailBundle } = await import("../tenantDetailsService");
+    const bundle = await getTenantDetailBundle("tenant-ref", { landlordId: "landlord-1" });
+
+    expect(bundle.currentLease).toBeNull();
+    expect(bundle.lease).toEqual(expect.objectContaining({ id: "lease-ref" }));
+    expect(bundle.canonicalState).toMatchObject({
+      leaseTermState: "past",
+      occupancyState: "review_needed",
+      tenantRelationshipState: "occupancy_unresolved",
+      supportingLeaseId: null,
+    });
+  });
+
   it("exposes only a valid landlord-owned lease for the matching tenant", async () => {
     tenantDocs.set("tenant-1", { landlordId: "landlord-1", fullName: "Tenant One", currentLeaseId: "lease-1", status: "Current" });
     propertyDocs.set("property-1", { landlordId: "landlord-1", name: "Property" });
     unitDocs.set("unit-1", { landlordId: "landlord-1", propertyId: "property-1", unitNumber: "1", status: "occupied", occupancyStatus: "occupied" });
-    leaseDocs.set("lease-1", { landlordId: "landlord-1", tenantId: "tenant-1", propertyId: "property-1", unitId: "unit-1", status: "active", monthlyRent: 1800 });
+    leaseDocs.set("lease-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      status: "active",
+      startDate: "2026-05-01",
+      endDate: "2027-04-30",
+      monthlyRent: 1800,
+    });
 
     const { getTenantDetailBundle } = await import("../tenantDetailsService");
     const bundle = await getTenantDetailBundle("tenant-1", { landlordId: "landlord-1" });
@@ -469,7 +600,8 @@ describe("getTenantDetailBundle", () => {
     const { getTenantDetailBundle } = await import("../tenantDetailsService");
     const bundle = await getTenantDetailBundle("tenant-1", { landlordId: "landlord-1" });
 
-    expect(bundle.currentLease).toEqual(
+    expect(bundle.currentLease).toBeNull();
+    expect(bundle.lease).toEqual(
       expect.objectContaining({
         id: "lease-1",
         signedDocumentUrl: null,
