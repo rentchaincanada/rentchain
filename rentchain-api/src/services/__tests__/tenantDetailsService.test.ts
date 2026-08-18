@@ -347,6 +347,48 @@ describe("getTenantsList", () => {
     });
   });
 
+  it("preserves multiple same-term lease evidence for tenant canonical review", async () => {
+    tenantDocs.set("tenant-visible", {
+      landlordId: "landlord-1",
+      fullName: "Visible Tenant",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      currentLeaseId: "lease-a",
+      status: "Current",
+    });
+    unitDocs.set("unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "101",
+      occupancyStatus: "occupied",
+      currentTenantId: "tenant-visible",
+      currentLeaseId: "lease-a",
+    });
+    for (const leaseId of ["lease-a", "lease-b"]) {
+      leaseDocs.set(leaseId, {
+        landlordId: "landlord-1",
+        tenantId: "tenant-visible",
+        primaryTenantId: "tenant-visible",
+        propertyId: "property-1",
+        unitId: "unit-1",
+        status: "active",
+        startDate: "2026-05-01",
+        endDate: "2027-04-30",
+        executionStatus: "fully_executed",
+      });
+    }
+
+    const { getTenantsList } = await import("../tenantDetailsService");
+    const tenant = (await getTenantsList({ landlordId: "landlord-1" }))
+      .find((candidate) => candidate.id === "tenant-visible");
+
+    expect(tenant?.canonicalState).toMatchObject({
+      occupancyState: "review_needed",
+      supportingLeaseId: null,
+    });
+    expect(tenant?.canonicalState?.reasons).toContain("MULTIPLE_CURRENT_LEASES");
+  });
+
   it("preserves fallback tenants when no tenant records exist outside landlord scope", async () => {
     tenantDocs.clear();
 

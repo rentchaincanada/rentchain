@@ -29,7 +29,7 @@ import {
   resolveUnitReference,
   toCanonicalLeaseRecord,
 } from "../services/leaseCanonicalizationService";
-import { evaluateSameLeaseAgreement, groupLeaseAgreementCandidates, pickAgreementWinner } from "../services/leasePartyConsolidationService";
+import { evaluateSameLeaseAgreement, groupLeaseAgreementCandidates, pickAgreementWinner, preserveCanonicalLeaseEvidence } from "../services/leasePartyConsolidationService";
 import { loadPropertyLeaseIntegrityDiagnostics } from "../services/leaseIntegrityService";
 import { buildLeaseRiskPersistenceFields, computeLeaseRiskSnapshot } from "../services/risk/recomputeLeaseRisk";
 import { loadPropertyCredibilitySummary } from "../services/risk/propertyCredibilitySummary";
@@ -3612,6 +3612,7 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
       ...grouped.ambiguousGroups.map((group) => pickAgreementWinner(group.candidates).lease),
       ...grouped.singles.map((candidate) => candidate.lease),
     ];
+    const canonicalEvidenceLeases = preserveCanonicalLeaseEvidence(filteredAgreementCandidates);
     const winnerIds = new Set(
       dedupePropertyScopedLeasesByUnit(groupedWinners).map((lease) => lease.id)
     );
@@ -3622,7 +3623,7 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
     const canonicalUnitStates = Object.fromEntries(
       units.map((unit: any) => {
         const unitId = String(unit?.id || "").trim();
-        const relatedLeases = groupedWinners.filter((lease: any) => canonicalLeaseMatchesUnit(lease, unitId));
+        const relatedLeases = canonicalEvidenceLeases.filter((lease: any) => canonicalLeaseMatchesUnit(lease, unitId));
         const unitInputs = resolveCanonicalUnitProjectionInputs(unit);
         return [unitId, buildCanonicalLeaseOccupancyProjection({
           leases: relatedLeases,

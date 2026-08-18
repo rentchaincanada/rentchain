@@ -90,6 +90,27 @@ describe("propertyCredibilitySummary", () => {
     expect(summary.tenantsWithScoreCount).toBe(1);
   });
 
+  it("counts a multiple-current unit as review instead of one coherent active lease", () => {
+    const summary = computePropertyCredibilitySummary({
+      propertyId: "property-conflict",
+      leases: [
+        { id: "lease-a", status: "active", tenantId: "tenant-1", riskScore: 80, riskConfidence: 0.9 },
+        { id: "lease-b", status: "active", tenantId: "tenant-1", riskScore: 80, riskConfidence: 0.9 },
+      ],
+      tenants: [{ id: "tenant-1", tenantScoreValue: 80, tenantScoreConfidence: 0.9 }],
+      canonicalUnitStates: {
+        "unit-1": {
+          leaseTermState: "active",
+          occupancyState: "review_needed",
+          supportingLeaseId: null,
+        },
+      },
+    });
+
+    expect(summary.activeLeaseCount).toBe(0);
+    expect(summary.lowConfidenceCount).toBe(1);
+  });
+
   it("preserves legacy status behavior when canonical unit states are absent", () => {
     const summary = computePropertyCredibilitySummary({
       propertyId: "property-legacy",

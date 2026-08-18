@@ -142,6 +142,9 @@ vi.mock("../../services/leaseCanonicalizationService", () => ({
     primaryTenantId: String(raw?.primaryTenantId || raw?.tenantId || "").trim() || null,
     startDate: raw?.startDate,
     endDate: raw?.endDate,
+    leaseStartDate: raw?.startDate,
+    leaseEndDate: raw?.endDate,
+    logicalUnitKey: String(raw?.unitId || "").trim() || null,
     executionStatus: raw?.executionStatus,
   })),
 }));
@@ -150,6 +153,7 @@ vi.mock("../../services/leasePartyConsolidationService", () => ({
   evaluateSameLeaseAgreement: vi.fn(() => ({ decision: "separate" })),
   groupLeaseAgreementCandidates: vi.fn((candidates: any[]) => ({ mergeGroups: [], ambiguousGroups: [], singles: candidates })),
   pickAgreementWinner: vi.fn((candidate: any) => candidate),
+  preserveCanonicalLeaseEvidence: vi.fn((candidates: any[]) => Array.from(new Map(candidates.map((candidate) => [candidate.lease.id, candidate.lease])).values())),
 }));
 
 vi.mock("../../services/leaseIntegrityService", () => ({
@@ -1144,5 +1148,53 @@ describe("leaseRoutes integrity repairs", () => {
       tenantRelationshipState: "current_occupant",
       supportingLeaseId: "lease-control",
     });
+  });
+
+  it("keeps independently valid same-term leases visible to the property canonical projection", async () => {
+    const { groupLeaseAgreementCandidates, pickAgreementWinner } = await import("../../services/leasePartyConsolidationService");
+    vi.mocked(groupLeaseAgreementCandidates).mockImplementationOnce((candidates: any[]) => ({
+      mergeGroups: [{
+        groupKey: "landlord-1::prop-1::unit-conflict",
+        representativeKey: "same-term",
+        candidates,
+        mergedTenantIds: ["tenant-1"],
+        ambiguous: false,
+        reasons: ["same_unit_same_term_signature"],
+      }],
+      ambiguousGroups: [],
+      singles: [],
+    }));
+    vi.mocked(pickAgreementWinner).mockImplementationOnce((candidates: any[]) => candidates[0]);
+    seedDoc("units", "unit-conflict", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "MULTI-1",
+      occupancyStatus: "occupied",
+      status: "occupied",
+      currentTenantId: "tenant-1",
+    });
+    for (const leaseId of ["lease-current-a", "lease-current-b"]) {
+      seedDoc("leases", leaseId, {
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        unitId: "unit-conflict",
+        tenantId: "tenant-1",
+        primaryTenantId: "tenant-1",
+        startDate: "2026-05-01",
+        endDate: "2027-04-30",
+        executionStatus: "fully_executed",
+        status: "active",
+      });
+    }
+
+    const app = await makeApp();
+    const res = await request(app).get("/property/prop-1");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.canonicalUnitStates?.["unit-conflict"]).toMatchObject({
+      occupancyState: "review_needed",
+      supportingLeaseId: null,
+    });
+    expect(res.body?.canonicalUnitStates?.["unit-conflict"]?.reasons).toContain("MULTIPLE_CURRENT_LEASES");
   });
 });
