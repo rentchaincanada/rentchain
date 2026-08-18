@@ -1,5 +1,5 @@
-import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import React, { useState } from "react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ResolveOccupancyDrawer } from "./ResolveOccupancyDrawer";
 
@@ -21,6 +21,24 @@ const context = {
   existingLeaseCandidates: [],
   activeLeaseRequiresEndWorkflow: false,
 };
+
+function DrawerHarness({ removeTriggerOnResolve = false }: { removeTriggerOnResolve?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [resolved, setResolved] = useState(false);
+  return (
+    <main aria-label="Occupancy workspace">
+      {!resolved ? <button type="button" onClick={() => setOpen(true)}>Resolve occupancy</button> : null}
+      <ResolveOccupancyDrawer
+        open={open}
+        propertyId="property-1"
+        unitId="unit-1"
+        tenantId="tenant-1"
+        onClose={() => setOpen(false)}
+        onResolved={() => { if (removeTriggerOnResolve) setResolved(true); }}
+      />
+    </main>
+  );
+}
 
 describe("ResolveOccupancyDrawer", () => {
   afterEach(() => cleanup());
@@ -54,5 +72,70 @@ describe("ResolveOccupancyDrawer", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Review later" }));
     expect(onClose).toHaveBeenCalledOnce();
     expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("moves focus through the named modal in both directions and contains repeated Tab", async () => {
+    render(<DrawerHarness />);
+    const opener = screen.getByRole("button", { name: "Resolve occupancy" });
+    opener.focus();
+    fireEvent.click(opener);
+
+    const dialog = await screen.findByRole("dialog", { name: "Resolve Occupancy" });
+    const close = screen.getByRole("button", { name: "Close Resolve Occupancy" });
+    await waitFor(() => expect(close).toHaveFocus());
+
+    fireEvent.keyDown(close, { key: "Tab" });
+    expect(screen.getByLabelText("Record operational move-out")).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "Tab" });
+    expect(screen.getByLabelText("Correct stale occupancy records")).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "Tab" });
+    expect(screen.getByRole("button", { name: "Review later" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "Tab" });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+    expect(screen.getByRole("button", { name: "Review later" })).toHaveFocus();
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it("Escape closes without mutation and restores focus to the opener", async () => {
+    render(<DrawerHarness />);
+    const opener = screen.getByRole("button", { name: "Resolve occupancy" });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = await screen.findByRole("dialog", { name: "Resolve Occupancy" });
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(opener).toHaveFocus());
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it.each(["Close Resolve Occupancy", "Review later"])(
+    "%s restores focus to the opener",
+    async (buttonName) => {
+      render(<DrawerHarness />);
+      const opener = screen.getByRole("button", { name: "Resolve occupancy" });
+      opener.focus();
+      fireEvent.click(opener);
+      fireEvent.click(await screen.findByRole("button", { name: buttonName }));
+
+      await waitFor(() => expect(opener).toHaveFocus());
+      expect(submit).not.toHaveBeenCalled();
+    }
+  );
+
+  it("focuses a stable workspace fallback after success removes the opener", async () => {
+    render(<DrawerHarness removeTriggerOnResolve />);
+    const opener = screen.getByRole("button", { name: "Resolve occupancy" });
+    opener.focus();
+    fireEvent.click(opener);
+    fireEvent.click(await screen.findByLabelText("Correct stale occupancy records"));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm operational reconciliation" }));
+
+    const workspace = screen.getByRole("main", { name: "Occupancy workspace" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(workspace).toHaveFocus());
+    expect(screen.queryByRole("button", { name: "Resolve occupancy" })).not.toBeInTheDocument();
   });
 });

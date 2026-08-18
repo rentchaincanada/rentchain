@@ -49,6 +49,8 @@ export function ResolveOccupancyDrawer(props: {
   const [selectedLeaseId, setSelectedLeaseId] = useState("");
   const idempotencyKey = useRef(key());
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!props.open) return;
@@ -65,9 +67,63 @@ export function ResolveOccupancyDrawer(props: {
     return () => { cancelled = true; };
   }, [props.open, props.propertyId, props.unitId, props.tenantId]);
 
+  useEffect(() => {
+    if (!props.open) return;
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }, [props.open]);
+
   useEffect(() => { if (props.open && !loading) closeRef.current?.focus(); }, [props.open, loading]);
   const canSubmit = useMemo(() => Boolean(context && type && !submitting && (type !== "record_operational_move_out" || effectiveDate) && (type !== "link_existing_lease" || selectedLeaseId)), [context, type, submitting, effectiveDate, selectedLeaseId]);
   if (!props.open) return null;
+
+  const restoreFocus = () => {
+    window.setTimeout(() => {
+      const opener = openerRef.current;
+      if (opener?.isConnected && !opener.hasAttribute("disabled")) {
+        opener.focus();
+        return;
+      }
+      const fallback = document.querySelector<HTMLElement>(
+        "[data-occupancy-focus-fallback], main, [role=main], h1"
+      );
+      if (fallback) {
+        if (!fallback.hasAttribute("tabindex")) fallback.setAttribute("tabindex", "-1");
+        fallback.focus();
+      }
+    }, 0);
+  };
+
+  const close = () => {
+    props.onClose();
+    restoreFocus();
+  };
+
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape" && !submitting) {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusable = Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((element) => element.getAttribute("aria-hidden") !== "true");
+    if (!focusable.length) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const activeIndex = focusable.indexOf(document.activeElement as HTMLElement);
+    const nextIndex = event.shiftKey
+      ? activeIndex <= 0 ? focusable.length - 1 : activeIndex - 1
+      : activeIndex < 0 || activeIndex === focusable.length - 1 ? 0 : activeIndex + 1;
+    event.preventDefault();
+    focusable[nextIndex].focus();
+  };
 
   const submit = async () => {
     if (!context || !type || !canSubmit) return;
@@ -76,7 +132,7 @@ export function ResolveOccupancyDrawer(props: {
     try {
       await submitOccupancyResolution({ context, type, idempotencyKey: idempotencyKey.current, effectiveDate, selectedLeaseId });
       await props.onResolved?.();
-      props.onClose();
+      close();
     } catch (reason) {
       const apiError = reason as ApiError;
       if (apiError?.body?.freshContext) setContext(apiError.body.freshContext);
@@ -87,11 +143,11 @@ export function ResolveOccupancyDrawer(props: {
   };
 
   return (
-    <div role="presentation" onKeyDown={(event) => { if (event.key === "Escape" && !submitting) props.onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15,23,42,.45)", display: "flex", justifyContent: "flex-end" }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="resolve-occupancy-title" style={{ width: "min(100%, 520px)", height: "100%", overflowY: "auto", background: "#fffaf1", padding: 24, boxShadow: "-12px 0 32px rgba(15,23,42,.18)", display: "grid", alignContent: "start", gap: 18 }}>
+    <div role="presentation" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15,23,42,.45)", display: "flex", justifyContent: "flex-end" }}>
+      <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="resolve-occupancy-title" tabIndex={-1} onKeyDown={handleDialogKeyDown} style={{ width: "min(100%, 520px)", maxWidth: "100vw", height: "100dvh", maxHeight: "100dvh", boxSizing: "border-box", overflowX: "hidden", overflowY: "auto", overscrollBehavior: "contain", background: "#fffaf1", padding: 24, boxShadow: "-12px 0 32px rgba(15,23,42,.18)", display: "grid", alignContent: "start", gap: 18 }}>
         <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
           <div><h2 id="resolve-occupancy-title" style={{ margin: 0 }}>Resolve Occupancy</h2><p style={{ margin: "6px 0 0", color: "#63594d" }}>Reconcile operational records without making a legal tenancy determination.</p></div>
-          <button ref={closeRef} type="button" onClick={props.onClose} disabled={submitting} aria-label="Close Resolve Occupancy">Close</button>
+          <button ref={closeRef} type="button" onClick={close} disabled={submitting} aria-label="Close Resolve Occupancy">Close</button>
         </header>
         {loading ? <p>Loading current occupancy records…</p> : null}
         {error ? <div role="alert" style={{ color: "#991b1b", background: "#fef2f2", padding: 12, borderRadius: 10 }}>{error}</div> : null}
@@ -103,7 +159,7 @@ export function ResolveOccupancyDrawer(props: {
           {type === "record_operational_move_out" ? <label>Effective date<input aria-label="Operational move-out effective date" type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} style={{ display: "block", marginTop: 6 }} /></label> : null}
           {type === "link_existing_lease" ? <label>Existing lease<select aria-label="Existing valid lease" value={selectedLeaseId} onChange={(event) => setSelectedLeaseId(event.target.value)} style={{ display: "block", marginTop: 6, maxWidth: "100%" }}><option value="">Select a lease</option>{context.existingLeaseCandidates.map((lease) => <option key={lease.id} value={lease.id}>{lease.label} · {lease.startDate || "Unknown start"} to {lease.endDate || "No end date"}</option>)}</select></label> : null}
           {type ? <div style={{ padding: 12, background: "#f8fafc", borderRadius: 10 }}>Historical lease and relationship records remain preserved. Confirming changes operational occupancy records only and does not determine legal tenancy rights.</div> : null}
-          <footer style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}><button type="button" onClick={props.onClose} disabled={submitting}>Review later</button>{type ? <button type="button" onClick={submit} disabled={!canSubmit}>{submitting ? "Reconciling…" : "Confirm operational reconciliation"}</button> : null}</footer>
+          <footer style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}><button type="button" onClick={close} disabled={submitting}>Review later</button>{type ? <button type="button" onClick={submit} disabled={!canSubmit}>{submitting ? "Reconciling…" : "Confirm operational reconciliation"}</button> : null}</footer>
         </> : null}
       </section>
     </div>
