@@ -19,6 +19,12 @@ export type CanonicalLeaseOccupancyProjection = {
   reasons: CanonicalLeaseConflictReason[];
 };
 
+export function canonicalLeaseMatchesUnit(raw: Record<string, any>, unitId: unknown): boolean {
+  const expectedUnitId = String(unitId || "").trim();
+  if (!expectedUnitId) return false;
+  return String(raw?.resolvedUnitId || raw?.unitId || "").trim() === expectedUnitId;
+}
+
 export function toCanonicalLeaseStateInput(raw: Record<string, any>): CanonicalLeaseStateInput {
   return {
     id: String(raw?.id || "").trim(),

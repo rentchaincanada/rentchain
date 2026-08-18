@@ -58,4 +58,46 @@ describe("propertyCredibilitySummary", () => {
     expect(summary.tenantScoreAverage).toBeNull();
     expect(summary.leaseRiskAverage).toBeNull();
   });
+
+  it("uses canonical lifecycle and occupancy for the property summary when supplied", () => {
+    const summary = computePropertyCredibilitySummary({
+      propertyId: "qa-pr1555-property",
+      leases: [
+        { id: "lease-expired", status: "active", tenantId: "tenant-expired", riskScore: 75, riskConfidence: 0.9 },
+        { id: "lease-active", status: "active", tenantId: "tenant-active", riskScore: 82, riskConfidence: 0.9 },
+      ],
+      tenants: [
+        { id: "tenant-expired", tenantScoreValue: 75, tenantScoreConfidence: 0.9 },
+        { id: "tenant-active", tenantScoreValue: 82, tenantScoreConfidence: 0.9 },
+      ],
+      canonicalUnitStates: {
+        "unit-expired": {
+          leaseTermState: "past",
+          occupancyState: "review_needed",
+          supportingLeaseId: null,
+        },
+        "unit-active": {
+          leaseTermState: "active",
+          occupancyState: "occupied",
+          supportingLeaseId: "lease-active",
+        },
+      },
+    });
+
+    expect(summary.activeLeaseCount).toBe(1);
+    expect(summary.lowConfidenceCount).toBe(1);
+    expect(summary.leasesWithRiskCount).toBe(1);
+    expect(summary.tenantsWithScoreCount).toBe(1);
+  });
+
+  it("preserves legacy status behavior when canonical unit states are absent", () => {
+    const summary = computePropertyCredibilitySummary({
+      propertyId: "property-legacy",
+      leases: [{ id: "lease-legacy", status: "active", tenantId: "tenant-legacy", riskScore: 80, riskConfidence: 0.9 }],
+      tenants: [{ id: "tenant-legacy", tenantScoreValue: 80, tenantScoreConfidence: 0.9 }],
+    });
+
+    expect(summary.activeLeaseCount).toBe(1);
+    expect(summary.lowConfidenceCount).toBe(0);
+  });
 });

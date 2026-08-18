@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCanonicalLeaseOccupancyProjection } from "../canonicalLeaseOccupancyProjection";
+import { buildCanonicalLeaseOccupancyProjection, canonicalLeaseMatchesUnit } from "../canonicalLeaseOccupancyProjection";
 
 const activeLease = {
   id: "lease-active",
@@ -13,6 +13,11 @@ const activeLease = {
 };
 
 describe("canonical lease occupancy projection", () => {
+  it("matches property units through the canonical resolved unit id", () => {
+    expect(canonicalLeaseMatchesUnit({ unitId: "legacy-label", resolvedUnitId: "unit-1" }, "unit-1")).toBe(true);
+    expect(canonicalLeaseMatchesUnit({ unitId: "legacy-label", resolvedUnitId: "unit-1" }, "legacy-label")).toBe(false);
+  });
+
   it("projects one shared active/occupied/current state", () => {
     expect(buildCanonicalLeaseOccupancyProjection({
       leases: [activeLease],

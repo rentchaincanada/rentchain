@@ -72,6 +72,7 @@ import { deriveLeaseLifecycleState } from "../lib/leases/leaseLifecycle";
 import { deriveLeaseOccupancyCoherence } from "../lib/leases/deriveLeaseOccupancyCoherence";
 import {
   buildCanonicalLeaseOccupancyProjection,
+  canonicalLeaseMatchesUnit,
   toCanonicalLeaseStateInput,
 } from "../lib/leases/canonicalLeaseOccupancyProjection";
 import { deriveCanonicalLeaseTermState } from "../lib/leases/canonicalLeaseOccupancyState";
@@ -3620,7 +3621,7 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
     const canonicalUnitStates = Object.fromEntries(
       units.map((unit: any) => {
         const unitId = String(unit?.id || "").trim();
-        const relatedLeases = groupedWinners.filter((lease: any) => String(lease?.unitId || "").trim() === unitId);
+        const relatedLeases = groupedWinners.filter((lease: any) => canonicalLeaseMatchesUnit(lease, unitId));
         return [unitId, buildCanonicalLeaseOccupancyProjection({
           leases: relatedLeases,
           context: { landlordId, propertyId, unitId },
@@ -3635,6 +3636,7 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
       propertyId,
       landlordId,
       leases: summaryLeases,
+      canonicalUnitStates,
     });
     if (String(req.query?.debug || "") === "1") {
       const integrity = await loadPropertyLeaseIntegrityDiagnostics(propertyId, landlordId, db as any);
