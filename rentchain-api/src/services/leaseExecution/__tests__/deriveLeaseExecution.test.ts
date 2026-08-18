@@ -144,6 +144,20 @@ describe("deriveLeaseExecution", () => {
     expect(result.completedAt).toBe("2026-05-09T12:00:00.000Z");
   });
 
+  it("preserves an explicit canonical fully-executed status without inventing signing timestamps", () => {
+    const result = deriveLeaseExecution({
+      leaseId: "lease-linked",
+      startDate: "2026-05-01",
+      monthlyRent: 1800,
+      status: "active",
+      raw: { executionStatus: "fully_executed" },
+    });
+
+    expect(result.executionStatus).toBe("fully_executed");
+    expect(result.requiredNextAction).toBe("none");
+    expect(result.completedAt).toBeNull();
+  });
+
   it("derives ready_for_tenant_signature from provider pending signature state", () => {
     const result = deriveLeaseExecution({
       leaseId: "lease-1",

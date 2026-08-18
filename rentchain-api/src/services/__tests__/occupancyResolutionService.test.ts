@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fakeDb, seed, read, failAudit, reset } = vi.hoisted(() => {
+const { fakeDb, seed, read, list, failAudit, reset } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
   let rejectAudit = false;
   const collection = (name: string) => {
@@ -44,6 +44,7 @@ const { fakeDb, seed, read, failAudit, reset } = vi.hoisted(() => {
     fakeDb,
     seed: (name: string, id: string, value: any) => collection(name).set(id, value),
     read: (name: string, id: string) => collection(name).get(id),
+    list: (name: string) => [...collection(name).values()],
     failAudit: (value: boolean) => { rejectAudit = value; },
     reset: () => { store.clear(); rejectAudit = false; },
   };
@@ -121,5 +122,22 @@ describe("occupancyResolutionService", () => {
     const result = await resolveOccupancy({ ...base, actorId: "landlord-1", type: "link_existing_lease", selectedLeaseId: "lease-current", expectedStateToken: fresh.expectedStateToken, idempotencyKey: "link-current", confirmation: true });
     expect(result.context.canonicalState).toMatchObject({ occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-current" });
     expect(read("units", "unit-1")).toMatchObject({ occupancyStatus: "occupied", currentLeaseId: "lease-current" });
+    expect(read("properties", "property-1").units[0]).toMatchObject({ occupancyStatus: "occupied", currentTenantId: "tenant-1", currentLeaseId: "lease-current" });
+    expect(read("tenants", "tenant-1")).toMatchObject({ status: "Current", currentLeaseId: "lease-current" });
+    expect(read("tenancies", "tenancy-1")).toMatchObject({ status: "active" });
+    expect(read("leases", "lease-current")).toMatchObject({ status: "active", executionStatus: "fully_executed", startDate: "2026-05-01", endDate: "2027-04-30" });
+  });
+
+  it("rejects a draft link candidate with zero operational or audit writes", async () => {
+    seedExpiredReview();
+    seed("leases", "lease-draft", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "draft", executionStatus: "draft", startDate: "2026-05-01", endDate: "2027-04-30" });
+    const context = await getOccupancyResolutionContext(base);
+    expect(context.existingLeaseCandidates.map((lease) => lease.id)).not.toContain("lease-draft");
+
+    await expect(resolveOccupancy({ ...base, actorId: "landlord-1", type: "link_existing_lease", selectedLeaseId: "lease-draft", expectedStateToken: context.expectedStateToken, idempotencyKey: "draft-link", confirmation: true })).rejects.toMatchObject({ code: "resolution_not_applicable" });
+
+    expect(read("units", "unit-1")).toMatchObject({ occupancyStatus: "occupied", currentLeaseId: "lease-past" });
+    expect(list("canonicalEvents")).toEqual([]);
+    expect(list("occupancyResolutionRequests")).toEqual([]);
   });
 });
