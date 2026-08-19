@@ -172,6 +172,11 @@ function pointerConflict(unit: CanonicalLeaseStartUnitInput, leaseId: string, te
   return leasePointers.some((id) => id !== leaseId) || tenantPointers.some((id) => id !== tenantId);
 }
 
+function occupiedWithoutTenantIdentity(unit: CanonicalLeaseStartUnitInput, tenantId: string): boolean {
+  if (!isOccupied(unit)) return false;
+  return ![text(unit.tenantId), text(unit.currentTenantId)].some((id) => id === tenantId);
+}
+
 function unitCoherent(unit: CanonicalLeaseStartUnitInput, leaseId: string, tenantId: string): boolean {
   return state(unit.status) === "occupied" && state(unit.occupancyStatus) === "occupied" &&
     idMatches(unit.tenantId, tenantId) && idMatches(unit.currentTenantId, tenantId) &&
@@ -246,6 +251,9 @@ export function evaluateCanonicalLeaseStart(input: CanonicalLeaseStartInput): Ca
   if ((isOccupied(standalone) && pointerConflict(standalone, leaseId, tenantId)) ||
       (isOccupied(embedded) && pointerConflict(embedded, leaseId, tenantId))) {
     return result("rejected", ["OCCUPIED_WITHOUT_CURRENT_LEASE", "STALE_CURRENT_LEASE_POINTER"]);
+  }
+  if (occupiedWithoutTenantIdentity(standalone, tenantId) || occupiedWithoutTenantIdentity(embedded, tenantId)) {
+    return result("rejected", ["OCCUPIED_WITHOUT_CURRENT_LEASE"]);
   }
   if (pointerConflict(standalone, leaseId, tenantId) || pointerConflict(embedded, leaseId, tenantId)) {
     return result("rejected", ["STALE_CURRENT_LEASE_POINTER"]);

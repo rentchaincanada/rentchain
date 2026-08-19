@@ -143,6 +143,62 @@ describe("canonical lease start", () => {
     expect(evaluateCanonicalLeaseStart(input)).toMatchObject({ outcome: "rejected", reasons: ["OCCUPIED_WITHOUT_CURRENT_LEASE", "STALE_CURRENT_LEASE_POINTER"] });
   });
 
+  it("rejects occupied legacy unit state without tenant or lease identity evidence", () => {
+    const input = baseInput();
+    input.standaloneUnits[0] = { ...input.standaloneUnits[0], status: "occupied", occupancyStatus: "occupied" };
+    input.embeddedUnits[0] = { ...input.embeddedUnits[0], status: "occupied", occupancyStatus: "occupied" };
+    expect(evaluateCanonicalLeaseStart(input)).toMatchObject({
+      outcome: "rejected",
+      occupancyEffective: false,
+      reasons: ["OCCUPIED_WITHOUT_CURRENT_LEASE"],
+      postcondition: null,
+    });
+  });
+
+  it("rejects when only one occupied unit representation identifies the tenant", () => {
+    const standaloneOnly = baseInput();
+    standaloneOnly.standaloneUnits[0] = { ...standaloneOnly.standaloneUnits[0], status: "occupied", tenantId: "tenant-1" };
+    standaloneOnly.embeddedUnits[0] = { ...standaloneOnly.embeddedUnits[0], status: "occupied" };
+    expect(evaluateCanonicalLeaseStart(standaloneOnly)).toMatchObject({ outcome: "rejected", reasons: ["OCCUPIED_WITHOUT_CURRENT_LEASE"] });
+
+    const embeddedOnly = baseInput();
+    embeddedOnly.standaloneUnits[0] = { ...embeddedOnly.standaloneUnits[0], status: "occupied" };
+    embeddedOnly.embeddedUnits[0] = { ...embeddedOnly.embeddedUnits[0], status: "occupied", currentTenantId: "tenant-1" };
+    expect(evaluateCanonicalLeaseStart(embeddedOnly)).toMatchObject({ outcome: "rejected", reasons: ["OCCUPIED_WITHOUT_CURRENT_LEASE"] });
+  });
+
+  it("rejects an occupied unit with the candidate lease pointer but no tenant identity", () => {
+    const input = baseInput();
+    input.standaloneUnits[0] = { ...input.standaloneUnits[0], status: "occupied", currentLeaseId: "lease-1" };
+    input.embeddedUnits[0] = { ...input.embeddedUnits[0], status: "occupied", currentLeaseId: "lease-1" };
+    expect(evaluateCanonicalLeaseStart(input)).toMatchObject({ outcome: "rejected", reasons: ["OCCUPIED_WITHOUT_CURRENT_LEASE"], postcondition: null });
+  });
+
+  it("rejects contradictory identities across occupied unit representations", () => {
+    const input = baseInput();
+    input.standaloneUnits[0] = { ...input.standaloneUnits[0], status: "occupied", tenantId: "tenant-1" };
+    input.embeddedUnits[0] = { ...input.embeddedUnits[0], status: "occupied", tenantId: "tenant-2" };
+    expect(evaluateCanonicalLeaseStart(input)).toMatchObject({
+      outcome: "rejected",
+      reasons: ["OCCUPIED_WITHOUT_CURRENT_LEASE", "STALE_CURRENT_LEASE_POINTER"],
+      postcondition: null,
+    });
+  });
+
+  it("rejects legacy occupied=true without identity evidence", () => {
+    const input = baseInput();
+    input.standaloneUnits[0] = { ...input.standaloneUnits[0], status: "", occupancyStatus: "", occupied: true };
+    input.embeddedUnits[0] = { ...input.embeddedUnits[0], status: "", occupancyStatus: "", occupied: true };
+    expect(evaluateCanonicalLeaseStart(input)).toMatchObject({ outcome: "rejected", reasons: ["OCCUPIED_WITHOUT_CURRENT_LEASE"], postcondition: null });
+  });
+
+  it("rejects legacy isOccupied=true without identity evidence", () => {
+    const input = baseInput();
+    input.standaloneUnits[0] = { ...input.standaloneUnits[0], status: "", occupancyStatus: "", isOccupied: true };
+    input.embeddedUnits[0] = { ...input.embeddedUnits[0], status: "", occupancyStatus: "", isOccupied: true };
+    expect(evaluateCanonicalLeaseStart(input)).toMatchObject({ outcome: "rejected", reasons: ["OCCUPIED_WITHOUT_CURRENT_LEASE"], postcondition: null });
+  });
+
   it("rejects stale unit and tenant lease pointers", () => {
     const unitInput = baseInput();
     unitInput.standaloneUnits[0].currentLeaseId = "lease-stale";
