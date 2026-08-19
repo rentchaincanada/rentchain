@@ -19,6 +19,7 @@ export const PREVIEW_PROXY_CONFIG = {
 export const PREVIEW_BACKEND_TARGET_KEYS = {
   permanent: "permanent",
   pr1555: "pr1555-c99145e5",
+  pr1561: "pr1561-d3-cert",
 } as const;
 
 export type PreviewBackendTarget = {
@@ -41,6 +42,14 @@ const PREVIEW_BACKEND_TARGETS: Record<string, PreviewBackendTarget> = {
       "https://rentchain-pr1555-qa-c99145e5-glistw4pya-nn.a.run.app",
     cloudRunIdTokenAudience:
       "https://rentchain-pr1555-qa-c99145e5-glistw4pya-nn.a.run.app",
+    temporary: true,
+  },
+  [PREVIEW_BACKEND_TARGET_KEYS.pr1561]: {
+    key: PREVIEW_BACKEND_TARGET_KEYS.pr1561,
+    cloudRunServiceUrl:
+      "https://rentchain-pr1561-qa-6256460c-glistw4pya-nn.a.run.app",
+    cloudRunIdTokenAudience:
+      "https://rentchain-pr1561-qa-6256460c-glistw4pya-nn.a.run.app",
     temporary: true,
   },
 };

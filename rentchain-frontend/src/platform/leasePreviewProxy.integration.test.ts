@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   handlePreviewBackendProxy,
+  PREVIEW_BACKEND_TARGET_KEYS,
   PREVIEW_PROXY_CONFIG,
   type PreviewBackendProxyDependencies,
 } from "../../server/previewBackendProxy";
@@ -63,7 +64,7 @@ describe("first-party lease mutation through the Preview proxy", () => {
 
   beforeEach(() => {
     process.env.VERCEL_ENV = "preview";
-    delete process.env.PREVIEW_BACKEND_TARGET;
+    process.env.PREVIEW_BACKEND_TARGET = PREVIEW_BACKEND_TARGET_KEYS.pr1561;
     vi.stubEnv("VITE_DEPLOY_ENV", "preview");
     vi.stubEnv("VITE_API_BASE_URL", "/api/preview-backend");
     authMocks.getAuthToken.mockClear();
@@ -138,7 +139,10 @@ describe("first-party lease mutation through the Preview proxy", () => {
 
     expect(sameOriginRequests).toEqual(["/api/preview-backend/api/leases"]);
     expect(cloudRunRequests).toHaveLength(1);
-    expect(cloudRunRequests[0].url).toBe(`${PREVIEW_PROXY_CONFIG.cloudRunServiceUrl}/api/leases`);
+    expect(cloudRunRequests[0].url).toBe(
+      "https://rentchain-pr1561-qa-6256460c-glistw4pya-nn.a.run.app/api/leases",
+    );
+    expect(cloudRunRequests[0].url).not.toContain(PREVIEW_PROXY_CONFIG.cloudRunServiceUrl);
     const outgoingHeaders = new Headers(cloudRunRequests[0].init?.headers);
     expect(outgoingHeaders.get("idempotency-key")).toBe("d3-end-to-end-key-001");
     expect(outgoingHeaders.get("authorization")).toBe("Bearer application-session-token");
