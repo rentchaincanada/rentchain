@@ -198,6 +198,11 @@ describe("PropertyDetailPanel occupancy regression coverage", () => {
         fixtureLease("upcoming"),
         fixtureLease("archived"),
       ],
+      canonicalUnitStates: {
+        [lifecycleContinuityIds.unit101Id]: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: lifecycleContinuityIds.activeLeaseId, reasons: [] },
+        [lifecycleContinuityIds.unit102Id]: { leaseTermState: null, occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null, reasons: [] },
+        [lifecycleContinuityIds.unit103Id]: { leaseTermState: "upcoming", occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: lifecycleContinuityIds.upcomingLeaseId, reasons: [] },
+      },
       credibilitySummary: null,
     });
     mocks.showToast.mockReset();
@@ -242,12 +247,13 @@ describe("PropertyDetailPanel occupancy regression coverage", () => {
     ]);
     mocks.getLeasesForProperty.mockResolvedValue({
       leases: [fixtureLease("archived")],
+      canonicalUnitStates: { [lifecycleContinuityIds.unit101Id]: { leaseTermState: "ended", occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null, reasons: [] } },
       credibilitySummary: null,
     });
 
     renderPropertyDetail();
 
-    expect((await screen.findAllByText("Archived")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Vacant")).length).toBeGreaterThan(0);
     expect(screen.queryByText(lifecycleContinuityLabels.activeTenantName)).not.toBeInTheDocument();
     expect(screen.queryByText(/John Smith · Ends/)).not.toBeInTheDocument();
   });
@@ -271,13 +277,14 @@ describe("PropertyDetailPanel occupancy regression coverage", () => {
           tenantName: lifecycleContinuityLabels.upcomingTenantName,
         }),
       ],
+      canonicalUnitStates: { [lifecycleContinuityIds.unit102Id]: { leaseTermState: "active", occupancyState: "review_needed", tenantRelationshipState: "occupancy_unresolved", supportingLeaseId: null, reasons: ["MULTIPLE_CURRENT_LEASES"] } },
       credibilitySummary: null,
     });
 
     renderPropertyDetail();
 
     expect((await screen.findAllByText("Review needed")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Multiple current leases match this unit.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Lease and occupancy records require review").length).toBeGreaterThan(0);
   });
 
   it("hydrates edit modal from the same normalized occupancy source as the unit table", async () => {
@@ -291,6 +298,7 @@ describe("PropertyDetailPanel occupancy regression coverage", () => {
     ]);
     mocks.getLeasesForProperty.mockResolvedValue({
       leases: [fixtureLease("active")],
+      canonicalUnitStates: { [lifecycleContinuityIds.unit101Id]: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: lifecycleContinuityIds.activeLeaseId, reasons: [] } },
       credibilitySummary: null,
     });
 
@@ -329,6 +337,7 @@ describe("PropertyDetailPanel occupancy regression coverage", () => {
           riskGrade: "B",
         }),
       ],
+      canonicalUnitStates: { [rawUnitId]: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lc_lease_unit_102", reasons: [] } },
       credibilitySummary: null,
     });
 

@@ -39,7 +39,7 @@ describe("leaseLifecycle", () => {
     expect(isLeaseCurrentlyActive(lease, today)).toBe(false);
   });
 
-  it("derives active, notice-period, future, and vacant unit occupancy from leases", () => {
+  it("uses canonical projections for current, future, and unresolved unit occupancy", () => {
     expect(
       deriveUnitOccupancyFromLeases(
         { id: "unit-active", unitNumber: "101", status: "vacant" },
@@ -50,6 +50,7 @@ describe("leaseLifecycle", () => {
             status: "active",
             startDate: "2026-01-01",
             endDate: "2026-12-31",
+            canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant" },
           },
         ],
         today
@@ -66,6 +67,7 @@ describe("leaseLifecycle", () => {
             status: "move_out_pending",
             startDate: "2026-01-01",
             endDate: "2026-12-31",
+            canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant" },
           },
         ],
         today
@@ -83,6 +85,7 @@ describe("leaseLifecycle", () => {
             signatureStatus: "signed",
             startDate: "2026-06-01",
             endDate: "2027-05-31",
+            canonicalState: { leaseTermState: "upcoming", occupancyState: "vacant", tenantRelationshipState: "past_tenant" },
           },
         ],
         today
@@ -103,7 +106,7 @@ describe("leaseLifecycle", () => {
         ],
         today
       )
-    ).toMatchObject({ status: "vacant", label: "Vacant" });
+    ).toMatchObject({ status: "review_required", label: "Review needed" });
   });
 
   it("respects valid manual unit occupancy when only expired leases exist", () => {
@@ -114,7 +117,7 @@ describe("leaseLifecycle", () => {
           unitNumber: "105",
           status: "occupied",
           occupantName: "Leen Bakri-Kasbah and Patricia Emeline Krisinta",
-          leaseEndDate: "2027-04-30",
+          currentTenantId: "tenant-manual",
         },
         [
           {
@@ -138,6 +141,7 @@ describe("leaseLifecycle", () => {
         status: "active",
         startDate: "2026-01-01",
         endDate: "2026-06-02",
+        canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant" },
       },
       {
         id: "lease-60",
@@ -145,6 +149,7 @@ describe("leaseLifecycle", () => {
         status: "active",
         startDate: "2026-01-01",
         endDate: "2026-07-03",
+        canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant" },
       },
       {
         id: "lease-future",
@@ -153,6 +158,7 @@ describe("leaseLifecycle", () => {
         signatureStatus: "signed",
         startDate: "2026-06-01",
         endDate: "2026-07-01",
+        canonicalState: { leaseTermState: "upcoming", occupancyState: "vacant", tenantRelationshipState: "past_tenant" },
       },
       {
         id: "lease-expired",
@@ -227,6 +233,7 @@ describe("leaseLifecycle", () => {
             status: "active",
             startDate: "2026-01-01",
             endDate: "2026-12-31",
+            canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant" },
           },
           {
             id: "lease-active-2",
@@ -234,10 +241,31 @@ describe("leaseLifecycle", () => {
             status: "active",
             startDate: "2026-02-01",
             endDate: "2026-11-30",
+            canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant" },
           },
         ],
         today
       )
     ).toMatchObject({ status: "review_required", label: "Review needed" });
+  });
+
+  it("does not infer current occupancy from active status, dates, or signing completion", () => {
+    const unit = { id: "unit-no-authority", unitNumber: "108", status: "vacant" };
+    expect(deriveUnitOccupancyFromLeases(unit, [{
+      id: "lease-incomplete",
+      unitId: "unit-no-authority",
+      status: "active",
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      leaseExecution: { executionStatus: "draft" },
+    }], today)).toMatchObject({ status: "review_required", label: "Review needed" });
+
+    expect(deriveUnitOccupancyFromLeases(unit, [{
+      id: "lease-signed-conflict",
+      unitId: "unit-no-authority",
+      status: "active",
+      signatureStatus: "signed",
+      canonicalState: { leaseTermState: "active", occupancyState: "review_needed", tenantRelationshipState: "occupancy_unresolved" },
+    }], today)).toMatchObject({ status: "review_required", label: "Review needed" });
   });
 });

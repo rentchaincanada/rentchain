@@ -461,7 +461,7 @@ describe("PropertyDetailPanel", () => {
     expect(screen.getAllByText("100%").length).toBeGreaterThan(0);
   });
 
-  it("renders safely when lease-backed occupancy falls back from active leases", async () => {
+  it("fails closed when canonical occupancy is unavailable for an active-looking lease", async () => {
     mocks.fetchUnitsForProperty.mockResolvedValue([
       {
         id: "unit-1",
@@ -510,13 +510,10 @@ describe("PropertyDetailPanel", () => {
       </MemoryRouter>
     );
 
-    expect((await screen.findAllByText("Occupied")).length).toBeGreaterThan(0);
-    const tenantLinks = screen.getAllByRole("link", { name: "Jane Tenant" });
-    expect(tenantLinks.length).toBeGreaterThan(0);
-    expect(tenantLinks[0]).toHaveAttribute("href", "/tenants?tenantId=tenant-1");
-    const leaseLinks = screen.getAllByRole("link", { name: "View lease" });
-    expect(leaseLinks.length).toBeGreaterThan(0);
-    expect(leaseLinks[0]).toHaveAttribute("href", "/leases/lease-1/summary");
+    expect((await screen.findAllByText("Review needed")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Canonical occupancy projection is unavailable.").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "Jane Tenant" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "View lease" })).not.toBeInTheDocument();
     expect(screen.queryByText("tenant-1")).not.toBeInTheDocument();
   });
 
@@ -554,6 +551,7 @@ describe("PropertyDetailPanel", () => {
           startDate: "2026-01-01",
           endDate: "2026-12-31",
           status: "active",
+          canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-1", reasons: [] },
           riskScore: 72,
           riskGrade: "B",
           createdAt: "2026-01-01T00:00:00.000Z",
@@ -610,6 +608,7 @@ describe("PropertyDetailPanel", () => {
           startDate: "2026-01-01",
           endDate: "2026-12-31",
           status: "active",
+          canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-102", reasons: [] },
           riskScore: 72,
           riskGrade: "B",
           createdAt: "2026-01-01T00:00:00.000Z",
@@ -659,6 +658,7 @@ describe("PropertyDetailPanel", () => {
           startDate: "2026-01-01",
           endDate: "2026-12-31",
           status: "active",
+          canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-1", reasons: [] },
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
@@ -736,6 +736,10 @@ describe("PropertyDetailPanel", () => {
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
       ],
+      canonicalUnitStates: {
+        "unit-future": { leaseTermState: "upcoming", occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: "lease-future", reasons: [] },
+        "unit-notice": { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-notice", reasons: [] },
+      },
       credibilitySummary: null,
     });
 
@@ -797,6 +801,7 @@ describe("PropertyDetailPanel", () => {
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
       ],
+      canonicalUnitStates: { "unit-occupied": { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-occupied", reasons: [] } },
       credibilitySummary: null,
     });
 
