@@ -8,14 +8,28 @@ import {
 
 function createFakeFirestore() {
   const store = new Map<string, Map<string, any>>();
-  let queue = Promise.resolve();
+  const versions = new Map<string, number>();
+  let commitQueue = Promise.resolve();
   let failCollection: string | null = null;
   let retryNext = false;
+  let overlapRemaining = 0;
+  let releaseOverlap: (() => void) | null = null;
+  let overlapPromise: Promise<void> | null = null;
+  const stats = { callbackAttempts: 0, activeCallbacks: 0, maxConcurrentCallbacks: 0, conflicts: 0 };
+  class OptimisticConflict extends Error {}
+  const docVersionKey = (name: string, id: string) => `doc:${name}:${id}`;
+  const collectionVersionKey = (name: string) => `collection:${name}`;
+  const version = (key: string) => versions.get(key) || 0;
+  const bump = (name: string, id: string) => {
+    versions.set(docVersionKey(name, id), version(docVersionKey(name, id)) + 1);
+    versions.set(collectionVersionKey(name), version(collectionVersionKey(name)) + 1);
+  };
   const collectionData = (name: string) => {
     if (!store.has(name)) store.set(name, new Map());
     return store.get(name)!;
   };
   const ref = (name: string, id: string): any => ({
+    kind: "doc",
     collectionName: name,
     id,
     get: async () => {
@@ -25,13 +39,16 @@ function createFakeFirestore() {
     set: async (value: any, options?: any) => {
       const prior = collectionData(name).get(id);
       collectionData(name).set(id, options?.merge ? { ...(prior || {}), ...structuredClone(value) } : structuredClone(value));
+      bump(name, id);
     },
     create: async (value: any) => {
       if (collectionData(name).has(id)) throw new Error("already_exists");
       collectionData(name).set(id, structuredClone(value));
+      bump(name, id);
     },
   });
   const query = (name: string, filters: any[] = []): any => ({
+    kind: "query",
     collectionName: name,
     filters,
     where: (field: string, op: string, value: any) => query(name, [...filters, { field, op, value }]),
@@ -41,50 +58,87 @@ function createFakeFirestore() {
         .map(([id, value]) => ({ id, exists: true, data: () => value, ref: ref(name, id) })),
     }),
   });
-  const transactionAttempt = async (callback: any, apply: boolean) => {
+  const transactionAttempt = async (callback: any, attempt: number) => {
     const writes: Array<{ kind: "set" | "create"; target: any; value: any; options?: any }> = [];
-    const result = await callback({
-      get: (target: any) => target.get(),
-      set: (target: any, value: any, options?: any) => writes.push({ kind: "set", target, value, options }),
-      create: (target: any, value: any) => writes.push({ kind: "create", target, value }),
-    });
-    if (!apply) return result;
-    const snapshot = structuredClone([...store.entries()].map(([name, values]) => [name, [...values.entries()]]));
+    const readVersions = new Map<string, number>();
+    stats.callbackAttempts += 1;
+    stats.activeCallbacks += 1;
+    stats.maxConcurrentCallbacks = Math.max(stats.maxConcurrentCallbacks, stats.activeCallbacks);
+    let result: any;
     try {
-      for (const write of writes) {
-        if (write.target.collectionName === failCollection) throw new Error("forced_transaction_failure");
-        if (write.kind === "create") await write.target.create(write.value);
-        else await write.target.set(write.value, write.options);
-      }
-    } catch (error) {
-      store.clear();
-      for (const [name, entries] of snapshot) store.set(name, new Map(entries));
-      throw error;
+      result = await callback({
+        get: async (target: any) => {
+          const key = target.kind === "query" ? collectionVersionKey(target.collectionName) : docVersionKey(target.collectionName, target.id);
+          if (!readVersions.has(key)) readVersions.set(key, version(key));
+          return target.get();
+        },
+        set: (target: any, value: any, options?: any) => writes.push({ kind: "set", target, value, options }),
+        create: (target: any, value: any) => writes.push({ kind: "create", target, value }),
+      });
+    } finally {
+      stats.activeCallbacks -= 1;
     }
+    if (attempt === 0 && overlapRemaining > 0 && overlapPromise) {
+      overlapRemaining -= 1;
+      if (overlapRemaining === 0) releaseOverlap?.();
+      await overlapPromise;
+    }
+    if (retryNext && attempt === 0) {
+      retryNext = false;
+      stats.conflicts += 1;
+      throw new OptimisticConflict();
+    }
+    const commit = commitQueue.then(async () => {
+      if ([...readVersions].some(([key, readVersion]) => version(key) !== readVersion)) {
+        stats.conflicts += 1;
+        throw new OptimisticConflict();
+      }
+      const storeSnapshot = structuredClone([...store.entries()].map(([name, values]) => [name, [...values.entries()]]));
+      const versionSnapshot = new Map(versions);
+      try {
+        for (const write of writes) {
+          if (write.target.collectionName === failCollection) throw new Error("forced_transaction_failure");
+          if (write.kind === "create") await write.target.create(write.value);
+          else await write.target.set(write.value, write.options);
+        }
+      } catch (error) {
+        store.clear();
+        for (const [name, entries] of storeSnapshot) store.set(name, new Map(entries));
+        versions.clear();
+        for (const [key, value] of versionSnapshot) versions.set(key, value);
+        throw error;
+      }
+    });
+    commitQueue = commit.then(() => undefined, () => undefined);
+    await commit;
     return result;
   };
   const firestore: any = {
     collection: (name: string) => ({ ...query(name), doc: (id: string) => ref(name, id) }),
-    runTransaction: (callback: any) => {
-      const run = queue.then(async () => {
-        if (retryNext) {
-          retryNext = false;
-          await transactionAttempt(callback, false);
+    runTransaction: async (callback: any) => {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          return await transactionAttempt(callback, attempt);
+        } catch (error) {
+          if (!(error instanceof OptimisticConflict) || attempt === 3) throw error;
         }
-        return transactionAttempt(callback, true);
-      });
-      queue = run.then(() => undefined, () => undefined);
-      return run;
+      }
+      throw new Error("transaction_retry_exhausted");
     },
   };
   return {
     firestore,
-    seed: (name: string, id: string, value: any) => collectionData(name).set(id, structuredClone(value)),
+    seed: (name: string, id: string, value: any) => { collectionData(name).set(id, structuredClone(value)); bump(name, id); },
     read: (name: string, id: string) => structuredClone(collectionData(name).get(id)),
     list: (name: string) => [...collectionData(name).values()].map((value) => structuredClone(value)),
     ids: (name: string) => [...collectionData(name).keys()],
     failWritesTo: (name: string | null) => { failCollection = name; },
     retryNextTransaction: () => { retryNext = true; },
+    overlapNextTransactions: (count: number) => {
+      overlapRemaining = count;
+      overlapPromise = new Promise<void>((resolve) => { releaseOverlap = resolve; });
+    },
+    stats,
   };
 }
 
@@ -188,7 +242,49 @@ describe("leaseStartService", () => {
     const result = await startCanonicalLeaseOccupancy(await mutationInput());
     expect(result).toMatchObject({ outcome: "created_without_occupancy", occupancyEffective: false, reasons: [reason] });
     expect(domainSnapshot()).toEqual(before);
-    expect(fake.list("leaseStartRequests")).toHaveLength(1);
+    expect(fake.list("leaseStartRequests")).toEqual([]);
+  });
+
+  it("fails closed for a cross-tenant active tenancy on the target unit", async () => {
+    fake.seed("tenancies", "tenancy-foreign", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-2", leaseId: "lease-foreign", status: "active" });
+    const before = domainSnapshot();
+    const result = await startCanonicalLeaseOccupancy(await mutationInput());
+    expect(result).toMatchObject({ outcome: "rejected", occupancyEffective: false, reasons: ["CURRENT_LEASE_CONTEXT_MISMATCH"] });
+    expect(domainSnapshot()).toEqual(before);
+    expect(fake.read("tenants", "tenant-1")).not.toHaveProperty("currentLeaseId");
+    expect(fake.list("leaseStartRequests")).toEqual([]);
+  });
+
+  it("fails closed for candidate-active plus foreign-active and two foreign-active tenancies", async () => {
+    fake.seed("tenancies", "tenancy-candidate", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", leaseId: "lease-1", status: "active" });
+    fake.seed("tenancies", "tenancy-foreign", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-2", leaseId: "lease-2", status: "active" });
+    expect(await startCanonicalLeaseOccupancy(await mutationInput())).toMatchObject({ outcome: "rejected", occupancyEffective: false });
+    expect(fake.list("canonicalEvents")).toEqual([]);
+
+    fake = createFakeFirestore();
+    seedBase();
+    fake.seed("tenancies", "tenancy-foreign-1", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-2", status: "active" });
+    fake.seed("tenancies", "tenancy-foreign-2", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-3", status: "active" });
+    expect(await startCanonicalLeaseOccupancy(await mutationInput())).toMatchObject({ outcome: "rejected", occupancyEffective: false });
+    expect(fake.list("tenancies")).toHaveLength(2);
+    expect(fake.list("leaseStartRequests")).toEqual([]);
+  });
+
+  it("ignores an unrelated tenancy on another unit", async () => {
+    fake.seed("tenancies", "tenancy-other-unit", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-2", tenantId: "tenant-2", status: "active" });
+    const result = await startCanonicalLeaseOccupancy(await mutationInput());
+    expect(result.outcome).toBe("occupancy_effective");
+    expect(fake.ids("tenancies")).toContain("tenancy-other-unit");
+    expect(fake.list("canonicalEvents")).toHaveLength(1);
+  });
+
+  it("includes cross-tenant target-unit tenancy evidence in the expected-state token", async () => {
+    fake.seed("tenancies", "tenancy-foreign", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-2", status: "inactive", updatedAt: "2026-04-01T00:00:00.000Z" });
+    const before = await getCanonicalLeaseStartContext({ ...base, firestore: fake.firestore });
+    fake.seed("tenancies", "tenancy-foreign", { ...fake.read("tenancies", "tenancy-foreign"), status: "active", updatedAt: evaluationInstant });
+    const after = await getCanonicalLeaseStartContext({ ...base, firestore: fake.firestore });
+    expect(after.expectedStateToken).not.toBe(before.expectedStateToken);
+    expect(after.decision).toMatchObject({ outcome: "rejected", occupancyEffective: false });
   });
 
   it("fails closed for multiple current leases with no success idempotency result", async () => {
@@ -280,17 +376,22 @@ describe("leaseStartService", () => {
     expect(fake.list("canonicalEvents")).toEqual([]);
   });
 
-  it("recomputes expected state inside the transaction and serializes concurrent starts", async () => {
+  it("overlaps optimistic transaction reads and retries the losing concurrent start", async () => {
     const context = await getCanonicalLeaseStartContext({ ...base, firestore: fake.firestore });
     const common = { ...await mutationInput(), expectedStateToken: context.expectedStateToken };
+    fake.overlapNextTransactions(2);
     const settled = await Promise.allSettled([
       startCanonicalLeaseOccupancy({ ...common, idempotencyKey: "race-a" }),
       startCanonicalLeaseOccupancy({ ...common, idempotencyKey: "race-b" }),
     ]);
     expect(settled.filter((entry) => entry.status === "fulfilled")).toHaveLength(1);
     expect(settled.filter((entry) => entry.status === "rejected")).toHaveLength(1);
+    expect(fake.stats.maxConcurrentCallbacks).toBeGreaterThanOrEqual(2);
+    expect(fake.stats.conflicts).toBeGreaterThanOrEqual(1);
+    expect(fake.stats.callbackAttempts).toBeGreaterThanOrEqual(3);
     expect(fake.list("canonicalEvents")).toHaveLength(1);
     expect(fake.list("tenancies")).toHaveLength(1);
+    expect(fake.list("leaseStartRequests")).toHaveLength(1);
   });
 
   it("returns an identical durable replay with no duplicate writes", async () => {
@@ -318,6 +419,22 @@ describe("leaseStartService", () => {
     });
     expect(replayAcrossOperation.canonicalOutcome).toBe("already_coherent");
     expect(fake.list("canonicalEvents")).toHaveLength(1);
+  });
+
+  it("binds expected state, actor, effective instant, and trigger into idempotency payload identity", async () => {
+    const input = await mutationInput();
+    await startCanonicalLeaseOccupancy(input);
+    const mismatches = [
+      { expectedStateToken: `${input.expectedStateToken}-changed` },
+      { actorId: "landlord-2" },
+      { evaluationInstant: "2026-05-01T12:00:01.000Z" },
+      { trigger: "signing_completion" as const },
+    ];
+    for (const mismatch of mismatches) {
+      await expect(startCanonicalLeaseOccupancy({ ...input, ...mismatch })).rejects.toMatchObject({ code: "lease_start_idempotency_key_reused" });
+    }
+    expect(fake.list("canonicalEvents")).toHaveLength(1);
+    expect(fake.list("leaseStartRequests")).toHaveLength(1);
   });
 
   it("does not duplicate events when the transaction callback retries", async () => {

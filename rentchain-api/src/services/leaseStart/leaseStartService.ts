@@ -109,7 +109,9 @@ async function readContext(reader: any, input: ContextInput): Promise<{ context:
   const tenantRef = firestore.collection("tenants").doc(input.tenantId);
   const unitsQuery = firestore.collection("units").where("landlordId", "==", input.landlordId).where("propertyId", "==", input.propertyId);
   const leasesQuery = firestore.collection("leases").where("landlordId", "==", input.landlordId).where("propertyId", "==", input.propertyId);
-  const tenanciesQuery = firestore.collection("tenancies").where("tenantId", "==", input.tenantId);
+  // A property-scoped single-field query avoids a new composite index while
+  // ensuring cross-tenant occupancy evidence for this logical unit is reread.
+  const tenanciesQuery = firestore.collection("tenancies").where("propertyId", "==", input.propertyId);
   const get = (target: any) => reader?.get ? reader.get(target) : target.get();
   const [propertySnap, unitSnap, leaseSnap, tenantSnap, unitsSnap, leasesSnap, tenanciesSnap] = await Promise.all([
     get(propertyRef), get(unitRef), get(leaseRef), get(tenantRef), get(unitsQuery), get(leasesQuery), get(tenanciesQuery),
@@ -140,7 +142,12 @@ async function readContext(reader: any, input: ContextInput): Promise<{ context:
     .filter((lease: any) => lease && text(lease.unitId) === input.unitId)
     .map(canonicalLease);
   if (!leases.some((lease: any) => lease.id === input.leaseId)) leases.push(canonicalLease(candidateLease));
-  const tenancies = (tenanciesSnap.docs || []).map(docData).filter(Boolean);
+  const tenancies = (tenanciesSnap.docs || []).map(docData).filter((tenancy: any) => {
+    if (!tenancy) return false;
+    const sameLogicalUnit = text(tenancy.unitId) === input.unitId ||
+      (Boolean(unitNumber) && [tenancy.unitNumber, tenancy.unitLabel].map(text).includes(unitNumber));
+    return sameLogicalUnit;
+  });
   const embedded = {
     ...matches[0].entry,
     id: text(matches[0].entry.id || matches[0].entry.unitId || input.unitId),
@@ -224,7 +231,8 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
   const requestRef = firestore.collection("leaseStartRequests").doc(requestId);
   const payloadHash = leaseStartHash({
     landlordId: input.landlordId, propertyId: input.propertyId, unitId: input.unitId, tenantId: input.tenantId,
-    leaseId: input.leaseId, operationKind: input.operationKind, trigger: input.trigger, source: input.source || null,
+    leaseId: input.leaseId, operationKind: input.operationKind, expectedStateToken: input.expectedStateToken,
+    actorId: input.actorId || null, trigger: input.trigger, source: input.source || null,
     evaluationInstant: normalizedInstant,
   });
 
@@ -239,10 +247,15 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
     if (loaded.context.expectedStateToken !== input.expectedStateToken) {
       throw new LeaseStartServiceError("lease_start_state_stale", loaded.context);
     }
-    if (loaded.context.decision.outcome === "rejected") return resultFrom(loaded.context, input, null);
+    // D2 has no live route caller. Canonical rejected and deferred decisions
+    // therefore return deterministically with no durable audit or idempotency
+    // record. D3 must define authenticated route-attempt persistence policy.
+    if (loaded.context.decision.outcome === "rejected" || loaded.context.decision.outcome === "created_without_occupancy") {
+      return resultFrom(loaded.context, input, null);
+    }
 
     const baseResult = resultFrom(loaded.context, input, requestId);
-    if (loaded.context.decision.outcome === "created_without_occupancy" || loaded.context.decision.outcome === "already_coherent") {
+    if (loaded.context.decision.outcome === "already_coherent") {
       const committedResult = { ...baseResult, idempotency: { ...baseResult.idempotency, resultId: requestId } };
       transaction.create(requestRef, {
         landlordId: input.landlordId, operationKind: input.operationKind, idempotencyKey: input.idempotencyKey,
