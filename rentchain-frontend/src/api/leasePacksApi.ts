@@ -83,7 +83,12 @@ export async function getLeaseSnapshot(snapshotId: string) {
 }
 
 export async function activateLeaseDraft(draftId: string, idempotencyKey: string) {
-  return apiJson<{ ok: true; leaseId: string; lease: Lease }>(
+  return apiJson<{
+    ok: true;
+    leaseId: string;
+    lease: Lease;
+    occupancyOutcome: "created_without_occupancy" | "occupancy_effective" | "already_coherent";
+  }>(
     `/leases/drafts/${encodeURIComponent(draftId)}/activate`,
     {
       method: "POST",

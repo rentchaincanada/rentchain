@@ -839,7 +839,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     occupancyRate,
     activeLeaseRentTotal,
     currentOccupiedRentTotal,
-  } = useMemo(() => buildPropertySummaryMetrics(displayedUnits, leases, unitCount), [displayedUnits, leases, unitCount]);
+  } = useMemo(
+    () => buildPropertySummaryMetrics(displayedUnits, leases, unitCount, new Date(), canonicalUnitStates),
+    [displayedUnits, leases, unitCount, canonicalUnitStates]
+  );
   const collectionRate =
     currentOccupiedRentTotal > 0 ? totalCollectedThisMonth / currentOccupiedRentTotal : 0;
   const getUnitOccupancy = useCallback(
@@ -862,6 +865,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             ? "Past lease · Occupancy requires review"
             : "Lease and occupancy records require review",
         };
+      }
+      if (canonical.occupancyState === "vacant" && canonical.leaseTermState === "upcoming") {
+        return { status: "upcoming", label: "Upcoming", lease: supportingLease };
       }
       return { status: "vacant", label: "Vacant", lease: null };
     },
