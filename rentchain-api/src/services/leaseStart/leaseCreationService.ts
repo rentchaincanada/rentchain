@@ -216,7 +216,8 @@ export async function createCanonicalLease(input: CreateCanonicalLeaseInput): Pr
 
     const eventIds = decision.outcome === "occupancy_effective" ? [creationEventId, occupancyEventId] : [creationEventId];
     const result = { ...baseResult(input, decision, expectedStateToken, requestId, eventIds), leaseId: input.leaseId };
-    transaction.create(leaseRef, { ...input.leaseRecord, id: input.leaseId, occupancyEffective: decision.occupancyEffective, occupancyEffectiveAt: decision.occupancyEffective ? instant : null });
+    const compatibilityStatus = decision.outcome === "occupancy_effective" ? "active" : "pending";
+    transaction.create(leaseRef, { ...input.leaseRecord, id: input.leaseId, status: compatibilityStatus, occupancyEffective: decision.occupancyEffective, occupancyEffectiveAt: decision.occupancyEffective ? instant : null });
     if (input.tenantRecord) transaction.create(tenantRef, { ...input.tenantRecord, id: input.tenantId });
     if (draftRef) transaction.set(draftRef, { status: "activated", leaseId: input.leaseId, activatedAt: instant, updatedAt: instant }, { merge: true });
     transaction.create(firestore.collection("canonicalEvents").doc(creationEventId), canonicalEvent(input, creationEventId, creationType, instant, requestId));

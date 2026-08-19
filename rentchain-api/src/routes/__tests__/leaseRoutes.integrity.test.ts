@@ -942,6 +942,41 @@ describe("leaseRoutes integrity repairs", () => {
       phone: "9025553333",
     });
     expect(res.body?.tenant?.phone).toBe("90255511119");
+    const tenanciesAfterFirst = (await fakeDb.collection("tenancies").get()).docs.map((doc: any) => doc.data());
+    expect(tenanciesAfterFirst).toHaveLength(1);
+    expect(tenanciesAfterFirst[0].moveInAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(tenanciesAfterFirst[0].moveInAt).not.toBe("2026-04-01");
+
+    const replay = await request(app)
+      .post("/reconciliation-candidates/unit-1/convert")
+      .set("Idempotency-Key", "convert-unit-1")
+      .send({ occupantName: "Recovered Tenant", startDate: "2026-04-01", endDate: "2027-03-31", monthlyRent: 1850, tenantPhone: "(902) 555-1111 ext 9", coApplicantEmail: "coapplicant@example.com", coApplicantPhone: "902-555-3333" });
+    expect(replay.status).toBe(201);
+    expect(replay.body?.lease?.id).toBe(res.body?.lease?.id);
+    expect((await fakeDb.collection("leases").get()).docs).toHaveLength(1);
+    expect((await fakeDb.collection("tenancies").get()).docs).toHaveLength(1);
+    expect((await fakeDb.collection("canonicalEvents").get()).docs).toHaveLength(2);
+  });
+
+  it("fails closed for contradictory occupied-unit tenant evidence", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-2" }] });
+    seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-1", occupantName: "Tenant One", rent: 1800, executionStatus: "fully_executed" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Tenant One", currentLeaseId: null });
+    const app = await makeApp();
+    const res = await request(app).post("/reconciliation-candidates/unit-1/convert").set("Idempotency-Key", "contradictory-conversion").send({ occupantName: "Tenant One", startDate: "2026-01-01", endDate: "2026-12-31", monthlyRent: 1800 });
+    expect(res.status).toBe(409);
+    expect((await fakeDb.collection("leases").get()).docs).toHaveLength(0);
+  });
+
+  it("fails closed for cross-tenant active tenancy during conversion", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-1" }] });
+    seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-1", occupantName: "Tenant One", rent: 1800, executionStatus: "fully_executed" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Tenant One", currentLeaseId: null });
+    seedDoc("tenancies", "foreign", { landlordId: "landlord-1", propertyId: "prop-1", unitId: "unit-1", tenantId: "tenant-2", leaseId: "foreign-lease", status: "active" });
+    const app = await makeApp();
+    const res = await request(app).post("/reconciliation-candidates/unit-1/convert").set("Idempotency-Key", "cross-tenant-conversion").send({ occupantName: "Tenant One", startDate: "2026-01-01", endDate: "2026-12-31", monthlyRent: 1800 });
+    expect(res.status).toBe(409);
+    expect((await fakeDb.collection("leases").get()).docs).toHaveLength(0);
   });
 
   it("rejects occupied unit conversion when the start date is after the end date", async () => {

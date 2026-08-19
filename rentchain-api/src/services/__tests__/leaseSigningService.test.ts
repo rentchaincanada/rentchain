@@ -113,16 +113,16 @@ describe("leaseSigningService", () => {
     await processSigningWebhook({ providerId: "mock", headers: {}, body });
     await processSigningWebhook({ providerId: "mock", headers: {}, body });
 
-    expect(startCanonicalLeaseOccupancyMock).toHaveBeenCalledTimes(2);
+    expect(startCanonicalLeaseOccupancyMock).toHaveBeenCalledTimes(1);
     expect(startCanonicalLeaseOccupancyMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
       operationKind: "signing_completion",
       idempotencyKey: "mock:provider-event-stable-1",
       trigger: "signing_completion",
     }));
-    expect(startCanonicalLeaseOccupancyMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      idempotencyKey: "mock:provider-event-stable-1",
-    }));
     expect(ensureCollection("leases").get("lease-1")).toEqual(expect.objectContaining({ executionStatus: "fully_executed" }));
+    expect(ensureCollection("leases").get("lease-1")).not.toHaveProperty("occupancyStartReview");
+    expect(ensureCollection("leaseSigningCompletionOperations").size).toBe(1);
+    expect(ensureCollection("leaseSigningEvents").size).toBe(2);
   });
 
   it("keeps signing completion durable while marking rejected occupancy for review", async () => {
@@ -151,8 +151,11 @@ describe("leaseSigningService", () => {
     const sent = await sendLeaseForSignature({ leaseId: "lease-future", landlordId: "landlord-1", lease: { startDate: "2027-01-01" }, tenantEmails: ["tenant@example.com"] });
     const signingRequest = ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId));
     await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-future-1", type: "signed", occurredAt: "2026-08-19T12:00:00.000Z" } });
+    await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-future-1", type: "signed", occurredAt: "2026-08-19T12:00:00.000Z" } });
     expect(ensureCollection("leases").get("lease-future")).toEqual(expect.objectContaining({ executionStatus: "fully_executed" }));
     expect(ensureCollection("leases").get("lease-future")).not.toHaveProperty("occupancyStartReview");
+    expect(startCanonicalLeaseOccupancyMock).toHaveBeenCalledTimes(1);
+    expect(ensureCollection("leaseSigningCompletionOperations").size).toBe(1);
   });
 
   it("creates a pending signing request without exposing raw provider references in projected snapshot", async () => {

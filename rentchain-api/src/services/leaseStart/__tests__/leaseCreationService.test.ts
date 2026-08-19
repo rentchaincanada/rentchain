@@ -105,7 +105,7 @@ describe("createCanonicalLease", () => {
   it("creates a fully executed current lease and complete occupancy atomically", async () => {
     const result = await createCanonicalLease(input());
     expect(result).toMatchObject({ canonicalOutcome: "occupancy_effective", occupancyEffective: true });
-    expect(fake.read("leases", "lease-create-1")).toMatchObject({ occupancyEffective: true });
+    expect(fake.read("leases", "lease-create-1")).toMatchObject({ status: "active", occupancyEffective: true });
     expect(fake.read("units", "unit-1")).toMatchObject({ status: "occupied", currentLeaseId: "lease-create-1", currentTenantId: "tenant-1" });
     expect(fake.read("properties", "property-1").units[0]).toMatchObject({ status: "occupied", currentLeaseId: "lease-create-1" });
     expect(fake.read("tenants", "tenant-1")).toMatchObject({ currentLeaseId: "lease-create-1" });
@@ -121,7 +121,7 @@ describe("createCanonicalLease", () => {
   ])("creates %s lease without current occupancy", async (_label, leasePatch) => {
     const result = await createCanonicalLease(input({ leaseRecord: leasePatch }));
     expect(result).toMatchObject({ canonicalOutcome: "created_without_occupancy", occupancyEffective: false });
-    expect(fake.read("leases", "lease-create-1")).toBeTruthy();
+    expect(fake.read("leases", "lease-create-1")).toMatchObject({ status: "pending", occupancyEffective: false });
     expect(fake.read("units", "unit-1")).toMatchObject({ status: "vacant" });
     expect(fake.read("tenants", "tenant-1")).toMatchObject({ currentLeaseId: null });
     expect(fake.list("tenancies")).toEqual([]);

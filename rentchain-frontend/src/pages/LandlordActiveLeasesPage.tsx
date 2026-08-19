@@ -29,7 +29,7 @@ import { isUpgradeRequiredError } from "@/lib/gatedFeatureErrors";
 import "./LandlordActiveLeasesPage.css";
 import { canonicalLeaseTermLabel, canonicalOccupancyLabel } from "@/lib/leases/canonicalStatePresentation";
 import { ResolveOccupancyDrawer } from "@/components/occupancy/ResolveOccupancyDrawer";
-import { createMutationIdempotencyKey } from "@/lib/mutationIdempotency";
+import { createMutationIdempotencyKey, isDeterministicMutationFailure } from "@/lib/mutationIdempotency";
 
 function formatCurrency(value: number | null | undefined) {
   const amount = typeof value === "number" ? value : 0;
@@ -621,6 +621,7 @@ export default function LandlordActiveLeasesPage() {
       setConvertError(null);
       await load();
     } catch (err: unknown) {
+      if (isDeterministicMutationFailure(err)) convertMutationKeyRef.current = null;
       setConvertError(errorMessage(err, "Failed to convert reference to lease."));
     } finally {
       setConvertSaving(false);

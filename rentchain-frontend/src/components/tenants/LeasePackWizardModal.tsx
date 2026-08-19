@@ -16,7 +16,7 @@ import { createPdfExportTimer, errorCodeFromUnknown, recordPdfExportEvent } from
 import { normalizeProvinceCode, provinceLabelFromCode, type ProvinceCode } from "@/lib/provinces";
 import { getJurisdictionWorkflow } from "@/lib/jurisdictionLeaseWorkflow";
 import { LeaseRiskCard } from "@/components/leases/LeaseRiskCard";
-import { createMutationIdempotencyKey } from "@/lib/mutationIdempotency";
+import { createMutationIdempotencyKey, isDeterministicMutationFailure } from "@/lib/mutationIdempotency";
 
 interface Props {
   open: boolean;
@@ -335,6 +335,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
         })
       );
     } catch (err: any) {
+      if (isDeterministicMutationFailure(err)) activationMutationKeyRef.current = null;
       setError(err?.message || "Failed to activate lease.");
     } finally {
       setActivating(false);

@@ -344,6 +344,7 @@ describe("lease draft routes", () => {
     expect(sendEmailMock).not.toHaveBeenCalled();
     expect(activateRes.body?.lease).toEqual(
       expect.objectContaining({
+        status: "pending",
         documentUrl: "https://example.invalid/new-lease.pdf",
         approvedDocumentUrl: "https://example.invalid/new-lease.pdf",
         documentRef: "https://example.invalid/new-lease.pdf",
@@ -572,6 +573,7 @@ describe("lease draft routes", () => {
       .send({});
     expect(activateRes.status).toBe(200);
     expect(activateRes.body?.ok).toBe(true);
+    expect(activateRes.body?.lease).toEqual(expect.objectContaining({ status: "pending", occupancyEffective: false }));
     const leaseId = String(activateRes.body?.leaseId || "");
     expect(leaseId).toBeTruthy();
     expect(activateRes.body?.leaseNotification).toEqual(
@@ -601,6 +603,32 @@ describe("lease draft routes", () => {
         occupancyStatus: "vacant",
       })
     );
+    const persistedLease = await fakeDb.collection("leases").doc(leaseId).get();
+    expect(persistedLease.data()).toEqual(expect.objectContaining({ status: "pending", occupancyEffective: false }));
+    expect(leaseService.getById(leaseId)).toBeUndefined();
+  });
+
+  it.each([
+    ["future", { startDate: "2027-01-01", endDate: "2027-12-31", executionStatus: "fully_executed" }, "pending", false],
+    ["eligible current", { startDate: "2026-01-01", endDate: "2026-12-31", executionStatus: "fully_executed" }, "active", true],
+  ])("activates a %s draft with canonical compatibility status", async (_label, overrides, expectedStatus, occupancyEffective) => {
+    const draftId = `draft-${String(_label).replace(/\s/g, "-")}`;
+    await fakeDb.collection("leaseDrafts").doc(draftId).set({ ...payload, ...overrides, landlordId: "landlord-1", status: "generated" });
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    const first = await request(app).post(`/drafts/${draftId}/activate`).set(auth).set("Idempotency-Key", `activate-${draftId}`).send({});
+    expect(first.status).toBe(200);
+    expect(first.body?.lease).toEqual(expect.objectContaining({ status: expectedStatus, occupancyEffective }));
+    expect((await fakeDb.collection("leases").doc(first.body.leaseId).get()).data()).toEqual(expect.objectContaining({ status: expectedStatus, occupancyEffective }));
+    expect(leaseService.getById(first.body.leaseId) !== undefined).toBe(occupancyEffective);
+
+    const replay = await request(app).post(`/drafts/${draftId}/activate`).set(auth).set("Idempotency-Key", `activate-${draftId}`).send({});
+    expect(replay.status).toBe(200);
+    expect(replay.body?.leaseId).toBe(first.body?.leaseId);
+    expect((await fakeDb.collection("leases").get()).docs).toHaveLength(1);
   });
 
   it("returns 401 for activate when unauthorized", async () => {

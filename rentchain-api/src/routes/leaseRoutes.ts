@@ -2756,7 +2756,8 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       });
     }
     // Keep in-memory lease service in sync for existing automation/toggle flows.
-    if (!leaseService.getById(leaseId)) leaseService.getAll().push({
+    const compatibilityStatus = result.canonicalOutcome === "occupancy_effective" ? "active" : "pending";
+    if (result.canonicalOutcome === "occupancy_effective" && !leaseService.getById(leaseId)) leaseService.getAll().push({
       id: leaseId,
       tenantId,
       tenantIds,
@@ -2783,7 +2784,7 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
     return res.status(200).json({
       ok: true,
       leaseId,
-      lease: { id: leaseId, ...leaseRecord, occupancyEffective: result.occupancyEffective },
+      lease: { id: leaseId, ...leaseRecord, status: compatibilityStatus, occupancyEffective: result.occupancyEffective },
       leaseNotification,
       leaseStart: result,
       occupancyOutcome: result.canonicalOutcome,
