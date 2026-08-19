@@ -363,6 +363,79 @@ describe("Preview backend proxy", () => {
     expect(JSON.stringify(requests[2].init?.headers)).not.toContain("must-not-forward");
   });
 
+  it.each([
+    "d3-runtime-cert-key-123",
+    "mutation_ABC-123.xyz",
+  ])("forwards an opaque Idempotency-Key unchanged to the backend request: %s", async (idempotencyKey) => {
+    const { requests, dependencies } = successfulDependencies();
+    const res = responseRecorder();
+
+    await handlePreviewBackendProxy(
+      request("/api/preview-backend/api/leases", "POST", {
+        headers: {
+          authorization: "Bearer application-session-token",
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+          "x-request-id": "trace-only-request-id",
+        },
+        body: { synthetic: true },
+      }),
+      res,
+      dependencies,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(requests[2].url).toBe(`${PREVIEW_PROXY_CONFIG.cloudRunServiceUrl}/api/leases`);
+    expect(requests[2].init?.headers).toMatchObject({
+      authorization: "Bearer application-session-token",
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+      "x-request-id": "trace-only-request-id",
+      "X-Serverless-Authorization": `Bearer ${token("google-id-token")}`,
+    });
+  });
+
+  it("does not synthesize Idempotency-Key from x-request-id", async () => {
+    const { requests, dependencies } = successfulDependencies();
+    const res = responseRecorder();
+
+    await handlePreviewBackendProxy(
+      request("/api/preview-backend/api/leases", "POST", {
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": "trace-only-request-id",
+        },
+        body: { synthetic: true },
+      }),
+      res,
+      dependencies,
+    );
+
+    expect(requests[2].init?.headers).toMatchObject({
+      "x-request-id": "trace-only-request-id",
+    });
+    expect(requests[2].init?.headers).not.toHaveProperty("idempotency-key");
+  });
+
+  it("fails closed instead of concatenating duplicate Idempotency-Key values", async () => {
+    const { requests, dependencies } = successfulDependencies();
+    const res = responseRecorder();
+
+    await handlePreviewBackendProxy(
+      request("/api/preview-backend/api/leases", "POST", {
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": ["first-key", "second-key"],
+        },
+        body: { synthetic: true },
+      }),
+      res,
+      dependencies,
+    );
+
+    expect(requests[2].init?.headers).not.toHaveProperty("idempotency-key");
+  });
+
   it("returns sanitized token-boundary errors", async () => {
     const res = responseRecorder();
     await handlePreviewBackendProxy(

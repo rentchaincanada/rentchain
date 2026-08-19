@@ -271,7 +271,7 @@ function upstreamHeaders(req: any, googleIdToken: string): Record<string, string
     "X-Serverless-Authorization": `Bearer ${googleIdToken}`,
   };
 
-  for (const name of ["accept", "authorization", "content-type", "x-request-id"]) {
+  for (const name of ["accept", "authorization", "content-type", "idempotency-key", "x-request-id"]) {
     const value = req?.headers?.[name];
     if (typeof value === "string" && value) headers[name] = value;
   }
