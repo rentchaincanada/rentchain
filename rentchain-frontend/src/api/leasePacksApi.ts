@@ -82,12 +82,12 @@ export async function getLeaseSnapshot(snapshotId: string) {
   );
 }
 
-export async function activateLeaseDraft(draftId: string) {
+export async function activateLeaseDraft(draftId: string, idempotencyKey: string) {
   return apiJson<{ ok: true; leaseId: string; lease: Lease }>(
     `/leases/drafts/${encodeURIComponent(draftId)}/activate`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
       body: JSON.stringify({}),
     }
   );

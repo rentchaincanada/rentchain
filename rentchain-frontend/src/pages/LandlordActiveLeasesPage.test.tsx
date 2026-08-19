@@ -1013,6 +1013,7 @@ describe("LandlordActiveLeasesPage", () => {
     await waitFor(() =>
       expect(mocks.convertUnitReferenceToLease).toHaveBeenCalledWith(
         "unit-9",
+        expect.stringMatching(/^lease-conversion:/),
         expect.objectContaining({
           tenantPhone: "90255511119",
           coApplicantEmail: "coapplicant@example.com",

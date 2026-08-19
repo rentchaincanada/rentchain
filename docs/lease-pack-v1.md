@@ -40,6 +40,9 @@
 - `PATCH /api/leases/drafts/:id`
 - `POST /api/leases/drafts/:id/generate`
 - `GET /api/leases/snapshots/:id`
+- `POST /api/leases/drafts/:id/activate` (`Idempotency-Key` required)
+
+Lease mutation requests that create a lease or can start canonical occupancy require a caller-owned `Idempotency-Key`, including direct creation, draft activation, and occupied-unit conversion. Retry the same logical mutation with the same key; use a new key for new user intent. Reusing a key with changed semantic input returns a conflict. `x-request-id` remains tracing metadata and is never an idempotency fallback.
 
 ## Validation Rules (v1)
 - Landlord-scoped access only.

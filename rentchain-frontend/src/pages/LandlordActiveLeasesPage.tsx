@@ -29,6 +29,7 @@ import { isUpgradeRequiredError } from "@/lib/gatedFeatureErrors";
 import "./LandlordActiveLeasesPage.css";
 import { canonicalLeaseTermLabel, canonicalOccupancyLabel } from "@/lib/leases/canonicalStatePresentation";
 import { ResolveOccupancyDrawer } from "@/components/occupancy/ResolveOccupancyDrawer";
+import { createMutationIdempotencyKey } from "@/lib/mutationIdempotency";
 
 function formatCurrency(value: number | null | undefined) {
   const amount = typeof value === "number" ? value : 0;
@@ -456,6 +457,10 @@ export default function LandlordActiveLeasesPage() {
   const [startDate, setStartDate] = React.useState(todayIso());
   const [endDate, setEndDate] = React.useState("");
   const [monthlyRent, setMonthlyRent] = React.useState("");
+  const convertMutationKeyRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    convertMutationKeyRef.current = null;
+  }, [selectedCandidate?.unitId, occupantName, tenantEmail, tenantPhone, coApplicantEmail, coApplicantPhone, startDate, endDate, monthlyRent]);
   const [isNarrowLayout, setIsNarrowLayout] = React.useState(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
     return window.matchMedia("(max-width: 768px)").matches;
@@ -599,7 +604,9 @@ export default function LandlordActiveLeasesPage() {
     }
     setConvertSaving(true);
     try {
-      await convertUnitReferenceToLease(selectedCandidate.unitId, {
+      const mutationKey = convertMutationKeyRef.current || createMutationIdempotencyKey("lease-conversion");
+      convertMutationKeyRef.current = mutationKey;
+      await convertUnitReferenceToLease(selectedCandidate.unitId, mutationKey, {
         occupantName,
         tenantEmail: tenantEmail.trim() || undefined,
         tenantPhone: tenantPhone.trim() || undefined,
@@ -609,6 +616,7 @@ export default function LandlordActiveLeasesPage() {
         endDate: endDate || null,
         monthlyRent: Number(monthlyRent || 0),
       });
+      convertMutationKeyRef.current = null;
       setSelectedCandidate(null);
       setConvertError(null);
       await load();
