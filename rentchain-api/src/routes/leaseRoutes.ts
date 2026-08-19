@@ -77,9 +77,12 @@ import {
   toCanonicalLeaseStateInput,
 } from "../lib/leases/canonicalLeaseOccupancyProjection";
 import { deriveCanonicalLeaseTermState } from "../lib/leases/canonicalLeaseOccupancyState";
+import { readMutationIdempotencyKey } from "../lib/http/mutationIdempotency";
+import { createCanonicalLease } from "../services/leaseStart/leaseCreationService";
+import { leaseStartDeterministicId } from "../services/leaseStart/leaseStartExpectedState";
+import { getCanonicalLeaseStartContext, LeaseStartServiceError, startCanonicalLeaseOccupancy } from "../services/leaseStart/leaseStartService";
 import { evaluateJurisdictionPolicy } from "../lib/jurisdiction/operationalPolicyEvaluator";
 import { formatInternalReference, slugifyOperationalReference } from "../lib/identityReferences";
-import { syncPropertyUnitOccupancyForTenantContext } from "../services/tenantPortal/tenantOccupancySyncService";
 import { computeLeaseState } from "../services/stateMachines/stateComputation";
 import { leaseStateMachine } from "../services/stateMachines/leaseStateMachine";
 import { appendProvenanceEvent } from "../services/stateMachines/provenanceStorage";
@@ -107,6 +110,34 @@ const LEDGER_COLLECTION = "ledgerEntries";
 const LEASE_NOTES_COLLECTION = "leaseNotes";
 const PAYMENT_METHODS = new Set(["cash", "etransfer", "cheque", "bank", "card", "other"]);
 const CHARGE_CATEGORIES = new Set(["rent", "fee", "adjustment"]);
+
+function mutationIdempotencyKeyOrReject(req: Request, res: Response): string | null {
+  const validation = readMutationIdempotencyKey(req);
+  if (validation.ok) return validation.key;
+  res.status(400).json({ ok: false, error: validation.error });
+  return null;
+}
+
+function leaseStartErrorResponse(error: unknown, res: Response) {
+  if (!(error instanceof LeaseStartServiceError)) return false;
+  const status = error.code === "lease_start_state_stale" || error.code === "lease_start_idempotency_key_reused" || error.code === "lease_start_context_ambiguous" ? 409 : 500;
+  res.status(status).json({ ok: false, error: error.code, freshContext: error.freshContext || undefined });
+  return true;
+}
+
+function canonicalLeaseStartRejection(res: Response, result: any) {
+  if (Array.isArray(result?.reasons) && result.reasons.includes("MULTIPLE_CURRENT_LEASES")) {
+    return res.status(409).json({
+      ok: false,
+      error: "conflicting_active_lease_agreement",
+      message: "A conflicting active lease agreement already exists for this unit and term",
+      conflictLeaseIds: result?.stateSummary?.eligibleCurrentLeaseIds || [],
+      reasons: result.reasons,
+      leaseStart: result,
+    });
+  }
+  return res.status(409).json({ ok: false, error: "lease_start_context_ambiguous", reasons: result?.reasons || [], leaseStart: result });
+}
 
 type LedgerEntryType = "charge" | "payment" | "adjustment";
 type ReconciliationPropertyState = {
@@ -530,33 +561,6 @@ async function resolveStandaloneUnitDocIdForLeaseEnd(lease: any): Promise<string
   const byLabel = resolveUnitReference(canonicalUnits, leaseUnitNumber);
   if (byLabel.ambiguous) return null;
   return byLabel.unit?.id || null;
-}
-
-async function syncOccupancyAfterActiveLeaseWrite(
-  input: {
-    tenantId: string;
-    leaseId: string;
-    landlordId: string;
-    propertyId: string;
-    unitId: string;
-  },
-  logPrefix: string
-) {
-  try {
-    const result = await syncPropertyUnitOccupancyForTenantContext(input);
-    if (!result.updated) {
-      console.warn(`${logPrefix} occupancy sync skipped`, {
-        leaseId: input.leaseId,
-        tenantId: input.tenantId,
-        landlordId: input.landlordId,
-        propertyId: input.propertyId,
-        unitId: input.unitId,
-        reason: result.reason,
-      });
-    }
-  } catch (syncErr) {
-    console.warn(`${logPrefix} occupancy sync failed`, syncErr);
-  }
 }
 
 async function reconcilePropertyUnitOccupancyForLeaseRestore(lease: any) {
@@ -2242,6 +2246,8 @@ router.get("/reconciliation-candidates", requireLandlord, async (req: any, res: 
         const blockingReasons: string[] = [];
         if (!occupantName) blockingReasons.push("occupant_name_required");
         if (!Number.isFinite(rent) || rent <= 0) blockingReasons.push("rent_required");
+        if (!String(raw?.tenantId || raw?.currentTenantId || "").trim()) blockingReasons.push("canonical_tenant_identity_required");
+        if (String(raw?.executionStatus || raw?.leaseExecutionStatus || "").trim() !== "fully_executed") blockingReasons.push("lease_execution_evidence_required");
 
         return {
           id: unitId,
@@ -2276,6 +2282,8 @@ router.get("/reconciliation-candidates", requireLandlord, async (req: any, res: 
 router.post("/reconciliation-candidates/:unitId/convert", requireLandlord, async (req: any, res: Response) => {
   try {
     if (!(await enforceLeaseCapability(req, res))) return;
+    const idempotencyKey = mutationIdempotencyKeyOrReject(req, res);
+    if (!idempotencyKey) return;
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
@@ -2298,17 +2306,11 @@ router.post("/reconciliation-candidates/:unitId/convert", requireLandlord, async
       return res.status(400).json({ ok: false, error: "unit_not_occupied" });
     }
 
-    const conflictingLeases = await db.collection("leases").where("landlordId", "==", landlordId).where("propertyId", "==", propertyId).get();
-    const hasCurrentLease = (conflictingLeases.docs || []).some((doc: any) => {
-      const raw = doc.data() as any;
-      if (!isCurrentLeaseStatus(raw?.status)) return false;
-      return (
-        String(raw?.unitId || "").trim() === unitId ||
-        String(raw?.unitNumber || raw?.unit || "").trim() === unitNumber
-      );
-    });
-    if (hasCurrentLease) {
-      return res.status(409).json({ ok: false, error: "current_lease_already_exists" });
+    const tenantId = String(unit?.tenantId || unit?.currentTenantId || "").trim();
+    if (!tenantId) return res.status(409).json({ ok: false, error: "anonymous_occupied_unit" });
+    const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+    if (!tenantSnap.exists || String(tenantSnap.data()?.landlordId || "").trim() !== landlordId) {
+      return res.status(409).json({ ok: false, error: "occupied_tenant_identity_incoherent" });
     }
 
     const occupantName = String(req.body?.occupantName || unit?.occupantName || "").trim();
@@ -2335,40 +2337,20 @@ router.post("/reconciliation-candidates/:unitId/convert", requireLandlord, async
     if (!Number.isFinite(monthlyRent) || monthlyRent <= 0) {
       return res.status(400).json({ ok: false, error: "monthly_rent_required" });
     }
+    const executionStatus = String(unit?.executionStatus || unit?.leaseExecutionStatus || "").trim();
+    if (executionStatus !== "fully_executed") {
+      return res.status(400).json({ ok: false, error: "lease_execution_evidence_required" });
+    }
 
     const propertySnap = await db.collection("properties").doc(propertyId).get();
     const property = propertySnap.data() as any;
     const propertyName = String(property?.name || property?.addressLine1 || "Property").trim() || "Property";
-    const tenantRef = db.collection("tenants").doc();
     const nowIso = new Date().toISOString();
-    await tenantRef.set(
-      {
-        landlordId,
-        fullName: occupantName,
-        email: tenantEmail,
-        phone: tenantPhone,
-        propertyId,
-        propertyName,
-        unitId,
-        unit: unitNumber,
-        currentLeaseId: null,
-        leaseStart: startDate,
-        leaseEnd: endDate || null,
-        monthlyRent,
-        coApplicant,
-        status: "Current",
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        source: "occupied_unit_reconciliation",
-      },
-      { merge: false }
-    );
-
     const riskSnapshot = await computeLeaseRiskSnapshot({
       landlordId,
       propertyId,
       unitId,
-      tenantIds: [tenantRef.id],
+      tenantIds: [tenantId],
       monthlyRent,
     });
     const riskFields = buildLeaseRiskPersistenceFields({}, riskSnapshot, {
@@ -2376,57 +2358,66 @@ router.post("/reconciliation-candidates/:unitId/convert", requireLandlord, async
       source: "occupied_unit_reconciliation",
     });
 
-    const lease = leaseService.create({
-      tenantId: tenantRef.id,
-      tenantIds: [tenantRef.id],
-      primaryTenantId: tenantRef.id,
-      propertyId,
-      unitNumber,
-      monthlyRent,
-      startDate,
-      endDate,
-      risk: riskFields.risk,
-      riskTimeline: riskFields.riskTimeline,
-    });
-
+    const leaseId = leaseStartDeterministicId("lease", [landlordId, "conversion", idempotencyKey]);
     const firestoreLeaseRecord = {
       landlordId,
-      tenantId: tenantRef.id,
-      tenantIds: [tenantRef.id],
-      primaryTenantId: tenantRef.id,
+      tenantId,
+      tenantIds: [tenantId],
+      primaryTenantId: tenantId,
       propertyId,
       unitId,
       unitNumber,
       monthlyRent,
       startDate,
       endDate: endDate || null,
-      automationEnabled: lease.automationEnabled ?? true,
-      renewalStatus: lease.renewalStatus ?? "unknown",
-      status: lease.status,
-      risk: lease.risk ?? null,
-      riskScore: lease.riskScore ?? lease.risk?.score ?? null,
-      riskGrade: lease.riskGrade ?? lease.risk?.grade ?? null,
-      riskConfidence: lease.riskConfidence ?? lease.risk?.confidence ?? null,
-      riskTimeline: Array.isArray((lease as any).riskTimeline) ? (lease as any).riskTimeline : [],
-      createdAt: lease.createdAt,
-      updatedAt: lease.updatedAt,
+      automationEnabled: true,
+      renewalStatus: "unknown",
+      status: "active",
+      executionStatus: "fully_executed",
+      executionState: "fully_executed",
+      risk: riskFields.risk ?? null,
+      riskScore: riskFields.riskScore ?? null,
+      riskGrade: riskFields.riskGrade ?? null,
+      riskConfidence: riskFields.riskConfidence ?? null,
+      riskTimeline: riskFields.riskTimeline ?? [],
+      createdAt: nowIso,
+      updatedAt: nowIso,
       source: "occupied_unit_reconciliation",
       sourceUnitId: unitId,
       referenceDocument: unit?.leaseDocument || null,
       coApplicant,
     };
-    await db.collection("leases").doc(lease.id).set(firestoreLeaseRecord, { merge: false });
-    await tenantRef.set({ currentLeaseId: lease.id, updatedAt: new Date().toISOString() }, { merge: true });
+    const result = await createCanonicalLease({
+      landlordId,
+      propertyId,
+      unitId,
+      tenantId,
+      leaseId,
+      leaseRecord: firestoreLeaseRecord,
+      operationKind: "conversion",
+      idempotencyKey,
+      evaluationInstant: nowIso,
+      actorId: String(req.user?.id || req.user?.email || landlordId).trim() || landlordId,
+      source: "occupied_unit_reconciliation",
+    });
+    if (result.canonicalOutcome === "rejected") {
+      return canonicalLeaseStartRejection(res, result);
+    }
+    if (!result.occupancyEffective) {
+      return res.status(409).json({ ok: false, error: "lease_start_not_occupancy_effective", reasons: result.reasons, leaseStart: result });
+    }
 
-    const enrichedLease = await enrichLeaseRow({ id: lease.id, ...firestoreLeaseRecord });
+    const enrichedLease = await enrichLeaseRow({ id: leaseId, ...firestoreLeaseRecord, occupancyEffective: true });
     const leaseNotification = internalLeaseRecordNotificationSuppressed();
     return res.status(201).json({
       ok: true,
       lease: enrichedLease,
-      tenant: { id: tenantRef.id, fullName: occupantName, email: tenantEmail, phone: tenantPhone },
+      tenant: { id: tenantId, fullName: occupantName, email: tenantEmail, phone: tenantPhone },
       leaseNotification,
+      leaseStart: result,
     });
   } catch (err) {
+    if (leaseStartErrorResponse(err, res)) return;
     console.error("[POST /api/leases/reconciliation-candidates/:unitId/convert] error", err);
     return res.status(500).json({ ok: false, error: "Failed to convert occupied unit to lease" });
   }
@@ -2604,6 +2595,8 @@ router.post("/drafts/:id/generate", requireLandlord, async (req: any, res: Respo
 
 router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: Response) => {
   try {
+    const idempotencyKey = mutationIdempotencyKeyOrReject(req, res);
+    if (!idempotencyKey) return;
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
@@ -2656,6 +2649,9 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
 
     const generatedLeaseDocument = await loadGeneratedLeaseDocumentForDraft(draftId, draft);
 
+    // Compatibility repair for drafts activated before D3 introduced durable
+    // mutation requests. This is not a new activation and never creates a
+    // second lease; new D3 activations flow through the canonical transaction.
     if (String(draft?.leaseId || "").trim()) {
       const existingLeaseId = String(draft.leaseId).trim();
       const existingLeaseSnap = await db.collection("leases").doc(existingLeaseId).get();
@@ -2669,37 +2665,15 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
             file: generatedLeaseDocument.file,
             actorId: String(req.user?.id || req.user?.email || landlordId).trim() || null,
           });
-          const repairedLeaseSnap = await db.collection("leases").doc(existingLeaseId).get();
-          return res.status(200).json({
-            ok: true,
-            leaseId: existingLeaseId,
-            lease: { id: existingLeaseId, ...(repairedLeaseSnap.data() as any) },
-          });
         }
-        return res.status(200).json({
-          ok: true,
-          leaseId: existingLeaseId,
-          lease: { id: existingLeaseId, ...(existingLeaseSnap.data() as any) },
-        });
+        const refreshed = await db.collection("leases").doc(existingLeaseId).get();
+        return res.status(200).json({ ok: true, leaseId: existingLeaseId, lease: { id: existingLeaseId, ...(refreshed.data() as any) }, leaseNotification: internalLeaseRecordNotificationSuppressed(), occupancyOutcome: (refreshed.data() as any)?.occupancyEffective ? "occupancy_effective" : "created_without_occupancy" });
       }
     }
 
-    const conflicts = await assertNoConflictingActiveAgreement({
-      landlordId,
-      propertyId,
-      unitId,
-      tenantIds,
-      startDate,
-      endDate,
-      monthlyRent: Math.round(baseRentCents / 100),
-    });
-    if (conflicts.length) {
-      return res.status(409).json({ ok: false, error: "conflicting_active_lease_agreement", conflictLeaseIds: conflicts.map((entry: any) => entry.lease.id) });
-    }
-
-    const now = Date.now();
+    const now = new Date().toISOString();
     const tenantId = tenantIds[0];
-    const leaseRef = db.collection("leases").doc();
+    const leaseId = leaseStartDeterministicId("lease", [landlordId, "draft_activation", idempotencyKey]);
     const riskSnapshot = await computeLeaseRiskSnapshot({
       landlordId,
       propertyId,
@@ -2739,7 +2713,9 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       riskTimeline: riskFields.riskTimeline,
       automationEnabled: true,
       renewalStatus: "unknown",
-      status: "active",
+      status: String(draft?.status || (String(draft?.executionStatus || draft?.executionState || "") === "fully_executed" ? "active" : "draft")),
+      executionStatus: String(draft?.executionStatus || draft?.executionState || "draft"),
+      executionState: String(draft?.executionState || draft?.executionStatus || "draft"),
       sourceDraftId: draftId,
       createdAt: now,
       updatedAt: now,
@@ -2752,31 +2728,37 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       leaseRecord.leaseDocumentGeneratedAt = now;
       leaseRecord.latestLeaseSnapshotId = generatedLeaseDocument.snapshotId;
     }
-    await leaseRef.set(leaseRecord, { merge: false });
+    const result = await createCanonicalLease({
+      landlordId,
+      propertyId,
+      unitId,
+      tenantId,
+      leaseId,
+      leaseRecord,
+      operationKind: "draft_activation",
+      idempotencyKey,
+      evaluationInstant: now,
+      actorId: String(req.user?.id || req.user?.email || landlordId).trim() || landlordId,
+      source: "lease_draft_activation",
+      draftActivation: { draftId },
+    });
+    if (result.canonicalOutcome === "rejected") {
+      return canonicalLeaseStartRejection(res, result);
+    }
     if (generatedLeaseDocument) {
       await linkGeneratedLeasePdfToTenantWorkspace({
-        draft: { ...draft, leaseId: leaseRef.id },
+        draft: { ...draft, leaseId },
         draftId,
         landlordId,
-        snapshotId: generatedLeaseDocument.snapshotId || `activated_${leaseRef.id}`,
+        snapshotId: generatedLeaseDocument.snapshotId || `activated_${leaseId}`,
         file: generatedLeaseDocument.file,
         actorId: String(req.user?.id || req.user?.email || landlordId).trim() || null,
       });
     }
-    await syncOccupancyAfterActiveLeaseWrite(
-      {
-        tenantId,
-        leaseId: leaseRef.id,
-        landlordId,
-        propertyId,
-        unitId,
-      },
-      "[POST /api/leases/drafts/:draftId/activate]"
-    );
-
     // Keep in-memory lease service in sync for existing automation/toggle flows.
-    leaseService.getAll().push({
-      id: leaseRef.id,
+    const compatibilityStatus = result.canonicalOutcome === "occupancy_effective" ? "active" : "pending";
+    if (result.canonicalOutcome === "occupancy_effective" && !leaseService.getById(leaseId)) leaseService.getAll().push({
+      id: leaseId,
       tenantId,
       tenantIds,
       primaryTenantId: tenantId,
@@ -2793,78 +2775,22 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       riskGrade: riskFields.riskGrade,
       riskConfidence: riskFields.riskConfidence,
       riskTimeline: riskFields.riskTimeline,
-      createdAt: new Date(now).toISOString(),
-      updatedAt: new Date(now).toISOString(),
-    });
-
-    await draftRef.set(
-      {
-        ...draft,
-        status: "activated",
-        leaseId: leaseRef.id,
-        activatedAt: now,
-        updatedAt: now,
-      },
-      { merge: false }
-    );
-    await writeCanonicalEvent({
-      domain: "lease",
-      action: "created",
-      status: "active",
-      actor: {
-        type: "landlord",
-        role: "landlord",
-        id: landlordId,
-      },
-      resource: {
-        type: "lease",
-        id: leaseRef.id,
-        parentType: "lease_draft",
-        parentId: draftId,
-      },
-      occurredAt: now,
-      visibility: "landlord",
-      summary: "Lease record created from draft",
-      metadata: {
-        propertyId,
-        unitId,
-        tenantIds,
-      },
-    });
-    await writeCanonicalEvent({
-      domain: "lease",
-      action: "activated",
-      status: "active",
-      actor: {
-        type: "landlord",
-        role: "landlord",
-        id: landlordId,
-      },
-      resource: {
-        type: "lease",
-        id: leaseRef.id,
-        parentType: "lease_draft",
-        parentId: draftId,
-      },
-      occurredAt: now,
-      visibility: "landlord",
-      summary: "Lease activated",
-      metadata: {
-        propertyId,
-        unitId,
-        tenantIds,
-      },
+      createdAt: now,
+      updatedAt: now,
     });
 
     const leaseNotification = internalLeaseRecordNotificationSuppressed();
 
     return res.status(200).json({
       ok: true,
-      leaseId: leaseRef.id,
-      lease: { id: leaseRef.id, ...leaseRecord },
+      leaseId,
+      lease: { id: leaseId, ...leaseRecord, status: compatibilityStatus, occupancyEffective: result.occupancyEffective },
       leaseNotification,
+      leaseStart: result,
+      occupancyOutcome: result.canonicalOutcome,
     });
   } catch (err: any) {
+    if (leaseStartErrorResponse(err, res)) return;
     console.error("[POST /api/leases/drafts/:draftId/activate] error", err);
     return res.status(500).json({ ok: false, error: "Failed to activate lease draft" });
   }
@@ -3654,6 +3580,8 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
 router.post("/", requireLandlord, async (req: Request, res: Response) => {
   try {
     if (!(await enforceLeaseCapability(req, res))) return;
+    const idempotencyKey = mutationIdempotencyKeyOrReject(req, res);
+    if (!idempotencyKey) return;
     const body = req.body as Partial<CreateLeasePayload>;
     if (!body.tenantId || !body.propertyId || !body.unitNumber) {
       return res.status(400).json({
@@ -3683,23 +3611,6 @@ router.post("/", requireLandlord, async (req: Request, res: Response) => {
       unitReference: String(body.unitNumber || "").trim(),
     });
 
-    const conflicts = await assertNoConflictingActiveAgreement({
-      landlordId,
-      propertyId: body.propertyId,
-      unitId: unitSelection.unitId,
-      tenantIds,
-      startDate: body.startDate,
-      endDate: body.endDate,
-      monthlyRent: Number(body.monthlyRent),
-    });
-    if (conflicts.length) {
-      return res.status(409).json({
-        error: "conflicting_active_lease_agreement",
-        message: "A conflicting active lease agreement already exists for this unit and term",
-        conflictLeaseIds: conflicts.map((entry: any) => entry.lease.id),
-      });
-    }
-
     const riskSnapshot = await computeLeaseRiskSnapshot({
       landlordId,
       propertyId: body.propertyId,
@@ -3712,77 +3623,66 @@ router.post("/", requireLandlord, async (req: Request, res: Response) => {
       source: "lease_create_route",
     });
 
-    const payload: CreateLeasePayload = {
-      tenantId: body.tenantId,
-      tenantIds,
-      primaryTenantId: tenantIds[0] || body.tenantId,
-      propertyId: body.propertyId,
-      unitNumber: unitSelection.unitLabel,
-      monthlyRent: Number(body.monthlyRent),
-      startDate: body.startDate,
-      endDate: body.endDate,
-      risk: riskFields.risk,
-      riskTimeline: riskFields.riskTimeline,
-    };
-
-    const lease = leaseService.create(payload);
-    let firestoreLeaseWritten = false;
-    if (landlordId) {
-      const firestoreLeaseRecord = {
+    const evaluationInstant = new Date().toISOString();
+    const actorId = String((req as any)?.user?.id || (req as any)?.user?.email || landlordId).trim() || landlordId;
+    const leaseId = leaseStartDeterministicId("lease", [landlordId, "direct_create", idempotencyKey]);
+    const executionStatus = String((body as any)?.executionStatus || (body as any)?.executionState || "").trim();
+    const firestoreLeaseRecord = {
         landlordId,
-        tenantId: lease.tenantId,
+        tenantId: String(body.tenantId || "").trim(),
         tenantIds,
         primaryTenantId: tenantIds[0] || body.tenantId,
-        propertyId: lease.propertyId,
+        propertyId: body.propertyId,
         unitId: unitSelection.unitId,
         unitNumber: unitSelection.unitLabel,
         unitLabel: unitSelection.unitLabel,
-        monthlyRent: lease.monthlyRent,
-        startDate: lease.startDate,
-        endDate: lease.endDate ?? null,
-        automationEnabled: lease.automationEnabled ?? true,
-        renewalStatus: lease.renewalStatus ?? "unknown",
-        status: lease.status,
-        risk: lease.risk ?? null,
-        riskScore: lease.riskScore ?? lease.risk?.score ?? null,
-        riskGrade: lease.riskGrade ?? lease.risk?.grade ?? null,
-        riskConfidence: lease.riskConfidence ?? lease.risk?.confidence ?? null,
-        riskTimeline: Array.isArray((lease as any).riskTimeline) ? (lease as any).riskTimeline : [],
-        createdAt: lease.createdAt,
-        updatedAt: lease.updatedAt,
+        monthlyRent: Number(body.monthlyRent),
+        startDate: body.startDate,
+        endDate: body.endDate ?? null,
+        automationEnabled: body.automationEnabled ?? true,
+        renewalStatus: body.renewalStatus ?? "unknown",
+        status: String((body as any)?.status || (executionStatus === "fully_executed" ? "active" : "draft")).trim(),
+        executionStatus: executionStatus || "draft",
+        executionState: executionStatus || "draft",
+        risk: riskFields.risk ?? null,
+        riskScore: riskFields.risk?.score ?? null,
+        riskGrade: riskFields.risk?.grade ?? null,
+        riskConfidence: riskFields.risk?.confidence ?? null,
+        riskTimeline: Array.isArray(riskFields.riskTimeline) ? riskFields.riskTimeline : [],
+        createdAt: evaluationInstant,
+        updatedAt: evaluationInstant,
       };
-      try {
-        await db.collection("leases").doc(lease.id).set(firestoreLeaseRecord, { merge: false });
-        firestoreLeaseWritten = true;
-      } catch (error: any) {
-        console.warn("[POST /api/leases] firestore lease write failed", error);
-      }
-      if (firestoreLeaseWritten) {
-        await syncOccupancyAfterActiveLeaseWrite(
-          {
-            tenantId: String(lease.tenantId || body.tenantId || "").trim(),
-            leaseId: lease.id,
-            landlordId,
-            propertyId: String(lease.propertyId || body.propertyId || "").trim(),
-            unitId: unitSelection.unitId,
-          },
-          "[POST /api/leases]"
-        );
-      }
+    const result = await createCanonicalLease({
+      landlordId,
+      propertyId: String(body.propertyId),
+      unitId: unitSelection.unitId,
+      tenantId: String(body.tenantId),
+      leaseId,
+      leaseRecord: firestoreLeaseRecord,
+      operationKind: "direct_create",
+      idempotencyKey,
+      evaluationInstant,
+      actorId,
+      source: "lease_create_route",
+    });
+    if (result.canonicalOutcome === "rejected") {
+      return canonicalLeaseStartRejection(res, result);
     }
-    const leaseNotification = landlordId && firestoreLeaseWritten
-      ? internalLeaseRecordNotificationSuppressed()
-      : { attempted: false, sent: false, reason: "lease_not_persisted" };
-    res.status(201).json({
+    const persistedLease = await db.collection("leases").doc(leaseId).get();
+    const lease = { id: leaseId, ...(persistedLease.data() || firestoreLeaseRecord) } as any;
+    return res.status(201).json({
       lease: {
         ...lease,
         unitId: unitSelection.unitId,
         unitNumber: unitSelection.unitLabel,
         unitLabel: unitSelection.unitLabel,
       },
-      leaseNotification,
+      leaseNotification: internalLeaseRecordNotificationSuppressed(),
+      leaseStart: result,
+      occupancyOutcome: result.canonicalOutcome,
     });
   } catch (err) {
+    if (leaseStartErrorResponse(err, res)) return;
     console.error("[POST /api/leases] error", err);
     res.status(500).json({ error: "Failed to process lease" });
   }
@@ -3799,6 +3699,7 @@ router.put("/:id", requireLandlord, async (req: any, res: Response) => {
     }
 
     if (leaseResult.source === "firestore") {
+      const evaluationInstant = new Date().toISOString();
       const next = {
         ...(payload.monthlyRent !== undefined ? { monthlyRent: payload.monthlyRent } : {}),
         ...(payload.startDate !== undefined ? { startDate: payload.startDate } : {}),
@@ -3806,9 +3707,54 @@ router.put("/:id", requireLandlord, async (req: any, res: Response) => {
         ...(payload.automationEnabled !== undefined ? { automationEnabled: payload.automationEnabled } : {}),
         ...(payload.renewalStatus !== undefined ? { renewalStatus: payload.renewalStatus } : {}),
         ...(payload.status !== undefined ? { status: payload.status } : {}),
-        updatedAt: new Date().toISOString(),
+        updatedAt: evaluationInstant,
       };
-      await db.collection("leases").doc(String(req.params?.id || "").trim()).set(next, { merge: true });
+      const currentLease = { id: String(req.params?.id || "").trim(), ...(leaseResult.lease as any) };
+      const proposedLease = { ...currentLease, ...next };
+      const before = deriveCanonicalLeaseTermState(currentLease, evaluationInstant);
+      const after = deriveCanonicalLeaseTermState(proposedLease, evaluationInstant);
+      const currentlyOccupancyEffective = (currentLease as any).occupancyEffective === true;
+      const terminalStatus = ["ended", "expired", "archived", "terminated", "cancelled", "canceled", "void"].includes(String((proposedLease as any).status || "").trim().toLowerCase());
+
+      if (currentlyOccupancyEffective && before.state === "active" && (after.state === "upcoming" || after.state === "past" || terminalStatus)) {
+        return res.status(409).json({ ok: false, error: terminalStatus ? "end_lease_workflow_required" : "occupancy_reconciliation_required" });
+      }
+      if (before.state === "past" && after.state === "active") {
+        return res.status(409).json({ ok: false, error: "restore_active_workflow_required" });
+      }
+
+      const executionStatus = String((proposedLease as any).executionStatus || (proposedLease as any).executionState || (proposedLease as any).leaseExecutionState || "").trim();
+      const startsCurrentOccupancy = before.state === "upcoming" && after.state === "active" && executionStatus === "fully_executed";
+      if (startsCurrentOccupancy) {
+        const idempotencyKey = mutationIdempotencyKeyOrReject(req, res);
+        if (!idempotencyKey) return;
+        const propertyId = String((proposedLease as any).propertyId || "").trim();
+        const unitId = String((proposedLease as any).unitId || "").trim();
+        const tenantId = String((proposedLease as any).tenantId || (proposedLease as any).primaryTenantId || "").trim();
+        if (!propertyId || !unitId || !tenantId) return res.status(409).json({ ok: false, error: "lease_start_context_ambiguous" });
+        const context = await getCanonicalLeaseStartContext({ landlordId, propertyId, unitId, tenantId, leaseId: currentLease.id, evaluationInstant, leasePatch: next });
+        const result = await startCanonicalLeaseOccupancy({
+          landlordId,
+          propertyId,
+          unitId,
+          tenantId,
+          leaseId: currentLease.id,
+          operationKind: "date_transition",
+          idempotencyKey,
+          expectedStateToken: context.expectedStateToken,
+          evaluationInstant,
+          trigger: "date_transition",
+          actorId: String(req.user?.id || req.user?.email || landlordId).trim() || landlordId,
+          source: "lease_update_route",
+          leasePatch: next,
+          persistRejectedAttempt: true,
+        });
+        if (result.canonicalOutcome === "rejected" || !result.occupancyEffective) {
+          return canonicalLeaseStartRejection(res, result);
+        }
+      } else {
+        await db.collection("leases").doc(currentLease.id).set(next, { merge: true });
+      }
       const refreshed = await getLeaseEntityForLandlord(String(req.params?.id || "").trim(), landlordId);
       if (!refreshed.ok) return res.status(refreshed.status).json({ error: refreshed.error });
       return res.json({ lease: await enrichLeaseRow({ id: String(req.params?.id || "").trim(), ...(refreshed.lease as any) }) });
@@ -3820,6 +3766,7 @@ router.put("/:id", requireLandlord, async (req: any, res: Response) => {
     }
     return res.json({ lease });
   } catch (err) {
+    if (leaseStartErrorResponse(err, res)) return;
     console.error("[PUT /api/leases/:id] error", err);
     return res.status(500).json({ error: "Failed to process lease" });
   }

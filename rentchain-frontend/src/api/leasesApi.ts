@@ -446,6 +446,8 @@ export interface CreateLeasePayload {
   endDate?: string | null;
   automationEnabled?: boolean;
   renewalStatus?: LeaseRenewalStatus;
+  executionStatus?: string;
+  status?: LeaseStatus;
 }
 
 export interface UpdateLeasePayload {
@@ -487,6 +489,7 @@ export async function getLeaseReconciliationCandidates(): Promise<{ candidates: 
 
 export async function convertUnitReferenceToLease(
   unitId: string,
+  idempotencyKey: string,
   payload: {
     occupantName?: string;
     tenantEmail?: string;
@@ -500,7 +503,7 @@ export async function convertUnitReferenceToLease(
 ): Promise<{ ok: true; lease: LandlordActiveLease; tenant: { id: string; fullName: string; email?: string | null; phone?: string | null } }> {
   return apiJson(`/leases/reconciliation-candidates/${encodeURIComponent(unitId)}/convert`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
     body: JSON.stringify(payload),
   });
 }
@@ -598,22 +601,24 @@ export async function getLeasePaymentStatus(id: string): Promise<{
 }
 
 export async function createLease(
-  payload: CreateLeasePayload
-): Promise<{ lease: Lease }> {
-  return apiJson<{ lease: Lease }>("/leases", {
+  payload: CreateLeasePayload,
+  idempotencyKey: string
+): Promise<{ lease: Lease; occupancyOutcome: "created_without_occupancy" | "occupancy_effective" | "already_coherent" }> {
+  return apiJson("/leases", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
     body: JSON.stringify(payload),
   });
 }
 
 export async function updateLease(
   id: string,
-  payload: UpdateLeasePayload
+  payload: UpdateLeasePayload,
+  idempotencyKey?: string
 ): Promise<{ lease: Lease }> {
   return apiJson<{ lease: Lease }>(`/leases/${encodeURIComponent(id)}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) },
     body: JSON.stringify(payload),
   });
 }

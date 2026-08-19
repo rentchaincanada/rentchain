@@ -69,6 +69,7 @@ const { fakeDb, listDocs, resetFakeDb, seedDoc } = vi.hoisted(() => {
       runTransaction: async (callback: any) =>
         callback({
           get: async (ref: any) => ref.get(),
+          create: async (ref: any, value: any) => ref.set(value),
           set: async (ref: any, value: any, options?: any) => ref.set(value, options),
         }),
       collection: (name: string) => ({
@@ -1244,6 +1245,7 @@ describe("leaseRoutes GET /active", () => {
     const res = await invokeRouter(router, {
       method: "POST",
       url: "/",
+      headers: { "idempotency-key": "active-create-no-document" },
       body: {
         tenantId: "tenant-1",
         propertyId: "prop-1",
@@ -1265,6 +1267,7 @@ describe("leaseRoutes GET /active", () => {
     seedDoc("properties", "prop-1", {
       landlordId: "landlord-1",
       name: "Harbour View",
+      units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-1", currentTenantId: "tenant-1" }],
     });
     seedDoc("units", "unit-1", {
       landlordId: "landlord-1",
@@ -1279,13 +1282,19 @@ describe("leaseRoutes GET /active", () => {
         bucket: "bucket-1",
         path: "leases/supporting-reference.pdf",
       },
+      tenantId: "tenant-1",
+      currentTenantId: "tenant-1",
+      executionStatus: "fully_executed",
     });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Recovered Tenant", email: "recovered@example.com", currentLeaseId: null });
 
     const router = (await import("../leaseRoutes")).default;
     const res = await invokeRouter(router, {
       method: "POST",
       url: "/reconciliation-candidates/unit-1/convert",
+      headers: { "idempotency-key": "active-conversion-no-document" },
       body: {
+        occupantName: "Recovered Tenant",
         tenantEmail: "recovered@example.com",
         startDate: "2026-05-01",
         endDate: "2027-04-30",
@@ -1319,6 +1328,7 @@ describe("leaseRoutes GET /active", () => {
     const res = await invokeRouter(router, {
       method: "POST",
       url: "/",
+      headers: { "idempotency-key": "active-create-invalid-date" },
       body: {
         tenantId: "tenant-1",
         propertyId: "prop-1",
@@ -1359,6 +1369,7 @@ describe("leaseRoutes GET /active", () => {
     const res = await invokeRouter(router, {
       method: "POST",
       url: "/",
+      headers: { "idempotency-key": "active-create-recipient" },
       body: {
         tenantId: "tenant-1",
         propertyId: "prop-1",
@@ -1754,12 +1765,15 @@ describe("leaseRoutes GET /active", () => {
     const res = await invokeRouter(router, {
       method: "POST",
       url: "/",
+      headers: { "idempotency-key": "active-create-occupancy" },
       body: {
         tenantId: "tenant-1",
         propertyId: "prop-1",
         unitNumber: "unit-1",
         monthlyRent: 1850,
         startDate: "2026-01-01",
+        endDate: "2026-12-31",
+        executionStatus: "fully_executed",
       },
     });
 
@@ -1812,9 +1826,6 @@ describe("leaseRoutes GET /active", () => {
         occupancyStatus: "occupied",
         currentTenantId: "tenant-1",
         currentLeaseId: leaseId,
-        tenantName: "Jane Tenant",
-        tenantFullName: "Jane Tenant",
-        currentTenantName: "Jane Tenant",
       }),
       expect.objectContaining({ id: "unit-2", status: "vacant" }),
     ]);
@@ -1825,19 +1836,17 @@ describe("leaseRoutes GET /active", () => {
         occupancyStatus: "occupied",
         currentTenantId: "tenant-1",
         currentLeaseId: leaseId,
-        tenantName: "Jane Tenant",
-        tenantFullName: "Jane Tenant",
-        currentTenantName: "Jane Tenant",
-        occupancySource: "canonical_lease",
+        occupancySource: "canonical_lease_start",
       })
     );
   });
 
-  it("does not block direct lease creation when occupancy sync cannot find a unit", async () => {
+  it("fails closed when direct lease creation cannot resolve canonical unit context", async () => {
     const router = (await import("../leaseRoutes")).default;
     const res = await invokeRouter(router, {
       method: "POST",
       url: "/",
+      headers: { "idempotency-key": "active-create-missing-unit" },
       body: {
         tenantId: "tenant-1",
         propertyId: "prop-missing",
@@ -1847,8 +1856,8 @@ describe("leaseRoutes GET /active", () => {
       },
     });
 
-    expect(res.status).toBe(201);
-    expect(res.body?.lease?.id).toBeTruthy();
+    expect(res.status).toBe(409);
+    expect(res.body?.error).toBe("lease_start_context_ambiguous");
   });
 
   it("hydrates property lease rows with canonical unit labels for display", async () => {

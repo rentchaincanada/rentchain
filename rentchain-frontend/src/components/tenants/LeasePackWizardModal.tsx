@@ -16,6 +16,7 @@ import { createPdfExportTimer, errorCodeFromUnknown, recordPdfExportEvent } from
 import { normalizeProvinceCode, provinceLabelFromCode, type ProvinceCode } from "@/lib/provinces";
 import { getJurisdictionWorkflow } from "@/lib/jurisdictionLeaseWorkflow";
 import { LeaseRiskCard } from "@/components/leases/LeaseRiskCard";
+import { createMutationIdempotencyKey, isDeterministicMutationFailure } from "@/lib/mutationIdempotency";
 
 interface Props {
   open: boolean;
@@ -75,6 +76,10 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   const [activating, setActivating] = React.useState(false);
   const [activatedLeaseId, setActivatedLeaseId] = React.useState<string>("");
   const [activatedLease, setActivatedLease] = React.useState<Lease | null>(null);
+  const activationMutationKeyRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    activationMutationKeyRef.current = null;
+  }, [draftId]);
   const [provinceCode, setProvinceCode] = React.useState<ProvinceCode | null>(null);
   const [provinceLoading, setProvinceLoading] = React.useState(false);
   const [state, setState] = React.useState<FormState>({
@@ -313,7 +318,10 @@ export const LeasePackWizardModal: React.FC<Props> = ({
     setActivating(true);
     setError("");
     try {
-      const result = await activateLeaseDraft(draftId);
+      const mutationKey = activationMutationKeyRef.current || createMutationIdempotencyKey("lease-draft-activation");
+      activationMutationKeyRef.current = mutationKey;
+      const result = await activateLeaseDraft(draftId, mutationKey);
+      activationMutationKeyRef.current = null;
       setActivatedLeaseId(result.leaseId);
       setActivatedLease(result.lease);
       showToast({
@@ -327,6 +335,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
         })
       );
     } catch (err: any) {
+      if (isDeterministicMutationFailure(err)) activationMutationKeyRef.current = null;
       setError(err?.message || "Failed to activate lease.");
     } finally {
       setActivating(false);

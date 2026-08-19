@@ -63,6 +63,11 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
     },
     seedDoc: (name: string, id: string, data: any) => ensureCollection(name).set(id, { id, data }),
     fakeDb: {
+      runTransaction: async (callback: any) => callback({
+        get: (target: any) => target.get(),
+        set: (ref: any, value: any, options?: any) => ref.set(value, options),
+        create: (ref: any, value: any) => ref.set(value),
+      }),
       collection: (name: string) => ({
         where: (field: string, op: string, value: any) => makeQuery(name, [{ field, op, value }]),
         orderBy: () => makeQuery(name),
@@ -143,27 +148,31 @@ describe("lease conflict responses", () => {
 
   it("returns the machine-readable conflict code for direct create overlaps", async () => {
     seedUnit("unit-1", { unitNumber: "A", status: "occupied" });
-    seedLease("lease-1", {});
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "A", status: "occupied", tenantId: "tenant-1" }] });
+    seedDoc("tenants", "tenant-2", { landlordId: "landlord-1", currentLeaseId: null });
+    seedLease("lease-1", { executionStatus: "fully_executed" });
     const app = await makeApp();
 
-    const res = await request(app).post("/").send({
+    const res = await request(app).post("/").set("Idempotency-Key", "conflict-create").send({
       tenantId: "tenant-2",
       propertyId: "prop-1",
       unitNumber: "unit-1",
       monthlyRent: 1900,
       startDate: "2026-01-15",
       endDate: "2026-11-30",
+      executionStatus: "fully_executed",
     });
 
     expect(res.status).toBe(409);
     expect(res.body?.error).toBe("conflicting_active_lease_agreement");
-    expect(res.body?.message).toBe("A conflicting active lease agreement already exists for this unit and term");
-    expect(res.body?.conflictLeaseIds).toContain("lease-1");
+    expect(res.body?.reasons).toContain("MULTIPLE_CURRENT_LEASES");
   });
 
   it("keeps the same machine-readable conflict code for draft activation overlaps", async () => {
     seedUnit("unit-1", { unitNumber: "A", status: "occupied" });
-    seedLease("lease-1", {});
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "A", status: "occupied", tenantId: "tenant-1" }] });
+    seedDoc("tenants", "tenant-2", { landlordId: "landlord-1", currentLeaseId: null });
+    seedLease("lease-1", { executionStatus: "fully_executed" });
     seedDoc("leaseDrafts", "draft-1", {
       landlordId: "landlord-1",
       propertyId: "prop-1",
@@ -177,13 +186,14 @@ describe("lease conflict responses", () => {
       dueDay: 1,
       paymentMethod: "etransfer",
       templateVersion: "ns-schedule-a-v1",
+      executionStatus: "fully_executed",
     });
     const app = await makeApp();
 
-    const res = await request(app).post("/drafts/draft-1/activate").send({});
+    const res = await request(app).post("/drafts/draft-1/activate").set("Idempotency-Key", "conflict-draft").send({});
 
     expect(res.status).toBe(409);
     expect(res.body?.error).toBe("conflicting_active_lease_agreement");
-    expect(res.body?.conflictLeaseIds).toContain("lease-1");
+    expect(res.body?.reasons).toContain("MULTIPLE_CURRENT_LEASES");
   });
 });

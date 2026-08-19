@@ -71,9 +71,11 @@ export class MockSigningProvider implements ISigningProvider {
     const type = String(body?.type || body?.eventType || "signed").trim().toLowerCase();
     const allowed = new Set(["sent", "viewed", "signed", "rejected", "expired", "cancelled", "failed", "downloaded"]);
     if (!allowed.has(type)) throw new Error("signing_webhook_type_invalid");
+    const providerEventId = String(body?.eventId || "").trim();
+    if (!providerEventId) throw new Error("signing_webhook_event_identity_missing");
     return {
       providerRequestId,
-      providerEventId: String(body?.eventId || `mock_evt_${digest(`${providerRequestId}:${type}:${nowIso()}`)}`).trim(),
+      providerEventId,
       type: type as any,
       signerEmail: String(body?.signerEmail || "").trim().toLowerCase() || null,
       occurredAt: String(body?.occurredAt || nowIso()),

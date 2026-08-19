@@ -1013,6 +1013,7 @@ describe("LandlordActiveLeasesPage", () => {
     await waitFor(() =>
       expect(mocks.convertUnitReferenceToLease).toHaveBeenCalledWith(
         "unit-9",
+        expect.stringMatching(/^lease-conversion:/),
         expect.objectContaining({
           tenantPhone: "90255511119",
           coApplicantEmail: "coapplicant@example.com",
@@ -1022,6 +1023,34 @@ describe("LandlordActiveLeasesPage", () => {
         })
       )
     );
+  });
+
+  it("reuses a conversion key after an uncertain failure and rotates it after a terminal conflict", async () => {
+    mocks.convertUnitReferenceToLease
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(Object.assign(new Error("conflict"), { status: 409 }))
+      .mockResolvedValueOnce({ ok: true, lease: { id: "lease-9" }, tenant: { id: "tenant-9", fullName: "Recovered Tenant" } });
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Occupied units missing lease records/i)).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Convert unit 9 to lease" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Create lease" }));
+    expect(await screen.findByText("Failed to fetch")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Create lease" }));
+    expect(await screen.findByText("conflict")).toBeInTheDocument();
+
+    const firstKey = mocks.convertUnitReferenceToLease.mock.calls[0][1];
+    const retryKey = mocks.convertUnitReferenceToLease.mock.calls[1][1];
+    expect(retryKey).toBe(firstKey);
+
+    fireEvent.change(screen.getByLabelText("Tenant phone (optional)"), { target: { value: "9025559999" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create lease" }));
+    await waitFor(() => expect(mocks.convertUnitReferenceToLease).toHaveBeenCalledTimes(3));
+    expect(mocks.convertUnitReferenceToLease.mock.calls[2][1]).not.toBe(firstKey);
   });
 
   it("blocks conversion when the start date is after the end date", async () => {

@@ -132,12 +132,31 @@ describe("Preview backend proxy", () => {
     });
   });
 
+  it("couples the authorized PR #1561 service URL and audience internally", () => {
+    const target = resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: PREVIEW_BACKEND_TARGET_KEYS.pr1561,
+    });
+    expect(target).toEqual({
+      key: "pr1561-d3-cert",
+      cloudRunServiceUrl: "https://rentchain-pr1561-qa-6256460c-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience: "https://rentchain-pr1561-qa-6256460c-glistw4pya-nn.a.run.app",
+      temporary: true,
+    });
+  });
+
   it.each([
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
+    ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1561],
+    ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1561],
     ["preview", ""],
     ["preview", "unknown"],
+    ["preview", "pr1562"],
+    ["preview", "arbitrary"],
+    ["preview", "https://attacker.example"],
     ["preview", "https://metadata.google.internal"],
+    ["preview", "https://arbitrary.a.run.app"],
     ["preview", "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app"],
     ["preview", "rentchain-pr1555-qa-wrong-region"],
     ["preview", "rentchain-pr1555-qa-cross-project"],
@@ -178,6 +197,31 @@ describe("Preview backend proxy", () => {
     );
   });
 
+  it.each([
+    ["service URL", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1561,
+      cloudRunServiceUrl: "https://arbitrary.a.run.app",
+      cloudRunIdTokenAudience: "https://rentchain-pr1561-qa-6256460c-glistw4pya-nn.a.run.app",
+      temporary: true,
+    }],
+    ["ID-token audience", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1561,
+      cloudRunServiceUrl: "https://rentchain-pr1561-qa-6256460c-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience: "https://arbitrary.a.run.app",
+      temporary: true,
+    }],
+    ["temporary flag", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1561,
+      cloudRunServiceUrl: "https://rentchain-pr1561-qa-6256460c-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience: "https://rentchain-pr1561-qa-6256460c-glistw4pya-nn.a.run.app",
+      temporary: false,
+    }],
+  ])("rejects a tampered PR #1561 mapping: %s", (_label, target) => {
+    expect(() => assertPreviewBackendTarget(target, "preview")).toThrow(
+      "PREVIEW_PROXY_TARGET_REJECTED",
+    );
+  });
+
   it("routes the authorized target using the same URL for ID-token audience and upstream", async () => {
     process.env.PREVIEW_BACKEND_TARGET = PREVIEW_BACKEND_TARGET_KEYS.pr1555;
     const { requests, dependencies } = successfulDependencies();
@@ -199,6 +243,34 @@ describe("Preview backend proxy", () => {
     expect(requests[1].init?.body).toBe(JSON.stringify({ audience: expected, includeEmail: false }));
     expect(requests[2].url).toBe(`${expected}/api/me`);
     expect(requests.every(({ url }) => !url.includes("attacker.invalid"))).toBe(true);
+  });
+
+  it("routes the PR #1561 target only to its exact registered backend", async () => {
+    process.env.PREVIEW_BACKEND_TARGET = PREVIEW_BACKEND_TARGET_KEYS.pr1561;
+    const { requests, dependencies } = successfulDependencies();
+    const res = responseRecorder();
+
+    await handlePreviewBackendProxy(
+      request("/api/preview-backend/api/leases", "POST", {
+        headers: {
+          authorization: "Bearer application-session-token",
+          "content-type": "application/json",
+          "idempotency-key": "pr1561-target-key",
+        },
+        body: { synthetic: true },
+      }),
+      res,
+      dependencies,
+    );
+
+    const expected = "https://rentchain-pr1561-qa-6256460c-glistw4pya-nn.a.run.app";
+    expect(requests[1].init?.body).toBe(JSON.stringify({ audience: expected, includeEmail: false }));
+    expect(requests[2].url).toBe(`${expected}/api/leases`);
+    expect(requests[2].init?.headers).toMatchObject({
+      authorization: "Bearer application-session-token",
+      "idempotency-key": "pr1561-target-key",
+      "X-Serverless-Authorization": `Bearer ${token("google-id-token")}`,
+    });
   });
 
   it("accepts only Preview and rejects Production or Development", async () => {
@@ -361,6 +433,79 @@ describe("Preview backend proxy", () => {
       "X-Serverless-Authorization": `Bearer ${token("google-id-token")}`,
     });
     expect(JSON.stringify(requests[2].init?.headers)).not.toContain("must-not-forward");
+  });
+
+  it.each([
+    "d3-runtime-cert-key-123",
+    "mutation_ABC-123.xyz",
+  ])("forwards an opaque Idempotency-Key unchanged to the backend request: %s", async (idempotencyKey) => {
+    const { requests, dependencies } = successfulDependencies();
+    const res = responseRecorder();
+
+    await handlePreviewBackendProxy(
+      request("/api/preview-backend/api/leases", "POST", {
+        headers: {
+          authorization: "Bearer application-session-token",
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+          "x-request-id": "trace-only-request-id",
+        },
+        body: { synthetic: true },
+      }),
+      res,
+      dependencies,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(requests[2].url).toBe(`${PREVIEW_PROXY_CONFIG.cloudRunServiceUrl}/api/leases`);
+    expect(requests[2].init?.headers).toMatchObject({
+      authorization: "Bearer application-session-token",
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+      "x-request-id": "trace-only-request-id",
+      "X-Serverless-Authorization": `Bearer ${token("google-id-token")}`,
+    });
+  });
+
+  it("does not synthesize Idempotency-Key from x-request-id", async () => {
+    const { requests, dependencies } = successfulDependencies();
+    const res = responseRecorder();
+
+    await handlePreviewBackendProxy(
+      request("/api/preview-backend/api/leases", "POST", {
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": "trace-only-request-id",
+        },
+        body: { synthetic: true },
+      }),
+      res,
+      dependencies,
+    );
+
+    expect(requests[2].init?.headers).toMatchObject({
+      "x-request-id": "trace-only-request-id",
+    });
+    expect(requests[2].init?.headers).not.toHaveProperty("idempotency-key");
+  });
+
+  it("fails closed instead of concatenating duplicate Idempotency-Key values", async () => {
+    const { requests, dependencies } = successfulDependencies();
+    const res = responseRecorder();
+
+    await handlePreviewBackendProxy(
+      request("/api/preview-backend/api/leases", "POST", {
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": ["first-key", "second-key"],
+        },
+        body: { synthetic: true },
+      }),
+      res,
+      dependencies,
+    );
+
+    expect(requests[2].init?.headers).not.toHaveProperty("idempotency-key");
   });
 
   it("returns sanitized token-boundary errors", async () => {

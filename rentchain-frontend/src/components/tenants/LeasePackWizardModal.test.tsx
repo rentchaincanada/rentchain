@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createLeaseDraft } from "@/api/leasePacksApi";
+import { activateLeaseDraft, createLeaseDraft, generateLeaseDraftPdf } from "@/api/leasePacksApi";
 import { LeasePackWizardModal } from "./LeasePackWizardModal";
 
 vi.mock("@/api/leasePacksApi", () => ({
@@ -100,5 +100,37 @@ describe("LeasePackWizardModal jurisdiction workflow guidance", () => {
 
     expect(screen.getByText("Lease start date must be on or before the end date.")).toBeInTheDocument();
     expect(createLeaseDraft).not.toHaveBeenCalled();
+  });
+
+  it("reuses an activation key after uncertain transport failure and rotates after a terminal response", async () => {
+    vi.mocked(createLeaseDraft).mockResolvedValue({ ok: true, draftId: "draft-1", draft: {} as any });
+    vi.mocked(generateLeaseDraftPdf).mockResolvedValue({ ok: true, snapshotId: "snapshot-1", scheduleAUrl: "https://example.invalid/schedule-a.pdf" } as any);
+    vi.mocked(activateLeaseDraft)
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(Object.assign(new Error("conflict"), { status: 409 }))
+      .mockResolvedValueOnce({ ok: true, leaseId: "lease-1", lease: {} as any });
+    render(
+      <LeasePackWizardModal
+        open
+        onClose={vi.fn()}
+        landlordName="Landlord"
+        tenant={{ id: "tenant-1", fullName: "Tenant One", propertyId: "property-1", propertyName: "Harbour Place", unitId: "unit-1", unit: "1", province: "NS" }}
+        lease={{ startDate: "2026-09-01", endDate: "2027-08-31", monthlyRent: 2000 }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Generate Schedule A PDF/i }));
+    const activate = await screen.findByRole("button", { name: "Activate Lease" });
+    fireEvent.click(activate);
+    expect(await screen.findByText("Failed to fetch")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Activate Lease" }));
+    expect(await screen.findByText("conflict")).toBeInTheDocument();
+
+    const firstKey = vi.mocked(activateLeaseDraft).mock.calls[0][1];
+    expect(vi.mocked(activateLeaseDraft).mock.calls[1][1]).toBe(firstKey);
+    fireEvent.change(screen.getByLabelText("Base rent (CAD)"), { target: { value: "2100" } });
+    fireEvent.click(screen.getByRole("button", { name: "Activate Lease" }));
+    await waitFor(() => expect(activateLeaseDraft).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(activateLeaseDraft).mock.calls[2][1]).not.toBe(firstKey);
   });
 });

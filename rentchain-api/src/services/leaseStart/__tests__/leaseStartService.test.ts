@@ -5,6 +5,7 @@ import {
   startCanonicalLeaseOccupancy,
   type StartCanonicalLeaseOccupancyInput,
 } from "../leaseStartService";
+import { startSigningCompletionOccupancy } from "../../signing/leaseSigningService";
 
 function createFakeFirestore() {
   const store = new Map<string, Map<string, any>>();
@@ -296,6 +297,18 @@ describe("leaseStartService", () => {
     expect(fake.list("leaseStartRequests")).toEqual([]);
   });
 
+  it("durably audits an authorized route-level domain rejection exactly once", async () => {
+    fake.seed("leases", "lease-2", { ...fake.read("leases", "lease-1"), tenantId: "tenant-1" });
+    const request = await mutationInput({ operationKind: "date_transition", trigger: "date_transition", idempotencyKey: "rejected-route-1", persistRejectedAttempt: true });
+    const first = await startCanonicalLeaseOccupancy(request);
+    const replay = await startCanonicalLeaseOccupancy(request);
+    expect(first).toMatchObject({ canonicalOutcome: "rejected", reasons: ["MULTIPLE_CURRENT_LEASES"] });
+    expect(replay.outcome).toBe("idempotent_replay");
+    expect(fake.list("canonicalEvents").filter((event) => event.type === "lease.occupancy_start_rejected")).toHaveLength(1);
+    expect(fake.list("leaseStartRequests")).toHaveLength(1);
+    expect(fake.read("leases", "lease-1")).not.toHaveProperty("occupancyEffective", true);
+  });
+
   it("cannot bypass D1 anonymous legacy occupancy rejection", async () => {
     fake = createFakeFirestore();
     seedBase({ unit: { status: "occupied", occupancyStatus: "occupied" }, embedded: { status: "occupied", occupancyStatus: "occupied" } });
@@ -483,5 +496,54 @@ describe("leaseStartService", () => {
   it("requires a nonempty expected-state token for an occupancy-effective mutation", async () => {
     await expect(startCanonicalLeaseOccupancy({ ...await mutationInput(), expectedStateToken: "" })).rejects.toMatchObject({ code: "lease_start_state_stale" });
     expect(fake.list("canonicalEvents")).toEqual([]);
+  });
+
+  it("replays a real D2 signing completion without recomputing changed expected state", async () => {
+    const request = {
+      firestore: fake.firestore,
+      providerId: "mock",
+      providerEventId: "provider-current-1",
+      occurredAt: evaluationInstant,
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      tenantId: "tenant-1",
+    };
+    const first = await startSigningCompletionOccupancy(request);
+    const replay = await startSigningCompletionOccupancy(request);
+
+    expect(first).toMatchObject({ replay: false, result: { canonicalOutcome: "occupancy_effective" } });
+    expect(replay).toMatchObject({ replay: true, result: { canonicalOutcome: "occupancy_effective" } });
+    expect(fake.list("canonicalEvents")).toHaveLength(1);
+    expect(fake.list("tenancies")).toHaveLength(1);
+    expect(fake.list("leaseStartRequests")).toHaveLength(1);
+    expect(fake.list("leaseSigningCompletionOperations")).toHaveLength(1);
+  });
+
+  it("replays a deferred future signing completion without occupancy or review evidence", async () => {
+    fake = createFakeFirestore();
+    seedBase({ lease: { startDate: "2027-01-01", endDate: "2027-12-31" } });
+    const request = {
+      firestore: fake.firestore,
+      providerId: "mock",
+      providerEventId: "provider-future-1",
+      occurredAt: evaluationInstant,
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      tenantId: "tenant-1",
+    };
+    const first = await startSigningCompletionOccupancy(request);
+    const replay = await startSigningCompletionOccupancy(request);
+
+    expect(first).toMatchObject({ replay: false, result: { canonicalOutcome: "created_without_occupancy" } });
+    expect(replay).toMatchObject({ replay: true, result: { canonicalOutcome: "created_without_occupancy" } });
+    expect(fake.list("canonicalEvents")).toEqual([]);
+    expect(fake.list("tenancies")).toEqual([]);
+    expect(fake.list("leaseStartRequests")).toEqual([]);
+    expect(fake.list("leaseSigningCompletionOperations")).toHaveLength(1);
+    expect(fake.read("leases", "lease-1")).not.toHaveProperty("occupancyStartReview");
   });
 });

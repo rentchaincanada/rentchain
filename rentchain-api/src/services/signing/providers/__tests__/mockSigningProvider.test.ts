@@ -41,4 +41,15 @@ describe("MockSigningProvider", () => {
       occurredAt: "2026-01-01T00:00:00.000Z",
     });
   });
+
+  it("fails closed when a webhook has no stable provider event identity", async () => {
+    const provider = new MockSigningProvider();
+
+    await expect(
+      provider.parseWebhookPayload({
+        providerRequestId: "mock_request",
+        type: "signed",
+      })
+    ).rejects.toThrow("signing_webhook_event_identity_missing");
+  });
 });
