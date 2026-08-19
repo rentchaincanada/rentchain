@@ -14,14 +14,19 @@ router.get("/tenants/:tenantId/signals", async (req: any, res) => {
   const tenantId = String(req.params?.tenantId || "").trim();
   if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId required" });
 
-  const result = await listLedgerEventsV2({
-    landlordId,
-    tenantId,
-    limit: 200,
-  });
+  try {
+    const result = await listLedgerEventsV2({
+      landlordId,
+      tenantId,
+      limit: 200,
+    });
 
-  const signals = computeTenantSignals(result.items || [], tenantId, landlordId);
-  return res.json({ ok: true, signals });
+    const signals = computeTenantSignals(result.items || [], tenantId, landlordId);
+    return res.json({ ok: true, signals });
+  } catch (error: any) {
+    console.error("[tenant-signals GET /tenants/:tenantId/signals] error", error);
+    return res.status(500).json({ ok: false, error: "Failed to load tenant signals" });
+  }
 });
 
 export default router;
