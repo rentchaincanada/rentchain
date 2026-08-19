@@ -17,6 +17,11 @@ import { normalizeProvinceCode, provinceLabelFromCode, type ProvinceCode } from 
 import { getJurisdictionWorkflow } from "@/lib/jurisdictionLeaseWorkflow";
 import { LeaseRiskCard } from "@/components/leases/LeaseRiskCard";
 import { createMutationIdempotencyKey, isDeterministicMutationFailure } from "@/lib/mutationIdempotency";
+import {
+  leaseStartMutationErrorMessage,
+  leaseStartOutcomePresentation,
+  type LeaseStartOutcome,
+} from "@/lib/leases/leaseStartPresentation";
 
 interface Props {
   open: boolean;
@@ -76,7 +81,9 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   const [activating, setActivating] = React.useState(false);
   const [activatedLeaseId, setActivatedLeaseId] = React.useState<string>("");
   const [activatedLease, setActivatedLease] = React.useState<Lease | null>(null);
+  const [activationOutcome, setActivationOutcome] = React.useState<LeaseStartOutcome | null>(null);
   const activationMutationKeyRef = React.useRef<string | null>(null);
+  const activationInFlightRef = React.useRef(false);
   React.useEffect(() => {
     activationMutationKeyRef.current = null;
   }, [draftId]);
@@ -303,6 +310,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   };
 
   const handleActivateLease = async () => {
+    if (activationInFlightRef.current) return;
     if (!isNsProvince) {
       setError("Lease activation from this modal is available for Nova Scotia Schedule A flow only.");
       return;
@@ -315,6 +323,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       setError(DATE_RANGE_ERROR);
       return;
     }
+    activationInFlightRef.current = true;
     setActivating(true);
     setError("");
     try {
@@ -324,9 +333,11 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       activationMutationKeyRef.current = null;
       setActivatedLeaseId(result.leaseId);
       setActivatedLease(result.lease);
+      setActivationOutcome(result.occupancyOutcome);
+      const presentation = leaseStartOutcomePresentation(result.occupancyOutcome, result.lease?.startDate || state.startDate);
       showToast({
-        message: "Lease activated",
-        description: "Lifecycle automation is now enabled for this tenant lease.",
+        message: presentation.title,
+        description: presentation.description,
         variant: "success",
       });
       window.dispatchEvent(
@@ -336,8 +347,9 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       );
     } catch (err: any) {
       if (isDeterministicMutationFailure(err)) activationMutationKeyRef.current = null;
-      setError(err?.message || "Failed to activate lease.");
+      setError(leaseStartMutationErrorMessage(err, "Failed to activate lease."));
     } finally {
+      activationInFlightRef.current = false;
       setActivating(false);
     }
   };
@@ -449,7 +461,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
         </div>
 
         {blockingProvinceError ? (
-          <div style={{ border: "1px solid #fecaca", background: "#fef2f2", color: "#b91c1c", padding: 10, borderRadius: 8 }}>
+          <div role="alert" style={{ border: "1px solid #fecaca", background: "#fef2f2", color: "#b91c1c", padding: 10, borderRadius: 8 }}>
             {blockingProvinceError}
           </div>
         ) : null}
@@ -628,7 +640,13 @@ export const LeasePackWizardModal: React.FC<Props> = ({
         ) : null}
 
         {activatedLeaseId ? (
-          <LeaseRiskCard risk={activatedLease?.risk ?? null} />
+          <div aria-live="polite" style={{ display: "grid", gap: 8 }}>
+            <div style={{ border: "1px solid #d1fae5", background: "#ecfdf5", color: "#166534", padding: 10, borderRadius: 8 }}>
+              <strong>{leaseStartOutcomePresentation(activationOutcome, activatedLease?.startDate || state.startDate).occupancyLabel}</strong>
+              <div style={{ marginTop: 4 }}>{leaseStartOutcomePresentation(activationOutcome, activatedLease?.startDate || state.startDate).description}</div>
+            </div>
+            <LeaseRiskCard risk={activatedLease?.risk ?? null} />
+          </div>
         ) : null}
       </div>
     </div>

@@ -30,6 +30,7 @@ import "./LandlordActiveLeasesPage.css";
 import { canonicalLeaseTermLabel, canonicalOccupancyLabel } from "@/lib/leases/canonicalStatePresentation";
 import { ResolveOccupancyDrawer } from "@/components/occupancy/ResolveOccupancyDrawer";
 import { createMutationIdempotencyKey, isDeterministicMutationFailure } from "@/lib/mutationIdempotency";
+import { leaseStartMutationErrorMessage } from "@/lib/leases/leaseStartPresentation";
 
 function formatCurrency(value: number | null | undefined) {
   const amount = typeof value === "number" ? value : 0;
@@ -458,6 +459,7 @@ export default function LandlordActiveLeasesPage() {
   const [endDate, setEndDate] = React.useState("");
   const [monthlyRent, setMonthlyRent] = React.useState("");
   const convertMutationKeyRef = React.useRef<string | null>(null);
+  const convertInFlightRef = React.useRef(false);
   React.useEffect(() => {
     convertMutationKeyRef.current = null;
   }, [selectedCandidate?.unitId, occupantName, tenantEmail, tenantPhone, coApplicantEmail, coApplicantPhone, startDate, endDate, monthlyRent]);
@@ -595,13 +597,14 @@ export default function LandlordActiveLeasesPage() {
   }
 
   async function handleConvert() {
-    if (!selectedCandidate) return;
+    if (!selectedCandidate || convertInFlightRef.current) return;
     setError(null);
     setConvertError(null);
     if (isInvalidLeaseDateRange(startDate, endDate)) {
       setConvertError("Lease start date must be on or before the end date.");
       return;
     }
+    convertInFlightRef.current = true;
     setConvertSaving(true);
     try {
       const mutationKey = convertMutationKeyRef.current || createMutationIdempotencyKey("lease-conversion");
@@ -622,8 +625,9 @@ export default function LandlordActiveLeasesPage() {
       await load();
     } catch (err: unknown) {
       if (isDeterministicMutationFailure(err)) convertMutationKeyRef.current = null;
-      setConvertError(errorMessage(err, "Failed to convert reference to lease."));
+      setConvertError(leaseStartMutationErrorMessage(err, "Failed to convert reference to lease."));
     } finally {
+      convertInFlightRef.current = false;
       setConvertSaving(false);
     }
   }
