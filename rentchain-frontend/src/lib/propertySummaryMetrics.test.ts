@@ -78,7 +78,7 @@ describe("buildPropertySummaryMetrics", () => {
     expect(metrics.currentOccupiedRentTotal).toBe(0);
   });
 
-  it("counts valid manual occupancy when expired leases are the only lease records", () => {
+  it("does not count manual occupancy without a canonical projection", () => {
     const metrics = buildPropertySummaryMetrics(
       [
         {
@@ -109,10 +109,10 @@ describe("buildPropertySummaryMetrics", () => {
       "2026-05-04"
     );
 
-    expect(metrics.leasedUnits).toHaveLength(1);
-    expect(metrics.occupancyRate).toBe(100);
+    expect(metrics.leasedUnits).toHaveLength(0);
+    expect(metrics.occupancyRate).toBe(0);
     expect(metrics.activeLeaseRentTotal).toBe(0);
-    expect(metrics.currentOccupiedRentTotal).toBe(1800);
+    expect(metrics.currentOccupiedRentTotal).toBe(0);
   });
 
   it("keeps signed future leases as upcoming instead of manual occupied", () => {

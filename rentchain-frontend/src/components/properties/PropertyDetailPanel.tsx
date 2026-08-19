@@ -198,9 +198,10 @@ function applySavedUnitOccupancy(unit: any, occupancy: UnitOccupancy): UnitOccup
   const savedStatus = String(unit?.occupancyStatus || unit?.status || "").trim().toLowerCase();
   if (savedStatus === "occupied" || savedStatus === "leased" || savedStatus === "rented") {
     return {
-      status: "occupied",
-      label: "Occupied",
+      status: "review_required",
+      label: "Review needed",
       lease: null,
+      reason: "Canonical occupancy projection is unavailable.",
     };
   }
   return occupancy;

@@ -109,7 +109,7 @@ describe("leaseLifecycle", () => {
     ).toMatchObject({ status: "review_required", label: "Review needed" });
   });
 
-  it("respects valid manual unit occupancy when only expired leases exist", () => {
+  it("fails closed when legacy occupied state and identity exist without canonical authority", () => {
     expect(
       deriveUnitOccupancyFromLeases(
         {
@@ -130,7 +130,42 @@ describe("leaseLifecycle", () => {
         ],
         today
       )
-    ).toMatchObject({ status: "occupied", label: "Occupied", lease: null });
+    ).toMatchObject({ status: "review_required", label: "Review needed", lease: null });
+  });
+
+  it("fails closed when legacy occupied identity is incomplete", () => {
+    expect(
+      deriveUnitOccupancyFromLeases(
+        { id: "unit-anonymous", unitNumber: "106", status: "occupied" },
+        [],
+        today
+      )
+    ).toMatchObject({ status: "review_required", label: "Review needed", lease: null });
+  });
+
+  it("uses authoritative canonical occupied and vacant projections", () => {
+    expect(
+      deriveUnitOccupancyFromLeases(
+        { id: "unit-current", unitNumber: "107" },
+        [{
+          id: "lease-current",
+          unitId: "unit-current",
+          canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant" },
+        }],
+        today
+      )
+    ).toMatchObject({ status: "occupied", label: "Occupied" });
+    expect(
+      deriveUnitOccupancyFromLeases(
+        { id: "unit-vacant", unitNumber: "108", status: "vacant" },
+        [{
+          id: "lease-past",
+          unitId: "unit-vacant",
+          canonicalState: { leaseTermState: "past", occupancyState: "vacant", tenantRelationshipState: "past_tenant" },
+        }],
+        today
+      )
+    ).toMatchObject({ status: "vacant", label: "Vacant" });
   });
 
   it("returns only currently active leases ending inside the threshold", () => {

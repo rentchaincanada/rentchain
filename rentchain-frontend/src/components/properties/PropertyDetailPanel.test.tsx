@@ -286,7 +286,7 @@ describe("PropertyDetailPanel", () => {
     );
   });
 
-  it("shows direct saved unit occupancy and field aliases without active lease records", async () => {
+  it("fails closed for direct saved occupancy while preserving non-occupancy field aliases", async () => {
     mocks.fetchUnitsForProperty.mockResolvedValue([
       {
         id: "unit-1",
@@ -332,10 +332,10 @@ describe("PropertyDetailPanel", () => {
     expect(within(row).getByText("$1,800")).toBeInTheDocument();
     expect(within(row).getByText("2")).toBeInTheDocument();
     expect(within(row).getByText("1.5")).toBeInTheDocument();
-    expect(within(row).getByText("Occupied")).toBeInTheDocument();
-    expect(within(row).getByText(/Jane Tenant/)).toBeInTheDocument();
-    expect(within(row).getByText(/Jun 10, 2027/)).toBeInTheDocument();
-    expect(screen.getAllByText("50%").length).toBeGreaterThan(0);
+    expect(within(row).getByText("Review needed")).toBeInTheDocument();
+    expect(within(row).queryByText(/Jane Tenant/)).not.toBeInTheDocument();
+    expect(within(row).queryByText(/Jun 10, 2027/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("0%").length).toBeGreaterThan(0);
   });
 
   it("imports the official occupancy metadata CSV template through the manual save path", async () => {
@@ -406,7 +406,7 @@ describe("PropertyDetailPanel", () => {
     expect(onRefresh).toHaveBeenCalled();
   });
 
-  it("shows manually occupied units when manual occupancy has a current lease end date", async () => {
+  it("does not treat manual identity and lease dates as canonical occupancy", async () => {
     mocks.fetchUnitsForProperty.mockResolvedValue([
       {
         id: "unit-1",
@@ -457,8 +457,8 @@ describe("PropertyDetailPanel", () => {
       </MemoryRouter>
     );
 
-    expect((await screen.findAllByText("Occupied")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("100%").length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Review needed")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("0%").length).toBeGreaterThan(0);
   });
 
   it("fails closed when canonical occupancy is unavailable for an active-looking lease", async () => {

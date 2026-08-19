@@ -80,6 +80,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   const [generating, setGenerating] = React.useState(false);
   const [activating, setActivating] = React.useState(false);
   const [activatedLeaseId, setActivatedLeaseId] = React.useState<string>("");
+  const [activatedDraftId, setActivatedDraftId] = React.useState<string>("");
   const [activatedLease, setActivatedLease] = React.useState<Lease | null>(null);
   const [activationOutcome, setActivationOutcome] = React.useState<LeaseStartOutcome | null>(null);
   const activationMutationKeyRef = React.useRef<string | null>(null);
@@ -87,6 +88,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   React.useEffect(() => {
     activationMutationKeyRef.current = null;
   }, [draftId]);
+  const activationComplete = Boolean(draftId && activatedDraftId === draftId);
   const [provinceCode, setProvinceCode] = React.useState<ProvinceCode | null>(null);
   const [provinceLoading, setProvinceLoading] = React.useState(false);
   const [state, setState] = React.useState<FormState>({
@@ -310,7 +312,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   };
 
   const handleActivateLease = async () => {
-    if (activationInFlightRef.current) return;
+    if (activationInFlightRef.current || activationComplete) return;
     if (!isNsProvince) {
       setError("Lease activation from this modal is available for Nova Scotia Schedule A flow only.");
       return;
@@ -331,6 +333,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       activationMutationKeyRef.current = mutationKey;
       const result = await activateLeaseDraft(draftId, mutationKey);
       activationMutationKeyRef.current = null;
+      setActivatedDraftId(draftId);
       setActivatedLeaseId(result.leaseId);
       setActivatedLease(result.lease);
       setActivationOutcome(result.occupancyOutcome);
@@ -624,10 +627,10 @@ export const LeasePackWizardModal: React.FC<Props> = ({
               <Button
                 type="button"
                 onClick={handleActivateLease}
-                disabled={activating}
+                disabled={activating || activationComplete}
                 style={{ padding: "8px 12px" }}
               >
-                {activating ? "Activating..." : "Activate Lease"}
+                {activating ? "Activating..." : activationComplete ? "Lease Activated" : "Activate Lease"}
               </Button>
             ) : null}
           </div>

@@ -259,23 +259,9 @@ function leaseIdentifiers(lease: LeaseLike): string[] {
   );
 }
 
-function hasManualOccupant(unit: UnitLike): boolean {
-  if (String(unit.occupantName || unit.tenantName || "").trim()) return true;
-  return Array.isArray(unit.occupants) && unit.occupants.some((occupant) => String(occupant || "").trim());
-}
-
-function hasPersistedCurrentOccupancy(unit: UnitLike): boolean {
+function hasLegacyOccupiedLikeState(unit: UnitLike): boolean {
   const status = normalize(unit.occupancyStatus || unit.status);
-  const hasIdentity = Boolean(
-    textValue(unit.currentTenantId || unit.tenantId) ||
-    textValue(unit.currentLeaseId || unit.leaseId) ||
-    hasManualOccupant(unit)
-  );
-  return status === "occupied" && hasIdentity;
-}
-
-function textValue(value: unknown): string {
-  return String(value || "").trim();
+  return status === "occupied" || status === "leased" || status === "rented";
 }
 
 function hasUnitArchivedSignal(unit: UnitLike): boolean {
@@ -338,12 +324,8 @@ export function deriveUnitOccupancyFromLeases(
   const upcoming = withLifecycle.find((item) => item.lease.canonicalState?.leaseTermState === "upcoming");
   if (upcoming) return { status: "upcoming", label: "Upcoming", lease: upcoming.lease };
 
-  if (hasPersistedCurrentOccupancy(unit)) {
-    return { status: "occupied", label: "Occupied", lease: null };
-  }
-
-  if (normalize(unit.occupancyStatus || unit.status) === "occupied") {
-    return { status: "review_required", label: "Review needed", lease: null, reason: "Occupied state lacks canonical tenant or lease identity." };
+  if (hasLegacyOccupiedLikeState(unit)) {
+    return { status: "review_required", label: "Review needed", lease: null, reason: "Canonical occupancy projection is unavailable." };
   }
 
   if (hasUnitArchivedSignal(unit) || matchedLeases.some(hasLeaseArchivedSignal)) {

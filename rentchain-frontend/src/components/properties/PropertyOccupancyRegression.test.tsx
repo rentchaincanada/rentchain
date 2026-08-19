@@ -258,6 +258,22 @@ describe("PropertyDetailPanel occupancy regression coverage", () => {
     expect(screen.queryByText(/John Smith · Ends/)).not.toBeInTheDocument();
   });
 
+  it.each(["leased", "rented"])("fails closed for legacy %s unit status without a canonical projection", async (status) => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([
+      fixtureUnit(lifecycleContinuityIds.unit101Id, {
+        status,
+        tenantId: lifecycleContinuityIds.activeTenantId,
+        currentLeaseId: lifecycleContinuityIds.activeLeaseId,
+      }),
+    ]);
+    mocks.getLeasesForProperty.mockResolvedValue({ leases: [], credibilitySummary: null });
+
+    renderPropertyDetail();
+
+    expect((await screen.findAllByText("Review needed")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Occupied")).not.toBeInTheDocument();
+  });
+
   it("surfaces review-needed conflicts instead of forcing occupied or vacant", async () => {
     mocks.fetchUnitsForProperty.mockResolvedValue([fixtureUnit(lifecycleContinuityIds.unit102Id)]);
     mocks.getLeasesForProperty.mockResolvedValue({
