@@ -107,6 +107,12 @@ export function deriveLeaseExecution(input: DeriveLeaseExecutionInput): LeaseExe
   const normalizedSigningStatus = normalizeStatus(
     raw?.currentSigningStatus || raw?.signingStatus || raw?.leaseSigningStatus || raw?.providerSigningStatus
   );
+  const persistedExecutionStatus = normalizeStatus(
+    raw?.executionStatus || raw?.leaseExecutionState || raw?.leaseExecution?.executionStatus
+  );
+  const persistentlyExecuted = ["fully_executed", "executed", "complete", "completed"].includes(
+    persistedExecutionStatus
+  );
   const providerSigningComplete = ["signed", "completed", "complete"].includes(normalizedSigningStatus);
   const providerSignedAt = providerSigningComplete
     ? firstIso(raw, ["currentStatusAt", "signedAt", "signingCompletedAt", "providerSignedAt", "fullyExecutedAt"])
@@ -157,7 +163,9 @@ export function deriveLeaseExecution(input: DeriveLeaseExecutionInput): LeaseExe
       fullyExecutedAt
   );
 
-  const executed = Boolean(providerSigningComplete || providerSignedAt || (tenantSignatureCaptured && landlordSignatureCaptured));
+  const executed = Boolean(
+    persistentlyExecuted || providerSigningComplete || providerSignedAt || (tenantSignatureCaptured && landlordSignatureCaptured)
+  );
   const landlordSigned = Boolean(!executed && landlordSignatureCaptured);
   const readyForLandlord = Boolean(!executed && !landlordSigned && statusImpliesReadyForLandlord);
   const tenantSigned = Boolean(

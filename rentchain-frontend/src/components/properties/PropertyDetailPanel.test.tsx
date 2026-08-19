@@ -530,6 +530,7 @@ describe("PropertyDetailPanel", () => {
     render(<MemoryRouter><PropertyDetailPanel property={{ id: "prop-1", name: "Harbour View", addressLine1: "12 Wharf Street", city: "Halifax", province: "NS", postalCode: "B3H 1A1", country: "Canada", totalUnits: 1, amenities: [], units: [], createdAt: new Date().toISOString() }} /></MemoryRouter>);
     expect((await screen.findAllByText("Review needed")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Past lease · Occupancy requires review").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Resolve occupancy" }).length).toBeGreaterThan(0);
   });
 
   it("hydrates lease risk unit labels from property units instead of showing raw unit ids", async () => {

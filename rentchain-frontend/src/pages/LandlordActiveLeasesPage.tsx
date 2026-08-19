@@ -28,6 +28,7 @@ import { useEntitlements } from "@/hooks/useEntitlements";
 import { isUpgradeRequiredError } from "@/lib/gatedFeatureErrors";
 import "./LandlordActiveLeasesPage.css";
 import { canonicalLeaseTermLabel, canonicalOccupancyLabel } from "@/lib/leases/canonicalStatePresentation";
+import { ResolveOccupancyDrawer } from "@/components/occupancy/ResolveOccupancyDrawer";
 
 function formatCurrency(value: number | null | undefined) {
   const amount = typeof value === "number" ? value : 0;
@@ -446,6 +447,7 @@ export default function LandlordActiveLeasesPage() {
   const [convertError, setConvertError] = React.useState<string | null>(null);
   const [paymentRailBusyLeaseId, setPaymentRailBusyLeaseId] = React.useState<string | null>(null);
   const [documentBusyLeaseId, setDocumentBusyLeaseId] = React.useState<string | null>(null);
+  const [resolvingLease, setResolvingLease] = React.useState<LandlordActiveLease | null>(null);
   const [occupantName, setOccupantName] = React.useState("");
   const [tenantEmail, setTenantEmail] = React.useState("");
   const [tenantPhone, setTenantPhone] = React.useState("");
@@ -1046,6 +1048,7 @@ export default function LandlordActiveLeasesPage() {
                     <td style={{ padding: 12 }}>
                       <div>{statusBadge(lease.canonicalState ? canonicalLeaseTermLabel(lease.canonicalState.leaseTermState) : lease.status)}</div>
                       {renderOccupancyDisplay(lease)}
+                      {lease.canonicalState?.occupancyState === "review_needed" && lease.propertyId && lease.unitId ? <button type="button" onClick={() => setResolvingLease(lease)}>Resolve occupancy</button> : null}
                       {lease.leaseExecution ? (
                         <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: leaseWorkspaceTheme.charcoal }}>
@@ -1155,6 +1158,7 @@ export default function LandlordActiveLeasesPage() {
                   <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>Status</div>
                   <div style={{ marginTop: 6 }}>{statusBadge(lease.canonicalState ? canonicalLeaseTermLabel(lease.canonicalState.leaseTermState) : lease.status)}</div>
                   {renderOccupancyDisplay(lease)}
+                  {lease.canonicalState?.occupancyState === "review_needed" && lease.propertyId && lease.unitId ? <button type="button" onClick={() => setResolvingLease(lease)}>Resolve occupancy</button> : null}
                 </div>
                 <div>
                   <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 12 }}>Rent</div>
@@ -1321,6 +1325,7 @@ export default function LandlordActiveLeasesPage() {
           </div>
         </div>
       ) : null}
+      {resolvingLease?.propertyId && resolvingLease.unitId ? <ResolveOccupancyDrawer open propertyId={resolvingLease.propertyId} unitId={resolvingLease.unitId} tenantId={resolvingLease.primaryTenantId || resolvingLease.tenantId || null} onClose={() => setResolvingLease(null)} onResolved={load} /> : null}
     </div>
   );
 }

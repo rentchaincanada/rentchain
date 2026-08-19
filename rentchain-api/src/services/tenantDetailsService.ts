@@ -13,6 +13,7 @@ import {
 import {
   groupLeaseAgreementCandidates,
   pickAgreementWinner,
+  preserveCanonicalLeaseEvidence,
 } from "./leasePartyConsolidationService";
 import { buildCredibilityInsights, type CredibilityInsights } from "./risk/credibilityInsights";
 import { buildMoveInRequirements, type MoveInRequirements } from "./moveInRequirements";
@@ -483,12 +484,13 @@ async function loadTenantLeaseResolution(tenant: TenantRecord | null, landlordId
       };
     });
     const grouped = groupLeaseAgreementCandidates(agreementCandidates);
+    const canonicalEvidenceLeases = preserveCanonicalLeaseEvidence(agreementCandidates);
     const representatives = [
       ...grouped.mergeGroups.map((group) => pickAgreementWinner(group.candidates).lease),
       ...grouped.ambiguousGroups.map((group) => pickAgreementWinner(group.candidates).lease),
       ...grouped.singles.map((candidate) => candidate.lease),
     ];
-    const selection = selectCanonicalCurrentLease(representatives.map(toCanonicalLeaseStateInput), {
+    const selection = selectCanonicalCurrentLease(canonicalEvidenceLeases.map(toCanonicalLeaseStateInput), {
       landlordId,
       tenantId,
     });
@@ -501,7 +503,7 @@ async function loadTenantLeaseResolution(tenant: TenantRecord | null, landlordId
       displayLease: selectedLease || hintedLease || (displayCandidates.length
         ? pickAgreementWinner(displayCandidates.map((lease) => ({ lease, raw: lease }))).lease
         : null),
-      leases: representatives,
+      leases: canonicalEvidenceLeases,
     };
   } catch (err) {
     console.error("[tenantDetailsService] loadTenantLeaseResolution error", err);

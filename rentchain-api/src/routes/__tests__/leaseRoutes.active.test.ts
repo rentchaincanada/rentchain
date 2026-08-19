@@ -449,6 +449,63 @@ describe("leaseRoutes GET /active", () => {
     );
   });
 
+  it("keeps a canonically executed linked lease coherent when signing artifacts are absent", async () => {
+    seedDoc("properties", "prop-link", { landlordId: "landlord-1", name: "Harbour View" });
+    seedDoc("tenants", "tenant-link", {
+      landlordId: "landlord-1",
+      fullName: "Linked Tenant",
+      propertyId: "prop-link",
+      unitId: "unit-link",
+      currentLeaseId: "lease-link",
+      status: "Current",
+    });
+    seedDoc("units", "unit-link", {
+      landlordId: "landlord-1",
+      propertyId: "prop-link",
+      unitNumber: "101",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "tenant-link",
+      currentTenantId: "tenant-link",
+      leaseId: "lease-link",
+      currentLeaseId: "lease-link",
+    });
+    seedDoc("leases", "lease-link", {
+      landlordId: "landlord-1",
+      propertyId: "prop-link",
+      tenantId: "tenant-link",
+      tenantIds: ["tenant-link"],
+      primaryTenantId: "tenant-link",
+      unitId: "unit-link",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "active",
+      executionStatus: "fully_executed",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/active" });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.leases?.[0]).toEqual(expect.objectContaining({
+      id: "lease-link",
+      canonicalState: expect.objectContaining({
+        occupancyState: "occupied",
+        tenantRelationshipState: "current_occupant",
+        supportingLeaseId: "lease-link",
+      }),
+      leaseExecution: expect.objectContaining({ executionStatus: "fully_executed" }),
+      stateCoherence: expect.objectContaining({
+        coherenceStatus: "coherent",
+        leaseOperationalState: "active",
+        occupancyState: "occupied",
+        flags: expect.objectContaining({ requiresReview: false }),
+      }),
+    }));
+  });
+
   it("projects generated primary lease document availability from leaseDocuments metadata", async () => {
     getPrimaryLeaseDocumentSummaryMock.mockResolvedValueOnce({
       id: "ldoc_generated",

@@ -35,6 +35,7 @@ import {
   canonicalOccupancyLabel,
   canonicalTenantRelationshipLabel,
 } from "@/lib/leases/canonicalStatePresentation";
+import { ResolveOccupancyDrawer } from "@/components/occupancy/ResolveOccupancyDrawer";
 
 interface TenantDetailPanelProps {
   tenantId: string | null;
@@ -182,6 +183,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
   const credibilityInsights = bundle.credibilityInsights || null;
   const [moveInReadiness, setMoveInReadiness] = useState<MoveInReadiness | null>(bundle.moveInReadiness || null);
   const [readinessSaving, setReadinessSaving] = useState(false);
+  const [resolveOccupancyOpen, setResolveOccupancyOpen] = useState(false);
 
   const [ledgerItems, setLedgerItems] = useState<any[]>([]);
   const [leaseLedgerItems, setLeaseLedgerItems] = useState<LeaseLedgerEntry[]>([]);
@@ -623,6 +625,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
           }
         />
         <DetailField label="Tenant Status" value={canonicalState ? canonicalTenantRelationshipLabel(canonicalState.tenantRelationshipState) : tenant.status ?? "--"} />
+        {canonicalState?.tenantRelationshipState === "occupancy_unresolved" && property?.id && unit?.id ? <button type="button" onClick={() => setResolveOccupancyOpen(true)}>Resolve occupancy</button> : null}
         {lifecycle?.flags?.hasStateConflict ? (
           <DetailField label="Lifecycle Review" value="Source status conflict detected" />
         ) : null}
@@ -1032,6 +1035,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
         lease={lease}
         landlordName={String(user?.displayName || user?.name || user?.email || "Landlord")}
       />
+      {resolveOccupancyOpen && property?.id && unit?.id ? <ResolveOccupancyDrawer open propertyId={property.id} unitId={unit.id} tenantId={tenantId} onClose={() => setResolveOccupancyOpen(false)} onResolved={() => navigate(0)} /> : null}
     </div>
   );
 };

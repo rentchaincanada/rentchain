@@ -140,6 +140,21 @@ export function pickAgreementWinner(group: LeaseAgreementCandidate[]): LeaseAgre
   return [...group].sort((a, b) => compareLeaseWinner(a.lease, b.lease))[0];
 }
 
+/**
+ * Canonical occupancy must evaluate every distinct lease record. Agreement
+ * consolidation is a display/migration concern and cannot choose a winner
+ * before the fail-closed current-lease selector runs.
+ */
+export function preserveCanonicalLeaseEvidence(candidates: LeaseAgreementCandidate[]): CanonicalLeaseRecord[] {
+  const byId = new Map<string, CanonicalLeaseRecord>();
+  for (const candidate of candidates) {
+    const id = String(candidate?.lease?.id || "").trim();
+    if (!id || byId.has(id)) continue;
+    byId.set(id, candidate.lease);
+  }
+  return [...byId.values()];
+}
+
 export function groupLeaseAgreementCandidates(candidates: LeaseAgreementCandidate[]): {
   mergeGroups: LeaseAgreementGroup[];
   ambiguousGroups: LeaseAgreementGroup[];

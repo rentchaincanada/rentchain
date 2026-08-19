@@ -32,6 +32,7 @@ import {
   type CanonicalLeaseOccupancyState,
 } from "@/lib/leases/canonicalStatePresentation";
 import "./TenantsPage.css";
+import { ResolveOccupancyDrawer } from "@/components/occupancy/ResolveOccupancyDrawer";
 
 type TenantWithTenancies = TenantApiModel & { tenancies?: TenancyApiModel[] };
 type MoveOutReason = "LEASE_TERM_END" | "EARLY_LEASE_END" | "EVICTED" | "OTHER";
@@ -360,6 +361,7 @@ class TenantsErrorBoundary extends React.Component<
 }
 
 export const TenantsPage: React.FC = () => {
+  const [resolveOccupancyOpen, setResolveOccupancyOpen] = useState(false);
   const navigate = useNavigate();
   const { user, ready, isLoading: authLoading, authStatus } = useAuth();
   const [searchParams] = useSearchParams();
@@ -1062,6 +1064,7 @@ const loadTenants = useCallback(async () => {
                         <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
                           {tenantLifecycleLabel(selectedTenant, selectedCanonicalState)}
                         </div>
+                        {selectedCanonicalState?.tenantRelationshipState === "occupancy_unresolved" && selectedTenant.propertyId && selectedTenant.unitId ? <button type="button" onClick={() => setResolveOccupancyOpen(true)}>Resolve occupancy</button> : null}
                       </Card>
                       <Card style={tenantWorkspaceCardStyle}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Property</div>
@@ -1529,6 +1532,7 @@ const loadTenants = useCallback(async () => {
           </Card>
         </div>
       ) : null}
+      {resolveOccupancyOpen && selectedTenant?.propertyId && selectedTenant.unitId ? <ResolveOccupancyDrawer open propertyId={selectedTenant.propertyId} unitId={selectedTenant.unitId} tenantId={selectedTenant.id} onClose={() => setResolveOccupancyOpen(false)} onResolved={refreshAfterLeaseEnded} /> : null}
       </div>
     </TenantsErrorBoundary>
   );
