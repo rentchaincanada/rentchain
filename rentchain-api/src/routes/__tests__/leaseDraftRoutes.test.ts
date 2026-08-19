@@ -8,7 +8,7 @@ import * as leaseDraftsService from "../../services/leaseDraftsService";
 type DocShape = { id: string; data: any };
 const sendEmailMock = vi.fn(async () => undefined);
 
-const { store, fakeDb, resetFakeDb } = vi.hoisted(() => {
+const { store, fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
   const store = new Map<string, Map<string, DocShape>>();
   let idSeq = 0;
 
@@ -62,6 +62,11 @@ const { store, fakeDb, resetFakeDb } = vi.hoisted(() => {
   }
 
   const fakeDb = {
+    runTransaction: async (callback: any) => callback({
+      get: (target: any) => target.get(),
+      set: (ref: any, value: any, options?: any) => ref.set(value, options),
+      create: (ref: any, value: any) => ref.set(value),
+    }),
     collection: (name: string) => ({
       where: (field: string, op: string, value: any) => makeQuery(name, [{ field, op, value }]),
       orderBy: () => makeQuery(name),
@@ -74,6 +79,7 @@ const { store, fakeDb, resetFakeDb } = vi.hoisted(() => {
   return {
     store,
     fakeDb,
+    seedDoc: (name: string, id: string, data: any) => ensureCollection(name).set(id, { id, data }),
     resetFakeDb: () => {
       store.clear();
       idSeq = 0;
@@ -133,6 +139,12 @@ describe("lease draft routes", () => {
     sendEmailMock.mockClear();
     sendEmailMock.mockResolvedValue(undefined);
     process.env.EMAIL_FROM = "noreply@example.com";
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "unit-1", status: "vacant", occupancyStatus: "vacant" }],
+    });
+    seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", unitNumber: "unit-1", status: "vacant", occupancyStatus: "vacant" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", status: "applicant", currentLeaseId: null });
   });
 
   const payload = {
@@ -194,7 +206,7 @@ describe("lease draft routes", () => {
     const attachmentDocsAfterGenerate = Array.from(store.get("ledgerAttachments")?.values() || []).map((doc) => doc.data);
     expect(attachmentDocsAfterGenerate).toEqual([]);
 
-    const activateRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
+    const activateRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).set("Idempotency-Key", "activate-1").send({});
     expect(activateRes.status).toBe(200);
     expect(activateRes.body?.lease?.documentUrl).toBeUndefined();
     expect(activateRes.body?.lease?.approvedDocumentUrl).toBeUndefined();
@@ -324,7 +336,7 @@ describe("lease draft routes", () => {
       generatedFiles: [{ kind: "lease-pdf", url: "https://example.invalid/new-lease.pdf" }],
     });
 
-    const activateRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
+    const activateRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).set("Idempotency-Key", "activate-2").send({});
     expect(activateRes.status).toBe(200);
     expect(activateRes.body?.leaseNotification).toEqual(
       expect.objectContaining({ attempted: false, sent: false, reason: "lease_document_not_available" })
@@ -392,7 +404,7 @@ describe("lease draft routes", () => {
       generatedFiles: [{ kind: "lease-pdf", url: "https://example.invalid/existing-lease.pdf" }],
     });
 
-    const firstRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
+    const firstRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).set("Idempotency-Key", "activate-repair").send({});
     expect(firstRes.status).toBe(200);
     expect(firstRes.body?.leaseId).toBe(leaseId);
     expect(firstRes.body?.lease).toEqual(
@@ -413,7 +425,7 @@ describe("lease draft routes", () => {
       generatedFiles: [{ kind: "lease-pdf", url: "https://example.invalid/existing-lease-new.pdf" }],
     });
 
-    const secondRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
+    const secondRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set("Authorization", "Bearer landlord-1").set("Idempotency-Key", "activate-repair").send({});
     expect(secondRes.status).toBe(200);
     expect(secondRes.body?.leaseId).toBe(leaseId);
 
@@ -556,6 +568,7 @@ describe("lease draft routes", () => {
     const activateRes = await request(app)
       .post(`/drafts/${encodeURIComponent(draftId)}/activate`)
       .set(auth)
+      .set("Idempotency-Key", "activate-tenant-fetch")
       .send({});
     expect(activateRes.status).toBe(200);
     expect(activateRes.body?.ok).toBe(true);
@@ -576,21 +589,16 @@ describe("lease draft routes", () => {
     expect(propertySnap.data()?.units).toEqual([
       expect.objectContaining({
         id: "unit-1",
-        status: "occupied",
-        occupancyStatus: "occupied",
-        currentTenantId: "tenant-1",
-        currentLeaseId: leaseId,
+        status: "vacant",
+        occupancyStatus: "vacant",
       }),
       expect.objectContaining({ id: "unit-2", status: "vacant" }),
     ]);
     const unitSnap = await fakeDb.collection("units").doc("unit-1").get();
     expect(unitSnap.data()).toEqual(
       expect.objectContaining({
-        status: "occupied",
-        occupancyStatus: "occupied",
-        currentTenantId: "tenant-1",
-        currentLeaseId: leaseId,
-        occupancySource: "canonical_lease",
+        status: "vacant",
+        occupancyStatus: "vacant",
       })
     );
   });
@@ -601,7 +609,7 @@ describe("lease draft routes", () => {
     app.use(express.json());
     app.use(router);
 
-    const res = await request(app).post("/drafts/draft-missing/activate").send({});
+    const res = await request(app).post("/drafts/draft-missing/activate").set("Idempotency-Key", "activate-unauthorized").send({});
     expect(res.status).toBe(401);
   });
 
@@ -614,6 +622,7 @@ describe("lease draft routes", () => {
     const res = await request(app)
       .post("/drafts/draft-missing/activate")
       .set(auth)
+      .set("Idempotency-Key", "activate-missing")
       .send({});
     expect(res.status).toBe(404);
     expect(res.body?.error).toBe("draft_not_found");
@@ -640,6 +649,7 @@ describe("lease draft routes", () => {
     const res = await request(app)
       .post(`/drafts/${encodeURIComponent(draftId)}/activate`)
       .set(auth)
+      .set("Idempotency-Key", "activate-no-end")
       .send({});
     expect(res.status).toBe(400);
     expect(res.body?.error).toBe("end_date_required");
@@ -690,6 +700,7 @@ describe("lease draft routes", () => {
     const res = await request(app)
       .post(`/drafts/${encodeURIComponent(draftId)}/activate`)
       .set(auth)
+      .set("Idempotency-Key", "activate-invalid-range")
       .send({});
     expect(res.status).toBe(400);
     expect(res.body).toEqual(

@@ -296,6 +296,18 @@ describe("leaseStartService", () => {
     expect(fake.list("leaseStartRequests")).toEqual([]);
   });
 
+  it("durably audits an authorized route-level domain rejection exactly once", async () => {
+    fake.seed("leases", "lease-2", { ...fake.read("leases", "lease-1"), tenantId: "tenant-1" });
+    const request = await mutationInput({ operationKind: "date_transition", trigger: "date_transition", idempotencyKey: "rejected-route-1", persistRejectedAttempt: true });
+    const first = await startCanonicalLeaseOccupancy(request);
+    const replay = await startCanonicalLeaseOccupancy(request);
+    expect(first).toMatchObject({ canonicalOutcome: "rejected", reasons: ["MULTIPLE_CURRENT_LEASES"] });
+    expect(replay.outcome).toBe("idempotent_replay");
+    expect(fake.list("canonicalEvents").filter((event) => event.type === "lease.occupancy_start_rejected")).toHaveLength(1);
+    expect(fake.list("leaseStartRequests")).toHaveLength(1);
+    expect(fake.read("leases", "lease-1")).not.toHaveProperty("occupancyEffective", true);
+  });
+
   it("cannot bypass D1 anonymous legacy occupancy rejection", async () => {
     fake = createFakeFirestore();
     seedBase({ unit: { status: "occupied", occupancyStatus: "occupied" }, embedded: { status: "occupied", occupancyStatus: "occupied" } });

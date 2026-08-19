@@ -65,6 +65,11 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
     },
     seedDoc: (name: string, id: string, data: any) => ensureCollection(name).set(id, { id, data }),
     fakeDb: {
+      runTransaction: async (callback: any) => callback({
+        get: (target: any) => target.get(),
+        set: (ref: any, value: any, options?: any) => ref.set(value, options),
+        create: (ref: any, value: any) => ref.set(value),
+      }),
       collection: (name: string) => ({
         where: (field: string, op: string, value: any) => makeQuery(name, [{ field, op, value }]),
         orderBy: () => {
@@ -891,8 +896,8 @@ describe("leaseRoutes integrity repairs", () => {
     expect(res.body.length).toBeGreaterThan(500);
   });
 
-  it("converts an occupied unit reference into a canonical lease and tenant", async () => {
-    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
+  it("converts identified occupied-unit evidence into a canonical lease for the existing tenant", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View", units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-1", currentTenantId: "tenant-1" }] });
     seedDoc("units", "unit-1", {
       landlordId: "landlord-1",
       propertyId: "prop-1",
@@ -900,18 +905,25 @@ describe("leaseRoutes integrity repairs", () => {
       status: "occupied",
       occupantName: "Recovered Tenant",
       rent: 1850,
+      tenantId: "tenant-1",
+      currentTenantId: "tenant-1",
+      executionStatus: "fully_executed",
       leaseDocument: {
         fileName: "lease.pdf",
         bucket: "bucket-1",
         path: "leases/lease.pdf",
       },
     });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Recovered Tenant", status: "current", currentLeaseId: null });
 
     const app = await makeApp();
     const res = await request(app)
       .post("/reconciliation-candidates/unit-1/convert")
+      .set("Idempotency-Key", "convert-unit-1")
       .send({
+        occupantName: "Recovered Tenant",
         startDate: "2026-04-01",
+        endDate: "2027-03-31",
         monthlyRent: 1850,
         tenantPhone: "(902) 555-1111 ext 9",
         coApplicantEmail: "coapplicant@example.com",
@@ -933,7 +945,7 @@ describe("leaseRoutes integrity repairs", () => {
   });
 
   it("rejects occupied unit conversion when the start date is after the end date", async () => {
-    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View", units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-1" }] });
     seedDoc("units", "unit-1", {
       landlordId: "landlord-1",
       propertyId: "prop-1",
@@ -941,11 +953,15 @@ describe("leaseRoutes integrity repairs", () => {
       status: "occupied",
       occupantName: "Recovered Tenant",
       rent: 1850,
+      tenantId: "tenant-1",
+      executionStatus: "fully_executed",
     });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Recovered Tenant", status: "current", currentLeaseId: null });
 
     const app = await makeApp();
     const res = await request(app)
       .post("/reconciliation-candidates/unit-1/convert")
+      .set("Idempotency-Key", "convert-invalid-range")
       .send({
         startDate: "2026-09-01",
         endDate: "2026-08-31",
@@ -960,6 +976,57 @@ describe("leaseRoutes integrity repairs", () => {
         message: "Lease start date must be on or before the end date.",
       })
     );
+  });
+
+  it("fails closed before mutation for anonymous occupied-unit conversion", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied" }] });
+    seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied", occupantName: "Unknown", rent: 1800, executionStatus: "fully_executed" });
+    const app = await makeApp();
+    const res = await request(app).post("/reconciliation-candidates/unit-1/convert").set("Idempotency-Key", "anonymous-conversion").send({ occupantName: "Unknown", startDate: "2026-01-01", endDate: "2026-12-31", monthlyRent: 1800 });
+    expect(res.status).toBe(409);
+    expect(res.body?.error).toBe("anonymous_occupied_unit");
+    expect((await fakeDb.collection("leases").get()).docs).toHaveLength(0);
+    expect((await fakeDb.collection("canonicalEvents").get()).docs).toHaveLength(0);
+  });
+
+  it("does not accept caller-claimed execution in place of server evidence", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-1" }] });
+    seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-1", occupantName: "Tenant One", rent: 1800 });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Tenant One", currentLeaseId: null });
+    const app = await makeApp();
+    const res = await request(app).post("/reconciliation-candidates/unit-1/convert").set("Idempotency-Key", "claimed-execution").send({ occupantName: "Tenant One", executionStatus: "fully_executed", startDate: "2026-01-01", endDate: "2026-12-31", monthlyRent: 1800 });
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("lease_execution_evidence_required");
+    expect((await fakeDb.collection("leases").get()).docs).toHaveLength(0);
+  });
+
+  it("atomically starts occupancy when an executed upcoming lease is edited to current", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "101", status: "vacant", occupancyStatus: "vacant" }] });
+    seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", unitNumber: "101", status: "vacant", occupancyStatus: "vacant" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", currentLeaseId: null, status: "applicant" });
+    seedDoc("leases", "lease-upcoming", {
+      landlordId: "landlord-1", propertyId: "prop-1", unitId: "unit-1", tenantId: "tenant-1",
+      status: "active", executionStatus: "fully_executed", startDate: "2026-09-01", endDate: "2027-08-31", occupancyEffective: false,
+    });
+    const app = await makeApp();
+    const res = await request(app).put("/lease-upcoming").set("Idempotency-Key", "date-start-1").send({ startDate: "2026-08-01" });
+    expect(res.status).toBe(200);
+    expect((await fakeDb.collection("leases").doc("lease-upcoming").get()).data()).toMatchObject({ startDate: "2026-08-01", occupancyEffective: true });
+    expect((await fakeDb.collection("units").doc("unit-1").get()).data()).toMatchObject({ status: "occupied", currentLeaseId: "lease-upcoming" });
+  });
+
+  it.each([
+    ["current to upcoming", { status: "active", startDate: "2026-01-01", endDate: "2026-12-31", occupancyEffective: true }, { startDate: "2026-09-01" }, "occupancy_reconciliation_required"],
+    ["current to past", { status: "active", startDate: "2026-01-01", endDate: "2026-12-31", occupancyEffective: true }, { endDate: "2026-07-31" }, "occupancy_reconciliation_required"],
+    ["past to current", { status: "active", startDate: "2025-01-01", endDate: "2025-12-31", occupancyEffective: false }, { startDate: "2026-01-01", endDate: "2026-12-31" }, "restore_active_workflow_required"],
+    ["terminal current", { status: "active", startDate: "2026-01-01", endDate: "2026-12-31", occupancyEffective: true }, { status: "ended" }, "end_lease_workflow_required"],
+  ])("rejects generic %s lifecycle mutation", async (_label, lease, patch, error) => {
+    seedDoc("leases", "lease-edit", { landlordId: "landlord-1", propertyId: "prop-1", unitId: "unit-1", tenantId: "tenant-1", executionStatus: "fully_executed", ...lease });
+    const app = await makeApp();
+    const res = await request(app).put("/lease-edit").send(patch);
+    expect(res.status).toBe(409);
+    expect(res.body?.error).toBe(error);
+    expect((await fakeDb.collection("leases").doc("lease-edit").get()).data()).toMatchObject(lease);
   });
 
   it("lists only active occupied reconciliation candidates from non-archived properties", async () => {

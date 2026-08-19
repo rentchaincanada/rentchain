@@ -87,6 +87,11 @@ const { store, fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
     },
     seedDoc: (name: string, id: string, data: any) => ensureCollection(name).set(id, { id, data }),
     fakeDb: {
+      runTransaction: async (callback: any) => callback({
+        get: (target: any) => target.get(),
+        set: (ref: any, value: any, options?: any) => ref.set(value, options),
+        create: (ref: any, value: any) => ref.set(value),
+      }),
       collection: (name: string) => ({
         where: (field: string, op: string, value: any) => makeQuery(name, [{ field, op, value }]),
         orderBy: () => makeQuery(name),
@@ -142,6 +147,17 @@ describe("lease route risk integration", () => {
     buildLeaseRiskInput.mockResolvedValue({ monthlyRent: 1900, monthlyIncome: 4800 });
     safeAssessLeaseRisk.mockReset();
     safeAssessLeaseRisk.mockResolvedValue(sampleRisk);
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      units: [
+        { id: "unit-1", unitId: "unit-1", unitNumber: "unit-1", status: "vacant", occupancyStatus: "vacant" },
+        { id: "unit-2", unitId: "unit-2", unitNumber: "unit-2", status: "vacant", occupancyStatus: "vacant" },
+      ],
+    });
+    seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", unitNumber: "unit-1", status: "vacant", occupancyStatus: "vacant" });
+    seedDoc("units", "unit-2", { landlordId: "landlord-1", propertyId: "prop-1", unitNumber: "unit-2", status: "vacant", occupancyStatus: "vacant" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", status: "applicant", currentLeaseId: null });
+    seedDoc("tenants", "tenant-2", { landlordId: "landlord-1", status: "applicant", currentLeaseId: null });
   });
 
   async function makeApp() {
@@ -156,10 +172,24 @@ describe("lease route risk integration", () => {
     return app;
   }
 
+  it("rejects missing mutation identity before any lease write and does not accept x-request-id", async () => {
+    const app = await makeApp();
+    const payload = { tenantId: "tenant-1", propertyId: "prop-1", unitNumber: "unit-1", monthlyRent: 1900, startDate: "2026-04-01" };
+    const missing = await request(app).post("/").send(payload);
+    const traceOnly = await request(app).post("/").set("x-request-id", "trace-only").send(payload);
+    expect(missing.status).toBe(400);
+    expect(missing.body?.error).toBe("idempotency_key_required");
+    expect(traceOnly.status).toBe(400);
+    expect(traceOnly.body?.error).toBe("idempotency_key_required");
+    expect(store.get("leases")?.size || 0).toBe(0);
+    expect(store.get("leaseStartRequests")?.size || 0).toBe(0);
+    expect(store.get("canonicalEvents")?.size || 0).toBe(0);
+  });
+
   it("returns and stores a first risk timeline entry on direct lease create", async () => {
     const app = await makeApp();
 
-    const res = await request(app).post("/").send({
+    const res = await request(app).post("/").set("Idempotency-Key", "risk-create-1").send({
       tenantId: "tenant-1",
       propertyId: "prop-1",
       unitNumber: "unit-1",
@@ -192,7 +222,7 @@ describe("lease route risk integration", () => {
     });
     const app = await makeApp();
 
-    const res = await request(app).post("/drafts/draft-1/activate").send({});
+    const res = await request(app).post("/drafts/draft-1/activate").set("Idempotency-Key", "risk-draft-1").send({});
 
     expect(res.status).toBe(200);
     expect(res.body.lease.risk.grade).toBe("B");
@@ -208,7 +238,7 @@ describe("lease route risk integration", () => {
     buildLeaseRiskInput.mockRejectedValueOnce(new Error("risk input unavailable"));
     const app = await makeApp();
 
-    const res = await request(app).post("/").send({
+    const res = await request(app).post("/").set("Idempotency-Key", "risk-create-fail-open").send({
       tenantId: "tenant-2",
       propertyId: "prop-1",
       unitNumber: "unit-2",

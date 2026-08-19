@@ -6,6 +6,7 @@ import { writeCanonicalEvent } from "../../lib/events/buildEvent";
 import { deriveLeaseSigningState, type DerivedLeaseSigningState } from "../leaseStateHelper";
 import { getConfiguredSigningProvider, signingProviderRegistry } from "./providers";
 import type { ISigningProvider, SigningProviderEventType, SigningProviderFieldPlacement } from "./providers/types";
+import { getCanonicalLeaseStartContext, startCanonicalLeaseOccupancy } from "../leaseStart/leaseStartService";
 
 export type LeaseSigningStatus =
   | "not_started"
@@ -708,6 +709,67 @@ export async function processSigningWebhook(input: { providerId: string; headers
     ...safeProviderMetadataFromRequest(data),
     documentMetadata: safeDocumentMetadataFromRequest(data),
   });
+  if (parsed.type === "signed") {
+    const leaseId = String(data?.leaseId || "").trim();
+    const landlordId = String(data?.landlordId || "").trim();
+    const occurredAt = String(parsed.occurredAt || "").trim();
+    const eventIdentity = String(parsed.providerEventId || "").trim();
+    if (!leaseId || !landlordId || !occurredAt || !eventIdentity) {
+      throw Object.assign(new Error("signing_completion_identity_incomplete"), { status: 409 });
+    }
+    const leaseRef = db.collection("leases").doc(leaseId);
+    const leaseSnap = await leaseRef.get();
+    const lease = leaseSnap.exists ? leaseSnap.data() as any : null;
+    if (lease && String(lease.landlordId || "").trim() === landlordId) {
+      await leaseRef.set({
+        executionStatus: "fully_executed",
+        executionState: "fully_executed",
+        fullyExecutedAt: occurredAt,
+        updatedAt: occurredAt,
+      }, { merge: true });
+      const propertyId = String(lease.propertyId || "").trim();
+      const unitId = String(lease.unitId || "").trim();
+      const tenantId = String(lease.tenantId || lease.primaryTenantId || lease.tenantIds?.[0] || "").trim();
+      if (propertyId && unitId && tenantId) {
+        try {
+          const context = await getCanonicalLeaseStartContext({ landlordId, propertyId, unitId, tenantId, leaseId, evaluationInstant: occurredAt });
+          const occupancyResult = await startCanonicalLeaseOccupancy({
+            landlordId,
+            propertyId,
+            unitId,
+            tenantId,
+            leaseId,
+            operationKind: "signing_completion",
+            idempotencyKey: `${provider.getProviderId()}:${eventIdentity}`,
+            expectedStateToken: context.expectedStateToken,
+            evaluationInstant: occurredAt,
+            trigger: "signing_completion",
+            actorId: `provider:${provider.getProviderId()}`,
+            source: "signing_provider_webhook",
+          });
+          if (occupancyResult.canonicalOutcome === "rejected") {
+            await leaseRef.set({
+              occupancyStartReview: {
+                status: "review_needed",
+                reasons: occupancyResult.reasons,
+                evaluatedAt: occurredAt,
+              },
+            }, { merge: true });
+          }
+        } catch (occupancyError: any) {
+          // Signing evidence is independently durable. Canonical occupancy must
+          // fail closed without rolling back a legitimate provider completion.
+          await leaseRef.set({
+            occupancyStartReview: {
+              status: "review_needed",
+              code: String(occupancyError?.code || occupancyError?.message || "lease_start_failed"),
+              evaluatedAt: occurredAt,
+            },
+          }, { merge: true });
+        }
+      }
+    }
+  }
   return {};
 }
 

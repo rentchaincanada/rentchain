@@ -62,10 +62,12 @@ export type StartCanonicalLeaseOccupancyInput = {
   trigger: LeaseStartTrigger;
   actorId?: string | null;
   source?: string | null;
+  leasePatch?: Record<string, unknown> | null;
+  persistRejectedAttempt?: boolean;
   firestore?: any;
 };
 
-type ContextInput = Pick<StartCanonicalLeaseOccupancyInput, "landlordId" | "propertyId" | "unitId" | "tenantId" | "leaseId" | "evaluationInstant"> & { firestore?: any };
+type ContextInput = Pick<StartCanonicalLeaseOccupancyInput, "landlordId" | "propertyId" | "unitId" | "tenantId" | "leaseId" | "evaluationInstant" | "leasePatch"> & { firestore?: any };
 
 export class LeaseStartServiceError extends Error {
   constructor(public code: LeaseStartErrorCode, public freshContext?: LeaseStartContext) {
@@ -118,7 +120,8 @@ async function readContext(reader: any, input: ContextInput): Promise<{ context:
   ]);
   const property = docData(propertySnap);
   const unit = docData(unitSnap);
-  const candidateLease = docData(leaseSnap);
+  const persistedCandidateLease = docData(leaseSnap);
+  const candidateLease = persistedCandidateLease ? { ...persistedCandidateLease, ...(input.leasePatch || {}) } : null;
   const tenant = docData(tenantSnap);
   if (!property || !unit || !candidateLease || !tenant) throw new LeaseStartServiceError("lease_start_context_ambiguous");
   if (text(property.landlordId || property.ownerId || property.owner) !== input.landlordId ||
@@ -233,6 +236,8 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
     landlordId: input.landlordId, propertyId: input.propertyId, unitId: input.unitId, tenantId: input.tenantId,
     leaseId: input.leaseId, operationKind: input.operationKind, expectedStateToken: input.expectedStateToken,
     actorId: input.actorId || null, trigger: input.trigger, source: input.source || null,
+    leasePatch: input.leasePatch || null,
+    persistRejectedAttempt: input.persistRejectedAttempt === true,
     evaluationInstant: normalizedInstant,
   });
 
@@ -250,6 +255,35 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
     // D2 has no live route caller. Canonical rejected and deferred decisions
     // therefore return deterministically with no durable audit or idempotency
     // record. D3 must define authenticated route-attempt persistence policy.
+    if (loaded.context.decision.outcome === "rejected" && input.persistRejectedAttempt === true) {
+      const eventId = leaseStartDeterministicId("lease_occupancy_start_rejected", [input.landlordId, input.operationKind, input.idempotencyKey, input.leaseId]);
+      const rejectedResult: LeaseStartServiceResult = {
+        ...resultFrom(loaded.context, input, requestId),
+        auditEventIds: [eventId],
+        idempotency: { key: input.idempotencyKey, replay: false, resultId: requestId },
+      };
+      transaction.create(firestore.collection("canonicalEvents").doc(eventId), {
+        id: eventId, version: "v1", type: "lease.occupancy_start_rejected", domain: "lease", action: "occupancy_start_rejected", status: "rejected",
+        actor: { type: "landlord", id: leaseStartDeterministicId("actor", [input.actorId || input.landlordId]), role: "landlord", displayName: null },
+        resource: { type: "lease", id: leaseStartDeterministicId("lease", [input.leaseId]), parentType: "property", parentId: leaseStartDeterministicId("property", [input.propertyId]) },
+        occurredAt: normalizedInstant, recordedAt: normalizedInstant, visibility: "internal",
+        summary: "Canonical lease occupancy start rejected.",
+        metadata: {
+          landlordRef: leaseStartDeterministicId("landlord", [input.landlordId]), tenantRef: leaseStartDeterministicId("tenant", [input.tenantId]),
+          unitRef: leaseStartDeterministicId("unit", [input.unitId]), requestRef: leaseStartDeterministicId("request", [requestId]),
+          operationKind: input.operationKind, trigger: input.trigger, source: input.source || null, reasons: rejectedResult.reasons, legalDetermination: false,
+        },
+        tags: ["lease_start", input.trigger, "rejected"], appendOnly: true, immutable: true,
+      });
+      transaction.create(requestRef, {
+        landlordId: input.landlordId, operationKind: input.operationKind, idempotencyKey: input.idempotencyKey,
+        payloadHash, leaseId: input.leaseId, canonicalOutcome: rejectedResult.canonicalOutcome,
+        reasons: rejectedResult.reasons, occupancyEffective: false,
+        resultingExpectedStateToken: rejectedResult.expectedStateToken, canonicalEventIds: [eventId], committedAt: normalizedInstant,
+        result: rejectedResult,
+      });
+      return rejectedResult;
+    }
     if (loaded.context.decision.outcome === "rejected" || loaded.context.decision.outcome === "created_without_occupancy") {
       return resultFrom(loaded.context, input, null);
     }
@@ -287,7 +321,7 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
       : loaded.records.tenancies.map((tenancy: any) => tenancy.id === tenancyId ? nextTenancy : tenancy);
     const nextCanonicalInput: CanonicalLeaseStartInput = {
       ...loaded.records.canonicalInput,
-      candidateLease: { ...loaded.records.canonicalInput.candidateLease, occupancyEffective: true, occupancyEffectiveAt: normalizedInstant, updatedAt: normalizedInstant },
+      candidateLease: { ...loaded.records.canonicalInput.candidateLease, ...(input.leasePatch || {}), occupancyEffective: true, occupancyEffectiveAt: normalizedInstant, updatedAt: normalizedInstant },
       standaloneUnits: [nextUnit],
       embeddedUnits: [{ ...nextEmbedded, landlordId: input.landlordId, propertyId: input.propertyId }],
       tenant: nextTenant,
@@ -311,7 +345,7 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
       expectedStateToken: resultingExpectedStateToken,
     };
 
-    transaction.set(loaded.records.leaseRef, { occupancyEffective: true, occupancyEffectiveAt: normalizedInstant, updatedAt: normalizedInstant }, { merge: true });
+    transaction.set(loaded.records.leaseRef, { ...(input.leasePatch || {}), occupancyEffective: true, occupancyEffectiveAt: normalizedInstant, updatedAt: normalizedInstant }, { merge: true });
     transaction.set(loaded.records.propertyRef, { units: nextEmbeddedUnits, updatedAt: normalizedInstant }, { merge: true });
     transaction.set(loaded.records.unitRef, nextUnit, { merge: true });
     transaction.set(loaded.records.tenantRef, { currentLeaseId: input.leaseId, status: "current", updatedAt: normalizedInstant }, { merge: true });
