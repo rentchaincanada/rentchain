@@ -3,7 +3,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { leaseService } from "../../services/leaseService";
 
-const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
+const { fakeDb, getSeededDoc, resetFakeDb, seedDoc } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
   let idSeq = 0;
 
@@ -61,6 +61,7 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
       store.clear();
       idSeq = 0;
     },
+    getSeededDoc: (name: string, id: string) => ensureCollection(name).get(id)?.data,
     seedDoc: (name: string, id: string, data: any) => ensureCollection(name).set(id, { id, data }),
     fakeDb: {
       runTransaction: async (callback: any) => callback({
@@ -168,7 +169,7 @@ describe("lease conflict responses", () => {
     expect(res.body?.reasons).toContain("MULTIPLE_CURRENT_LEASES");
   });
 
-  it("keeps the same machine-readable conflict code for draft activation overlaps", async () => {
+  it("creates a pending-signing lease without resolving an occupied-unit conflict", async () => {
     seedUnit("unit-1", { unitNumber: "A", status: "occupied" });
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "A", status: "occupied", tenantId: "tenant-1" }] });
     seedDoc("tenants", "tenant-2", { landlordId: "landlord-1", currentLeaseId: null });
@@ -192,8 +193,19 @@ describe("lease conflict responses", () => {
 
     const res = await request(app).post("/drafts/draft-1/activate").set("Idempotency-Key", "conflict-draft").send({});
 
-    expect(res.status).toBe(409);
-    expect(res.body?.error).toBe("conflicting_active_lease_agreement");
-    expect(res.body?.reasons).toContain("MULTIPLE_CURRENT_LEASES");
+    expect(res.status).toBe(200);
+    expect(res.body?.lease).toMatchObject({
+      status: "pending",
+      executionStatus: "draft",
+      executionState: "draft",
+      signingStatus: "not_started",
+    });
+    expect(res.body?.occupancyOutcome).toBe("created_without_occupancy");
+    expect(getSeededDoc("units", "unit-1")).toMatchObject({
+      status: "occupied",
+    });
+    expect(getSeededDoc("tenants", "tenant-2")).toMatchObject({
+      currentLeaseId: null,
+    });
   });
 });

@@ -5,6 +5,7 @@ import LandlordActiveLeasesPage from "./LandlordActiveLeasesPage";
 
 const mocks = vi.hoisted(() => ({
   getActiveLeasesForLandlord: vi.fn(),
+  getPendingSigningLeasesForLandlord: vi.fn(),
   getArchivedLeasesForLandlord: vi.fn(),
   enableLeasePaymentRail: vi.fn(),
   getLeaseReconciliationCandidates: vi.fn(),
@@ -19,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/api/leasesApi", () => ({
   getActiveLeasesForLandlord: mocks.getActiveLeasesForLandlord,
+  getPendingSigningLeasesForLandlord: mocks.getPendingSigningLeasesForLandlord,
   getArchivedLeasesForLandlord: mocks.getArchivedLeasesForLandlord,
   enableLeasePaymentRail: mocks.enableLeasePaymentRail,
   getLeaseReconciliationCandidates: mocks.getLeaseReconciliationCandidates,
@@ -206,6 +208,7 @@ describe("LandlordActiveLeasesPage", () => {
       ],
     });
     mocks.getArchivedLeasesForLandlord.mockResolvedValue({ leases: [] });
+    mocks.getPendingSigningLeasesForLandlord.mockResolvedValue({ leases: [] });
     mocks.getLeaseReconciliationCandidates.mockResolvedValue({
       candidates: [
         {
@@ -1131,6 +1134,62 @@ describe("LandlordActiveLeasesPage", () => {
     expect((await screen.findAllByText("Archived Place")).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
     await waitFor(() => expect(mocks.restoreLeaseRecord).toHaveBeenCalledWith("lease-2"));
+  });
+
+  it("loads the targeted pending lease into a distinct signing workspace", async () => {
+    mocks.getActiveLeasesForLandlord.mockClear();
+    mocks.getPendingSigningLeasesForLandlord.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-pending",
+          propertyId: "prop-2",
+          propertyName: "Signing Place",
+          unitNumber: "2B",
+          monthlyRent: 1200,
+          startDate: "2026-09-01",
+          endDate: "2027-08-31",
+          status: "pending",
+          tenantName: "Pending Tenant",
+          tenantEmail: "pending@example.invalid",
+          leaseExecution: {
+            executionStatus: "draft",
+            executionLabel: "Lease draft",
+            executionDescription: "Signing is required before execution.",
+            requiredNextAction: "generate_primary_lease",
+            tenantSignatureStatus: "not_started",
+            landlordSignatureStatus: "not_started",
+            pdfStatus: "not_generated",
+            completedAt: null,
+          },
+        },
+        {
+          id: "lease-other-pending",
+          propertyId: "prop-3",
+          propertyName: "Other Signing Place",
+          unitNumber: "3C",
+          monthlyRent: 1300,
+          startDate: "2026-10-01",
+          endDate: "2027-09-30",
+          status: "pending",
+          tenantName: "Other Tenant",
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/leases?view=pending-signing&leaseId=lease-pending"]}>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText("Pending signing")).length).toBeGreaterThan(0);
+    expect(mocks.getPendingSigningLeasesForLandlord).toHaveBeenCalledTimes(1);
+    expect(mocks.getActiveLeasesForLandlord).not.toHaveBeenCalled();
+    expect((await screen.findAllByText("Signing Place")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Other Signing Place")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
+    expect(screen.getByText("Lease signing")).toBeInTheDocument();
+    expect(screen.getByText(/not active and do not establish occupancy/i)).toBeInTheDocument();
   });
 
   it("filters the current lease list by tenant, unit, and property with a no-match state", async () => {

@@ -1617,7 +1617,10 @@ async function loadLatestLeaseNoticeForProjection(leaseId: string, landlordId: s
     .sort((a: any, b: any) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0))[0] || null;
 }
 
-async function listLandlordLeaseRows(landlordId: string, opts?: { archived?: boolean | null }) {
+async function listLandlordLeaseRows(
+  landlordId: string,
+  opts?: { archived?: boolean | null; pendingSigning?: boolean }
+) {
   const collectionRef: any = (db as any).collection("leases");
   if (!collectionRef || typeof collectionRef.where !== "function") {
     return [];
@@ -1629,6 +1632,9 @@ async function listLandlordLeaseRows(landlordId: string, opts?: { archived?: boo
   const filtered = rows.filter((row: any) => {
     if (isHiddenFromLandlordLeaseLists(row)) return false;
     const isArchived = Boolean(row?.archivedAt);
+    if (opts?.pendingSigning) {
+      return !isArchived && String(row?.status || "").trim().toLowerCase() === "pending";
+    }
     if (archivedFlag === true) return isArchived;
     if (archivedFlag === false) return !isArchived && isCurrentLeaseStatus(row?.status);
     return true;
@@ -2146,6 +2152,19 @@ router.get("/active", requireLandlord, async (req: any, res: Response) => {
   } catch (err) {
     console.error("[GET /api/leases/active] error", err);
     return res.status(500).json({ ok: false, error: "Failed to load active leases" });
+  }
+});
+
+router.get("/pending-signing", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    const leases = await listLandlordLeaseRows(landlordId, { pendingSigning: true });
+    return res.status(200).json({ ok: true, leases });
+  } catch (err) {
+    console.error("[GET /api/leases/pending-signing] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to load leases pending signing" });
   }
 });
 
@@ -2713,9 +2732,14 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       riskTimeline: riskFields.riskTimeline,
       automationEnabled: true,
       renewalStatus: "unknown",
-      status: String(draft?.status || (String(draft?.executionStatus || draft?.executionState || "") === "fully_executed" ? "active" : "draft")),
-      executionStatus: String(draft?.executionStatus || draft?.executionState || "draft"),
-      executionState: String(draft?.executionState || draft?.executionStatus || "draft"),
+      // Draft activation creates the durable lease record for the signing
+      // workflow. Draft fields are never authoritative execution evidence:
+      // only verified server-side signing completion may establish
+      // fully_executed and invoke occupancy-effective canonical start.
+      status: "pending",
+      executionStatus: "draft",
+      executionState: "draft",
+      signingStatus: "not_started",
       sourceDraftId: draftId,
       createdAt: now,
       updatedAt: now,

@@ -120,17 +120,54 @@ describe("LeasePackWizardModal jurisdiction workflow guidance", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Generate Schedule A PDF/i }));
-    const activate = await screen.findByRole("button", { name: "Activate Lease" });
+    const activate = await screen.findByRole("button", { name: "Create Lease and Continue to Signing" });
     fireEvent.click(activate);
     expect(await screen.findByText("Failed to fetch")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Activate Lease" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Lease and Continue to Signing" }));
     expect(await screen.findByText("conflict")).toBeInTheDocument();
 
     const firstKey = vi.mocked(activateLeaseDraft).mock.calls[0][1];
     expect(vi.mocked(activateLeaseDraft).mock.calls[1][1]).toBe(firstKey);
     fireEvent.change(screen.getByLabelText("Base rent (CAD)"), { target: { value: "2100" } });
-    fireEvent.click(screen.getByRole("button", { name: "Activate Lease" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Lease and Continue to Signing" }));
     await waitFor(() => expect(activateLeaseDraft).toHaveBeenCalledTimes(3));
     expect(vi.mocked(activateLeaseDraft).mock.calls[2][1]).not.toBe(firstKey);
+  });
+
+  it("presents lease creation as pending signing without implying execution or occupancy", async () => {
+    vi.mocked(createLeaseDraft).mockResolvedValue({ ok: true, draftId: "draft-pending", draft: {} as any });
+    vi.mocked(generateLeaseDraftPdf).mockResolvedValue({
+      ok: true,
+      snapshotId: "snapshot-pending",
+      scheduleAUrl: "https://example.invalid/schedule-a.pdf",
+    } as any);
+    vi.mocked(activateLeaseDraft).mockResolvedValue({
+      ok: true,
+      leaseId: "lease-pending",
+      lease: { status: "pending", occupancyEffective: false } as any,
+    });
+
+    render(
+      <LeasePackWizardModal
+        open
+        onClose={vi.fn()}
+        landlordName="Landlord"
+        tenant={{ id: "tenant-1", fullName: "Tenant One", propertyId: "property-1", propertyName: "Harbour Place", unitId: "unit-1", unit: "1", province: "NS" }}
+        lease={{ startDate: "2026-09-01", endDate: "2027-08-31", monthlyRent: 2000 }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Generate Schedule A PDF/i }));
+    expect(await screen.findByText(/Schedule A is generated and ready for review/i)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Create Lease and Continue to Signing" }));
+
+    expect(await screen.findByText("Pending signing")).toBeInTheDocument();
+    expect(screen.getByText("Lease record created. Signing is still required, and occupancy has not begun.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continue to signing" })).toHaveAttribute(
+      "href",
+      "/leases?view=pending-signing&leaseId=lease-pending"
+    );
+    expect(screen.queryByText(/fully executed/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/occupancy started/i)).not.toBeInTheDocument();
   });
 });
