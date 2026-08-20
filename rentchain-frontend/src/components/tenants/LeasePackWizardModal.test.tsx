@@ -109,8 +109,16 @@ describe("LeasePackWizardModal jurisdiction workflow guidance", () => {
     vi.mocked(generateLeaseDraftPdf).mockResolvedValue({ ok: true, snapshotId: "snapshot-1", scheduleAUrl: "https://example.invalid/schedule-a.pdf" } as any);
     vi.mocked(activateLeaseDraft)
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockRejectedValueOnce(Object.assign(new Error("conflict"), { status: 409 }))
-      .mockResolvedValueOnce({ ok: true, leaseId: "lease-1", lease: {} as any, occupancyOutcome: "occupancy_effective" });
+      .mockRejectedValueOnce(Object.assign(new Error("conflict"), {
+        status: 409,
+        body: { error: "lease_start_idempotency_key_reused" },
+      }))
+      .mockResolvedValueOnce({
+        ok: true,
+        leaseId: "lease-1",
+        lease: { status: "pending", occupancyEffective: false } as any,
+        occupancyOutcome: "created_without_occupancy",
+      });
     render(
       <LeasePackWizardModal
         open
@@ -126,7 +134,7 @@ describe("LeasePackWizardModal jurisdiction workflow guidance", () => {
     fireEvent.click(activate);
     expect(await screen.findByText("Failed to fetch")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Create Lease and Continue to Signing" }));
-    expect(await screen.findByText("conflict")).toBeInTheDocument();
+    expect(await screen.findByText(/submit it as a new operation/i)).toBeInTheDocument();
 
     const firstKey = vi.mocked(activateLeaseDraft).mock.calls[0][1];
     expect(vi.mocked(activateLeaseDraft).mock.calls[1][1]).toBe(firstKey);
