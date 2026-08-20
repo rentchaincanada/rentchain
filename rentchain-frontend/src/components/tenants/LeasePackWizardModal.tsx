@@ -304,11 +304,11 @@ export const LeasePackWizardModal: React.FC<Props> = ({
 
   const handleActivateLease = async () => {
     if (!isNsProvince) {
-      setError("Lease activation from this modal is available for Nova Scotia Schedule A flow only.");
+      setError("Lease creation from this modal is available for Nova Scotia Schedule A flow only.");
       return;
     }
     if (!draftId) {
-      setError("Generate Schedule A PDF first, then activate the lease.");
+      setError("Generate Schedule A PDF first, then create the lease record.");
       return;
     }
     if (isInvalidLeaseDateRange(state.startDate, state.endDate)) {
@@ -325,8 +325,8 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       setActivatedLeaseId(result.leaseId);
       setActivatedLease(result.lease);
       showToast({
-        message: "Lease activated",
-        description: "Lifecycle automation is now enabled for this tenant lease.",
+        message: "Lease record created",
+        description: "Signing is still required, and occupancy has not begun.",
         variant: "success",
       });
       window.dispatchEvent(
@@ -336,7 +336,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       );
     } catch (err: any) {
       if (isDeterministicMutationFailure(err)) activationMutationKeyRef.current = null;
-      setError(err?.message || "Failed to activate lease.");
+      setError(err?.message || "Failed to create lease record.");
     } finally {
       setActivating(false);
     }
@@ -612,10 +612,14 @@ export const LeasePackWizardModal: React.FC<Props> = ({
               <Button
                 type="button"
                 onClick={handleActivateLease}
-                disabled={activating}
+                disabled={activating || Boolean(activatedLeaseId)}
                 style={{ padding: "8px 12px" }}
               >
-                {activating ? "Activating..." : "Activate Lease"}
+                {activating
+                  ? "Creating lease..."
+                  : activatedLeaseId
+                    ? "Lease Created"
+                    : "Create Lease and Continue to Signing"}
               </Button>
             ) : null}
           </div>
@@ -623,12 +627,26 @@ export const LeasePackWizardModal: React.FC<Props> = ({
         ) : null}
         {isNsProvince && snapshotId ? (
           <div style={{ color: "#4b5563", fontSize: 12 }}>
-            Activating creates the official lease record and enables lifecycle automation.
+            Schedule A is generated and ready for review. Creating the lease record does not execute the lease or begin occupancy.
           </div>
         ) : null}
 
         {activatedLeaseId ? (
-          <LeaseRiskCard risk={activatedLease?.risk ?? null} />
+          <>
+            <div
+              role="status"
+              style={{ border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1e3a8a", padding: 10, borderRadius: 8 }}
+            >
+              <div style={{ fontWeight: 700 }}>Pending signing</div>
+              <div style={{ fontSize: 13 }}>
+                Lease record created. Signing is still required, and occupancy has not begun.
+              </div>
+              <a href="/leases" style={{ display: "inline-block", marginTop: 6, color: "#1d4ed8", textDecoration: "underline" }}>
+                Continue to signing
+              </a>
+            </div>
+            <LeaseRiskCard risk={activatedLease?.risk ?? null} />
+          </>
         ) : null}
       </div>
     </div>

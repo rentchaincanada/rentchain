@@ -2713,9 +2713,14 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       riskTimeline: riskFields.riskTimeline,
       automationEnabled: true,
       renewalStatus: "unknown",
-      status: String(draft?.status || (String(draft?.executionStatus || draft?.executionState || "") === "fully_executed" ? "active" : "draft")),
-      executionStatus: String(draft?.executionStatus || draft?.executionState || "draft"),
-      executionState: String(draft?.executionState || draft?.executionStatus || "draft"),
+      // Draft activation creates the durable lease record for the signing
+      // workflow. Draft fields are never authoritative execution evidence:
+      // only verified server-side signing completion may establish
+      // fully_executed and invoke occupancy-effective canonical start.
+      status: "pending",
+      executionStatus: "draft",
+      executionState: "draft",
+      signingStatus: "not_started",
       sourceDraftId: draftId,
       createdAt: now,
       updatedAt: now,
