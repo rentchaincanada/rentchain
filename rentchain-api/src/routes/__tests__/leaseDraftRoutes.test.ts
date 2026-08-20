@@ -562,9 +562,25 @@ describe("lease draft routes", () => {
       email: "tenant@example.com",
     });
 
-    const createRes = await request(app).post("/drafts").set(auth).send(payload);
+    const createRes = await request(app).post("/drafts").set(auth).send({
+      ...payload,
+      executionStatus: "fully_executed",
+      executionState: "fully_executed",
+      fullyExecutedAt: "2026-03-01T00:00:00.000Z",
+      status: "active",
+    });
     expect(createRes.status).toBe(201);
     const draftId = String(createRes.body?.draftId || "");
+    expect(createRes.body?.draft).toEqual(expect.objectContaining({ status: "draft" }));
+    expect(createRes.body?.draft).not.toHaveProperty("executionStatus");
+    expect(createRes.body?.draft).not.toHaveProperty("executionState");
+    expect(createRes.body?.draft).not.toHaveProperty("fullyExecutedAt");
+
+    const generateRes = await request(app)
+      .post(`/drafts/${encodeURIComponent(draftId)}/generate`)
+      .set(auth)
+      .send({ tenantNames: ["Tenant One"], propertyAddress: "1 Test Street", unitLabel: "unit-1" });
+    expect(generateRes.status).toBe(201);
 
     const activateRes = await request(app)
       .post(`/drafts/${encodeURIComponent(draftId)}/activate`)
@@ -573,7 +589,13 @@ describe("lease draft routes", () => {
       .send({});
     expect(activateRes.status).toBe(200);
     expect(activateRes.body?.ok).toBe(true);
-    expect(activateRes.body?.lease).toEqual(expect.objectContaining({ status: "pending", occupancyEffective: false }));
+    expect(activateRes.body?.lease).toEqual(expect.objectContaining({
+      status: "pending",
+      executionStatus: "draft",
+      executionState: "draft",
+      signingStatus: "not_started",
+      occupancyEffective: false,
+    }));
     const leaseId = String(activateRes.body?.leaseId || "");
     expect(leaseId).toBeTruthy();
     expect(activateRes.body?.leaseNotification).toEqual(
@@ -604,31 +626,85 @@ describe("lease draft routes", () => {
       })
     );
     const persistedLease = await fakeDb.collection("leases").doc(leaseId).get();
-    expect(persistedLease.data()).toEqual(expect.objectContaining({ status: "pending", occupancyEffective: false }));
+    expect(persistedLease.data()).toEqual(expect.objectContaining({
+      status: "pending",
+      executionStatus: "draft",
+      executionState: "draft",
+      signingStatus: "not_started",
+      occupancyEffective: false,
+    }));
     expect(leaseService.getById(leaseId)).toBeUndefined();
   });
 
-  it.each([
-    ["future", { startDate: "2027-01-01", endDate: "2027-12-31", executionStatus: "fully_executed" }, "pending", false],
-    ["eligible current", { startDate: "2026-01-01", endDate: "2026-12-31", executionStatus: "fully_executed" }, "active", true],
-  ])("activates a %s draft with canonical compatibility status", async (_label, overrides, expectedStatus, occupancyEffective) => {
-    const draftId = `draft-${String(_label).replace(/\s/g, "-")}`;
-    await fakeDb.collection("leaseDrafts").doc(draftId).set({ ...payload, ...overrides, landlordId: "landlord-1", status: "generated" });
+  it("creates a future generated lease pending signing without occupancy", async () => {
     const router = (await import("../leaseRoutes")).default;
     const app = express();
     app.use(express.json());
     app.use(router);
 
+    const created = await request(app).post("/drafts").set(auth).send({
+      ...payload,
+      startDate: "2027-01-01",
+      endDate: "2027-12-31",
+    });
+    const draftId = String(created.body?.draftId || "");
+    expect((await request(app).post(`/drafts/${draftId}/generate`).set(auth).send({})).status).toBe(201);
+
     const first = await request(app).post(`/drafts/${draftId}/activate`).set(auth).set("Idempotency-Key", `activate-${draftId}`).send({});
     expect(first.status).toBe(200);
-    expect(first.body?.lease).toEqual(expect.objectContaining({ status: expectedStatus, occupancyEffective }));
-    expect((await fakeDb.collection("leases").doc(first.body.leaseId).get()).data()).toEqual(expect.objectContaining({ status: expectedStatus, occupancyEffective }));
-    expect(leaseService.getById(first.body.leaseId) !== undefined).toBe(occupancyEffective);
+    expect(first.body?.lease).toEqual(expect.objectContaining({
+      status: "pending",
+      executionStatus: "draft",
+      signingStatus: "not_started",
+      occupancyEffective: false,
+    }));
+    expect((await fakeDb.collection("leases").doc(first.body.leaseId).get()).data()).toEqual(expect.objectContaining({ status: "pending", occupancyEffective: false }));
+    expect(leaseService.getById(first.body.leaseId)).toBeUndefined();
 
     const replay = await request(app).post(`/drafts/${draftId}/activate`).set(auth).set("Idempotency-Key", `activate-${draftId}`).send({});
     expect(replay.status).toBe(200);
     expect(replay.body?.leaseId).toBe(first.body?.leaseId);
     expect((await fakeDb.collection("leases").get()).docs).toHaveLength(1);
+  });
+
+  it("creates an ambiguous occupied-unit lease pending signing without occupancy mutation", async () => {
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "unit-1",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      occupantName: "Anonymous Occupant",
+    });
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    const created = await request(app).post("/drafts").set(auth).send(payload);
+    const draftId = String(created.body?.draftId || "");
+    expect((await request(app).post(`/drafts/${draftId}/generate`).set(auth).send({})).status).toBe(201);
+    const response = await request(app)
+      .post(`/drafts/${draftId}/activate`)
+      .set(auth)
+      .set("Idempotency-Key", "activate-ambiguous-pending")
+      .send({ executionStatus: "fully_executed" });
+
+    expect(response.status).toBe(200);
+    expect(response.body?.lease).toEqual(expect.objectContaining({
+      status: "pending",
+      executionStatus: "draft",
+      occupancyEffective: false,
+    }));
+    expect((await fakeDb.collection("units").doc("unit-1").get()).data()).toEqual(expect.objectContaining({
+      status: "occupied",
+      occupancyStatus: "occupied",
+      occupantName: "Anonymous Occupant",
+    }));
+    expect((await fakeDb.collection("tenants").doc("tenant-1").get()).data()).toEqual(expect.objectContaining({
+      status: "applicant",
+      currentLeaseId: null,
+    }));
   });
 
   it("returns 401 for activate when unauthorized", async () => {

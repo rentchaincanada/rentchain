@@ -122,31 +122,31 @@ describe("LeasePackWizardModal jurisdiction workflow guidance", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Generate Schedule A PDF/i }));
-    const activate = await screen.findByRole("button", { name: "Activate Lease" });
+    const activate = await screen.findByRole("button", { name: "Create Lease and Continue to Signing" });
     fireEvent.click(activate);
     expect(await screen.findByText("Failed to fetch")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Activate Lease" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Lease and Continue to Signing" }));
     expect(await screen.findByText("conflict")).toBeInTheDocument();
 
     const firstKey = vi.mocked(activateLeaseDraft).mock.calls[0][1];
     expect(vi.mocked(activateLeaseDraft).mock.calls[1][1]).toBe(firstKey);
     fireEvent.change(screen.getByLabelText("Base rent (CAD)"), { target: { value: "2100" } });
-    fireEvent.click(screen.getByRole("button", { name: "Activate Lease" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Lease and Continue to Signing" }));
     await waitFor(() => expect(activateLeaseDraft).toHaveBeenCalledTimes(3));
     expect(vi.mocked(activateLeaseDraft).mock.calls[2][1]).not.toBe(firstKey);
   });
 
-  it.each([
-    ["created_without_occupancy", "Pending occupancy", "future-start automation is not enabled"],
-    ["occupancy_effective", "Current occupancy", "Canonical occupancy is effective"],
-  ] as const)("presents %s activation without conflating lease creation and occupancy", async (occupancyOutcome, label, description) => {
-    vi.mocked(createLeaseDraft).mockResolvedValue({ ok: true, draftId: "draft-1", draft: {} as any });
-    vi.mocked(generateLeaseDraftPdf).mockResolvedValue({ ok: true, snapshotId: "snapshot-1", scheduleAUrl: "https://example.invalid/schedule-a.pdf" } as any);
+  it("presents lease creation as pending signing without implying execution or occupancy", async () => {
+    vi.mocked(createLeaseDraft).mockResolvedValue({ ok: true, draftId: "draft-pending", draft: {} as any });
+    vi.mocked(generateLeaseDraftPdf).mockResolvedValue({
+      ok: true,
+      snapshotId: "snapshot-pending",
+      scheduleAUrl: "https://example.invalid/schedule-a.pdf",
+    } as any);
     vi.mocked(activateLeaseDraft).mockResolvedValue({
       ok: true,
-      leaseId: "lease-1",
-      lease: { id: "lease-1", startDate: "2026-09-01" } as any,
-      occupancyOutcome,
+      leaseId: "lease-pending",
+      lease: { status: "pending", occupancyEffective: false } as any,
     });
     render(
       <LeasePackWizardModal
@@ -159,13 +159,20 @@ describe("LeasePackWizardModal jurisdiction workflow guidance", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Generate Schedule A PDF/i }));
-    fireEvent.click(await screen.findByRole("button", { name: "Activate Lease" }));
+    expect(await screen.findByText(/Schedule A is generated and ready for review/i)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Create Lease and Continue to Signing" }));
 
-    expect(await screen.findByText(label)).toBeInTheDocument();
-    expect(screen.getByText(new RegExp(description, "i"))).toBeInTheDocument();
+    expect(await screen.findByText("Pending signing")).toBeInTheDocument();
+    expect(screen.getByText("Lease record created. Signing is still required, and occupancy has not begun.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continue to signing" })).toHaveAttribute(
+      "href",
+      "/leases?view=pending-signing&leaseId=lease-pending"
+    );
+    expect(screen.queryByText(/fully executed/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/occupancy started/i)).not.toBeInTheDocument();
   });
 
-  it("coalesces duplicate activation clicks while one request is in flight", async () => {
+  it("coalesces duplicate lease-creation clicks while one request is in flight", async () => {
     vi.mocked(createLeaseDraft).mockResolvedValue({ ok: true, draftId: "draft-1", draft: {} as any });
     vi.mocked(generateLeaseDraftPdf).mockResolvedValue({ ok: true, snapshotId: "snapshot-1", scheduleAUrl: "https://example.invalid/schedule-a.pdf" } as any);
     let resolveActivation!: (value: any) => void;
@@ -180,22 +187,21 @@ describe("LeasePackWizardModal jurisdiction workflow guidance", () => {
       />
     );
     fireEvent.click(screen.getByRole("button", { name: /Generate Schedule A PDF/i }));
-    const activate = await screen.findByRole("button", { name: "Activate Lease" });
+    const activate = await screen.findByRole("button", { name: "Create Lease and Continue to Signing" });
     fireEvent.click(activate);
     fireEvent.click(activate);
     expect(activateLeaseDraft).toHaveBeenCalledTimes(1);
-    resolveActivation({ ok: true, leaseId: "lease-1", lease: {}, occupancyOutcome: "created_without_occupancy" });
-    expect(await screen.findByText("Pending occupancy")).toBeInTheDocument();
+    resolveActivation({ ok: true, leaseId: "lease-1", lease: { status: "pending", occupancyEffective: false } });
+    expect(await screen.findByText("Pending signing")).toBeInTheDocument();
   });
 
-  it("keeps a successful draft activation terminal after the component settles", async () => {
+  it("keeps successful lease creation terminal after the component settles", async () => {
     vi.mocked(createLeaseDraft).mockResolvedValue({ ok: true, draftId: "draft-1", draft: {} as any });
     vi.mocked(generateLeaseDraftPdf).mockResolvedValue({ ok: true, snapshotId: "snapshot-1", scheduleAUrl: "https://example.invalid/schedule-a.pdf" } as any);
     vi.mocked(activateLeaseDraft).mockResolvedValue({
       ok: true,
       leaseId: "lease-1",
-      lease: { id: "lease-1", startDate: "2026-09-01" } as any,
-      occupancyOutcome: "created_without_occupancy",
+      lease: { id: "lease-1", status: "pending", occupancyEffective: false } as any,
     });
     render(
       <LeasePackWizardModal
@@ -208,9 +214,9 @@ describe("LeasePackWizardModal jurisdiction workflow guidance", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Generate Schedule A PDF/i }));
-    fireEvent.click(await screen.findByRole("button", { name: "Activate Lease" }));
-    expect(await screen.findByText("Pending occupancy")).toBeInTheDocument();
-    const completed = screen.getByRole("button", { name: "Lease Activated" });
+    fireEvent.click(await screen.findByRole("button", { name: "Create Lease and Continue to Signing" }));
+    expect(await screen.findByText("Pending signing")).toBeInTheDocument();
+    const completed = screen.getByRole("button", { name: "Lease Created" });
     expect(completed).toBeDisabled();
     fireEvent.click(completed);
 
@@ -218,7 +224,7 @@ describe("LeasePackWizardModal jurisdiction workflow guidance", () => {
     expect(mocks.showToast).toHaveBeenCalledTimes(1);
   });
 
-  it("allows a newly generated draft after a different draft completed activation", async () => {
+  it("allows a newly generated draft after a different draft completed lease creation", async () => {
     vi.mocked(createLeaseDraft)
       .mockResolvedValueOnce({ ok: true, draftId: "draft-1", draft: {} as any })
       .mockResolvedValueOnce({ ok: true, draftId: "draft-2", draft: {} as any });
@@ -226,29 +232,24 @@ describe("LeasePackWizardModal jurisdiction workflow guidance", () => {
       .mockResolvedValueOnce({ ok: true, snapshotId: "snapshot-1", scheduleAUrl: "https://example.invalid/schedule-a-1.pdf" } as any)
       .mockResolvedValueOnce({ ok: true, snapshotId: "snapshot-2", scheduleAUrl: "https://example.invalid/schedule-a-2.pdf" } as any);
     vi.mocked(updateLeaseDraft).mockResolvedValue({} as any);
-    vi.mocked(activateLeaseDraft).mockResolvedValue({ ok: true, leaseId: "lease-1", lease: {} as any, occupancyOutcome: "occupancy_effective" });
+    vi.mocked(activateLeaseDraft).mockResolvedValue({ ok: true, leaseId: "lease-1", lease: { status: "pending", occupancyEffective: false } as any });
     const props = {
       onClose: vi.fn(),
       landlordName: "Landlord",
       tenant: { id: "tenant-1", fullName: "Tenant One", propertyId: "property-1", propertyName: "Harbour Place", unitId: "unit-1", unit: "1", province: "NS" },
       lease: { startDate: "2026-09-01", endDate: "2027-08-31", monthlyRent: 2000 },
     };
-    const { rerender } = render(
-      <LeasePackWizardModal
-        open
-        {...props}
-      />
-    );
+    const { rerender } = render(<LeasePackWizardModal open {...props} />);
 
     fireEvent.click(screen.getByRole("button", { name: /Generate Schedule A PDF/i }));
-    fireEvent.click(await screen.findByRole("button", { name: "Activate Lease" }));
-    expect(await screen.findByRole("button", { name: "Lease Activated" })).toBeDisabled();
+    fireEvent.click(await screen.findByRole("button", { name: "Create Lease and Continue to Signing" }));
+    expect(await screen.findByRole("button", { name: "Lease Created" })).toBeDisabled();
     rerender(<LeasePackWizardModal open={false} {...props} />);
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Lease Activated" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Lease Created" })).not.toBeInTheDocument());
     rerender(<LeasePackWizardModal open {...props} />);
     fireEvent.click(screen.getByRole("button", { name: /Generate Schedule A PDF/i }));
 
-    expect(await screen.findByRole("button", { name: "Activate Lease" })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: "Create Lease and Continue to Signing" })).toBeEnabled();
     expect(screen.getByText(/Draft: draft-2/)).toBeInTheDocument();
   });
 });

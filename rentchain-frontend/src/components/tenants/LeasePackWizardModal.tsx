@@ -17,11 +17,7 @@ import { normalizeProvinceCode, provinceLabelFromCode, type ProvinceCode } from 
 import { getJurisdictionWorkflow } from "@/lib/jurisdictionLeaseWorkflow";
 import { LeaseRiskCard } from "@/components/leases/LeaseRiskCard";
 import { createMutationIdempotencyKey, isDeterministicMutationFailure } from "@/lib/mutationIdempotency";
-import {
-  leaseStartMutationErrorMessage,
-  leaseStartOutcomePresentation,
-  type LeaseStartOutcome,
-} from "@/lib/leases/leaseStartPresentation";
+import { leaseStartMutationErrorMessage } from "@/lib/leases/leaseStartPresentation";
 
 interface Props {
   open: boolean;
@@ -82,7 +78,6 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   const [activatedLeaseId, setActivatedLeaseId] = React.useState<string>("");
   const [activatedDraftId, setActivatedDraftId] = React.useState<string>("");
   const [activatedLease, setActivatedLease] = React.useState<Lease | null>(null);
-  const [activationOutcome, setActivationOutcome] = React.useState<LeaseStartOutcome | null>(null);
   const activationMutationKeyRef = React.useRef<string | null>(null);
   const activationInFlightRef = React.useRef(false);
   React.useEffect(() => {
@@ -314,11 +309,11 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   const handleActivateLease = async () => {
     if (activationInFlightRef.current || activationComplete) return;
     if (!isNsProvince) {
-      setError("Lease activation from this modal is available for Nova Scotia Schedule A flow only.");
+      setError("Lease creation from this modal is available for Nova Scotia Schedule A flow only.");
       return;
     }
     if (!draftId) {
-      setError("Generate Schedule A PDF first, then activate the lease.");
+      setError("Generate Schedule A PDF first, then create the lease record.");
       return;
     }
     if (isInvalidLeaseDateRange(state.startDate, state.endDate)) {
@@ -336,11 +331,9 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       setActivatedDraftId(draftId);
       setActivatedLeaseId(result.leaseId);
       setActivatedLease(result.lease);
-      setActivationOutcome(result.occupancyOutcome);
-      const presentation = leaseStartOutcomePresentation(result.occupancyOutcome, result.lease?.startDate || state.startDate);
       showToast({
-        message: presentation.title,
-        description: presentation.description,
+        message: "Lease record created",
+        description: "Signing is still required, and occupancy has not begun.",
         variant: "success",
       });
       window.dispatchEvent(
@@ -350,7 +343,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       );
     } catch (err: any) {
       if (isDeterministicMutationFailure(err)) activationMutationKeyRef.current = null;
-      setError(leaseStartMutationErrorMessage(err, "Failed to activate lease."));
+      setError(leaseStartMutationErrorMessage(err, "Failed to create lease record."));
     } finally {
       activationInFlightRef.current = false;
       setActivating(false);
@@ -630,7 +623,11 @@ export const LeasePackWizardModal: React.FC<Props> = ({
                 disabled={activating || activationComplete}
                 style={{ padding: "8px 12px" }}
               >
-                {activating ? "Activating..." : activationComplete ? "Lease Activated" : "Activate Lease"}
+                {activating
+                  ? "Creating lease..."
+                  : activationComplete
+                    ? "Lease Created"
+                    : "Create Lease and Continue to Signing"}
               </Button>
             ) : null}
           </div>
@@ -638,18 +635,29 @@ export const LeasePackWizardModal: React.FC<Props> = ({
         ) : null}
         {isNsProvince && snapshotId ? (
           <div style={{ color: "#4b5563", fontSize: 12 }}>
-            Activating creates the official lease record and enables lifecycle automation.
+            Schedule A is generated and ready for review. Creating the lease record does not execute the lease or begin occupancy.
           </div>
         ) : null}
 
         {activatedLeaseId ? (
-          <div aria-live="polite" style={{ display: "grid", gap: 8 }}>
-            <div style={{ border: "1px solid #d1fae5", background: "#ecfdf5", color: "#166534", padding: 10, borderRadius: 8 }}>
-              <strong>{leaseStartOutcomePresentation(activationOutcome, activatedLease?.startDate || state.startDate).occupancyLabel}</strong>
-              <div style={{ marginTop: 4 }}>{leaseStartOutcomePresentation(activationOutcome, activatedLease?.startDate || state.startDate).description}</div>
+          <>
+            <div
+              role="status"
+              style={{ border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1e3a8a", padding: 10, borderRadius: 8 }}
+            >
+              <div style={{ fontWeight: 700 }}>Pending signing</div>
+              <div style={{ fontSize: 13 }}>
+                Lease record created. Signing is still required, and occupancy has not begun.
+              </div>
+              <a
+                href={`/leases?view=pending-signing&leaseId=${encodeURIComponent(activatedLeaseId)}`}
+                style={{ display: "inline-block", marginTop: 6, color: "#1d4ed8", textDecoration: "underline" }}
+              >
+                Continue to signing
+              </a>
             </div>
             <LeaseRiskCard risk={activatedLease?.risk ?? null} />
-          </div>
+          </>
         ) : null}
       </div>
     </div>

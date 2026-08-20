@@ -6,6 +6,7 @@ import {
   enableLeasePaymentRail,
   getActiveLeasesForLandlord,
   getArchivedLeasesForLandlord,
+  getPendingSigningLeasesForLandlord,
   getLeaseReconciliationCandidates,
   downloadSignedLease,
   refreshLeaseDocumentUrl,
@@ -436,7 +437,9 @@ function renderJurisdictionPolicyGuidance(lease: LandlordActiveLease) {
 
 export default function LandlordActiveLeasesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const view = searchParams.get("view") === "archived" ? "archived" : "active";
+  const requestedView = searchParams.get("view");
+  const view = requestedView === "archived" || requestedView === "pending-signing" ? requestedView : "active";
+  const targetedLeaseId = view === "pending-signing" ? String(searchParams.get("leaseId") || "").trim() : "";
   const entitlements = useEntitlements();
   const leasesEnabled = entitlements.hasCapability("leases");
   const [leases, setLeases] = React.useState<LandlordActiveLease[]>([]);
@@ -496,7 +499,11 @@ export default function LandlordActiveLeasesPage() {
       setLoading(true);
       setError(null);
       const [leaseResponse, candidateResponse] = await Promise.all([
-        view === "archived" ? getArchivedLeasesForLandlord() : getActiveLeasesForLandlord(),
+        view === "archived"
+          ? getArchivedLeasesForLandlord()
+          : view === "pending-signing"
+            ? getPendingSigningLeasesForLandlord()
+            : getActiveLeasesForLandlord(),
         view === "active" ? getLeaseReconciliationCandidates() : Promise.resolve({ candidates: [] }),
       ]);
       const nextLeases = Array.isArray(leaseResponse?.leases)
@@ -634,8 +641,10 @@ export default function LandlordActiveLeasesPage() {
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const filteredLeases = React.useMemo(
-    () => leases.filter((lease) => matchesLeaseSearch(lease, normalizedSearchQuery)),
-    [leases, normalizedSearchQuery]
+    () => leases.filter((lease) =>
+      (!targetedLeaseId || lease.id === targetedLeaseId) && matchesLeaseSearch(lease, normalizedSearchQuery)
+    ),
+    [leases, normalizedSearchQuery, targetedLeaseId]
   );
 
   function buildLeaseActionMeta(lease: LandlordActiveLease) {
@@ -840,7 +849,7 @@ export default function LandlordActiveLeasesPage() {
         <div className="printHeader">
           <div className="printTitle">Lease operations summary</div>
           <div className="printMeta">
-            <div>View: {view === "archived" ? "Archived leases" : "Active leases"}</div>
+            <div>View: {view === "archived" ? "Archived leases" : view === "pending-signing" ? "Pending signing" : "Active leases"}</div>
             <div>Visible leases: {filteredLeases.length}</div>
           </div>
         </div>
@@ -886,6 +895,19 @@ export default function LandlordActiveLeasesPage() {
         </button>
         <button
           type="button"
+          onClick={() => setSearchParams({ view: "pending-signing" })}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 10,
+            border: `1px solid ${view === "pending-signing" ? leaseWorkspaceTheme.charcoal : leaseWorkspaceTheme.borderStrong}`,
+            background: view === "pending-signing" ? leaseWorkspaceTheme.charcoal : leaseWorkspaceTheme.card,
+            color: view === "pending-signing" ? "#fffaf1" : leaseWorkspaceTheme.charcoal,
+          }}
+        >
+          Pending signing
+        </button>
+        <button
+          type="button"
           onClick={() => setSearchParams({ view: "archived" })}
           style={{
             padding: "8px 12px",
@@ -924,6 +946,15 @@ export default function LandlordActiveLeasesPage() {
         />
       ) : null}
       {error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
+
+      {!entitlements.loading && leasesEnabled && !loading && !error && view === "pending-signing" ? (
+        <div style={{ padding: 16, borderRadius: 12, border: `1px solid ${leaseWorkspaceTheme.border}`, background: leaseWorkspaceTheme.card }}>
+          <div style={{ fontWeight: 800, color: leaseWorkspaceTheme.charcoal }}>Pending signing</div>
+          <div style={{ color: leaseWorkspaceTheme.neutralText, fontSize: 13 }}>
+            These lease records are not active and do not establish occupancy. Complete the signing workflow before activation.
+          </div>
+        </div>
+      ) : null}
 
       {!entitlements.loading && leasesEnabled && !loading && view === "active" && candidates.length > 0 ? (
         <div style={{ display: "grid", gap: 10, border: `1px solid ${leaseWorkspaceTheme.border}`, borderRadius: 12, background: leaseWorkspaceTheme.card, padding: 16 }}>
@@ -1011,7 +1042,11 @@ export default function LandlordActiveLeasesPage() {
             color: leaseWorkspaceTheme.neutralText,
           }}
         >
-          {view === "archived" ? "No archived leases yet." : "No active leases were found for this landlord yet."}
+          {view === "archived"
+            ? "No archived leases yet."
+            : view === "pending-signing"
+              ? "No leases are pending signing."
+              : "No active leases were found for this landlord yet."}
         </div>
       ) : null}
 

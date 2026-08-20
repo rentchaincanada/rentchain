@@ -480,6 +480,10 @@ export async function getActiveLeasesForLandlord(): Promise<{ leases: LandlordAc
   return apiJson<{ leases: LandlordActiveLease[] }>("/leases/active");
 }
 
+export async function getPendingSigningLeasesForLandlord(): Promise<{ leases: LandlordActiveLease[] }> {
+  return apiJson<{ leases: LandlordActiveLease[] }>("/leases/pending-signing");
+}
+
 export async function getArchivedLeasesForLandlord(): Promise<{ leases: LandlordActiveLease[] }> {
   return apiJson<{ leases: LandlordActiveLease[] }>("/leases/archived");
 }

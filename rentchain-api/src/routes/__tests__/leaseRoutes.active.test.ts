@@ -355,6 +355,80 @@ describe("leaseRoutes GET /active", () => {
     expect(res.body?.leases?.[0]?.paymentMethod).toBeUndefined();
   });
 
+  it("keeps pending-signing leases out of current leases while making them discoverable for signing", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View", province: "NS" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Pending Tenant", email: "pending@example.invalid" });
+    seedDoc("leases", "lease-current-pending", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "pending",
+      executionStatus: "draft",
+      signingStatus: "not_started",
+    });
+    seedDoc("leases", "lease-future-pending", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-future",
+      unitNumber: "103",
+      monthlyRent: 1950,
+      startDate: "2099-01-01",
+      endDate: "2099-12-31",
+      status: "pending",
+      executionStatus: "draft",
+      signingStatus: "not_started",
+    });
+    seedDoc("leases", "lease-active", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-2",
+      unitId: "unit-2",
+      unitNumber: "102",
+      monthlyRent: 1750,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "active",
+    });
+    seedDoc("leases", "lease-other-landlord-pending", {
+      landlordId: "landlord-2",
+      propertyId: "prop-2",
+      status: "pending",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const pendingRes = await invokeRouter(router, { method: "GET", url: "/pending-signing" });
+    const activeRes = await invokeRouter(router, { method: "GET", url: "/active" });
+
+    expect(pendingRes.status).toBe(200);
+    expect(pendingRes.body?.leases).toHaveLength(2);
+    expect(pendingRes.body?.leases).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "lease-current-pending",
+        status: "pending",
+        tenantName: "Pending Tenant",
+        leaseExecution: expect.objectContaining({ executionStatus: "draft" }),
+      }),
+      expect.objectContaining({
+        id: "lease-future-pending",
+        status: "pending",
+        startDate: "2099-01-01",
+        leaseExecution: expect.objectContaining({ executionStatus: "draft" }),
+      }),
+    ]));
+    expect(activeRes.status).toBe(200);
+    expect(activeRes.body?.leases.map((lease: any) => lease.id)).toEqual(["lease-active"]);
+  });
+
   it("returns lifecycle summary on landlord-scoped single lease detail responses", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View", province: "NS" });
     seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", email: "jane@example.com" });
