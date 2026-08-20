@@ -9,7 +9,11 @@ type Props = {
   unit: any | null;
   onClose: () => void;
   onSaved: (unit: any) => void;
+  occupancyAuthority?: "current" | "review" | "none";
 };
+
+const END_LEASE_GUIDANCE = "End the lease before marking this unit vacant.";
+const RESOLVE_OCCUPANCY_GUIDANCE = "Resolve the occupancy records before changing this unit to vacant.";
 
 function isPersistedUnitId(unit: any) {
   const id = String(unit?.id || unit?.unitId || unit?.uid || "").trim();
@@ -25,7 +29,7 @@ function resolveSavedUnit(response: any, fallbackUnit: any, payload: any) {
   return updated;
 }
 
-export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
+export function UnitEditModal({ open, unit, onClose, onSaved, occupancyAuthority = "none" }: Props) {
   const [unitNumber, setUnitNumber] = useState("");
   const [rent, setRent] = useState<string>("");
   const [beds, setBeds] = useState<string>("");
@@ -91,6 +95,15 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
       setError("This unit is not ready for occupancy updates yet. Refresh the property after saving units, then try again.");
       return;
     }
+    const attemptsVacancy = String(unit?.status || "").toLowerCase() === "occupied" && (status || "vacant").toLowerCase() === "vacant";
+    if (attemptsVacancy && occupancyAuthority === "current") {
+      setError(END_LEASE_GUIDANCE);
+      return;
+    }
+    if (attemptsVacancy && occupancyAuthority === "review") {
+      setError(RESOLVE_OCCUPANCY_GUIDANCE);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -123,6 +136,10 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
           ? "This unit could not be found. Refresh the property after saving units, then try again."
           : message === "UNIT_ID_UNRESOLVED"
           ? "The unit was saved, but its stable ID was not returned. Keep this modal open and try again, or refresh the property."
+          : message === "end_lease_workflow_required"
+          ? END_LEASE_GUIDANCE
+          : message === "occupancy_reconciliation_required"
+          ? RESOLVE_OCCUPANCY_GUIDANCE
           : message || "Failed to save unit"
       );
     } finally {

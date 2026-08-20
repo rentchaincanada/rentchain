@@ -2267,6 +2267,8 @@ describe("leaseRoutes GET /active", () => {
       leaseId: "lease-1",
       currentLeaseId: "lease-1",
     });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", currentLeaseId: "lease-1" });
+    seedDoc("tenancies", "tenancy-1", { landlordId: "landlord-1", propertyId: "prop-1", unitId: "unit-1", tenantId: "tenant-1", leaseId: "lease-1", status: "active" });
 
     const router = (await import("../leaseRoutes")).default;
     const res = await invokeRouter(router, { method: "POST", url: "/lease-1/end", body: {} });
@@ -2289,6 +2291,60 @@ describe("leaseRoutes GET /active", () => {
         occupancySource: "lease_end",
       })
     );
+    expect((await fakeDb.collection("leases").doc("lease-1").get()).data()).toMatchObject({ status: "ended" });
+    expect((await fakeDb.collection("tenants").doc("tenant-1").get()).data()).toMatchObject({ currentLeaseId: null });
+    expect((await fakeDb.collection("tenancies").doc("tenancy-1").get()).data()).toMatchObject({ status: "inactive" });
+    expect(listDocs("canonicalEvents")).toHaveLength(1);
+    expect(listDocs("canonicalEvents")[0].data).toMatchObject({
+      type: "lease.occupancy_ended",
+      action: "occupancy_ended",
+      appendOnly: true,
+      immutable: true,
+    });
+
+    const replay = await invokeRouter(router, { method: "POST", url: "/lease-1/end", body: {} });
+    expect(replay.status).toBe(200);
+    expect(listDocs("canonicalEvents")).toHaveLength(1);
+    expect((await fakeDb.collection("tenancies").doc("tenancy-1").get()).data()).toMatchObject({ status: "inactive" });
+  });
+
+  it("fails closed when multiple active tenancies claim the lease being ended", async () => {
+    seedDoc("properties", "prop-tenancy-conflict", { landlordId: "landlord-1", units: [{ id: "unit-tenancy-conflict", unitNumber: "401", status: "occupied", tenantId: "tenant-conflict", currentLeaseId: "lease-tenancy-conflict" }] });
+    seedDoc("units", "unit-tenancy-conflict", { landlordId: "landlord-1", propertyId: "prop-tenancy-conflict", unitNumber: "401", status: "occupied", tenantId: "tenant-conflict", currentLeaseId: "lease-tenancy-conflict" });
+    seedDoc("tenants", "tenant-conflict", { landlordId: "landlord-1", currentLeaseId: "lease-tenancy-conflict" });
+    seedDoc("leases", "lease-tenancy-conflict", { landlordId: "landlord-1", propertyId: "prop-tenancy-conflict", unitId: "unit-tenancy-conflict", unitNumber: "401", tenantId: "tenant-conflict", status: "active" });
+    for (const id of ["tenancy-a", "tenancy-b"]) seedDoc("tenancies", id, { landlordId: "landlord-1", propertyId: "prop-tenancy-conflict", unitId: "unit-tenancy-conflict", tenantId: "tenant-conflict", leaseId: "lease-tenancy-conflict", status: "active" });
+    const router = (await import("../leaseRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-tenancy-conflict/end", body: {} });
+
+    expect(res.status).toBe(409);
+    expect((await fakeDb.collection("leases").doc("lease-tenancy-conflict").get()).data()).toMatchObject({ status: "active" });
+    expect((await fakeDb.collection("units").doc("unit-tenancy-conflict").get()).data()).toMatchObject({ status: "occupied" });
+    expect(listDocs("canonicalEvents")).toHaveLength(0);
+  });
+
+  it("does not commit End Lease domain writes when canonical audit creation fails", async () => {
+    seedDoc("properties", "prop-audit-failure", { landlordId: "landlord-1", units: [{ id: "unit-audit-failure", unitNumber: "402", status: "occupied", tenantId: "tenant-audit-failure", currentLeaseId: "lease-audit-failure" }] });
+    seedDoc("units", "unit-audit-failure", { landlordId: "landlord-1", propertyId: "prop-audit-failure", unitNumber: "402", status: "occupied", tenantId: "tenant-audit-failure", currentLeaseId: "lease-audit-failure" });
+    seedDoc("tenants", "tenant-audit-failure", { landlordId: "landlord-1", currentLeaseId: "lease-audit-failure" });
+    seedDoc("tenancies", "tenancy-audit-failure", { landlordId: "landlord-1", propertyId: "prop-audit-failure", unitId: "unit-audit-failure", tenantId: "tenant-audit-failure", leaseId: "lease-audit-failure", status: "active" });
+    seedDoc("leases", "lease-audit-failure", { landlordId: "landlord-1", propertyId: "prop-audit-failure", unitId: "unit-audit-failure", unitNumber: "402", tenantId: "tenant-audit-failure", status: "active" });
+    vi.spyOn(fakeDb, "runTransaction").mockImplementationOnce(async (callback: any) => callback({
+      get: async (ref: any) => ref.get(),
+      create: () => { throw new Error("synthetic audit failure"); },
+      set: async (ref: any, value: any, options?: any) => ref.set(value, options),
+    }));
+    const router = (await import("../leaseRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-audit-failure/end", body: {} });
+
+    expect(res.status).toBe(409);
+    expect((await fakeDb.collection("leases").doc("lease-audit-failure").get()).data()).toMatchObject({ status: "active" });
+    expect((await fakeDb.collection("units").doc("unit-audit-failure").get()).data()).toMatchObject({ status: "occupied" });
+    expect((await fakeDb.collection("tenants").doc("tenant-audit-failure").get()).data()).toMatchObject({ currentLeaseId: "lease-audit-failure" });
+    expect((await fakeDb.collection("tenancies").doc("tenancy-audit-failure").get()).data()).toMatchObject({ status: "active" });
+    expect(listDocs("canonicalEvents")).toHaveLength(0);
   });
 
   it("treats an already-ended lease as an idempotent no-op when no replacement linkage exists", async () => {
