@@ -62,8 +62,32 @@ describe("ResolveOccupancyDrawer", () => {
     render(<ResolveOccupancyDrawer open propertyId="property-1" unitId="unit-1" tenantId="tenant-1" onClose={vi.fn()} />);
     fireEvent.click(await screen.findByLabelText("Correct stale occupancy records"));
     fireEvent.click(screen.getByRole("button", { name: "Confirm operational reconciliation" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/changed while this review was open/i);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/changed while this review was open/i);
+    expect(alert).not.toHaveTextContent("occupancy_state_stale");
     expect(screen.getByRole("dialog", { name: "Resolve Occupancy" })).toBeInTheDocument();
+  });
+
+  it("shows bounded review guidance for ambiguous embedded unit records", async () => {
+    submit.mockRejectedValue(Object.assign(new Error("ambiguous"), { body: { error: "embedded_unit_ambiguous" } }));
+    render(<ResolveOccupancyDrawer open propertyId="property-1" unitId="unit-1" tenantId="tenant-1" onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByLabelText("Correct stale occupancy records"));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm operational reconciliation" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The occupancy records for this unit do not match cleanly. Review the unit and lease records before trying again.");
+    expect(alert).not.toHaveTextContent("embedded_unit_ambiguous");
+  });
+
+  it("uses bounded generic copy for an unknown occupancy error identifier", async () => {
+    submit.mockRejectedValue(Object.assign(new Error("unknown"), { body: { error: "synthetic_unknown_occupancy_error" } }));
+    render(<ResolveOccupancyDrawer open propertyId="property-1" unitId="unit-1" tenantId="tenant-1" onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByLabelText("Correct stale occupancy records"));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm operational reconciliation" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("We couldn't complete this occupancy reconciliation. Review the current records and try again.");
+    expect(alert).not.toHaveTextContent("synthetic_unknown_occupancy_error");
   });
 
   it("Review later closes with zero mutation", async () => {
