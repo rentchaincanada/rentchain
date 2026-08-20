@@ -2325,11 +2325,11 @@ describe("leaseRoutes GET /active", () => {
   });
 
   it("ends every participating tenancy and clears every matching tenant pointer for a multi-party lease", async () => {
-    seedDoc("properties", "prop-multi-party", { landlordId: "landlord-1", units: [{ id: "unit-multi-party", unitNumber: "501", status: "occupied", tenantId: "tenant-a", currentLeaseId: "lease-multi-party" }] });
-    seedDoc("units", "unit-multi-party", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitNumber: "501", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-a", currentTenantId: "tenant-a", leaseId: "lease-multi-party", currentLeaseId: "lease-multi-party" });
+    seedDoc("properties", "prop-multi-party", { landlordId: "landlord-1", units: [{ id: "unit-multi-party", unitNumber: "501", status: "occupied", tenantId: "tenant-b", currentTenantId: "tenant-b", currentLeaseId: "lease-multi-party" }] });
+    seedDoc("units", "unit-multi-party", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitNumber: "501", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-b", currentTenantId: "tenant-b", leaseId: "lease-multi-party", currentLeaseId: "lease-multi-party" });
     seedDoc("tenants", "tenant-a", { landlordId: "landlord-1", currentLeaseId: "lease-multi-party" });
     seedDoc("tenants", "tenant-b", { landlordId: "landlord-1", currentLeaseId: "lease-multi-party" });
-    seedDoc("leases", "lease-multi-party", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", unitNumber: "501", tenantId: "tenant-a", tenantIds: ["tenant-a", "tenant-b", "tenant-a", ""], status: "active" });
+    seedDoc("leases", "lease-multi-party", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", unitNumber: "501", tenantId: "tenant-a", primaryTenantId: "tenant-a", tenantIds: ["tenant-a", "tenant-b", "tenant-a", ""], status: "active" });
     seedDoc("tenancies", "tenancy-a", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", tenantId: "tenant-a", leaseId: "lease-multi-party", status: "active" });
     seedDoc("tenancies", "tenancy-b", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", tenantId: "tenant-b", leaseId: "lease-multi-party", status: "active" });
     seedDoc("tenancies", "unrelated-tenancy", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", tenantId: "tenant-a", leaseId: "lease-other", status: "active" });
@@ -2355,6 +2355,29 @@ describe("leaseRoutes GET /active", () => {
     expect((await fakeDb.collection("tenancies").doc("tenancy-a").get()).data()).toMatchObject({ status: "inactive" });
     expect((await fakeDb.collection("tenancies").doc("tenancy-b").get()).data()).toMatchObject({ status: "inactive" });
     expect((await fakeDb.collection("tenancies").doc("unrelated-tenancy").get()).data()).toMatchObject({ status: "active" });
+  });
+
+  it.each([
+    ["foreign tenant pointer", "tenant-c", "tenant-c"],
+    ["mixed participant pointers", "tenant-a", "tenant-b"],
+  ])("fails closed for %s without ending a multi-party lease", async (_label, standaloneTenantId, embeddedTenantId) => {
+    seedDoc("properties", "prop-multi-pointer-conflict", { landlordId: "landlord-1", units: [{ id: "unit-multi-pointer-conflict", unitNumber: "502", status: "occupied", tenantId: embeddedTenantId, currentTenantId: embeddedTenantId, currentLeaseId: "lease-multi-pointer-conflict" }] });
+    seedDoc("units", "unit-multi-pointer-conflict", { landlordId: "landlord-1", propertyId: "prop-multi-pointer-conflict", unitNumber: "502", status: "occupied", occupancyStatus: "occupied", tenantId: standaloneTenantId, currentTenantId: standaloneTenantId, leaseId: "lease-multi-pointer-conflict", currentLeaseId: "lease-multi-pointer-conflict" });
+    seedDoc("tenants", "tenant-a", { landlordId: "landlord-1", currentLeaseId: "lease-multi-pointer-conflict" });
+    seedDoc("tenants", "tenant-b", { landlordId: "landlord-1", currentLeaseId: "lease-multi-pointer-conflict" });
+    seedDoc("leases", "lease-multi-pointer-conflict", { landlordId: "landlord-1", propertyId: "prop-multi-pointer-conflict", unitId: "unit-multi-pointer-conflict", unitNumber: "502", tenantId: "tenant-a", primaryTenantId: "tenant-a", tenantIds: ["tenant-a", "tenant-b"], status: "active" });
+    seedDoc("tenancies", "tenancy-pointer-a", { landlordId: "landlord-1", propertyId: "prop-multi-pointer-conflict", unitId: "unit-multi-pointer-conflict", tenantId: "tenant-a", leaseId: "lease-multi-pointer-conflict", status: "active" });
+    seedDoc("tenancies", "tenancy-pointer-b", { landlordId: "landlord-1", propertyId: "prop-multi-pointer-conflict", unitId: "unit-multi-pointer-conflict", tenantId: "tenant-b", leaseId: "lease-multi-pointer-conflict", status: "active" });
+    const router = (await import("../leaseRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-multi-pointer-conflict/end", body: {} });
+
+    expect(res.status).toBe(409);
+    expect((await fakeDb.collection("leases").doc("lease-multi-pointer-conflict").get()).data()).toMatchObject({ status: "active" });
+    expect((await fakeDb.collection("units").doc("unit-multi-pointer-conflict").get()).data()).toMatchObject({ status: "occupied" });
+    expect((await fakeDb.collection("tenancies").doc("tenancy-pointer-a").get()).data()).toMatchObject({ status: "active" });
+    expect((await fakeDb.collection("tenancies").doc("tenancy-pointer-b").get()).data()).toMatchObject({ status: "active" });
+    expect(listDocs("canonicalEvents")).toHaveLength(0);
   });
 
   it("does not commit End Lease domain writes when canonical audit creation fails", async () => {

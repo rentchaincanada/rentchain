@@ -439,6 +439,7 @@ async function endFirestoreLeaseAtomically(
       persistedLease.primaryTenantId,
       ...(Array.isArray(persistedLease.tenantIds) ? persistedLease.tenantIds : []),
     ].map((value) => String(value || "").trim()).filter(Boolean)));
+    const participantSet = new Set(participantTenantIds);
     const tenantRefs = participantTenantIds.map((id) => db.collection("tenants").doc(id));
     const tenantSnaps = await Promise.all(tenantRefs.map((ref) => transaction.get(ref)));
     const tenantId = String(persistedLease.tenantId || persistedLease.primaryTenantId || participantTenantIds[0] || "").trim();
@@ -468,12 +469,12 @@ async function endFirestoreLeaseAtomically(
         return Boolean(currentLeaseId) && currentLeaseId !== leaseId;
       })
     );
-    const hasConflictingTenantLink = currentUnitRecords.some((unit: any) =>
-      [unit.tenantId, unit.currentTenantId].some((value) => {
-        const currentTenantId = String(value || "").trim();
-        return Boolean(currentTenantId) && (!tenantId || currentTenantId !== tenantId);
-      })
-    );
+    const unitTenantPointers = currentUnitRecords
+      .flatMap((unit: any) => [unit.tenantId, unit.currentTenantId])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    const hasConflictingTenantLink = unitTenantPointers.some((currentTenantId) => !participantSet.has(currentTenantId)) ||
+      new Set(unitTenantPointers).size > 1;
     const tenantCurrentLeaseIds = tenantSnaps
       .filter((snap: any) => snap?.exists)
       .map((snap: any) => String((snap.data() || {}).currentLeaseId || "").trim())
@@ -481,7 +482,6 @@ async function endFirestoreLeaseAtomically(
     const queriedActiveTenancies = (tenanciesSnap?.docs || [])
       .map((doc: any) => ({ id: doc.id, ref: doc.ref, ...(doc.data() || {}) }))
       .filter((tenancy: any) => normalizeStatus(tenancy.status) === "active");
-    const participantSet = new Set(participantTenantIds);
     const invalidActiveTenancy = queriedActiveTenancies.some((tenancy: any) =>
       String(tenancy.landlordId || "").trim() !== authority.landlordId ||
       String(tenancy.propertyId || "").trim() !== propertyId ||
