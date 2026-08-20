@@ -2324,6 +2324,39 @@ describe("leaseRoutes GET /active", () => {
     expect(listDocs("canonicalEvents")).toHaveLength(0);
   });
 
+  it("ends every participating tenancy and clears every matching tenant pointer for a multi-party lease", async () => {
+    seedDoc("properties", "prop-multi-party", { landlordId: "landlord-1", units: [{ id: "unit-multi-party", unitNumber: "501", status: "occupied", tenantId: "tenant-a", currentLeaseId: "lease-multi-party" }] });
+    seedDoc("units", "unit-multi-party", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitNumber: "501", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-a", currentTenantId: "tenant-a", leaseId: "lease-multi-party", currentLeaseId: "lease-multi-party" });
+    seedDoc("tenants", "tenant-a", { landlordId: "landlord-1", currentLeaseId: "lease-multi-party" });
+    seedDoc("tenants", "tenant-b", { landlordId: "landlord-1", currentLeaseId: "lease-multi-party" });
+    seedDoc("leases", "lease-multi-party", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", unitNumber: "501", tenantId: "tenant-a", tenantIds: ["tenant-a", "tenant-b", "tenant-a", ""], status: "active" });
+    seedDoc("tenancies", "tenancy-a", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", tenantId: "tenant-a", leaseId: "lease-multi-party", status: "active" });
+    seedDoc("tenancies", "tenancy-b", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", tenantId: "tenant-b", leaseId: "lease-multi-party", status: "active" });
+    seedDoc("tenancies", "unrelated-tenancy", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", tenantId: "tenant-a", leaseId: "lease-other", status: "active" });
+    const router = (await import("../leaseRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-multi-party/end", body: {} });
+
+    expect(res.status).toBe(200);
+    expect((await fakeDb.collection("leases").doc("lease-multi-party").get()).data()).toMatchObject({ status: "ended" });
+    expect((await fakeDb.collection("units").doc("unit-multi-party").get()).data()).toMatchObject({ status: "vacant", currentLeaseId: null });
+    expect((await fakeDb.collection("properties").doc("prop-multi-party").get()).data()?.units[0]).toMatchObject({ status: "vacant", currentLeaseId: null });
+    expect((await fakeDb.collection("tenants").doc("tenant-a").get()).data()).toMatchObject({ currentLeaseId: null });
+    expect((await fakeDb.collection("tenants").doc("tenant-b").get()).data()).toMatchObject({ currentLeaseId: null });
+    expect((await fakeDb.collection("tenancies").doc("tenancy-a").get()).data()).toMatchObject({ status: "inactive" });
+    expect((await fakeDb.collection("tenancies").doc("tenancy-b").get()).data()).toMatchObject({ status: "inactive" });
+    expect((await fakeDb.collection("tenancies").doc("unrelated-tenancy").get()).data()).toMatchObject({ status: "active" });
+    expect(listDocs("canonicalEvents")).toHaveLength(1);
+    expect(listDocs("canonicalEvents")[0].data?.metadata?.tenantRefs).toHaveLength(2);
+
+    const replay = await invokeRouter(router, { method: "POST", url: "/lease-multi-party/end", body: {} });
+    expect(replay.status).toBe(200);
+    expect(listDocs("canonicalEvents")).toHaveLength(1);
+    expect((await fakeDb.collection("tenancies").doc("tenancy-a").get()).data()).toMatchObject({ status: "inactive" });
+    expect((await fakeDb.collection("tenancies").doc("tenancy-b").get()).data()).toMatchObject({ status: "inactive" });
+    expect((await fakeDb.collection("tenancies").doc("unrelated-tenancy").get()).data()).toMatchObject({ status: "active" });
+  });
+
   it("does not commit End Lease domain writes when canonical audit creation fails", async () => {
     seedDoc("properties", "prop-audit-failure", { landlordId: "landlord-1", units: [{ id: "unit-audit-failure", unitNumber: "402", status: "occupied", tenantId: "tenant-audit-failure", currentLeaseId: "lease-audit-failure" }] });
     seedDoc("units", "unit-audit-failure", { landlordId: "landlord-1", propertyId: "prop-audit-failure", unitNumber: "402", status: "occupied", tenantId: "tenant-audit-failure", currentLeaseId: "lease-audit-failure" });

@@ -416,7 +416,6 @@ async function endFirestoreLeaseAtomically(
 ) {
   const propertyId = String(lease?.propertyId || "").trim();
   const unitReference = String(lease?.unitId || lease?.unitNumber || lease?.unit || "").trim();
-  const tenantId = String(lease?.tenantId || lease?.primaryTenantId || "").trim();
   if (!propertyId || !unitReference) throw new Error("lease_end_missing_property_or_unit");
 
   if (typeof (db as any).runTransaction !== "function") throw new Error("lease_end_transaction_unavailable");
@@ -424,17 +423,25 @@ async function endFirestoreLeaseAtomically(
   await (db as any).runTransaction(async (transaction: any) => {
     const leaseRef = db.collection("leases").doc(leaseId);
     const propertyRef = db.collection("properties").doc(propertyId);
-    const tenantRef = tenantId ? db.collection("tenants").doc(tenantId) : null;
-    const tenanciesQuery = tenantId ? db.collection("tenancies").where("tenantId", "==", tenantId) : null;
-    const [leaseSnap, propertySnap, tenantSnap, unitSnap, tenanciesSnap] = await Promise.all([
+    const tenanciesQuery = db.collection("tenancies").where("leaseId", "==", leaseId);
+    const [leaseSnap, propertySnap, unitSnap, tenanciesSnap] = await Promise.all([
       transaction.get(leaseRef),
       transaction.get(propertyRef),
-      tenantRef ? transaction.get(tenantRef) : Promise.resolve(null),
       transaction.get(db.collection("units").where("propertyId", "==", propertyId)),
-      tenanciesQuery ? transaction.get(tenanciesQuery) : Promise.resolve({ docs: [] }),
+      transaction.get(tenanciesQuery),
     ]);
     if (!leaseSnap.exists) throw new Error("lease_end_lease_not_found");
     if (!propertySnap.exists) throw new Error("lease_end_property_not_found");
+
+    const persistedLease = leaseSnap.data() || {};
+    const participantTenantIds = Array.from(new Set([
+      persistedLease.tenantId,
+      persistedLease.primaryTenantId,
+      ...(Array.isArray(persistedLease.tenantIds) ? persistedLease.tenantIds : []),
+    ].map((value) => String(value || "").trim()).filter(Boolean)));
+    const tenantRefs = participantTenantIds.map((id) => db.collection("tenants").doc(id));
+    const tenantSnaps = await Promise.all(tenantRefs.map((ref) => transaction.get(ref)));
+    const tenantId = String(persistedLease.tenantId || persistedLease.primaryTenantId || participantTenantIds[0] || "").trim();
 
     const nowIso = new Date().toISOString();
     const propertyData = propertySnap.data() || {};
@@ -467,25 +474,30 @@ async function endFirestoreLeaseAtomically(
         return Boolean(currentTenantId) && (!tenantId || currentTenantId !== tenantId);
       })
     );
-    const tenantCurrentLeaseId = tenantSnap?.exists
-      ? String((tenantSnap.data() || {}).currentLeaseId || "").trim()
-      : "";
-    const activeTenancies = (tenanciesSnap?.docs || [])
+    const tenantCurrentLeaseIds = tenantSnaps
+      .filter((snap: any) => snap?.exists)
+      .map((snap: any) => String((snap.data() || {}).currentLeaseId || "").trim())
+      .filter(Boolean);
+    const queriedActiveTenancies = (tenanciesSnap?.docs || [])
       .map((doc: any) => ({ id: doc.id, ref: doc.ref, ...(doc.data() || {}) }))
-      .filter((tenancy: any) => normalizeStatus(tenancy.status) === "active")
-      .filter((tenancy: any) => !tenancy.landlordId || String(tenancy.landlordId).trim() === authority.landlordId)
-      .filter((tenancy: any) => !tenancy.propertyId || String(tenancy.propertyId).trim() === propertyId)
-      .filter((tenancy: any) => matchesUnitReference(tenancy, unitReference));
-
-    if (activeTenancies.length > 1) throw new Error("lease_end_active_tenancy_ambiguous");
-    if (activeTenancies.some((tenancy: any) => tenancy.leaseId && String(tenancy.leaseId).trim() !== leaseId)) {
-      throw new Error("lease_end_current_linkage_mismatch");
+      .filter((tenancy: any) => normalizeStatus(tenancy.status) === "active");
+    const participantSet = new Set(participantTenantIds);
+    const invalidActiveTenancy = queriedActiveTenancies.some((tenancy: any) =>
+      String(tenancy.landlordId || "").trim() !== authority.landlordId ||
+      String(tenancy.propertyId || "").trim() !== propertyId ||
+      !matchesUnitReference(tenancy, unitReference) ||
+      !participantSet.has(String(tenancy.tenantId || "").trim())
+    );
+    const activeTenancyTenantIds = queriedActiveTenancies.map((tenancy: any) => String(tenancy.tenantId || "").trim());
+    if (invalidActiveTenancy || new Set(activeTenancyTenantIds).size !== activeTenancyTenantIds.length) {
+      throw new Error("lease_end_active_tenancy_ambiguous");
     }
+    const activeTenancies = queriedActiveTenancies;
 
     if (
       hasConflictingLeaseLink ||
       hasConflictingTenantLink ||
-      (tenantCurrentLeaseId && tenantCurrentLeaseId !== leaseId)
+      tenantCurrentLeaseIds.some((currentLeaseId) => currentLeaseId !== leaseId)
     ) {
       throw new Error("lease_end_current_linkage_mismatch");
     }
@@ -518,6 +530,7 @@ async function endFirestoreLeaseAtomically(
       metadata: {
         landlordRef: leaseStartDeterministicId("landlord", [authority.landlordId]),
         tenantRef: tenantId ? leaseStartDeterministicId("tenant", [tenantId]) : null,
+        tenantRefs: participantTenantIds.map((id) => leaseStartDeterministicId("tenant", [id])),
         unitRef: leaseStartDeterministicId("unit", [unitReference]),
         leaseRef: leaseStartDeterministicId("lease", [leaseId]),
         workflow: "end_lease",
@@ -539,15 +552,17 @@ async function endFirestoreLeaseAtomically(
     }
 
     transaction.set(leaseRef, { status: "ended", endDate, updatedAt: nowIso }, { merge: true });
-    if (tenantRef && tenantSnap?.exists) {
-      const tenant = tenantSnap.data() || {};
-      if (String(tenant.currentLeaseId || "").trim() === leaseId) {
-        transaction.set(tenantRef, { currentLeaseId: null, updatedAt: nowIso }, { merge: true });
+    tenantSnaps.forEach((tenantSnap: any, index: number) => {
+      if (tenantSnap?.exists) {
+        const tenant = tenantSnap.data() || {};
+        if (String(tenant.currentLeaseId || "").trim() === leaseId) {
+          transaction.set(tenantRefs[index], { currentLeaseId: null, updatedAt: nowIso }, { merge: true });
+        }
       }
-    }
-    if (activeTenancies.length === 1) {
-      transaction.set(activeTenancies[0].ref, { status: "inactive", moveOutAt: endDate, updatedAt: nowIso }, { merge: true });
-    }
+    });
+    activeTenancies.forEach((tenancy: any) => {
+      transaction.set(tenancy.ref, { status: "inactive", moveOutAt: endDate, updatedAt: nowIso }, { merge: true });
+    });
   });
 }
 

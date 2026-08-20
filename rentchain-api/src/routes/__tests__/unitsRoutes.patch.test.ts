@@ -125,6 +125,15 @@ describe("unitsRoutes PATCH aliases", () => {
     resetDb();
   });
 
+  function seedCoherentCurrentOccupancy(options: { contradictoryTenantPointer?: boolean } = {}) {
+    const embedded = { id: "unit-1", unitId: "unit-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied", occupantName: "Tenant One", tenantId: "tenant-1", currentTenantId: "tenant-1", leaseId: "lease-1", currentLeaseId: "lease-1", leaseEndDate: "2026-12-31" };
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [embedded] });
+    seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", ...embedded, rent: 1800 });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", currentLeaseId: options.contradictoryTenantPointer ? "lease-other" : "lease-1" });
+    seedDoc("leases", "lease-1", { landlordId: "landlord-1", propertyId: "prop-1", unitId: "unit-1", tenantId: "tenant-1", tenantIds: ["tenant-1"], status: "active", executionStatus: "fully_executed", occupancyEffective: true, startDate: "2026-01-01", endDate: "2026-12-31" });
+    seedDoc("tenancies", "tenancy-1", { landlordId: "landlord-1", propertyId: "prop-1", unitId: "unit-1", tenantId: "tenant-1", leaseId: "lease-1", status: "active" });
+  }
+
   it("accepts name + marketRent aliases for unit updates", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1" });
     seedDoc("units", "unit-1", {
@@ -191,6 +200,54 @@ describe("unitsRoutes PATCH aliases", () => {
     expect(getDoc("canonicalEvents", "anything")).toBeUndefined();
   });
 
+  it.each([
+    ["occupantName clear", { occupantName: null }],
+    ["occupantName case rewrite", { occupantName: "TENANT ONE" }],
+    ["tenantName rewrite", { tenantName: "Other Tenant" }],
+    ["leaseEndDate clear", { leaseEndDate: null }],
+    ["leaseEndDate rewrite", { leaseEndDate: "2026-11-30" }],
+    ["tenantId rewrite", { tenantId: "tenant-other" }],
+    ["currentTenantId clear", { currentTenantId: null }],
+    ["leaseId rewrite", { leaseId: "lease-other" }],
+    ["currentLeaseId clear", { currentLeaseId: null }],
+    ["status vacancy", { status: "vacant" }],
+    ["occupancyStatus vacancy", { occupancyStatus: "vacant" }],
+  ])("rejects coherent current occupancy-bearing bypass: %s", async (_label, body) => {
+    seedCoherentCurrentOccupancy();
+    const before = JSON.parse(JSON.stringify({ unit: getDoc("units", "unit-1"), property: getDoc("properties", "prop-1") }));
+    const app = await createApp();
+
+    const res = await request(app).patch("/api/units/unit-1").send(body);
+
+    expect(res.status).toBe(409);
+    expect(res.body?.error).toBe("end_lease_workflow_required");
+    expect({ unit: getDoc("units", "unit-1"), property: getDoc("properties", "prop-1") }).toEqual(before);
+  });
+
+  it.each([
+    ["occupantName clear", { occupantName: null }],
+    ["occupantName case rewrite", { occupantName: "TENANT ONE" }],
+    ["tenantName rewrite", { tenantName: "Other Tenant" }],
+    ["leaseEndDate clear", { leaseEndDate: null }],
+    ["leaseEndDate rewrite", { leaseEndDate: "2026-11-30" }],
+    ["tenantId rewrite", { tenantId: "tenant-other" }],
+    ["currentTenantId clear", { currentTenantId: null }],
+    ["leaseId rewrite", { leaseId: "lease-other" }],
+    ["currentLeaseId clear", { currentLeaseId: null }],
+    ["status vacancy", { status: "vacant" }],
+    ["occupancyStatus vacancy", { occupancyStatus: "vacant" }],
+  ])("routes contradictory single-current occupancy-bearing bypass to reconciliation: %s", async (_label, body) => {
+    seedCoherentCurrentOccupancy({ contradictoryTenantPointer: true });
+    const before = JSON.parse(JSON.stringify({ unit: getDoc("units", "unit-1"), property: getDoc("properties", "prop-1") }));
+    const app = await createApp();
+
+    const res = await request(app).patch("/api/units/unit-1").send(body);
+
+    expect(res.status).toBe(409);
+    expect(res.body?.error).toBe("occupancy_reconciliation_required");
+    expect({ unit: getDoc("units", "unit-1"), property: getDoc("properties", "prop-1") }).toEqual(before);
+  });
+
   it("rejects ambiguous occupied-to-vacant updates with occupancy reconciliation guidance", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied" }] });
     seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", unitNumber: "101", status: "occupied", occupancyStatus: "occupied" });
@@ -212,7 +269,7 @@ describe("unitsRoutes PATCH aliases", () => {
     seedDoc("leases", "lease-1", { landlordId: "landlord-1", propertyId: "prop-1", unitId: "unit-1", tenantId: "tenant-1", status: "active", executionStatus: "fully_executed", occupancyEffective: true, startDate: "2026-01-01", endDate: "2026-12-31" });
     const app = await createApp();
 
-    const res = await request(app).patch("/api/units/unit-1").send({ name: "101A", marketRent: 1900, status: "occupied", occupantName: "Changed Name" });
+    const res = await request(app).patch("/api/units/unit-1").send({ name: "101A", marketRent: 1900, status: "occupied", occupantName: "Tenant One" });
 
     expect(res.status).toBe(200);
     expect(getDoc("units", "unit-1")).toMatchObject({ unitNumber: "101A", rent: 1900, status: "occupied", occupancyStatus: "occupied", occupantName: "Tenant One", tenantId: "tenant-1", currentLeaseId: "lease-1" });

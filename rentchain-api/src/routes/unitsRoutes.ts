@@ -518,6 +518,11 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
     leaseEnd,
   } = req.body || {};
   const updates: any = {};
+  const occupancyAttempts = Object.fromEntries(
+    ["tenantId", "currentTenantId", "leaseId", "currentLeaseId"]
+      .filter((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field))
+      .map((field) => [field, (req.body || {})[field]])
+  );
 
   const nextUnitNumber = unitNumber ?? unit ?? name ?? label;
   if (nextUnitNumber !== undefined) {
@@ -557,13 +562,19 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
     updates.status = normalizedStatus;
     updates.occupancyStatus = normalizedStatus;
   }
-  const nextOccupantName = occupantName ?? tenantName;
+  const nextOccupantName = Object.prototype.hasOwnProperty.call(req.body || {}, "occupantName")
+    ? occupantName
+    : tenantName;
   if (nextOccupantName !== undefined) {
     const value = String(nextOccupantName || "").trim();
     updates.occupantName = value || null;
     updates.tenantName = value || null;
   }
-  const nextLeaseEndDate = leaseEndDate ?? endDate ?? leaseEnd;
+  const nextLeaseEndDate = Object.prototype.hasOwnProperty.call(req.body || {}, "leaseEndDate")
+    ? leaseEndDate
+    : Object.prototype.hasOwnProperty.call(req.body || {}, "endDate")
+      ? endDate
+      : leaseEnd;
   if (nextLeaseEndDate !== undefined) {
     const value = String(nextLeaseEndDate || "").trim();
     updates.leaseEndDate = value || null;
@@ -572,7 +583,7 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
   updates.updatedAtServer = FieldValue.serverTimestamp ? FieldValue.serverTimestamp() : new Date();
 
   try {
-    const updated = await applyGovernedUnitUpdate({ firestore: db, landlordId, unitId, updates });
+    const updated = await applyGovernedUnitUpdate({ firestore: db, landlordId, unitId, updates, occupancyAttempts });
     return res.json({ ok: true, unit: updated });
   } catch (error: any) {
     if (error instanceof GovernedUnitUpdateError) {

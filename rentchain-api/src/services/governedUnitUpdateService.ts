@@ -11,6 +11,7 @@ type GovernedUnitUpdateInput = {
   landlordId: string;
   unitId: string;
   updates: Record<string, any>;
+  occupancyAttempts?: Record<string, any>;
 };
 
 const OCCUPANCY_FIELDS = new Set([
@@ -31,6 +32,38 @@ function text(value: unknown): string {
 
 function occupied(value: unknown): boolean {
   return text(value).toLowerCase() === "occupied";
+}
+
+function normalized(value: unknown): string {
+  return text(value).toLowerCase();
+}
+
+function hasOwn(record: Record<string, any>, field: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, field);
+}
+
+function firstDefined(record: Record<string, any>, fields: string[]): unknown {
+  for (const field of fields) {
+    if (hasOwn(record, field)) return record[field];
+  }
+  return undefined;
+}
+
+function occupancyBearingMutation(existing: any, updates: Record<string, any>, attempts: Record<string, any>): boolean {
+  const requested = { ...updates, ...attempts };
+  const logicalGroups = [
+    { fields: ["status", "occupancyStatus"], current: existing.status ?? existing.occupancyStatus, normalize: normalized },
+    { fields: ["occupantName", "tenantName"], current: existing.occupantName ?? existing.tenantName, normalize: text },
+    { fields: ["leaseEndDate"], current: existing.leaseEndDate, normalize: text },
+  ];
+  if (logicalGroups.some(({ fields, current, normalize }) => {
+    const requestedValue = firstDefined(requested, fields);
+    return requestedValue !== undefined && normalize(requestedValue) !== normalize(current);
+  })) return true;
+
+  return ["tenantId", "currentTenantId", "leaseId", "currentLeaseId"].some((field) =>
+    hasOwn(attempts, field) && text(attempts[field]) !== text(existing[field])
+  );
 }
 
 function matchesEmbeddedUnit(unit: any, unitId: string, unitNumber: string): boolean {
@@ -109,20 +142,47 @@ export async function applyGovernedUnitUpdate(input: GovernedUnitUpdateInput): P
       .filter((tenancy: any) => !propertyId || !text(tenancy.propertyId) || text(tenancy.propertyId) === propertyId)
       .filter((tenancy: any) => tenancyMatchesUnit(tenancy, input.unitId, unitNumber));
     const tenant = tenantSnap?.exists ? tenantSnap.data() || {} : null;
-    const requestsVacancy = input.updates.status === "vacant" || input.updates.occupancyStatus === "vacant";
+    const attempts = input.occupancyAttempts || {};
+    const hasOccupancyMutation = occupancyBearingMutation(existing, input.updates, attempts);
     const hasOccupiedEvidence = occupied(existing.status) || occupied(existing.occupancyStatus) || occupied(embedded?.status) ||
       occupied(embedded?.occupancyStatus) || Boolean(text(existing.currentLeaseId || existing.leaseId)) ||
-      Boolean(text(embedded?.currentLeaseId || embedded?.leaseId)) || Boolean(text(tenant?.currentLeaseId)) || activeTenancies.length > 0;
+      Boolean(text(embedded?.currentLeaseId || embedded?.leaseId)) || Boolean(text(tenant?.currentLeaseId)) ||
+      activeTenancies.length > 0 || currentLeases.length > 0;
 
-    if (requestsVacancy && currentLeases.length === 1) {
+    const selectedLease = currentLeases.length === 1 ? currentLeases[0] : null;
+    const selectedLeaseId = text(selectedLease?.id);
+    const leaseParticipantIds = new Set(
+      [selectedLease?.tenantId, selectedLease?.primaryTenantId, ...(Array.isArray(selectedLease?.tenantIds) ? selectedLease.tenantIds : [])]
+        .map(text)
+        .filter(Boolean)
+    );
+    const unitTenantIds = [existing.currentTenantId, existing.tenantId, embedded?.currentTenantId, embedded?.tenantId]
+      .map(text)
+      .filter(Boolean);
+    const statusValues = [existing.status, existing.occupancyStatus, embedded?.status, embedded?.occupancyStatus]
+      .map(normalized)
+      .filter(Boolean);
+    const leasePointers = [existing.currentLeaseId, existing.leaseId, embedded?.currentLeaseId, embedded?.leaseId, tenant?.currentLeaseId]
+      .map(text)
+      .filter(Boolean);
+    const contradictoryContext = currentLeases.length > 1 || new Set(statusValues).size > 1 ||
+      (selectedLeaseId && leasePointers.some((pointer) => pointer !== selectedLeaseId)) ||
+      (selectedLeaseId && (unitTenantIds.length === 0 || unitTenantIds.some((id) => !leaseParticipantIds.has(id)))) ||
+      activeTenancies.length > 1 ||
+      (selectedLeaseId && activeTenancies.some((tenancy: any) =>
+        (text(tenancy.leaseId) && text(tenancy.leaseId) !== selectedLeaseId) ||
+        (text(tenancy.tenantId) && !leaseParticipantIds.has(text(tenancy.tenantId)))
+      ));
+
+    if (hasOccupancyMutation && hasOccupiedEvidence) {
+      if (contradictoryContext || currentLeases.length !== 1) {
+        throw new GovernedUnitUpdateError("occupancy_reconciliation_required");
+      }
       throw new GovernedUnitUpdateError("end_lease_workflow_required");
     }
-    if (requestsVacancy && (currentLeases.length > 1 || hasOccupiedEvidence)) {
-      throw new GovernedUnitUpdateError("occupancy_reconciliation_required");
-    }
 
-    const canonicalCurrent = currentLeases.length === 1;
-    const governedUpdates = canonicalCurrent ? { ...safeMetadata(input.updates) } : { ...input.updates };
+    const protectedOccupancy = hasOccupiedEvidence || currentLeases.length > 0;
+    const governedUpdates = protectedOccupancy ? { ...safeMetadata(input.updates) } : { ...input.updates };
     const now = new Date();
     governedUpdates.updatedAt = now;
     const nextUnit = { ...existing, ...governedUpdates };
