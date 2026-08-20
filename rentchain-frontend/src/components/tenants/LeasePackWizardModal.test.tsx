@@ -163,7 +163,10 @@ describe("LeasePackWizardModal jurisdiction workflow guidance", () => {
 
     expect(await screen.findByText("Pending signing")).toBeInTheDocument();
     expect(screen.getByText("Lease record created. Signing is still required, and occupancy has not begun.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Continue to signing" })).toHaveAttribute("href", "/leases");
+    expect(screen.getByRole("link", { name: "Continue to signing" })).toHaveAttribute(
+      "href",
+      "/leases?view=pending-signing&leaseId=lease-pending"
+    );
     expect(screen.queryByText(/fully executed/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/occupancy started/i)).not.toBeInTheDocument();
   });

@@ -641,7 +641,10 @@ export const LeasePackWizardModal: React.FC<Props> = ({
               <div style={{ fontSize: 13 }}>
                 Lease record created. Signing is still required, and occupancy has not begun.
               </div>
-              <a href="/leases" style={{ display: "inline-block", marginTop: 6, color: "#1d4ed8", textDecoration: "underline" }}>
+              <a
+                href={`/leases?view=pending-signing&leaseId=${encodeURIComponent(activatedLeaseId)}`}
+                style={{ display: "inline-block", marginTop: 6, color: "#1d4ed8", textDecoration: "underline" }}
+              >
                 Continue to signing
               </a>
             </div>
