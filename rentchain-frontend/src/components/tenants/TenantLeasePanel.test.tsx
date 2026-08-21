@@ -51,6 +51,7 @@ describe("TenantLeasePanel", () => {
           startDate: "2026-01-01",
           endDate: "2026-12-31",
           status: "active",
+          canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-1", reasons: [] },
           automationEnabled: true,
         },
       ],
@@ -106,6 +107,7 @@ describe("TenantLeasePanel", () => {
           startDate: "2026-01-01",
           endDate: null,
           status: "active",
+          canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-1", reasons: [] },
           automationEnabled: true,
         },
         {

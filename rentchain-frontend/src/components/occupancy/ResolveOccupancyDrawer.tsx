@@ -29,6 +29,32 @@ const LABELS: Record<OccupancyResolutionType, string> = {
   link_existing_lease: "Link an existing valid lease",
 };
 
+const OCCUPANCY_ERROR_COPY: Record<string, string> = {
+  occupancy_state_stale: "Occupancy records changed while this review was open. Review the refreshed state before trying again.",
+  embedded_unit_ambiguous: "The occupancy records for this unit do not match cleanly. Review the unit and lease records before trying again.",
+  unit_context_ambiguous: "The unit records do not identify one safe occupancy context. Review the unit and lease records before trying again.",
+  end_lease_workflow_required: "A valid active lease still supports this occupancy. Use the existing End Lease workflow if the operational occupancy has ended.",
+  resolution_not_applicable: "This reconciliation action no longer applies to the current occupancy records. Review the latest state before trying again.",
+  selected_lease_not_eligible: "The selected lease can no longer support this reconciliation. Review the available lease records before trying again.",
+  unsafe_canonical_postcondition: "RentChain could not verify a safe occupancy result, so no records were changed. Review the current records before trying again.",
+  idempotency_key_reused: "This request changed after an earlier attempt. Review the latest state, then start a new reconciliation.",
+  confirmation_required: "Confirm the operational reconciliation before submitting it.",
+  effective_date_required: "Enter an effective date before recording an operational move-out.",
+  tenant_required_for_move_out: "A tenant record is required to record an operational move-out. Review the current occupancy records.",
+  property_not_found: "This property is no longer available. Close this review and refresh the workspace.",
+  unit_not_found: "This unit is no longer available. Close this review and refresh the workspace.",
+  tenant_not_found: "The tenant record is no longer available. Close this review and refresh the workspace.",
+  forbidden: "You do not have access to review this occupancy.",
+  "upgrade required": "Your current plan does not include this occupancy workflow.",
+};
+
+const OCCUPANCY_ERROR_FALLBACK = "We couldn't complete this occupancy reconciliation. Review the current records and try again.";
+
+function occupancyErrorMessage(error: unknown, fallback = OCCUPANCY_ERROR_FALLBACK): string {
+  const code = String((error as ApiError | null)?.body?.error || "").trim().toLowerCase();
+  return OCCUPANCY_ERROR_COPY[code] || fallback;
+}
+
 function key() {
   return globalThis.crypto?.randomUUID?.() || `occupancy-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -63,7 +89,7 @@ export function ResolveOccupancyDrawer(props: {
     idempotencyKey.current = key();
     getOccupancyResolutionContext(props)
       .then((result) => { if (!cancelled) setContext(result.context); })
-      .catch((reason) => { if (!cancelled) setError((reason as ApiError)?.body?.error || "Occupancy review could not be loaded."); })
+      .catch((reason) => { if (!cancelled) setError(occupancyErrorMessage(reason, "Occupancy review could not be loaded. Close this review and try again.")); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [props.open, props.propertyId, props.unitId, props.tenantId]);
@@ -137,7 +163,7 @@ export function ResolveOccupancyDrawer(props: {
     } catch (reason) {
       const apiError = reason as ApiError;
       if (apiError?.body?.freshContext) setContext(apiError.body.freshContext);
-      setError(apiError?.body?.error === "occupancy_state_stale" ? "Occupancy records changed while this review was open. Review the refreshed state before trying again." : apiError?.body?.error || "Occupancy records were not changed.");
+      setError(occupancyErrorMessage(apiError));
     } finally {
       setSubmitting(false);
     }

@@ -48,6 +48,7 @@ export interface Lease {
   createdAt: string;
   updatedAt: string;
   canonicalState?: CanonicalLeaseOccupancyState | null;
+  occupancyEffective?: boolean | null;
 }
 
 export type LeaseStateCoherence = {
@@ -504,7 +505,12 @@ export async function convertUnitReferenceToLease(
     endDate?: string | null;
     monthlyRent?: number;
   }
-): Promise<{ ok: true; lease: LandlordActiveLease; tenant: { id: string; fullName: string; email?: string | null; phone?: string | null } }> {
+): Promise<{
+  ok: true;
+  lease: LandlordActiveLease;
+  tenant: { id: string; fullName: string; email?: string | null; phone?: string | null };
+  leaseStart?: { canonicalOutcome?: "created_without_occupancy" | "occupancy_effective" | "already_coherent" };
+}> {
   return apiJson(`/leases/reconciliation-candidates/${encodeURIComponent(unitId)}/convert`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },

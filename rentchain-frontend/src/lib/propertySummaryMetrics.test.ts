@@ -28,6 +28,7 @@ describe("buildPropertySummaryMetrics", () => {
           monthlyRent: 1900,
           startDate: "2026-01-01",
           status: "active",
+          canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-1", reasons: [] },
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
@@ -77,7 +78,7 @@ describe("buildPropertySummaryMetrics", () => {
     expect(metrics.currentOccupiedRentTotal).toBe(0);
   });
 
-  it("counts valid manual occupancy when expired leases are the only lease records", () => {
+  it("does not count manual occupancy without a canonical projection", () => {
     const metrics = buildPropertySummaryMetrics(
       [
         {
@@ -108,10 +109,10 @@ describe("buildPropertySummaryMetrics", () => {
       "2026-05-04"
     );
 
-    expect(metrics.leasedUnits).toHaveLength(1);
-    expect(metrics.occupancyRate).toBe(100);
+    expect(metrics.leasedUnits).toHaveLength(0);
+    expect(metrics.occupancyRate).toBe(0);
     expect(metrics.activeLeaseRentTotal).toBe(0);
-    expect(metrics.currentOccupiedRentTotal).toBe(1800);
+    expect(metrics.currentOccupiedRentTotal).toBe(0);
   });
 
   it("keeps signed future leases as upcoming instead of manual occupied", () => {
@@ -138,6 +139,7 @@ describe("buildPropertySummaryMetrics", () => {
           endDate: "2027-05-31",
           status: "active",
           signatureStatus: "signed",
+          canonicalState: { leaseTermState: "upcoming", occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null, reasons: [] },
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
@@ -170,6 +172,7 @@ describe("buildPropertySummaryMetrics", () => {
           unitNumber: "101",
           monthlyRent: 1800,
           status: "active",
+          canonicalState: { leaseTermState: "upcoming", occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null, reasons: [] },
           derivedLifecycleState: "signed_future",
         },
       ],
@@ -205,6 +208,7 @@ describe("buildPropertySummaryMetrics", () => {
           startDate: "2026-01-01",
           endDate: "2026-12-31",
           status: "active",
+          canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-1", reasons: [] },
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
@@ -218,6 +222,7 @@ describe("buildPropertySummaryMetrics", () => {
           startDate: "2026-02-01",
           endDate: "2026-11-30",
           status: "active",
+          canonicalState: { leaseTermState: "active", occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-2", reasons: [] },
           createdAt: "2026-02-01T00:00:00.000Z",
           updatedAt: "2026-02-01T00:00:00.000Z",
         },

@@ -17,6 +17,7 @@ import { normalizeProvinceCode, provinceLabelFromCode, type ProvinceCode } from 
 import { getJurisdictionWorkflow } from "@/lib/jurisdictionLeaseWorkflow";
 import { LeaseRiskCard } from "@/components/leases/LeaseRiskCard";
 import { createMutationIdempotencyKey, isDeterministicMutationFailure } from "@/lib/mutationIdempotency";
+import { leaseStartMutationErrorMessage } from "@/lib/leases/leaseStartPresentation";
 
 interface Props {
   open: boolean;
@@ -75,11 +76,14 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   const [generating, setGenerating] = React.useState(false);
   const [activating, setActivating] = React.useState(false);
   const [activatedLeaseId, setActivatedLeaseId] = React.useState<string>("");
+  const [activatedDraftId, setActivatedDraftId] = React.useState<string>("");
   const [activatedLease, setActivatedLease] = React.useState<Lease | null>(null);
   const activationMutationKeyRef = React.useRef<string | null>(null);
+  const activationInFlightRef = React.useRef(false);
   React.useEffect(() => {
     activationMutationKeyRef.current = null;
   }, [draftId]);
+  const activationComplete = Boolean(draftId && activatedDraftId === draftId);
   const [provinceCode, setProvinceCode] = React.useState<ProvinceCode | null>(null);
   const [provinceLoading, setProvinceLoading] = React.useState(false);
   const [state, setState] = React.useState<FormState>({
@@ -303,6 +307,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
   };
 
   const handleActivateLease = async () => {
+    if (activationInFlightRef.current || activationComplete) return;
     if (!isNsProvince) {
       setError("Lease creation from this modal is available for Nova Scotia Schedule A flow only.");
       return;
@@ -315,6 +320,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       setError(DATE_RANGE_ERROR);
       return;
     }
+    activationInFlightRef.current = true;
     setActivating(true);
     setError("");
     try {
@@ -322,6 +328,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       activationMutationKeyRef.current = mutationKey;
       const result = await activateLeaseDraft(draftId, mutationKey);
       activationMutationKeyRef.current = null;
+      setActivatedDraftId(draftId);
       setActivatedLeaseId(result.leaseId);
       setActivatedLease(result.lease);
       showToast({
@@ -336,8 +343,9 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       );
     } catch (err: any) {
       if (isDeterministicMutationFailure(err)) activationMutationKeyRef.current = null;
-      setError(err?.message || "Failed to create lease record.");
+      setError(leaseStartMutationErrorMessage(err, "Failed to create lease record."));
     } finally {
+      activationInFlightRef.current = false;
       setActivating(false);
     }
   };
@@ -449,7 +457,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
         </div>
 
         {blockingProvinceError ? (
-          <div style={{ border: "1px solid #fecaca", background: "#fef2f2", color: "#b91c1c", padding: 10, borderRadius: 8 }}>
+          <div role="alert" style={{ border: "1px solid #fecaca", background: "#fef2f2", color: "#b91c1c", padding: 10, borderRadius: 8 }}>
             {blockingProvinceError}
           </div>
         ) : null}
@@ -612,12 +620,12 @@ export const LeasePackWizardModal: React.FC<Props> = ({
               <Button
                 type="button"
                 onClick={handleActivateLease}
-                disabled={activating || Boolean(activatedLeaseId)}
+                disabled={activating || activationComplete}
                 style={{ padding: "8px 12px" }}
               >
                 {activating
                   ? "Creating lease..."
-                  : activatedLeaseId
+                  : activationComplete
                     ? "Lease Created"
                     : "Create Lease and Continue to Signing"}
               </Button>
