@@ -96,10 +96,6 @@ export function UnitEditModal({ open, unit, onClose, onSaved, occupancyAuthority
       return;
     }
     const attemptsVacancy = String(unit?.status || "").toLowerCase() === "occupied" && (status || "vacant").toLowerCase() === "vacant";
-    if (attemptsVacancy && occupancyAuthority === "current") {
-      setError(END_LEASE_GUIDANCE);
-      return;
-    }
     if (attemptsVacancy && occupancyAuthority === "review") {
       setError(RESOLVE_OCCUPANCY_GUIDANCE);
       return;

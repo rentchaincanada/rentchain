@@ -144,7 +144,8 @@ describe("UnitEditModal", () => {
     );
   });
 
-  it("blocks canonical current occupancy from being marked vacant and shows End Lease guidance", async () => {
+  it("submits canonical current occupancy for backend authority and shows End Lease guidance", async () => {
+    mocks.updateUnit.mockRejectedValue(new Error("end_lease_workflow_required"));
     render(
       <UnitEditModal open unit={{ id: "unit-1", unitNumber: "101", status: "occupied" }} occupancyAuthority="current" onClose={vi.fn()} onSaved={vi.fn()} />
     );
@@ -152,7 +153,27 @@ describe("UnitEditModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("End the lease before marking this unit vacant.")).toBeInTheDocument();
-    expect(mocks.updateUnit).not.toHaveBeenCalled();
+    expect(mocks.updateUnit).toHaveBeenCalledWith(
+      "unit-1",
+      expect.objectContaining({ status: "vacant" })
+    );
+    expect(screen.getByRole("dialog", { name: "Edit unit" })).toBeInTheDocument();
+  });
+
+  it("lets backend reconciliation override incomplete current occupancy context", async () => {
+    mocks.updateUnit.mockRejectedValue(new Error("occupancy_reconciliation_required"));
+    render(
+      <UnitEditModal open unit={{ id: "unit-1", unitNumber: "101", status: "occupied" }} occupancyAuthority="current" onClose={vi.fn()} onSaved={vi.fn()} />
+    );
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "vacant" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Resolve the occupancy records before changing this unit to vacant.")).toBeInTheDocument();
+    expect(screen.queryByText("End the lease before marking this unit vacant.")).not.toBeInTheDocument();
+    expect(mocks.updateUnit).toHaveBeenCalledWith(
+      "unit-1",
+      expect.objectContaining({ status: "vacant" })
+    );
     expect(screen.getByRole("dialog", { name: "Edit unit" })).toBeInTheDocument();
   });
 
