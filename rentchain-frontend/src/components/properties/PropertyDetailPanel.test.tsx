@@ -101,11 +101,12 @@ vi.mock("./UnitsCsvPreviewModal", () => ({
 }));
 
 vi.mock("./UnitEditModal", () => ({
-  UnitEditModal: ({ open, unit, onSaved }: any) =>
+  UnitEditModal: ({ open, unit, occupancyAuthority, onSaved }: any) =>
     open ? (
       <div data-testid="unit-edit-modal">
         <div>modal tenant: {unit?.occupantName || ""}</div>
         <div>modal lease end: {unit?.leaseEndDate || ""}</div>
+        <div>modal occupancy authority: {occupancyAuthority || "none"}</div>
         <button
           type="button"
           onClick={() =>
@@ -461,7 +462,7 @@ describe("PropertyDetailPanel", () => {
     expect(screen.getAllByText("0%").length).toBeGreaterThan(0);
   });
 
-  it("fails closed when canonical occupancy is unavailable for an active-looking lease", async () => {
+  it("uses canonical current occupancy for an active-looking lease", async () => {
     mocks.fetchUnitsForProperty.mockResolvedValue([
       {
         id: "unit-1",
@@ -486,6 +487,15 @@ describe("PropertyDetailPanel", () => {
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
       ],
+      canonicalUnitStates: {
+        "unit-1": {
+          leaseTermState: "active",
+          occupancyState: "occupied",
+          tenantRelationshipState: "current_occupant",
+          supportingLeaseId: "lease-1",
+          reasons: [],
+        },
+      },
       credibilitySummary: null,
     });
 
@@ -510,11 +520,14 @@ describe("PropertyDetailPanel", () => {
       </MemoryRouter>
     );
 
-    expect((await screen.findAllByText("Review needed")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Canonical occupancy projection is unavailable.").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("link", { name: "Jane Tenant" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "View lease" })).not.toBeInTheDocument();
+    expect((await screen.findAllByText("Occupied")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Canonical occupancy projection is unavailable.")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Jane Tenant" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "View lease" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("tenant-1")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" }).at(-1)!);
+    expect(await screen.findByText("modal occupancy authority: current")).toBeInTheDocument();
   });
 
   it("prefers canonical review-needed occupancy over a stale saved occupied status", async () => {
@@ -528,6 +541,9 @@ describe("PropertyDetailPanel", () => {
     expect((await screen.findAllByText("Review needed")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Past lease · Occupancy requires review").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Resolve occupancy" }).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" }).at(-1)!);
+    expect(await screen.findByText("modal occupancy authority: review")).toBeInTheDocument();
   });
 
   it("hydrates lease risk unit labels from property units instead of showing raw unit ids", async () => {

@@ -5,6 +5,7 @@ import { authenticateJwt } from "../middleware/authMiddleware";
 import { requireCapability } from "../services/capabilityGuard";
 import { uploadBufferToGcs } from "../lib/gcs";
 import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
+import { applyGovernedUnitUpdate, GovernedUnitUpdateError } from "../services/governedUnitUpdateService";
 
 const router = Router();
 const leaseDocumentUpload = multer({
@@ -517,6 +518,11 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
     leaseEnd,
   } = req.body || {};
   const updates: any = {};
+  const occupancyAttempts = Object.fromEntries(
+    ["tenantId", "currentTenantId", "leaseId", "currentLeaseId"]
+      .filter((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field))
+      .map((field) => [field, (req.body || {})[field]])
+  );
 
   const nextUnitNumber = unitNumber ?? unit ?? name ?? label;
   if (nextUnitNumber !== undefined) {
@@ -556,24 +562,37 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
     updates.status = normalizedStatus;
     updates.occupancyStatus = normalizedStatus;
   }
-  const nextOccupantName = occupantName ?? tenantName;
+  const nextOccupantName = Object.prototype.hasOwnProperty.call(req.body || {}, "occupantName")
+    ? occupantName
+    : tenantName;
   if (nextOccupantName !== undefined) {
     const value = String(nextOccupantName || "").trim();
     updates.occupantName = value || null;
     updates.tenantName = value || null;
   }
-  const nextLeaseEndDate = leaseEndDate ?? endDate ?? leaseEnd;
+  const nextLeaseEndDate = Object.prototype.hasOwnProperty.call(req.body || {}, "leaseEndDate")
+    ? leaseEndDate
+    : Object.prototype.hasOwnProperty.call(req.body || {}, "endDate")
+      ? endDate
+      : leaseEnd;
   if (nextLeaseEndDate !== undefined) {
     const value = String(nextLeaseEndDate || "").trim();
     updates.leaseEndDate = value || null;
   }
 
-  updates.updatedAt = new Date();
   updates.updatedAtServer = FieldValue.serverTimestamp ? FieldValue.serverTimestamp() : new Date();
 
-  await ref.set(updates, { merge: true });
-  const updated = { id: unitId, ...existing, ...updates };
-  return res.json({ ok: true, unit: updated });
+  try {
+    const updated = await applyGovernedUnitUpdate({ firestore: db, landlordId, unitId, updates, occupancyAttempts });
+    return res.json({ ok: true, unit: updated });
+  } catch (error: any) {
+    if (error instanceof GovernedUnitUpdateError) {
+      return res.status(409).json({ ok: false, error: error.code });
+    }
+    if (error?.message === "UNIT_NOT_FOUND") return res.status(404).json({ ok: false, error: "UNIT_NOT_FOUND" });
+    if (error?.message === "FORBIDDEN") return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    throw error;
+  }
 });
 
 router.post(

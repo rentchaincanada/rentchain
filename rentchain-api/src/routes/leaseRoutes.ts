@@ -402,73 +402,47 @@ async function resolvePropertyUnitForLease(lease: any, errorPrefix: string) {
   };
 }
 
-async function reconcilePropertyUnitVacancyForLeaseEnd(lease: any) {
-  const { propertyRef, units, unitIndex } = await resolvePropertyUnitForLease(lease, "lease_end");
-  const nowIso = new Date().toISOString();
-  const nextUnits = units.map((unit: any, index: number) =>
-    index === unitIndex ? { ...unit, status: "vacant" } : unit
-  );
-  await propertyRef.set(
-    {
-      units: nextUnits,
-      updatedAt: nowIso,
-    },
-    { merge: true }
-  );
-
-  const unitDocId = await resolveStandaloneUnitDocIdForLeaseEnd(lease);
-  if (unitDocId) {
-    await db.collection("units").doc(unitDocId).set(
-      {
-        status: "vacant",
-        occupancyStatus: "vacant",
-        tenantId: null,
-        currentTenantId: null,
-        leaseId: null,
-        currentLeaseId: null,
-        occupancySource: "lease_end",
-        occupancyUpdatedAt: nowIso,
-        updatedAt: nowIso,
-      },
-      { merge: true }
-    );
-  }
-}
-
 /**
  * Ends a Firestore lease and reconciles every denormalized occupancy projection
  * in one transaction.  The previous implementation committed the lease first
  * and reconciled the property/unit projections afterwards, leaving a durable
  * ended lease when the second write failed.
  */
-async function endFirestoreLeaseAtomically(leaseId: string, lease: any, endDate: string) {
+async function endFirestoreLeaseAtomically(
+  leaseId: string,
+  lease: any,
+  endDate: string,
+  authority: { landlordId: string; actorId: string }
+) {
   const propertyId = String(lease?.propertyId || "").trim();
   const unitReference = String(lease?.unitId || lease?.unitNumber || lease?.unit || "").trim();
-  const tenantId = String(lease?.tenantId || lease?.primaryTenantId || "").trim();
   if (!propertyId || !unitReference) throw new Error("lease_end_missing_property_or_unit");
 
-  // Lightweight route fakes used by unit tests do not implement transactions;
-  // retain their existing reconciliation path while real Firestore always uses
-  // the atomic branch below.
-  if (typeof (db as any).runTransaction !== "function") {
-    await db.collection("leases").doc(leaseId).set({ status: "ended", endDate, updatedAt: new Date().toISOString() }, { merge: true });
-    await reconcilePropertyUnitVacancyForLeaseEnd({ id: leaseId, ...lease });
-    return;
-  }
+  if (typeof (db as any).runTransaction !== "function") throw new Error("lease_end_transaction_unavailable");
 
-  try {
-    await (db as any).runTransaction(async (transaction: any) => {
+  await (db as any).runTransaction(async (transaction: any) => {
     const leaseRef = db.collection("leases").doc(leaseId);
     const propertyRef = db.collection("properties").doc(propertyId);
-    const tenantRef = tenantId ? db.collection("tenants").doc(tenantId) : null;
-    const [leaseSnap, propertySnap, tenantSnap, unitSnap] = await Promise.all([
+    const tenanciesQuery = db.collection("tenancies").where("leaseId", "==", leaseId);
+    const [leaseSnap, propertySnap, unitSnap, tenanciesSnap] = await Promise.all([
       transaction.get(leaseRef),
       transaction.get(propertyRef),
-      tenantRef ? transaction.get(tenantRef) : Promise.resolve(null),
       transaction.get(db.collection("units").where("propertyId", "==", propertyId)),
+      transaction.get(tenanciesQuery),
     ]);
     if (!leaseSnap.exists) throw new Error("lease_end_lease_not_found");
     if (!propertySnap.exists) throw new Error("lease_end_property_not_found");
+
+    const persistedLease = leaseSnap.data() || {};
+    const participantTenantIds = Array.from(new Set([
+      persistedLease.tenantId,
+      persistedLease.primaryTenantId,
+      ...(Array.isArray(persistedLease.tenantIds) ? persistedLease.tenantIds : []),
+    ].map((value) => String(value || "").trim()).filter(Boolean)));
+    const participantSet = new Set(participantTenantIds);
+    const tenantRefs = participantTenantIds.map((id) => db.collection("tenants").doc(id));
+    const tenantSnaps = await Promise.all(tenantRefs.map((ref) => transaction.get(ref)));
+    const tenantId = String(persistedLease.tenantId || persistedLease.primaryTenantId || participantTenantIds[0] || "").trim();
 
     const nowIso = new Date().toISOString();
     const propertyData = propertySnap.data() || {};
@@ -482,9 +456,7 @@ async function endFirestoreLeaseAtomically(leaseId: string, lease: any, endDate:
       const data = doc.data() || {};
       return matchesUnitReference(data, unitReference, doc.id);
     });
-    // Test doubles may return plain documents without transaction references.
-    // Fall back before issuing any transaction writes in that case.
-    if (unitDocs.length === 1 && !unitDocs[0].ref) throw new Error("lease_end_transaction_double_unsupported");
+    if (unitDocs.length === 1 && !unitDocs[0].ref) throw new Error("lease_end_transaction_unavailable");
 
     if (unitDocs.length > 1) throw new Error("lease_end_standalone_unit_ambiguous");
 
@@ -497,20 +469,35 @@ async function endFirestoreLeaseAtomically(leaseId: string, lease: any, endDate:
         return Boolean(currentLeaseId) && currentLeaseId !== leaseId;
       })
     );
-    const hasConflictingTenantLink = currentUnitRecords.some((unit: any) =>
-      [unit.tenantId, unit.currentTenantId].some((value) => {
-        const currentTenantId = String(value || "").trim();
-        return Boolean(currentTenantId) && (!tenantId || currentTenantId !== tenantId);
-      })
+    const unitTenantPointers = currentUnitRecords
+      .flatMap((unit: any) => [unit.tenantId, unit.currentTenantId])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    const hasConflictingTenantLink = unitTenantPointers.some((currentTenantId) => !participantSet.has(currentTenantId)) ||
+      new Set(unitTenantPointers).size > 1;
+    const tenantCurrentLeaseIds = tenantSnaps
+      .filter((snap: any) => snap?.exists)
+      .map((snap: any) => String((snap.data() || {}).currentLeaseId || "").trim())
+      .filter(Boolean);
+    const queriedActiveTenancies = (tenanciesSnap?.docs || [])
+      .map((doc: any) => ({ id: doc.id, ref: doc.ref, ...(doc.data() || {}) }))
+      .filter((tenancy: any) => normalizeStatus(tenancy.status) === "active");
+    const invalidActiveTenancy = queriedActiveTenancies.some((tenancy: any) =>
+      String(tenancy.landlordId || "").trim() !== authority.landlordId ||
+      String(tenancy.propertyId || "").trim() !== propertyId ||
+      !matchesUnitReference(tenancy, unitReference) ||
+      !participantSet.has(String(tenancy.tenantId || "").trim())
     );
-    const tenantCurrentLeaseId = tenantSnap?.exists
-      ? String((tenantSnap.data() || {}).currentLeaseId || "").trim()
-      : "";
+    const activeTenancyTenantIds = queriedActiveTenancies.map((tenancy: any) => String(tenancy.tenantId || "").trim());
+    if (invalidActiveTenancy || new Set(activeTenancyTenantIds).size !== activeTenancyTenantIds.length) {
+      throw new Error("lease_end_active_tenancy_ambiguous");
+    }
+    const activeTenancies = queriedActiveTenancies;
 
     if (
       hasConflictingLeaseLink ||
       hasConflictingTenantLink ||
-      (tenantCurrentLeaseId && tenantCurrentLeaseId !== leaseId)
+      tenantCurrentLeaseIds.some((currentLeaseId) => currentLeaseId !== leaseId)
     ) {
       throw new Error("lease_end_current_linkage_mismatch");
     }
@@ -525,6 +512,39 @@ async function endFirestoreLeaseAtomically(leaseId: string, lease: any, endDate:
         ? { ...unit, status: "vacant", occupancyStatus: "vacant", tenantId: null, currentTenantId: null, leaseId: null, currentLeaseId: null, occupancySource: "lease_end", occupancyUpdatedAt: nowIso, updatedAt: nowIso }
         : unit
     );
+    const auditEventId = leaseStartDeterministicId("lease_occupancy_ended", [authority.landlordId, leaseId]);
+    const auditRef = db.collection("canonicalEvents").doc(auditEventId);
+    transaction.create(auditRef, {
+      id: auditEventId,
+      version: "v1",
+      type: "lease.occupancy_ended",
+      domain: "lease",
+      action: "occupancy_ended",
+      status: "succeeded",
+      actor: { type: "landlord", id: leaseStartDeterministicId("actor", [authority.actorId]), role: "landlord", displayName: null },
+      resource: { type: "lease", id: leaseStartDeterministicId("lease", [leaseId]), parentType: "property", parentId: leaseStartDeterministicId("property", [propertyId]) },
+      occurredAt: nowIso,
+      recordedAt: nowIso,
+      visibility: "internal",
+      summary: "Canonical lease occupancy ended.",
+      metadata: {
+        landlordRef: leaseStartDeterministicId("landlord", [authority.landlordId]),
+        tenantRef: tenantId ? leaseStartDeterministicId("tenant", [tenantId]) : null,
+        tenantRefs: participantTenantIds.map((id) => leaseStartDeterministicId("tenant", [id])),
+        unitRef: leaseStartDeterministicId("unit", [unitReference]),
+        leaseRef: leaseStartDeterministicId("lease", [leaseId]),
+        workflow: "end_lease",
+        source: "lease_end_route",
+        previousCanonicalOccupancyState: "occupied",
+        resultingCanonicalOccupancyState: "vacant",
+        effectiveDate: endDate,
+        legalDetermination: false,
+      },
+      tags: ["lease_end", "occupancy_ended"],
+      appendOnly: true,
+      immutable: true,
+    });
+
     transaction.set(propertyRef, { units: nextEmbeddedUnits, updatedAt: nowIso }, { merge: true });
 
     if (unitDocs.length === 1) {
@@ -532,18 +552,18 @@ async function endFirestoreLeaseAtomically(leaseId: string, lease: any, endDate:
     }
 
     transaction.set(leaseRef, { status: "ended", endDate, updatedAt: nowIso }, { merge: true });
-    if (tenantRef && tenantSnap?.exists) {
-      const tenant = tenantSnap.data() || {};
-      if (String(tenant.currentLeaseId || "").trim() === leaseId) {
-        transaction.set(tenantRef, { currentLeaseId: null, updatedAt: nowIso }, { merge: true });
+    tenantSnaps.forEach((tenantSnap: any, index: number) => {
+      if (tenantSnap?.exists) {
+        const tenant = tenantSnap.data() || {};
+        if (String(tenant.currentLeaseId || "").trim() === leaseId) {
+          transaction.set(tenantRefs[index], { currentLeaseId: null, updatedAt: nowIso }, { merge: true });
+        }
       }
-    }
     });
-  } catch (error: any) {
-    if (error?.message !== "lease_end_transaction_double_unsupported") throw error;
-    await db.collection("leases").doc(leaseId).set({ status: "ended", endDate, updatedAt: new Date().toISOString() }, { merge: true });
-    await reconcilePropertyUnitVacancyForLeaseEnd({ id: leaseId, ...lease });
-  }
+    activeTenancies.forEach((tenancy: any) => {
+      transaction.set(tenancy.ref, { status: "inactive", moveOutAt: endDate, updatedAt: nowIso }, { merge: true });
+    });
+  });
 }
 
 async function resolveStandaloneUnitDocIdForLeaseEnd(lease: any): Promise<string | null> {
@@ -3807,7 +3827,15 @@ router.post("/:id/end", requireLandlord, async (req: any, res: Response) => {
     }
     if (leaseResult.source === "firestore") {
       try {
-        await endFirestoreLeaseAtomically(String(req.params?.id || "").trim(), leaseResult.lease as any, endDate);
+        await endFirestoreLeaseAtomically(
+          String(req.params?.id || "").trim(),
+          leaseResult.lease as any,
+          endDate,
+          {
+            landlordId,
+            actorId: String(req.user?.id || req.user?.email || landlordId).trim() || landlordId,
+          }
+        );
       } catch (reconcileErr: any) {
         console.error("[POST /api/leases/:id/end] occupancy reconciliation failed", {
           leaseId: String(req.params?.id || "").trim(),

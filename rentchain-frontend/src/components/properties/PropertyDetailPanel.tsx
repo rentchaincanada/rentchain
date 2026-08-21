@@ -2169,6 +2169,13 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       <UnitEditModal
         open={!!editingUnit}
         unit={editingUnit}
+        occupancyAuthority={(() => {
+          const unitId = String(editingUnit?.id || editingUnit?.unitId || "").trim();
+          const canonical = canonicalUnitStates[unitId];
+          if (canonical?.occupancyState === "occupied" && canonical.supportingLeaseId) return "current";
+          if (canonical?.occupancyState === "review_needed") return "review";
+          return "none";
+        })()}
         onClose={() => setEditingUnit(null)}
         onSaved={(updated) => {
           const editingKey = String(editingUnit?.id || editingUnit?.unitId || editingUnit?.uid || "").trim();
