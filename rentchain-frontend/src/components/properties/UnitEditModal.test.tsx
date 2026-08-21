@@ -144,6 +144,73 @@ describe("UnitEditModal", () => {
     );
   });
 
+  it("submits canonical current occupancy for backend authority and shows End Lease guidance", async () => {
+    mocks.updateUnit.mockRejectedValue(new Error("end_lease_workflow_required"));
+    render(
+      <UnitEditModal open unit={{ id: "unit-1", unitNumber: "101", status: "occupied" }} occupancyAuthority="current" onClose={vi.fn()} onSaved={vi.fn()} />
+    );
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "vacant" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("End the lease before marking this unit vacant.")).toBeInTheDocument();
+    expect(mocks.updateUnit).toHaveBeenCalledWith(
+      "unit-1",
+      expect.objectContaining({ status: "vacant" })
+    );
+    expect(screen.getByRole("dialog", { name: "Edit unit" })).toBeInTheDocument();
+  });
+
+  it("lets backend reconciliation override incomplete current occupancy context", async () => {
+    mocks.updateUnit.mockRejectedValue(new Error("occupancy_reconciliation_required"));
+    render(
+      <UnitEditModal open unit={{ id: "unit-1", unitNumber: "101", status: "occupied" }} occupancyAuthority="current" onClose={vi.fn()} onSaved={vi.fn()} />
+    );
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "vacant" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Resolve the occupancy records before changing this unit to vacant.")).toBeInTheDocument();
+    expect(screen.queryByText("End the lease before marking this unit vacant.")).not.toBeInTheDocument();
+    expect(mocks.updateUnit).toHaveBeenCalledWith(
+      "unit-1",
+      expect.objectContaining({ status: "vacant" })
+    );
+    expect(screen.getByRole("dialog", { name: "Edit unit" })).toBeInTheDocument();
+  });
+
+  it("blocks review-needed occupancy from being marked vacant and shows Resolve Occupancy guidance", async () => {
+    render(
+      <UnitEditModal open unit={{ id: "unit-1", unitNumber: "101", status: "occupied" }} occupancyAuthority="review" onClose={vi.fn()} onSaved={vi.fn()} />
+    );
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "vacant" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Resolve the occupancy records before changing this unit to vacant.")).toBeInTheDocument();
+    expect(mocks.updateUnit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["end_lease_workflow_required", "End the lease before marking this unit vacant."],
+    ["occupancy_reconciliation_required", "Resolve the occupancy records before changing this unit to vacant."],
+  ])("maps backend %s conflicts to bounded guidance without closing", async (code, copy) => {
+    const onClose = vi.fn();
+    mocks.updateUnit.mockRejectedValue(new Error(code));
+    render(<UnitEditModal open unit={{ id: "unit-1", unitNumber: "101", status: "vacant" }} onClose={onClose} onSaved={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Monthly rent"), { target: { value: "1900" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(copy)).toBeInTheDocument();
+    expect(screen.queryByText(code)).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("keeps safe metadata edits available for current occupancy", async () => {
+    mocks.updateUnit.mockResolvedValue({ unit: { id: "unit-1", unitNumber: "101A", status: "occupied" } });
+    render(<UnitEditModal open unit={{ id: "unit-1", unitNumber: "101", status: "occupied" }} occupancyAuthority="current" onClose={vi.fn()} onSaved={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Unit number"), { target: { value: "101A" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.updateUnit).toHaveBeenCalled());
+  });
+
   it("keeps the modal open when the update response omits a persisted ID", async () => {
     const onClose = vi.fn();
     const onSaved = vi.fn();

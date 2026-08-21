@@ -101,11 +101,12 @@ vi.mock("./UnitsCsvPreviewModal", () => ({
 }));
 
 vi.mock("./UnitEditModal", () => ({
-  UnitEditModal: ({ open, unit, onSaved }: any) =>
+  UnitEditModal: ({ open, unit, occupancyAuthority, onSaved }: any) =>
     open ? (
       <div data-testid="unit-edit-modal">
         <div>modal tenant: {unit?.occupantName || ""}</div>
         <div>modal lease end: {unit?.leaseEndDate || ""}</div>
+        <div>modal occupancy authority: {occupancyAuthority || "none"}</div>
         <button
           type="button"
           onClick={() =>
@@ -486,6 +487,15 @@ describe("PropertyDetailPanel", () => {
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
       ],
+      canonicalUnitStates: {
+        "unit-1": {
+          leaseTermState: "active",
+          occupancyState: "occupied",
+          tenantRelationshipState: "current_occupant",
+          supportingLeaseId: "lease-1",
+          reasons: [],
+        },
+      },
       credibilitySummary: null,
     });
 
@@ -518,6 +528,9 @@ describe("PropertyDetailPanel", () => {
     expect(leaseLinks.length).toBeGreaterThan(0);
     expect(leaseLinks[0]).toHaveAttribute("href", "/leases/lease-1/summary");
     expect(screen.queryByText("tenant-1")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" }).at(-1)!);
+    expect(await screen.findByText("modal occupancy authority: current")).toBeInTheDocument();
   });
 
   it("prefers canonical review-needed occupancy over a stale saved occupied status", async () => {
@@ -531,6 +544,9 @@ describe("PropertyDetailPanel", () => {
     expect((await screen.findAllByText("Review needed")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Past lease · Occupancy requires review").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Resolve occupancy" }).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" }).at(-1)!);
+    expect(await screen.findByText("modal occupancy authority: review")).toBeInTheDocument();
   });
 
   it("hydrates lease risk unit labels from property units instead of showing raw unit ids", async () => {
