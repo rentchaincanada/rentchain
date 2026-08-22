@@ -235,6 +235,16 @@ export function isLeaseCurrentlyActive(lease: LeaseLike | null | undefined, toda
   return status === "active" || status === "notice_period";
 }
 
+export function selectCanonicalCurrentLease<T extends LeaseLike>(
+  leases: T[],
+  today: string | number | Date = new Date()
+): T | null {
+  const current = (Array.isArray(leases) ? leases : []).filter((lease) =>
+    isLeaseCurrentlyActive(lease, today)
+  );
+  return current.length === 1 ? current[0] : null;
+}
+
 export function isLeaseExpired(lease: LeaseLike | null | undefined, today: string | number | Date = new Date()) {
   return deriveLeaseLifecycleStatus(lease, today) === "expired";
 }

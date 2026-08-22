@@ -270,6 +270,7 @@ function normalizeLeaseRow(id: string, raw: any) {
         ? null
         : String(raw?.endDate || raw?.leaseEndDate || raw?.leaseEnd || "").trim() || null,
     status: String(raw?.status || "active").trim().toLowerCase() || "active",
+    occupancyEffective: raw?.occupancyEffective === true,
     risk,
     riskScore: typeof raw?.riskScore === "number" ? raw.riskScore : typeof risk?.score === "number" ? risk.score : null,
     riskGrade: String(raw?.riskGrade || risk?.grade || "").trim() || null,
@@ -1663,6 +1664,17 @@ async function listLandlordLeaseRows(
 
   const leases = await Promise.all(filtered.map((row: any) => enrichLeaseRow(row)));
   const mergedLeases = mergeLeaseRows(leases);
+  const propertyIds = Array.from(
+    new Set(mergedLeases.map((lease: any) => String(lease?.propertyId || "").trim()).filter(Boolean))
+  );
+  const unitsByPropertyId = new Map<string, any[]>(
+    await Promise.all(
+      propertyIds.map(async (propertyId) => [
+        propertyId,
+        await loadUnitsForProperty(db as any, propertyId, landlordId),
+      ] as [string, any[]])
+    )
+  );
   const leaseIds = mergedLeases.map((lease: any) => String(lease?.id || "").trim()).filter(Boolean);
   const latestNoticeByLeaseId = new Map<string, any>();
   if (leaseIds.length > 0) {
@@ -1683,6 +1695,8 @@ async function listLandlordLeaseRows(
     const latestNotice = latestNoticeByLeaseId.get(String(lease?.id || "").trim()) || null;
     const unitId = String(lease?.unitId || lease?.unitNumber || lease?.unitLabel || "").trim();
     const propertyId = String(lease?.propertyId || "").trim();
+    const unitResolution = resolveUnitReference(unitsByPropertyId.get(propertyId) || [], unitId);
+    const unitInputs = resolveCanonicalUnitProjectionInputs(unitResolution.unit || {});
     const relatedLeases = mergedLeases.filter((candidate: any) =>
       String(candidate?.propertyId || "").trim() === propertyId &&
       String(candidate?.unitId || candidate?.unitNumber || candidate?.unitLabel || "").trim() === unitId
@@ -1690,9 +1704,7 @@ async function listLandlordLeaseRows(
     const canonicalState = buildCanonicalLeaseOccupancyProjection({
       leases: relatedLeases,
       context: { landlordId, propertyId, unitId },
-      persistedUnitOccupancy: lease?.stateCoherence?.sourceFields?.unitStatus,
-      persistedTenancyStatus: lease?.stateCoherence?.sourceFields?.occupancyStatus,
-      currentLeasePointerId: lease?.stateCoherence?.sourceFields?.currentLeaseId,
+      ...unitInputs,
       tenantId: lease?.primaryTenantId || lease?.tenantId || lease?.tenantIds?.[0],
       persistedTenantStatus: lease?.stateCoherence?.sourceFields?.tenantStatus,
     });
@@ -3521,7 +3533,20 @@ router.get("/tenant/:tenantId", requireLandlord, async (req: any, res: Response)
         };
       })
     );
-    return res.status(200).json({ ok: true, leases: mergeLeaseRows([...memoryLeases, ...displayLeases]) });
+    const canonicalLeaseRows = landlordId ? await listLandlordLeaseRows(landlordId) : [];
+    const canonicalLeaseById = new Map(
+      canonicalLeaseRows.map((lease: any) => [String(lease?.id || "").trim(), lease])
+    );
+    const projectedDisplayLeases = displayLeases.map((lease: any) => {
+      const canonicalLease = canonicalLeaseById.get(String(lease?.id || "").trim()) as any;
+      if (!canonicalLease) return lease;
+      return {
+        ...lease,
+        occupancyEffective: canonicalLease.occupancyEffective === true,
+        canonicalState: canonicalLease.canonicalState,
+      };
+    });
+    return res.status(200).json({ ok: true, leases: mergeLeaseRows([...memoryLeases, ...projectedDisplayLeases]) });
   } catch {
     return res.status(200).json({ ok: true, leases: memoryLeases });
   }
