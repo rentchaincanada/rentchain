@@ -75,6 +75,8 @@ export function toCanonicalLeaseStateInput(raw: Record<string, any>): CanonicalL
     propertyId: raw?.propertyId,
     unitId: raw?.resolvedUnitId || raw?.unitId || raw?.unitNumber || raw?.unitLabel,
     tenantId: raw?.primaryTenantId || raw?.tenantId || raw?.tenantIds?.[0],
+    primaryTenantId: raw?.primaryTenantId,
+    tenantIds: raw?.tenantIds,
     status: raw?.status,
     startDate: raw?.startDate,
     leaseStartDate: raw?.leaseStartDate,
@@ -91,6 +93,7 @@ export function toCanonicalLeaseStateInput(raw: Record<string, any>): CanonicalL
     renewedByLeaseId: raw?.renewedByLeaseId || raw?.renewalLeaseId,
     updatedAt: raw?.updatedAt,
     createdAt: raw?.createdAt,
+    occupancyDisposition: raw?.occupancyDisposition,
   };
 }
 

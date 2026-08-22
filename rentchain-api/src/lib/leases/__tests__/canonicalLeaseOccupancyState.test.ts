@@ -72,6 +72,55 @@ describe("canonical lease and occupancy state", () => {
     expect(selection).toMatchObject({ lease: null, reasons: ["MULTIPLE_CURRENT_LEASES"] });
   });
 
+  it("narrowly excludes a resolved conflicting lease without changing its contractual lifecycle", () => {
+    const excluded = {
+      ...activeLease,
+      id: "lease-excluded",
+      occupancyDisposition: {
+        status: "excluded_from_current_occupancy_by_resolution",
+        reason: "multiple_current_resolution",
+        resolutionEventId: "occupancy_resolution:event-1",
+        selectedLeaseId: "lease-active",
+        excludedAt: "2026-05-01T12:00:00.000Z",
+      },
+    };
+    expect(deriveCanonicalLeaseTermState(excluded, asOfDate)).toMatchObject({ state: "active", supportsCurrentOccupancy: false });
+    expect(selectCanonicalCurrentLease([activeLease, excluded], { propertyId: "property-1", unitId: "unit-1", asOfDate }).lease?.id).toBe("lease-active");
+  });
+
+  it("fails safely when every otherwise-current lease is excluded", () => {
+    const exclusion = { status: "excluded_from_current_occupancy_by_resolution", reason: "multiple_current_resolution", resolutionEventId: "occupancy_resolution:event-1", selectedLeaseId: "other", excludedAt: "2026-05-01T12:00:00.000Z" };
+    const selection = selectCanonicalCurrentLease([
+      { ...activeLease, occupancyDisposition: exclusion },
+      { ...activeLease, id: "lease-active-2", occupancyDisposition: exclusion },
+    ], { propertyId: "property-1", unitId: "unit-1", asOfDate });
+    expect(selection.lease).toBeNull();
+    expect(evaluateCanonicalOccupancy({ persistedUnitOccupancy: "occupied", selection })).toMatchObject({ occupancyState: "review_needed", supportingLeaseId: null });
+  });
+
+  it.each([
+    { status: "excluded_from_current_occupancy_by_resolution" },
+    { status: "excluded_from_current_occupancy_by_resolution", reason: "multiple_current_resolution", resolutionEventId: "occupancy_resolution:event-1", selectedLeaseId: "lease-active", excludedAt: "not-a-date" },
+    { status: "excluded_from_current_occupancy_by_resolution", reason: "multiple_current_resolution", resolutionEventId: "occupancy_resolution:event-1", selectedLeaseId: "lease-active-2", excludedAt: "2026-05-01T12:00:00.000Z" },
+  ])("does not silently honor malformed exclusion metadata", (occupancyDisposition) => {
+    const selection = selectCanonicalCurrentLease([
+      activeLease,
+      { ...activeLease, id: "lease-active-2", occupancyDisposition },
+    ], { propertyId: "property-1", unitId: "unit-1", asOfDate });
+    expect(selection).toMatchObject({ lease: null, reasons: ["MULTIPLE_CURRENT_LEASES"] });
+  });
+
+  it("keeps excluded future and ended leases non-current", () => {
+    const occupancyDisposition = { status: "excluded_from_current_occupancy_by_resolution", reason: "multiple_current_resolution", resolutionEventId: "occupancy_resolution:event-1", selectedLeaseId: "lease-active", excludedAt: "2026-05-01T12:00:00.000Z" };
+    expect(deriveCanonicalLeaseTermState({ ...activeLease, startDate: "2027-01-01", endDate: "2027-12-31", occupancyDisposition }, asOfDate).supportsCurrentOccupancy).toBe(false);
+    expect(deriveCanonicalLeaseTermState({ ...activeLease, status: "ended", occupancyDisposition }, asOfDate).supportsCurrentOccupancy).toBe(false);
+  });
+
+  it("matches a non-primary participant in canonical tenant context", () => {
+    const selection = selectCanonicalCurrentLease([{ ...activeLease, primaryTenantId: "tenant-1", tenantIds: ["tenant-1", "tenant-2"] }], { tenantId: "tenant-2", asOfDate });
+    expect(selection.lease?.id).toBe("lease-active");
+  });
+
   it("does not treat an expired lease with stale occupied state as vacant", () => {
     const selection = selectCanonicalCurrentLease(
       [{ ...activeLease, endDate: "2026-04-30" }],
