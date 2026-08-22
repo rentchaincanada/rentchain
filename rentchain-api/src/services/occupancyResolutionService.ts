@@ -313,7 +313,7 @@ export async function resolveOccupancy(input: ResolutionContextInput & {
     let selectedLease: any = null;
     let selectedTenantId = "";
     let nextLeases = records.leases;
-    let resultingTenancyStatus = records.tenancies.some((row: any) => row.status === "active") ? "active" : "inactive";
+    const plannedTenancies = records.tenancies.map((row: any) => ({ ...row }));
     const changedFields = new Set<string>();
 
     if (input.type === "resolve_multiple_current_leases") {
@@ -386,10 +386,12 @@ export async function resolveOccupancy(input: ResolutionContextInput & {
       }
       for (const tenancy of records.tenancies.filter((row: any) => row.status === "active" && candidateIds.has(text(row.leaseId)) && text(row.leaseId) !== selectedLease.id)) {
         transaction.set(tenancy.ref, { status: "inactive", moveOutAt: now, moveOutReason: "OCCUPANCY_RECONCILIATION", updatedAt: now }, { merge: true });
+        const plannedTenancy = plannedTenancies.find((row: any) => row.id === tenancy.id);
+        if (plannedTenancy) plannedTenancy.status = "inactive";
       }
       if (!selectedActiveTenancies.length) {
         const tenancyId = `occupancy_resolution_tenancy:${hash([input.landlordId, input.propertyId, input.unitId, selectedTenantId, selectedLease.id]).slice(0, 32)}`;
-        transaction.create(db.collection("tenancies").doc(tenancyId), {
+        const selectedTenancy = {
           id: tenancyId,
           landlordId: input.landlordId,
           propertyId: input.propertyId,
@@ -403,9 +405,10 @@ export async function resolveOccupancy(input: ResolutionContextInput & {
           source: "multiple_current_occupancy_resolution",
           createdAt: now,
           updatedAt: now,
-        });
+        };
+        transaction.create(db.collection("tenancies").doc(tenancyId), selectedTenancy);
+        plannedTenancies.push(selectedTenancy);
       }
-      resultingTenancyStatus = "active";
       nextUnit = { ...nextUnit, status: "occupied", occupancyStatus: "occupied", tenantId: selectedTenantId, currentTenantId: selectedTenantId, leaseId: selectedLease.id, currentLeaseId: selectedLease.id, occupancySource: "occupancy_resolution", occupancyUpdatedAt: now, updatedAt: now };
       nextTenant = records.tenantsById.get(selectedTenantId) ? { ...records.tenantsById.get(selectedTenantId), currentLeaseId: selectedLease.id, status: "current" } : null;
       ["status", "occupancyStatus", "tenantId", "currentTenantId", "leaseId", "currentLeaseId"].forEach((field) => changedFields.add(`unit.${field}`));
@@ -447,21 +450,36 @@ export async function resolveOccupancy(input: ResolutionContextInput & {
       updatedAt: now,
     } : unit);
 
-    if (input.type !== "link_existing_lease") {
+    if (input.type === "record_operational_move_out" || input.type === "clear_stale_occupancy_record") {
       for (const tenancy of records.tenancies.filter((row: any) => row.status === "active")) {
         transaction.set(tenancy.ref, input.type === "record_operational_move_out"
           ? { status: "inactive", moveOutAt: `${input.effectiveDate}T00:00:00.000Z`, moveOutReason: "OTHER", moveOutReasonNote: "Operational occupancy reconciliation", updatedAt: now }
           : { status: "inactive", updatedAt: now }, { merge: true });
+        const plannedTenancy = plannedTenancies.find((row: any) => row.id === tenancy.id);
+        if (plannedTenancy) plannedTenancy.status = "inactive";
       }
       changedFields.add("tenancy.status");
       if (input.type === "record_operational_move_out") changedFields.add("tenancy.moveOutAt");
+    }
+
+    const selectedActivePlannedTenancies = selectedLease
+      ? plannedTenancies.filter((row: any) => row.status === "active" && text(row.leaseId) === selectedLease.id)
+      : [];
+    if (input.type === "resolve_multiple_current_leases") {
+      const candidateIds = new Set(loaded.context.existingLeaseCandidates.map((lease) => lease.id));
+      const excludedActivePlannedTenancies = plannedTenancies.filter((row: any) => row.status === "active" && candidateIds.has(text(row.leaseId)) && text(row.leaseId) !== selectedLease.id);
+      if (selectedActivePlannedTenancies.length !== 1 || excludedActivePlannedTenancies.length) {
+        throw new OccupancyResolutionError("unsafe_canonical_postcondition", 409, loaded.context);
+      }
     }
 
     const resultingCanonicalState = buildCanonicalLeaseOccupancyProjection({
       leases: nextLeases,
       context: { landlordId: input.landlordId, propertyId: input.propertyId, unitId: input.unitId, ...(selectedTenantId ? { tenantId: selectedTenantId } : loaded.context.tenantId ? { tenantId: loaded.context.tenantId } : {}) },
       ...resolveCanonicalUnitProjectionInputs(nextUnit),
-      persistedTenancyStatus: input.type === "link_existing_lease" && records.tenancies.some((row: any) => row.status === "active") ? "active" : input.type === "resolve_multiple_current_leases" ? resultingTenancyStatus : "inactive",
+      persistedTenancyStatus: input.type === "resolve_multiple_current_leases"
+        ? selectedActivePlannedTenancies.length === 1 ? "active" : "inactive"
+        : input.type === "link_existing_lease" && records.tenancies.some((row: any) => row.status === "active") ? "active" : "inactive",
       persistedTenantStatus: nextTenant?.status,
       currentLeasePointerId: nextTenant?.currentLeaseId || nextUnit.currentLeaseId,
       tenantId: selectedTenantId || loaded.context.tenantId,

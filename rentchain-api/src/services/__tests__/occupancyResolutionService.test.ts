@@ -137,7 +137,7 @@ describe("occupancyResolutionService", () => {
     await expect(getOccupancyResolutionContext({ ...base, landlordId: "landlord-2" })).rejects.toMatchObject({ code: "forbidden" });
   });
 
-  it.each(["lease-a", "lease-b"])("resolves all current candidates by explicit selection of %s without changing contractual facts", async (selectedLeaseId) => {
+  it.each(["lease-a", "lease-b"])("preserves the selected lease's pre-existing active tenancy when resolving %s", async (selectedLeaseId) => {
     seedMultipleCurrent();
     const context = await getOccupancyResolutionContext({ ...base, tenantId: null });
     expect(context.canonicalState).toMatchObject({ occupancyState: "review_needed", supportingLeaseId: null });
@@ -153,9 +153,28 @@ describe("occupancyResolutionService", () => {
     expect(read("leases", "lease-a")).toMatchObject({ startDate: beforeA.startDate, endDate: beforeA.endDate });
     expect(read("leases", "lease-b")).toMatchObject({ startDate: beforeB.startDate, endDate: beforeB.endDate });
     expect(read("units", "unit-1")).toMatchObject({ occupancyStatus: "occupied", currentLeaseId: selectedLeaseId });
+    expect(read("tenancies", selectedLeaseId === "lease-a" ? "tenancy-a" : "tenancy-b")).toMatchObject({ status: "active", leaseId: selectedLeaseId });
     expect(read("tenancies", selectedLeaseId === "lease-a" ? "tenancy-b" : "tenancy-a")).toMatchObject({ status: "inactive", moveOutReason: "OCCUPANCY_RECONCILIATION" });
     expect(read("tenancies", "unrelated")).toMatchObject({ status: "active", leaseId: "lease-other" });
     expect(read("canonicalEvents", result.auditEventId)).toMatchObject({ action: "multiple_current_resolved", metadata: { legalDetermination: false, contractualLeaseStatusChanged: false } });
+  });
+
+  it("does not mutate an unrelated active tenancy loaded for the same unit", async () => {
+    seedMultipleCurrent();
+    seed("tenancies", "same-unit-unrelated", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-unrelated", leaseId: "lease-unrelated", status: "active", createdAt: "2026-01-01T00:00:00.000Z" });
+    const unrelatedBefore = structuredClone(read("tenancies", "same-unit-unrelated"));
+    const context = await getOccupancyResolutionContext({ ...base, tenantId: null });
+    await resolveOccupancy({ ...base, tenantId: null, actorId: "landlord-1", type: "resolve_multiple_current_leases", selectedLeaseId: "lease-a", expectedStateToken: context.expectedStateToken, idempotencyKey: "same-unit-unrelated", confirmation: true });
+    expect(read("tenancies", "same-unit-unrelated")).toEqual(unrelatedBefore);
+  });
+
+  it("evaluates the multiple-current postcondition from the final planned tenancy state", async () => {
+    seedMultipleCurrent();
+    const context = await getOccupancyResolutionContext({ ...base, tenantId: null });
+    const result = await resolveOccupancy({ ...base, tenantId: null, actorId: "landlord-1", type: "resolve_multiple_current_leases", selectedLeaseId: "lease-a", expectedStateToken: context.expectedStateToken, idempotencyKey: "planned-tenancy-postcondition", confirmation: true });
+    expect(read("tenancies", "tenancy-a")).toMatchObject({ status: "active", leaseId: "lease-a" });
+    expect(read("tenancies", "tenancy-b")).toMatchObject({ status: "inactive", leaseId: "lease-b" });
+    expect(result.context.canonicalState).toMatchObject({ occupancyState: "occupied", supportingLeaseId: "lease-a" });
   });
 
   it("supports a non-primary selected participant pointer and clears excluded-only pointers", async () => {
@@ -181,16 +200,22 @@ describe("occupancyResolutionService", () => {
     expect(read("tenants", "tenant-2")).toMatchObject({ currentLeaseId: "lease-b" });
   });
 
-  it("resolves three current candidates while excluding every non-selected candidate", async () => {
+  it("deactivates only active tenancies belonging to non-selected conflicting leases", async () => {
     seedMultipleCurrent();
     seed("tenants", "tenant-3", { landlordId: "landlord-1", name: "Tenant Three", status: "Current", currentLeaseId: "lease-c" });
     seed("leases", "lease-c", { ...read("leases", "lease-b"), tenantId: "tenant-3", tenantIds: ["tenant-3"] });
+    seed("tenancies", "same-unit-unrelated", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-unrelated", leaseId: "lease-unrelated", status: "active" });
+    const unrelatedBefore = structuredClone(read("tenancies", "same-unit-unrelated"));
     const context = await getOccupancyResolutionContext({ ...base, tenantId: null });
     expect(context.existingLeaseCandidates).toHaveLength(3);
     const result = await resolveOccupancy({ ...base, tenantId: null, actorId: "landlord-1", type: "resolve_multiple_current_leases", selectedLeaseId: "lease-c", expectedStateToken: context.expectedStateToken, idempotencyKey: "three-candidates", confirmation: true });
     expect(result.context.canonicalState).toMatchObject({ occupancyState: "occupied", supportingLeaseId: "lease-c" });
     expect(read("leases", "lease-a")).toMatchObject({ occupancyEffective: false, occupancyDisposition: { selectedLeaseId: "lease-c" } });
     expect(read("leases", "lease-b")).toMatchObject({ occupancyEffective: false, occupancyDisposition: { selectedLeaseId: "lease-c" } });
+    expect(read("tenancies", "tenancy-a")).toMatchObject({ status: "inactive", moveOutReason: "OCCUPANCY_RECONCILIATION" });
+    expect(read("tenancies", "tenancy-b")).toMatchObject({ status: "inactive", moveOutReason: "OCCUPANCY_RECONCILIATION" });
+    expect(list("tenancies").filter((tenancy: any) => tenancy.status === "active" && tenancy.leaseId === "lease-c")).toHaveLength(1);
+    expect(read("tenancies", "same-unit-unrelated")).toEqual(unrelatedBefore);
   });
 
   it("allows only one winner for concurrent different selections", async () => {
