@@ -1915,6 +1915,125 @@ describe("leaseRoutes GET /active", () => {
     );
   });
 
+  it("projects canonical current evidence for both participants in a coherent multi-party tenant lease", async () => {
+    const unit = {
+      id: "unit-multi-projection",
+      unitNumber: "501",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      currentTenantId: "tenant-b",
+      tenantId: "tenant-b",
+      currentLeaseId: "lease-multi-projection",
+    };
+    seedDoc("properties", "prop-multi-projection", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      address: "123 Harbour Street",
+      units: [unit],
+    });
+    seedDoc("units", "unit-multi-projection", {
+      ...unit,
+      landlordId: "landlord-1",
+      propertyId: "prop-multi-projection",
+    });
+    seedDoc("tenants", "tenant-a", { landlordId: "landlord-1", status: "current", currentLeaseId: "lease-multi-projection" });
+    seedDoc("tenants", "tenant-b", { landlordId: "landlord-1", status: "current", currentLeaseId: "lease-multi-projection" });
+    seedDoc("leases", "lease-multi-projection", {
+      landlordId: "landlord-1",
+      propertyId: "prop-multi-projection",
+      unitId: "unit-multi-projection",
+      unitNumber: "501",
+      tenantId: "tenant-a",
+      primaryTenantId: "tenant-a",
+      tenantIds: ["tenant-a", "tenant-b"],
+      status: "active",
+      executionStatus: "fully_executed",
+      occupancyEffective: true,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      monthlyRent: 2100,
+    });
+    seedDoc("leases", "lease-cross-landlord", {
+      landlordId: "landlord-2",
+      propertyId: "prop-foreign",
+      unitId: "unit-foreign",
+      tenantId: "tenant-b",
+      tenantIds: ["tenant-b"],
+      status: "active",
+      executionStatus: "fully_executed",
+      occupancyEffective: true,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    for (const tenantId of ["tenant-a", "tenant-b"]) {
+      const res = await invokeRouter(router, { method: "GET", url: `/tenant/${tenantId}` });
+      expect(res.status).toBe(200);
+      expect(res.body?.leases).toHaveLength(1);
+      expect(res.body.leases[0]).toEqual(expect.objectContaining({
+        id: "lease-multi-projection",
+        occupancyEffective: true,
+        tenantIds: ["tenant-a", "tenant-b"],
+        canonicalState: expect.objectContaining({
+          leaseTermState: "active",
+          occupancyState: "occupied",
+          tenantRelationshipState: "current_occupant",
+          supportingLeaseId: "lease-multi-projection",
+          reasons: [],
+        }),
+      }));
+    }
+  });
+
+  it("keeps non-current and ambiguous tenant lease projections fail closed", async () => {
+    const units = [
+      { id: "unit-pending", unitNumber: "101", status: "vacant", occupancyStatus: "vacant" },
+      { id: "unit-future", unitNumber: "102", status: "vacant", occupancyStatus: "vacant" },
+      { id: "unit-ended", unitNumber: "103", status: "vacant", occupancyStatus: "vacant" },
+      { id: "unit-review", unitNumber: "104", status: "occupied", occupancyStatus: "occupied", currentLeaseId: "lease-stale", currentTenantId: "tenant-1" },
+      { id: "unit-multiple", unitNumber: "105", status: "occupied", occupancyStatus: "occupied", currentLeaseId: "lease-multiple-a", currentTenantId: "tenant-1" },
+    ];
+    seedDoc("properties", "prop-projection-states", { landlordId: "landlord-1", name: "Projection House", units });
+    for (const unit of units) {
+      seedDoc("units", unit.id, { ...unit, landlordId: "landlord-1", propertyId: "prop-projection-states" });
+    }
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", status: "current", currentLeaseId: "lease-multiple-a" });
+    const lease = (id: string, unitId: string, patch: Record<string, unknown>) => seedDoc("leases", id, {
+      landlordId: "landlord-1",
+      propertyId: "prop-projection-states",
+      unitId,
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      monthlyRent: 1800,
+      ...patch,
+    });
+    lease("lease-pending", "unit-pending", { status: "pending", executionStatus: "not_started", occupancyEffective: false, startDate: "2026-01-01", endDate: "2026-12-31" });
+    lease("lease-future", "unit-future", { status: "active", executionStatus: "fully_executed", occupancyEffective: false, startDate: "2099-01-01", endDate: "2099-12-31" });
+    lease("lease-ended", "unit-ended", { status: "ended", executionStatus: "fully_executed", occupancyEffective: false, startDate: "2025-01-01", endDate: "2025-12-31", endedAt: "2025-12-31T00:00:00.000Z" });
+    lease("lease-review", "unit-review", { status: "active", executionStatus: "fully_executed", occupancyEffective: true, startDate: "2026-01-01", endDate: "2026-12-31" });
+    lease("lease-multiple-a", "unit-multiple", { status: "active", executionStatus: "fully_executed", occupancyEffective: true, startDate: "2026-01-01", endDate: "2026-12-31" });
+    lease("lease-multiple-b", "unit-multiple", { status: "active", executionStatus: "fully_executed", occupancyEffective: true, startDate: "2026-02-01", endDate: "2026-11-30" });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/tenant/tenant-1" });
+    expect(res.status).toBe(200);
+    const byId = new Map(res.body.leases.map((item: any) => [item.id, item]));
+    expect((byId.get("lease-pending") as any)?.canonicalState).toEqual(expect.objectContaining({ leaseTermState: "draft", occupancyState: "vacant" }));
+    expect((byId.get("lease-future") as any)?.canonicalState).toEqual(expect.objectContaining({ leaseTermState: "upcoming", occupancyState: "vacant" }));
+    expect((byId.get("lease-ended") as any)?.canonicalState).toEqual(expect.objectContaining({ leaseTermState: "ended", occupancyState: "vacant" }));
+    expect((byId.get("lease-review") as any)?.canonicalState).toEqual(expect.objectContaining({ occupancyState: "review_needed", tenantRelationshipState: "occupancy_unresolved" }));
+    for (const id of ["lease-multiple-a", "lease-multiple-b"]) {
+      expect((byId.get(id) as any)?.canonicalState).toEqual(expect.objectContaining({
+        occupancyState: "review_needed",
+        tenantRelationshipState: "occupancy_unresolved",
+        supportingLeaseId: null,
+        reasons: expect.arrayContaining(["MULTIPLE_CURRENT_LEASES"]),
+      }));
+    }
+  });
+
   it("fails closed when direct lease creation cannot resolve canonical unit context", async () => {
     const router = (await import("../leaseRoutes")).default;
     const res = await invokeRouter(router, {

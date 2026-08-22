@@ -12,7 +12,7 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
 import { upgradeStarterButtonStyle } from "@/lib/upgradeButtonStyles";
 import { LeaseRiskCard } from "@/components/leases/LeaseRiskCard";
-import { deriveLeaseLifecycleStatus, isLeaseCurrentlyActive } from "@/lib/leases/leaseLifecycle";
+import { deriveLeaseLifecycleStatus, selectCanonicalCurrentLease } from "@/lib/leases/leaseLifecycle";
 
 const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
@@ -169,7 +169,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId, on
   }, [loadLeases, tenantId]);
 
   const activeLease = useMemo(
-    () => leases.find((l) => isLeaseCurrentlyActive(l)) ?? null,
+    () => selectCanonicalCurrentLease(leases),
     [leases]
   );
 

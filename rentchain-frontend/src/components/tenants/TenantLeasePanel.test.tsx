@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TenantLeasePanel } from "./TenantLeasePanel";
 
 const mocks = vi.hoisted(() => ({
@@ -33,6 +33,8 @@ vi.mock("@/components/leases/LeaseRiskCard", () => ({
 }));
 
 describe("TenantLeasePanel", () => {
+  afterEach(() => cleanup());
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.useCapabilities.mockReturnValue({
@@ -92,6 +94,112 @@ describe("TenantLeasePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm end lease" }));
 
     await waitFor(() => expect(mocks.endLease).toHaveBeenCalledWith("lease-1", expect.any(String)));
+  });
+
+  it("restores End Lease for the runtime-shaped canonical multi-party response", async () => {
+    mocks.getLeaseAutomationTasks.mockResolvedValue({ tasks: [] });
+    mocks.getLeasesForTenant.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-multi-party",
+          tenantId: "tenant-a",
+          primaryTenantId: "tenant-a",
+          tenantIds: ["tenant-a", "tenant-b"],
+          propertyId: "property-1",
+          propertyName: "Harbour View",
+          unitId: "unit-1",
+          unitNumber: "101",
+          monthlyRent: 1800,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          occupancyEffective: true,
+          canonicalState: {
+            leaseTermState: "active",
+            occupancyState: "occupied",
+            tenantRelationshipState: "current_occupant",
+            supportingLeaseId: "lease-multi-party",
+            reasons: [],
+          },
+        },
+      ],
+    });
+
+    render(<TenantLeasePanel tenantId="tenant-b" />);
+
+    expect(await screen.findByText("Property: Harbour View - Unit 101")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "End lease" })).toHaveLength(1);
+  });
+
+  it.each([
+    [
+      "pending signing",
+      {
+        id: "lease-pending",
+        status: "pending",
+        canonicalState: { leaseTermState: "draft", occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null, reasons: ["DRAFT_LEASE_CANNOT_SUPPORT_OCCUPANCY"] },
+      },
+    ],
+    [
+      "review needed",
+      {
+        id: "lease-review",
+        status: "active",
+        canonicalState: { leaseTermState: "active", occupancyState: "review_needed", tenantRelationshipState: "occupancy_unresolved", supportingLeaseId: "lease-review", reasons: ["STALE_CURRENT_LEASE_POINTER"] },
+      },
+    ],
+    [
+      "future",
+      {
+        id: "lease-future",
+        status: "active",
+        canonicalState: { leaseTermState: "upcoming", occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null, reasons: ["UPCOMING_LEASE_CANNOT_SUPPORT_OCCUPANCY"] },
+      },
+    ],
+  ])("does not expose End Lease for %s canonical state", async (_label, lease) => {
+    mocks.getLeasesForTenant.mockResolvedValue({
+      leases: [{
+        propertyId: "property-1",
+        propertyName: "Harbour View",
+        unitNumber: "101",
+        monthlyRent: 1800,
+        startDate: "2026-01-01",
+        endDate: "2026-12-31",
+        ...lease,
+      }],
+    });
+
+    render(<TenantLeasePanel tenantId="tenant-1" />);
+    await waitFor(() => expect(mocks.getLeasesForTenant).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "End lease" })).not.toBeInTheDocument();
+  });
+
+  it("fails closed instead of choosing an arbitrary lease when multiple canonical current leases are returned", async () => {
+    const canonicalState = {
+      leaseTermState: "active",
+      occupancyState: "occupied",
+      tenantRelationshipState: "current_occupant",
+      reasons: [],
+    };
+    mocks.getLeasesForTenant.mockResolvedValue({
+      leases: ["lease-a", "lease-b"].map((id) => ({
+        id,
+        propertyId: "property-1",
+        propertyName: "Harbour View",
+        unitNumber: "101",
+        monthlyRent: 1800,
+        startDate: "2026-01-01",
+        endDate: "2026-12-31",
+        status: "active",
+        occupancyEffective: true,
+        canonicalState: { ...canonicalState, supportingLeaseId: id },
+      })),
+    });
+
+    render(<TenantLeasePanel tenantId="tenant-1" />);
+    await waitFor(() => expect(mocks.getLeasesForTenant).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "End lease" })).not.toBeInTheDocument();
+    expect(mocks.getLeaseAutomationTasks).not.toHaveBeenCalled();
   });
 
   it("does not render raw property ids in lease labels", async () => {

@@ -5,11 +5,37 @@ import {
   getExpiringSoonLeases,
   isLeaseCurrentlyActive,
   isLeaseExpired,
+  selectCanonicalCurrentLease,
 } from "./leaseLifecycle";
 
 const today = "2026-05-04";
 
 describe("leaseLifecycle", () => {
+  it("selects exactly one canonical current lease and fails closed on ambiguity", () => {
+    const current = {
+      id: "lease-current",
+      canonicalState: {
+        leaseTermState: "active" as const,
+        occupancyState: "occupied" as const,
+        tenantRelationshipState: "current_occupant" as const,
+      },
+    };
+    const secondCurrent = { ...current, id: "lease-current-2" };
+    const pending = {
+      id: "lease-pending",
+      status: "pending",
+      canonicalState: {
+        leaseTermState: "draft" as const,
+        occupancyState: "vacant" as const,
+        tenantRelationshipState: "past_tenant" as const,
+      },
+    };
+
+    expect(selectCanonicalCurrentLease([current, pending], today)).toBe(current);
+    expect(selectCanonicalCurrentLease([current, secondCurrent], today)).toBeNull();
+    expect(selectCanonicalCurrentLease([pending], today)).toBeNull();
+  });
+
   it("prefers backend derived lifecycle state when present", () => {
     const lease = {
       id: "lease-derived",
