@@ -271,6 +271,8 @@ function normalizeLeaseRow(id: string, raw: any) {
         : String(raw?.endDate || raw?.leaseEndDate || raw?.leaseEnd || "").trim() || null,
     status: String(raw?.status || "active").trim().toLowerCase() || "active",
     occupancyEffective: raw?.occupancyEffective === true,
+    occupancyEffectiveAt: raw?.occupancyEffectiveAt || null,
+    occupancyDisposition: raw?.occupancyDisposition || null,
     risk,
     riskScore: typeof raw?.riskScore === "number" ? raw.riskScore : typeof risk?.score === "number" ? risk.score : null,
     riskGrade: String(raw?.riskGrade || risk?.grade || "").trim() || null,

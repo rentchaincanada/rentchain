@@ -30,6 +30,8 @@ export type CanonicalLeaseStateInput = {
   propertyId?: unknown;
   unitId?: unknown;
   tenantId?: unknown;
+  primaryTenantId?: unknown;
+  tenantIds?: unknown;
   status?: unknown;
   startDate?: unknown;
   leaseStartDate?: unknown;
@@ -46,6 +48,7 @@ export type CanonicalLeaseStateInput = {
   renewedByLeaseId?: unknown;
   updatedAt?: unknown;
   createdAt?: unknown;
+  occupancyDisposition?: unknown;
 };
 
 export type CanonicalLeaseTermResult = {
@@ -124,6 +127,21 @@ function executionState(input: CanonicalLeaseStateInput): string {
   return normalize(input.executionState || input.executionStatus);
 }
 
+export const MULTIPLE_CURRENT_OCCUPANCY_EXCLUSION = "excluded_from_current_occupancy_by_resolution" as const;
+
+export function hasValidCurrentOccupancyExclusion(input: CanonicalLeaseStateInput): boolean {
+  const disposition = input.occupancyDisposition;
+  if (!disposition || typeof disposition !== "object" || Array.isArray(disposition)) return false;
+  const record = disposition as Record<string, unknown>;
+  const selectedLeaseId = value(record.selectedLeaseId);
+  return normalize(record.status) === MULTIPLE_CURRENT_OCCUPANCY_EXCLUSION
+    && normalize(record.reason) === "multiple_current_resolution"
+    && Boolean(value(record.resolutionEventId)?.startsWith("occupancy_resolution:"))
+    && Boolean(selectedLeaseId)
+    && selectedLeaseId !== value(input.id)
+    && toUtcDay(record.excludedAt) != null;
+}
+
 export function deriveCanonicalLeaseTermState(
   input: CanonicalLeaseStateInput,
   asOfDate: unknown = new Date()
@@ -139,7 +157,7 @@ export function deriveCanonicalLeaseTermState(
     state,
     effectiveStartDate: isoDay(startDay),
     effectiveEndDate: isoDay(endDay),
-    supportsCurrentOccupancy: state === "active" && !INCOMPLETE_EXECUTION.has(execution),
+    supportsCurrentOccupancy: state === "active" && !INCOMPLETE_EXECUTION.has(execution) && !hasValidCurrentOccupancyExclusion(input),
     reasons,
   });
 
@@ -169,7 +187,12 @@ export function deriveCanonicalLeaseTermState(
 function contextMatches(lease: CanonicalLeaseStateInput, context: CanonicalLeaseSelectorContext): boolean {
   return (["landlordId", "propertyId", "unitId", "tenantId"] as const).every((key) => {
     const expected = value(context[key]);
-    return !expected || value(lease[key]) === expected;
+    if (!expected) return true;
+    if (key !== "tenantId") return value(lease[key]) === expected;
+    const participants = [lease.tenantId, lease.primaryTenantId, ...(Array.isArray(lease.tenantIds) ? lease.tenantIds : [])]
+      .map(value)
+      .filter((candidate): candidate is string => Boolean(candidate));
+    return new Set(participants).has(expected);
   });
 }
 
@@ -248,7 +271,7 @@ export function evaluateCanonicalTenantRelationship(input: {
   const reasons = [...input.occupancy.reasons];
   const tenantId = value(input.tenantId);
   const selected = input.selection.lease;
-  if (selected && tenantId && value(selected.tenantId) !== tenantId) reasons.push("CURRENT_LEASE_CONTEXT_MISMATCH");
+  if (selected && tenantId && !contextMatches(selected, { tenantId })) reasons.push("CURRENT_LEASE_CONTEXT_MISMATCH");
   if (input.occupancy.occupancyState === "occupied" && selected && !reasons.length) {
     return { relationshipState: "current_occupant", supportingLeaseId: selected.id, reasons: [] };
   }

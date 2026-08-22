@@ -27,6 +27,7 @@ const LABELS: Record<OccupancyResolutionType, string> = {
   record_operational_move_out: "Record operational move-out",
   clear_stale_occupancy_record: "Correct stale occupancy records",
   link_existing_lease: "Link an existing valid lease",
+  resolve_multiple_current_leases: "Select the lease that supports current occupancy",
 };
 
 const OCCUPANCY_ERROR_COPY: Record<string, string> = {
@@ -36,6 +37,10 @@ const OCCUPANCY_ERROR_COPY: Record<string, string> = {
   end_lease_workflow_required: "A valid active lease still supports this occupancy. Use the existing End Lease workflow if the operational occupancy has ended.",
   resolution_not_applicable: "This reconciliation action no longer applies to the current occupancy records. Review the latest state before trying again.",
   selected_lease_not_eligible: "The selected lease can no longer support this reconciliation. Review the available lease records before trying again.",
+  multiple_current_no_longer_present: "The multiple-lease conflict changed while this review was open. Review the refreshed state before trying again.",
+  candidate_participant_context_ambiguous: "The conflicting lease participants cannot be verified safely. Review the tenant and lease records before trying again.",
+  occupancy_projection_context_ambiguous: "The current unit pointers do not match the conflicting leases safely. Review the occupancy records before trying again.",
+  selected_tenancy_context_ambiguous: "The selected lease has ambiguous active tenancy records. Review those records before trying again.",
   unsafe_canonical_postcondition: "RentChain could not verify a safe occupancy result, so no records were changed. Review the current records before trying again.",
   idempotency_key_reused: "This request changed after an earlier attempt. Review the latest state, then start a new reconciliation.",
   confirmation_required: "Confirm the operational reconciliation before submitting it.",
@@ -74,6 +79,7 @@ export function ResolveOccupancyDrawer(props: {
   const [type, setType] = useState<OccupancyResolutionType | "">("");
   const [effectiveDate, setEffectiveDate] = useState("");
   const [selectedLeaseId, setSelectedLeaseId] = useState("");
+  const [multipleCurrentAcknowledged, setMultipleCurrentAcknowledged] = useState(false);
   const idempotencyKey = useRef(key());
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -86,6 +92,8 @@ export function ResolveOccupancyDrawer(props: {
     setError(null);
     setContext(null);
     setType("");
+    setSelectedLeaseId("");
+    setMultipleCurrentAcknowledged(false);
     idempotencyKey.current = key();
     getOccupancyResolutionContext(props)
       .then((result) => { if (!cancelled) setContext(result.context); })
@@ -100,7 +108,14 @@ export function ResolveOccupancyDrawer(props: {
   }, [props.open]);
 
   useEffect(() => { if (props.open && !loading) closeRef.current?.focus(); }, [props.open, loading]);
-  const canSubmit = useMemo(() => Boolean(context && type && !submitting && (type !== "record_operational_move_out" || effectiveDate) && (type !== "link_existing_lease" || selectedLeaseId)), [context, type, submitting, effectiveDate, selectedLeaseId]);
+  const canSubmit = useMemo(() => Boolean(
+    context
+    && type
+    && !submitting
+    && (type !== "record_operational_move_out" || effectiveDate)
+    && (type !== "link_existing_lease" || selectedLeaseId)
+    && (type !== "resolve_multiple_current_leases" || (selectedLeaseId && multipleCurrentAcknowledged))
+  ), [context, type, submitting, effectiveDate, selectedLeaseId, multipleCurrentAcknowledged]);
   if (!props.open) return null;
 
   const restoreFocus = () => {
@@ -162,7 +177,13 @@ export function ResolveOccupancyDrawer(props: {
       close();
     } catch (reason) {
       const apiError = reason as ApiError;
-      if (apiError?.body?.freshContext) setContext(apiError.body.freshContext);
+      if (apiError?.body?.freshContext) {
+        setContext(apiError.body.freshContext);
+        setType("");
+        setSelectedLeaseId("");
+        setMultipleCurrentAcknowledged(false);
+        idempotencyKey.current = key();
+      }
       setError(occupancyErrorMessage(apiError));
     } finally {
       setSubmitting(false);
@@ -182,9 +203,14 @@ export function ResolveOccupancyDrawer(props: {
           <div><strong>{context.propertyLabel} · {context.unitLabel}</strong><div style={{ color: "#92400e", marginTop: 4 }}>Current state: Review needed</div></div>
           <section><h3>Why review is required</h3><ul>{context.canonicalState.reasons.map((reason) => <li key={reason}>{REASON_COPY[reason] || "Current occupancy records require review."}</li>)}</ul></section>
           {context.activeLeaseRequiresEndWorkflow ? <div style={{ padding: 12, background: "#fff7ed", borderRadius: 10 }}>A valid active lease still supports this occupancy. Use the existing End Lease workflow if the operational occupancy has ended.</div> : null}
-          {context.eligibleResolutionTypes.length ? <fieldset style={{ border: 0, padding: 0, display: "grid", gap: 10 }}><legend style={{ fontWeight: 800, marginBottom: 8 }}>Choose a reconciliation action</legend>{context.eligibleResolutionTypes.map((option) => <label key={option} style={{ display: "flex", gap: 8 }}><input type="radio" name="occupancy-resolution" checked={type === option} onChange={() => setType(option)} />{LABELS[option]}</label>)}</fieldset> : <p>These records do not have a safe automated resolution. They will remain visible for review.</p>}
+          {context.eligibleResolutionTypes.length ? <fieldset style={{ border: 0, padding: 0, display: "grid", gap: 10 }}><legend style={{ fontWeight: 800, marginBottom: 8 }}>Choose a reconciliation action</legend>{context.eligibleResolutionTypes.map((option) => <label key={option} style={{ display: "flex", gap: 8 }}><input type="radio" name="occupancy-resolution" checked={type === option} onChange={() => { setType(option); setSelectedLeaseId(""); setMultipleCurrentAcknowledged(false); }} />{LABELS[option]}</label>)}</fieldset> : <p>These records do not have a safe automated resolution. They will remain visible for review.</p>}
           {type === "record_operational_move_out" ? <label>Effective date<input aria-label="Operational move-out effective date" type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} style={{ display: "block", marginTop: 6 }} /></label> : null}
           {type === "link_existing_lease" ? <label>Existing lease<select aria-label="Existing valid lease" value={selectedLeaseId} onChange={(event) => setSelectedLeaseId(event.target.value)} style={{ display: "block", marginTop: 6, maxWidth: "100%" }}><option value="">Select a lease</option>{context.existingLeaseCandidates.map((lease) => <option key={lease.id} value={lease.id}>{lease.label} · {lease.startDate || "Unknown start"} to {lease.endDate || "No end date"}</option>)}</select></label> : null}
+          {type === "resolve_multiple_current_leases" ? <section aria-labelledby="multiple-current-heading" style={{ display: "grid", gap: 12 }}>
+            <div><h3 id="multiple-current-heading" style={{ marginBottom: 6 }}>Multiple current leases found</h3><p style={{ margin: 0 }}>RentChain cannot determine which agreement should represent current occupancy. Review every candidate and explicitly select the occupancy-supporting lease.</p></div>
+            <fieldset style={{ border: 0, padding: 0, display: "grid", gap: 10 }}><legend style={{ fontWeight: 800, marginBottom: 8 }}>Occupancy-supporting lease</legend>{context.existingLeaseCandidates.map((lease, index) => <label key={lease.id} style={{ display: "grid", gap: 5, padding: 12, border: "1px solid #d6c9b8", borderRadius: 10, background: selectedLeaseId === lease.id ? "#f0fdf4" : "#fff" }}><span style={{ display: "flex", gap: 8, fontWeight: 800 }}><input type="radio" name="multiple-current-lease" checked={selectedLeaseId === lease.id} onChange={() => setSelectedLeaseId(lease.id)} />Lease option {index + 1} · {lease.reference}</span><span>{lease.participantNames.join(", ") || "Tenant record"}</span><span>{lease.startDate || "Unknown start"} to {lease.endDate || "No end date"} · {lease.executionStatus || "Execution state unavailable"}</span><span>{lease.activeTenancyCount} active occupancy {lease.activeTenancyCount === 1 ? "record" : "records"}</span></label>)}</fieldset>
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}><input type="checkbox" checked={multipleCurrentAcknowledged} onChange={(event) => setMultipleCurrentAcknowledged(event.target.checked)} />I understand this selection changes RentChain&apos;s occupancy record and does not by itself determine the legal validity or termination of another lease.</label>
+          </section> : null}
           {type ? <div style={{ padding: 12, background: "#f8fafc", borderRadius: 10 }}>Historical lease and relationship records remain preserved. Confirming changes operational occupancy records only and does not determine legal tenancy rights.</div> : null}
           <footer style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}><button type="button" onClick={close} disabled={submitting}>Review later</button>{type ? <button type="button" onClick={submit} disabled={!canSubmit}>{submitting ? "Reconciling…" : "Confirm operational reconciliation"}</button> : null}</footer>
         </> : null}

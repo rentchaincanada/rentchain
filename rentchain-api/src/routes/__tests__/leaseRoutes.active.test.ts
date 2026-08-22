@@ -1993,6 +1993,7 @@ describe("leaseRoutes GET /active", () => {
       { id: "unit-ended", unitNumber: "103", status: "vacant", occupancyStatus: "vacant" },
       { id: "unit-review", unitNumber: "104", status: "occupied", occupancyStatus: "occupied", currentLeaseId: "lease-stale", currentTenantId: "tenant-1" },
       { id: "unit-multiple", unitNumber: "105", status: "occupied", occupancyStatus: "occupied", currentLeaseId: "lease-multiple-a", currentTenantId: "tenant-1" },
+      { id: "unit-resolved", unitNumber: "106", status: "occupied", occupancyStatus: "occupied", currentLeaseId: "lease-resolved-selected", currentTenantId: "tenant-1" },
     ];
     seedDoc("properties", "prop-projection-states", { landlordId: "landlord-1", name: "Projection House", units });
     for (const unit of units) {
@@ -2015,6 +2016,21 @@ describe("leaseRoutes GET /active", () => {
     lease("lease-review", "unit-review", { status: "active", executionStatus: "fully_executed", occupancyEffective: true, startDate: "2026-01-01", endDate: "2026-12-31" });
     lease("lease-multiple-a", "unit-multiple", { status: "active", executionStatus: "fully_executed", occupancyEffective: true, startDate: "2026-01-01", endDate: "2026-12-31" });
     lease("lease-multiple-b", "unit-multiple", { status: "active", executionStatus: "fully_executed", occupancyEffective: true, startDate: "2026-02-01", endDate: "2026-11-30" });
+    lease("lease-resolved-selected", "unit-resolved", { status: "active", executionStatus: "fully_executed", occupancyEffective: true, startDate: "2026-01-01", endDate: "2026-12-31" });
+    lease("lease-resolved-excluded", "unit-resolved", {
+      status: "active",
+      executionStatus: "fully_executed",
+      occupancyEffective: false,
+      startDate: "2026-02-01",
+      endDate: "2026-11-30",
+      occupancyDisposition: {
+        status: "excluded_from_current_occupancy_by_resolution",
+        reason: "multiple_current_resolution",
+        resolutionEventId: "occupancy_resolution:resolved-projection",
+        selectedLeaseId: "lease-resolved-selected",
+        excludedAt: "2026-08-22T12:00:00.000Z",
+      },
+    });
 
     const router = (await import("../leaseRoutes")).default;
     const res = await invokeRouter(router, { method: "GET", url: "/tenant/tenant-1" });
@@ -2032,6 +2048,18 @@ describe("leaseRoutes GET /active", () => {
         reasons: expect.arrayContaining(["MULTIPLE_CURRENT_LEASES"]),
       }));
     }
+    expect((byId.get("lease-resolved-selected") as any)?.canonicalState).toEqual(expect.objectContaining({
+      occupancyState: "occupied",
+      tenantRelationshipState: "current_occupant",
+      supportingLeaseId: "lease-resolved-selected",
+      reasons: [],
+    }));
+    expect(byId.has("lease-resolved-excluded")).toBe(true);
+    expect((byId.get("lease-resolved-excluded") as any)?.canonicalState).toEqual(expect.objectContaining({
+      occupancyState: "occupied",
+      supportingLeaseId: "lease-resolved-selected",
+      reasons: [],
+    }));
   });
 
   it("fails closed when direct lease creation cannot resolve canonical unit context", async () => {

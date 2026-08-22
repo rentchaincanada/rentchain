@@ -20,6 +20,14 @@ export type CanonicalUnitRecord = {
 };
 
 export type CanonicalLeaseRecord = LeaseWorkflowLease & {
+  primaryTenantId?: string | null;
+  tenantIds?: string[];
+  executionStatus?: unknown;
+  leaseExecutionState?: unknown;
+  leaseExecution?: unknown;
+  occupancyEffective?: boolean;
+  occupancyEffectiveAt?: unknown;
+  occupancyDisposition?: unknown;
   sourceMonthlyRent: number;
   hasResolvedUnit: boolean;
   resolvedUnitId: string | null;
@@ -242,6 +250,14 @@ export function toCanonicalLeaseRecord(
   );
   return {
     ...lease,
+    primaryTenantId: asTrimmedString(raw?.primaryTenantId),
+    tenantIds: compactStrings(Array.isArray(raw?.tenantIds) ? raw.tenantIds : []),
+    executionStatus: raw?.executionStatus,
+    leaseExecutionState: raw?.leaseExecutionState,
+    leaseExecution: raw?.leaseExecution,
+    occupancyEffective: raw?.occupancyEffective === true,
+    occupancyEffectiveAt: raw?.occupancyEffectiveAt,
+    occupancyDisposition: raw?.occupancyDisposition,
     sourceMonthlyRent: toNumberSafe(raw?.monthlyRent, raw?.currentRent, raw?.rent, raw?.rentAmount),
     hasResolvedUnit: Boolean(resolution.unit?.id) && !resolution.ambiguous,
     resolvedUnitId: resolution.unit?.id || null,
