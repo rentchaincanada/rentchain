@@ -160,6 +160,21 @@ describe("Preview backend proxy", () => {
     });
   });
 
+  it("couples the authorized PR #1566 service URL and audience internally", () => {
+    const target = resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: PREVIEW_BACKEND_TARGET_KEYS.pr1566,
+    });
+    expect(target).toEqual({
+      key: "pr1566-multiple-current-cert",
+      cloudRunServiceUrl:
+        "https://rentchain-pr1566-qa-multicurrent-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1566-qa-multicurrent-glistw4pya-nn.a.run.app",
+      temporary: true,
+    });
+  });
+
   it.each([
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
@@ -167,6 +182,8 @@ describe("Preview backend proxy", () => {
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1561],
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1565],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1565],
+    ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1566],
+    ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1566],
     ["preview", ""],
     ["preview", "unknown"],
     ["preview", "pr1562"],
@@ -175,6 +192,7 @@ describe("Preview backend proxy", () => {
     ["preview", "https://metadata.google.internal"],
     ["preview", "https://arbitrary.a.run.app"],
     ["preview", "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app"],
+    ["preview", "https://rentchain-pr1566-qa-multicurrent-glistw4pya-nn.a.run.app"],
     ["preview", "rentchain-pr1555-qa-wrong-region"],
     ["preview", "rentchain-pr1555-qa-cross-project"],
   ])("rejects unsafe target selection for %s / %s", (vercelEnvironment, targetKey) => {
@@ -293,6 +311,67 @@ describe("Preview backend proxy", () => {
     );
   });
 
+  it.each([
+    ["mismatched audience", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1566,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1566-qa-multicurrent-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-preview-backend-glistw4pya-nn.a.run.app",
+      temporary: true,
+    }],
+    ["arbitrary Cloud Run host", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1566,
+      cloudRunServiceUrl: "https://arbitrary.a.run.app",
+      cloudRunIdTokenAudience: "https://arbitrary.a.run.app",
+      temporary: true,
+    }],
+    ["Production Cloud Run host", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1566,
+      cloudRunServiceUrl:
+        "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app",
+      temporary: true,
+    }],
+    ["cross-project host", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1566,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1566-qa-multicurrent-other-project.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1566-qa-multicurrent-other-project.a.run.app",
+      temporary: true,
+    }],
+    ["wrong service slot", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1566,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1566-qa-wrongslot-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1566-qa-wrongslot-glistw4pya-nn.a.run.app",
+      temporary: true,
+    }],
+    ["wrong region", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1566,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1566-qa-multicurrent-glistw4pya-uc.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1566-qa-multicurrent-glistw4pya-uc.a.run.app",
+      temporary: true,
+    }],
+    ["temporary flag", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1566,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1566-qa-multicurrent-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1566-qa-multicurrent-glistw4pya-nn.a.run.app",
+      temporary: false,
+    }],
+  ])("rejects a tampered PR #1566 mapping: %s", (_label, target) => {
+    expect(() => assertPreviewBackendTarget(target, "preview")).toThrow(
+      "PREVIEW_PROXY_TARGET_REJECTED",
+    );
+  });
+
   it("routes the authorized target using the same URL for ID-token audience and upstream", async () => {
     process.env.PREVIEW_BACKEND_TARGET = PREVIEW_BACKEND_TARGET_KEYS.pr1555;
     const { requests, dependencies } = successfulDependencies();
@@ -365,6 +444,31 @@ describe("Preview backend proxy", () => {
     );
     expect(requests[2].url).toBe(
       `${expected}/api/leases/tenant/synthetic-tenant`,
+    );
+    expect(requests[2].init?.method).toBe("GET");
+  });
+
+  it("routes the PR #1566 occupancy resolution context only to its exact registered backend", async () => {
+    process.env.PREVIEW_BACKEND_TARGET = PREVIEW_BACKEND_TARGET_KEYS.pr1566;
+    const { requests, dependencies } = successfulDependencies();
+    const res = responseRecorder();
+
+    await handlePreviewBackendProxy(
+      request(
+        "/api/preview-backend/api/occupancy-resolutions/context?propertyId=synthetic-property&unitId=synthetic-unit",
+        "GET",
+      ),
+      res,
+      dependencies,
+    );
+
+    const expected =
+      "https://rentchain-pr1566-qa-multicurrent-glistw4pya-nn.a.run.app";
+    expect(requests[1].init?.body).toBe(
+      JSON.stringify({ audience: expected, includeEmail: false }),
+    );
+    expect(requests[2].url).toBe(
+      `${expected}/api/occupancy-resolutions/context?propertyId=synthetic-property&unitId=synthetic-unit`,
     );
     expect(requests[2].init?.method).toBe("GET");
   });
