@@ -776,6 +776,7 @@ export async function processSigningWebhook(input: { providerId: string; headers
     const leaseSnap = await leaseRef.get();
     const lease = leaseSnap.exists ? leaseSnap.data() as any : null;
     if (lease && String(lease.landlordId || "").trim() === landlordId) {
+      const isLinkedRenewal = Boolean(String(lease.predecessorLeaseId || "").trim());
       await leaseRef.set({
         executionStatus: "fully_executed",
         executionState: "fully_executed",
@@ -785,7 +786,10 @@ export async function processSigningWebhook(input: { providerId: string; headers
       const propertyId = String(lease.propertyId || "").trim();
       const unitId = String(lease.unitId || "").trim();
       const tenantId = String(lease.tenantId || lease.primaryTenantId || lease.tenantIds?.[0] || "").trim();
-      if (propertyId && unitId && tenantId) {
+      // A linked renewal is execution-complete here, never occupancy-effective.
+      // Its explicit renewal activation route owns the atomic handoff at every
+      // date boundary, including on or after the successor start date.
+      if (!isLinkedRenewal && propertyId && unitId && tenantId) {
         try {
           const completion = await startSigningCompletionOccupancy({
             providerId: provider.getProviderId(), providerEventId: eventIdentity, occurredAt,

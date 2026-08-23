@@ -17,6 +17,13 @@ export function leaseStartHash(value: unknown): string {
   return crypto.createHash("sha256").update(stable(value)).digest("hex");
 }
 
+export function buildLeaseStartExpectedStateMaterialToken(
+  version: string,
+  material: Record<string, unknown>
+): string {
+  return leaseStartHash({ version, ...material });
+}
+
 function leaseMaterial(lease: CanonicalLeaseStartInput["candidateLease"]) {
   return {
     id: lease.id,
@@ -59,8 +66,7 @@ export function buildLeaseStartExpectedStateToken(
   decision: CanonicalLeaseStartResult,
   versionMarkers: { propertyUpdatedAt?: unknown } = {}
 ): string {
-  return leaseStartHash({
-    version: "lease_start_expected_state_v1",
+  return buildLeaseStartExpectedStateMaterialToken("lease_start_expected_state_v1", {
     landlordId: input.landlordId,
     propertyId: input.propertyId,
     unitId: input.unitId,

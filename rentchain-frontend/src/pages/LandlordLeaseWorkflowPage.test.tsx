@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   createLandlordDecisionQueueItem: vi.fn(),
   updateLandlordDecisionQueueItem: vi.fn(),
   fetchReviewTimeline: vi.fn(),
+  getRenewalContinuityContext: vi.fn(),
+  activateRenewalContinuity: vi.fn(),
 }));
 
 const scrollIntoViewMock = vi.fn();
@@ -38,6 +40,11 @@ vi.mock("@/api/landlordDecisionQueueApi", () => ({
 vi.mock("@/api/reviewTimelineApi", () => ({
   fetchReviewTimeline: mocks.fetchReviewTimeline,
   reviewTimelinePath: ({ scope, scopeId }: { scope: string; scopeId: string }) => `/review-timeline?scope=${scope}&scopeId=${scopeId}`,
+}));
+
+vi.mock("@/api/renewalContinuityApi", () => ({
+  getRenewalContinuityContext: mocks.getRenewalContinuityContext,
+  activateRenewalContinuity: mocks.activateRenewalContinuity,
 }));
 
 function renderWorkflow(path: string) {
@@ -147,6 +154,9 @@ describe("LandlordLeaseWorkflowPage", () => {
     mocks.createLandlordDecisionQueueItem.mockReset();
     mocks.updateLandlordDecisionQueueItem.mockReset();
     mocks.fetchReviewTimeline.mockReset();
+    mocks.getRenewalContinuityContext.mockReset();
+    mocks.activateRenewalContinuity.mockReset();
+    mocks.getRenewalContinuityContext.mockRejectedValue(new Error("renewal_context_ambiguous"));
     mocks.getLeaseById.mockResolvedValue({
       lease: {
         id: "lease-1",
@@ -1473,6 +1483,86 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(document.body).not.toHaveTextContent(/must respond by|notice has been served|legally valid|automatically compliant/i);
     expect(document.body).not.toHaveTextContent(/evidence saved|notice has been served|email sent/i);
     expect(document.body).not.toHaveTextContent("/portfolio-health?entry=lease-renewals&propertyId=prop-1");
+  });
+
+  it("presents an upcoming fully executed renewal without an early activation action", async () => {
+    mocks.getRenewalContinuityContext.mockResolvedValueOnce({
+      ok: true,
+      context: {
+        expectedStateToken: "state-upcoming",
+        evaluationInstant: "2026-12-15T12:00:00.000Z",
+        predecessorLeaseId: "lease-old",
+        successorLeaseId: "lease-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        participantIds: ["tenant-1"],
+        predecessorCanonicalState: "past",
+        successorCanonicalState: "upcoming",
+        termContinuity: true,
+        executionReady: true,
+        handoffEligible: false,
+        blockingReasons: ["RENEWAL_TOO_EARLY"],
+      },
+    });
+    renderWorkflow("/leases/lease-1/workflows/renewal");
+    const card = await screen.findByLabelText("Renewal continuity");
+    expect(card).toHaveTextContent("Upcoming renewal");
+    expect(card).toHaveTextContent("Fully executed");
+    expect(within(card).queryByRole("button", { name: "Activate renewal" })).not.toBeInTheDocument();
+  });
+
+  it("activates only a server-eligible renewal with expected state and one idempotency key", async () => {
+    const eligibleContext = {
+      expectedStateToken: "state-eligible",
+      evaluationInstant: "2027-01-01T12:00:00.000Z",
+      predecessorLeaseId: "lease-old",
+      successorLeaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      participantIds: ["tenant-1"],
+      predecessorCanonicalState: "past" as const,
+      successorCanonicalState: "active" as const,
+      termContinuity: true,
+      executionReady: true,
+      handoffEligible: true,
+      blockingReasons: [],
+    };
+    mocks.getRenewalContinuityContext.mockResolvedValue({ ok: true, context: eligibleContext });
+    mocks.activateRenewalContinuity.mockResolvedValue({ ok: true, result: { outcome: "renewal_handoff_completed" } });
+    renderWorkflow("/leases/lease-1/workflows/renewal");
+    fireEvent.click(await screen.findByRole("button", { name: "Activate renewal" }));
+    await waitFor(() => expect(mocks.activateRenewalContinuity).toHaveBeenCalledTimes(1));
+    expect(mocks.activateRenewalContinuity).toHaveBeenCalledWith(
+      "lease-1",
+      { expectedStateToken: "state-eligible", evaluationInstant: "2027-01-01T12:00:00.000Z" },
+      expect.stringMatching(/^renewal-/)
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent("Occupancy remained continuous");
+  });
+
+  it("renders blocked ambiguous renewal guidance without selecting a successor", async () => {
+    mocks.getRenewalContinuityContext.mockResolvedValueOnce({
+      ok: true,
+      context: {
+        expectedStateToken: "state-blocked",
+        evaluationInstant: "2027-01-01T12:00:00.000Z",
+        predecessorLeaseId: "lease-old",
+        successorLeaseId: "lease-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        participantIds: ["tenant-1"],
+        predecessorCanonicalState: "past",
+        successorCanonicalState: "active",
+        termContinuity: true,
+        executionReady: true,
+        handoffEligible: false,
+        blockingReasons: ["MULTIPLE_RENEWAL_SUCCESSORS"],
+      },
+    });
+    renderWorkflow("/leases/lease-1/workflows/renewal");
+    const card = await screen.findByLabelText("Renewal continuity");
+    expect(card).toHaveTextContent("Multiple successor renewals require review.");
+    expect(within(card).queryByRole("button", { name: "Activate renewal" })).not.toBeInTheDocument();
   });
 
   it("uses workflow-local renewal status instead of stale no-follow-up lifecycle copy", async () => {

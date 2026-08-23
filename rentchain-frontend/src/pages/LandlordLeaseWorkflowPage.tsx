@@ -33,6 +33,12 @@ import {
 } from "@/api/landlordDecisionQueueApi";
 import { fetchReviewTimeline, reviewTimelinePath, type ReviewTimelineEntry } from "@/api/reviewTimelineApi";
 import { evidencePackPath } from "@/api/evidencePackApi";
+import {
+  activateRenewalContinuity,
+  getRenewalContinuityContext,
+  type RenewalContinuityContext,
+  type RenewalContinuityReason,
+} from "@/api/renewalContinuityApi";
 
 type WorkflowKey = "execution" | "rent-increase" | "notice" | "deposit" | "renewal" | "move-out";
 
@@ -696,6 +702,108 @@ function RenewalOperatorInputsWorkspace({ lease }: { lease: LandlordActiveLease 
         </>
       ) : null}
     </>
+  );
+}
+
+const renewalReasonLabels: Record<RenewalContinuityReason, string> = {
+  RENEWAL_LINK_MISSING: "The predecessor/successor renewal link is incomplete.",
+  RENEWAL_LINK_CONFLICT: "Renewal links conflict and require review.",
+  RENEWAL_CONTEXT_MISMATCH: "The renewal does not match the predecessor property and unit.",
+  RENEWAL_TERM_NOT_CONTIGUOUS: "The renewal term is not contiguous with the predecessor term.",
+  RENEWAL_TOO_EARLY: "This renewal is fully prepared but is not effective yet.",
+  RENEWAL_EXECUTION_INCOMPLETE: "All required signing evidence must be complete before handoff.",
+  RENEWAL_PARTICIPANTS_MISMATCH: "Participant changes require a separate review workflow.",
+  RENEWAL_PREDECESSOR_NOT_CURRENT: "The predecessor is not the current projected lease context.",
+  RENEWAL_SUCCESSOR_INELIGIBLE: "The successor lease is not currently eligible.",
+  RENEWAL_SUCCESSOR_SUPERSEDED: "This successor has already been superseded.",
+  MULTIPLE_RENEWAL_SUCCESSORS: "Multiple successor renewals require review.",
+  MULTIPLE_CURRENT_LEASES: "Multiple current leases must be resolved first.",
+  RENEWAL_PROJECTION_MISMATCH: "Occupancy projections changed and must be reviewed.",
+};
+
+function createRenewalIdempotencyKey() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return `renewal-${crypto.randomUUID()}`;
+  return `renewal-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function RenewalContinuityCard({ leaseId, onCompleted }: { leaseId: string; onCompleted: () => Promise<void> }) {
+  const [context, setContext] = React.useState<RenewalContinuityContext | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [activating, setActivating] = React.useState(false);
+  const [message, setMessage] = React.useState<string | null>(null);
+  const idempotencyKey = React.useRef(createRenewalIdempotencyKey());
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await getRenewalContinuityContext(leaseId);
+      setContext(response.context);
+      setMessage(null);
+    } catch (error) {
+      const detail = errorMessage(error, "Renewal handoff context is unavailable.");
+      if (detail.includes("renewal_context_ambiguous")) setContext(null);
+      else setMessage(detail);
+    } finally {
+      setLoading(false);
+    }
+  }, [leaseId]);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function activate() {
+    if (!context?.handoffEligible) return;
+    setActivating(true);
+    setMessage(null);
+    try {
+      await activateRenewalContinuity(leaseId, {
+        expectedStateToken: context.expectedStateToken,
+        evaluationInstant: context.evaluationInstant,
+      }, idempotencyKey.current);
+      await onCompleted();
+      await load();
+      setMessage("Renewal handoff completed. Occupancy remained continuous.");
+    } catch (error) {
+      setMessage(errorMessage(error, "Renewal handoff failed safely. Refresh the context before retrying."));
+    } finally {
+      setActivating(false);
+    }
+  }
+
+  if (loading) return <div style={{ color: workflowTheme.muted }}>Loading renewal handoff context…</div>;
+  if (!context && !message) return null;
+  return (
+    <div style={sourceContextStyle} aria-label="Renewal continuity">
+      <div style={sourceContextTitleStyle}>Renewal continuity</div>
+      {context ? (
+        <>
+          <div style={{ color: workflowTheme.muted, lineHeight: 1.55 }}>
+            {context.handoffEligible
+              ? "This fully executed renewal is effective and ready for an atomic occupancy handoff."
+              : context.successorCanonicalState === "upcoming"
+                ? "Upcoming renewal — the predecessor remains current until this renewal is effective."
+                : "Renewal handoff is blocked until the server-authoritative issues below are resolved."}
+          </div>
+          <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, margin: "12px 0 0" }}>
+            <ReviewFact label="Term continuity" value={context.termContinuity ? "Contiguous" : "Review needed"} />
+            <ReviewFact label="Execution" value={context.executionReady ? "Fully executed" : "Incomplete"} />
+            <ReviewFact label="Occupancy status" value={context.handoffEligible ? "Ready for handoff" : "No pointer changes"} />
+          </dl>
+          {context.blockingReasons.length > 0 ? (
+            <ul style={{ margin: "12px 0 0", paddingLeft: 20, color: workflowTheme.muted }}>
+              {context.blockingReasons.map((reason) => <li key={reason}>{renewalReasonLabels[reason]}</li>)}
+            </ul>
+          ) : null}
+          {context.handoffEligible ? (
+            <button type="button" style={{ ...primaryButtonStyle, marginTop: 14 }} disabled={activating} onClick={() => void activate()}>
+              {activating ? "Activating renewal…" : "Activate renewal"}
+            </button>
+          ) : null}
+        </>
+      ) : null}
+      {message ? <div role="status" style={{ marginTop: 12, color: message.includes("completed") ? workflowTheme.pine : "#b91c1c" }}>{message}</div> : null}
+    </div>
   );
 }
 
@@ -1943,6 +2051,13 @@ export default function LandlordLeaseWorkflowPage() {
                 Review and save unit-specific renewal inputs such as proposed rent, term dates, and tenant response target date
                 before preparing tenant-facing notices.
               </div>
+              <RenewalContinuityCard
+                leaseId={lease.id}
+                onCompleted={async () => {
+                  const response = await getLeaseById(lease.id);
+                  setLease(response.lease || null);
+                }}
+              />
               <RenewalOperatorInputsWorkspace lease={lease} />
             </section>
           ) : null}

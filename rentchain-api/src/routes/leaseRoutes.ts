@@ -81,6 +81,11 @@ import { readMutationIdempotencyKey } from "../lib/http/mutationIdempotency";
 import { createCanonicalLease } from "../services/leaseStart/leaseCreationService";
 import { leaseStartDeterministicId } from "../services/leaseStart/leaseStartExpectedState";
 import { getCanonicalLeaseStartContext, LeaseStartServiceError, startCanonicalLeaseOccupancy } from "../services/leaseStart/leaseStartService";
+import {
+  getRenewalContinuityContext,
+  handoffRenewalContinuity,
+  RenewalContinuityServiceError,
+} from "../services/leaseStart/renewalContinuityService";
 import { evaluateJurisdictionPolicy } from "../lib/jurisdiction/operationalPolicyEvaluator";
 import { formatInternalReference, slugifyOperationalReference } from "../lib/identityReferences";
 import { computeLeaseState } from "../services/stateMachines/stateComputation";
@@ -122,6 +127,18 @@ function leaseStartErrorResponse(error: unknown, res: Response) {
   if (!(error instanceof LeaseStartServiceError)) return false;
   const status = error.code === "lease_start_state_stale" || error.code === "lease_start_idempotency_key_reused" || error.code === "lease_start_context_ambiguous" ? 409 : 500;
   res.status(status).json({ ok: false, error: error.code, freshContext: error.freshContext || undefined });
+  return true;
+}
+
+function renewalContinuityErrorResponse(error: unknown, res: Response) {
+  if (!(error instanceof RenewalContinuityServiceError)) return false;
+  const status = error.code === "renewal_context_ambiguous" ? 404 : error.code === "renewal_postcondition_failed" ? 500 : 409;
+  res.status(status).json({
+    ok: false,
+    error: error.code,
+    reasons: error.reasons,
+    freshContext: error.freshContext || undefined,
+  });
   return true;
 }
 
@@ -2872,6 +2889,52 @@ router.get("/snapshots/:id", requireLandlord, async (req: any, res: Response) =>
   }
 });
 
+router.get("/renewals/:successorLeaseId/context", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const evaluationInstant = new Date().toISOString();
+    const context = await getRenewalContinuityContext({
+      landlordId,
+      successorLeaseId: String(req.params?.successorLeaseId || "").trim(),
+      evaluationInstant,
+    });
+    return res.json({ ok: true, context });
+  } catch (error) {
+    if (renewalContinuityErrorResponse(error, res)) return;
+    console.error("[GET /api/leases/renewals/:successorLeaseId/context] error", error);
+    return res.status(500).json({ ok: false, error: "renewal_context_failed" });
+  }
+});
+
+router.post("/renewals/:successorLeaseId/activate", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const idempotencyKey = mutationIdempotencyKeyOrReject(req, res);
+    if (!idempotencyKey) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const expectedStateToken = String(req.body?.expectedStateToken || "").trim();
+    const evaluationInstant = String(req.body?.evaluationInstant || "").trim();
+    if (!expectedStateToken || !evaluationInstant) {
+      return res.status(400).json({ ok: false, error: "renewal_expected_state_required" });
+    }
+    const result = await handoffRenewalContinuity({
+      landlordId,
+      successorLeaseId: String(req.params?.successorLeaseId || "").trim(),
+      expectedStateToken,
+      evaluationInstant,
+      idempotencyKey,
+      actorId: String(req.user?.id || req.user?.email || landlordId).trim() || landlordId,
+      source: "lease_renewal_route",
+    });
+    return res.json({ ok: true, result });
+  } catch (error) {
+    if (renewalContinuityErrorResponse(error, res)) return;
+    console.error("[POST /api/leases/renewals/:successorLeaseId/activate] error", error);
+    return res.status(500).json({ ok: false, error: "renewal_handoff_failed" });
+  }
+});
+
 router.post("/:id/automation/tasks/regenerate", requireLandlord, async (req: any, res: Response) => {
   const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
   const leaseResult = await getLeaseEntityForLandlord(String(req.params?.id || "").trim(), landlordId);
@@ -3712,6 +3775,9 @@ router.post("/", requireLandlord, async (req: Request, res: Response) => {
         endDate: body.endDate ?? null,
         automationEnabled: body.automationEnabled ?? true,
         renewalStatus: body.renewalStatus ?? "unknown",
+        ...(String((body as any)?.predecessorLeaseId || "").trim()
+          ? { predecessorLeaseId: String((body as any).predecessorLeaseId).trim() }
+          : {}),
         status: String((body as any)?.status || (executionStatus === "fully_executed" ? "active" : "draft")).trim(),
         executionStatus: executionStatus || "draft",
         executionState: executionStatus || "draft",
@@ -3735,6 +3801,9 @@ router.post("/", requireLandlord, async (req: Request, res: Response) => {
       evaluationInstant,
       actorId,
       source: "lease_create_route",
+      renewalLink: String((body as any)?.predecessorLeaseId || "").trim()
+        ? { predecessorLeaseId: String((body as any).predecessorLeaseId).trim() }
+        : null,
     });
     if (result.canonicalOutcome === "rejected") {
       return canonicalLeaseStartRejection(res, result);
