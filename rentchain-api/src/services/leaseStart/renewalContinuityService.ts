@@ -6,7 +6,7 @@ import {
   type RenewalContinuityEvaluation,
   type RenewalContinuityLease,
 } from "../../lib/leases/renewalContinuity";
-import { leaseStartDeterministicId, leaseStartHash } from "./leaseStartExpectedState";
+import { buildLeaseStartExpectedStateMaterialToken, leaseStartDeterministicId, leaseStartHash } from "./leaseStartExpectedState";
 import {
   assertLeaseStartExpectedState,
   persistLeaseStartAtomicResult,
@@ -112,8 +112,7 @@ function contextToken(records: any, evaluation: RenewalContinuityEvaluation, eva
     moveOutAt: tenancy.moveOutAt ?? null,
     updatedAt: tenancy.updatedAt ?? null,
   })).sort((left: any, right: any) => left.id.localeCompare(right.id));
-  return leaseStartHash({
-    version: "renewal_continuity_expected_state_v1",
+  return buildLeaseStartExpectedStateMaterialToken("renewal_continuity_expected_state_v1", {
     evaluationInstant,
     evaluation,
     predecessor: records.predecessor,
