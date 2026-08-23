@@ -43,6 +43,7 @@ const stickyWorkspaceIds = new Set([
   "properties",
   "tenants",
   "leases",
+  "review-needed",
   "payments",
   "scheduling",
   "unified-inbox",

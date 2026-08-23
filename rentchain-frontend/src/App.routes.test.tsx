@@ -179,6 +179,10 @@ vi.mock("./pages/DecisionInboxPage", () => ({
   default: () => <h1>Decision Inbox Page</h1>,
 }));
 
+vi.mock("./pages/ReviewNeededPage", () => ({
+  default: () => <h1>Review Needed Workspace</h1>,
+}));
+
 vi.mock("./pages/AgentSupervisionPage", () => ({
   default: () => <h1>Agent Supervision Page</h1>,
 }));
@@ -384,6 +388,20 @@ describe("Routes: /decision-inbox", () => {
     );
 
     expect(await screen.findByText(/Decision Inbox Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /review-needed", () => {
+  it("renders the landlord review-needed workspace", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/review-needed"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: "Review Needed Workspace" })).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

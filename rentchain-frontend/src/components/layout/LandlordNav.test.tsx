@@ -126,6 +126,7 @@ describe("LandlordNav mobile drawer", () => {
     expect(within(workspaceNav).getByRole("link", { name: "Properties" })).toHaveAttribute("href", "/properties");
     expect(within(workspaceNav).getByRole("link", { name: "Tenants" })).toHaveAttribute("href", "/tenants");
     expect(within(workspaceNav).getByRole("link", { name: "Leases" })).toHaveAttribute("href", "/leases");
+    expect(within(workspaceNav).getByRole("link", { name: "Review Needed" })).toHaveAttribute("href", "/review-needed");
     expect(within(workspaceNav).getByRole("link", { name: "Payments" })).toHaveClass("active");
     expect(within(workspaceNav).queryByRole("group", { name: "Communications" })).not.toBeInTheDocument();
     expect(within(workspaceNav).queryByRole("link", { name: "Unified Inbox" })).not.toBeInTheDocument();

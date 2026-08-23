@@ -185,6 +185,7 @@ const PropertyNoticesPage = lazy(() => import("./pages/PropertyNoticesPage"));
 const MaintenanceRequestsPage = lazy(() => import("./pages/MaintenanceRequestsPage"));
 const LeaseLedgerPage = lazy(() => import("./pages/LeaseLedgerPage"));
 const LandlordActiveLeasesPage = lazy(() => import("./pages/LandlordActiveLeasesPage"));
+const ReviewNeededPage = lazy(() => import("./pages/ReviewNeededPage"));
 const LandlordLeaseSummaryPage = lazy(() => import("./pages/LandlordLeaseSummaryPage"));
 const LandlordLeaseWorkflowPage = lazy(() => import("./pages/LandlordLeaseWorkflowPage"));
 const ApplicationReviewSummaryPage = lazy(() => import("./pages/ApplicationReviewSummaryPage"));
@@ -1733,6 +1734,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <LandlordActiveLeasesPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/review-needed"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <ReviewNeededPage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>

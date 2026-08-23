@@ -116,6 +116,16 @@ export const NAV_ITEMS: NavItem[] = [
     requiresLandlordOrAdmin: true,
   },
   {
+    id: "review-needed",
+    label: "Review Needed",
+    to: "/review-needed",
+    icon: ClipboardList,
+    showInDrawer: true,
+    showInTabs: false,
+    requiresLandlordOrAdmin: true,
+    requiresFeature: "leases",
+  },
+  {
     id: "unified-inbox",
     label: "Unified Inbox",
     to: "/landlord/unified-inbox",
