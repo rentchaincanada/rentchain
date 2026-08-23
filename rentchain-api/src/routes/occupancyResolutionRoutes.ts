@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { requireCapability } from "../services/capabilityGuard";
+import { readMutationIdempotencyKey } from "../lib/http/mutationIdempotency";
 import {
   getOccupancyResolutionContext,
   OccupancyResolutionError,
@@ -13,6 +14,7 @@ const TYPES = new Set<OccupancyResolutionType>([
   "record_operational_move_out",
   "clear_stale_occupancy_record",
   "link_existing_lease",
+  "resolve_multiple_current_leases",
 ]);
 
 function landlordId(req: any): string {
@@ -57,8 +59,9 @@ router.post("/", requireLandlord, async (req: any, res) => {
     const propertyId = String(req.body?.propertyId || "").trim();
     const unitId = String(req.body?.unitId || "").trim();
     const expectedStateToken = String(req.body?.expectedStateToken || "").trim();
-    const idempotencyKey = String(req.body?.idempotencyKey || "").trim();
-    if (!propertyId || !unitId || !expectedStateToken || !idempotencyKey) {
+    const idempotency = readMutationIdempotencyKey(req);
+    if (!idempotency.ok) return res.status(400).json({ ok: false, error: idempotency.error });
+    if (!propertyId || !unitId || !expectedStateToken) {
       return res.status(400).json({ ok: false, error: "resolution_context_required" });
     }
     const result = await resolveOccupancy({
@@ -69,7 +72,7 @@ router.post("/", requireLandlord, async (req: any, res) => {
       tenantId: String(req.body?.tenantId || "").trim() || null,
       type,
       expectedStateToken,
-      idempotencyKey,
+      idempotencyKey: idempotency.key,
       confirmation: req.body?.confirmation === true,
       effectiveDate: String(req.body?.effectiveDate || "").trim() || null,
       selectedLeaseId: String(req.body?.selectedLeaseId || "").trim() || null,

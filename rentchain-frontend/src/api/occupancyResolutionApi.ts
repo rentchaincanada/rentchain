@@ -4,7 +4,8 @@ import type { CanonicalLeaseOccupancyState } from "@/lib/leases/canonicalStatePr
 export type OccupancyResolutionType =
   | "record_operational_move_out"
   | "clear_stale_occupancy_record"
-  | "link_existing_lease";
+  | "link_existing_lease"
+  | "resolve_multiple_current_leases";
 
 export type OccupancyResolutionContext = {
   propertyId: string;
@@ -15,7 +16,7 @@ export type OccupancyResolutionContext = {
   canonicalState: CanonicalLeaseOccupancyState;
   expectedStateToken: string;
   eligibleResolutionTypes: OccupancyResolutionType[];
-  existingLeaseCandidates: Array<{ id: string; label: string; tenantId: string | null; startDate: string | null; endDate: string | null }>;
+  existingLeaseCandidates: Array<{ id: string; label: string; tenantId: string | null; startDate: string | null; endDate: string | null; executionStatus: string | null; participantNames: string[]; participantCount: number; reference: string; occupancyEffective: boolean; activeTenancyCount: number }>;
   activeLeaseRequiresEndWorkflow: boolean;
 };
 
@@ -34,14 +35,13 @@ export async function submitOccupancyResolution(input: {
 }) {
   return apiJson<{ ok: true; context: OccupancyResolutionContext; auditEventId: string; idempotent: boolean }>("/occupancy-resolutions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": input.idempotencyKey },
     body: JSON.stringify({
       propertyId: input.context.propertyId,
       unitId: input.context.unitId,
       tenantId: input.context.tenantId,
       expectedStateToken: input.context.expectedStateToken,
       type: input.type,
-      idempotencyKey: input.idempotencyKey,
       confirmation: true,
       effectiveDate: input.effectiveDate || null,
       selectedLeaseId: input.selectedLeaseId || null,

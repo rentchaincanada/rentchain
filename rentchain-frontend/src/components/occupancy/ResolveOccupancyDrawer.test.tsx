@@ -57,6 +57,38 @@ describe("ResolveOccupancyDrawer", () => {
     expect(screen.getByRole("button", { name: "Confirm operational reconciliation" })).toBeEnabled();
   });
 
+  it("shows every conflicting lease with no default and requires explicit selection plus acknowledgement", async () => {
+    getContext.mockResolvedValueOnce({
+      ok: true,
+      context: {
+        ...context,
+        tenantId: null,
+        canonicalState: { ...context.canonicalState, leaseTermState: "active", reasons: ["MULTIPLE_CURRENT_LEASES"] },
+        eligibleResolutionTypes: ["resolve_multiple_current_leases"],
+        existingLeaseCandidates: [
+          { id: "lease-a", reference: "Lease A1B2C3D4", label: "Harbour House · Unit 1A", tenantId: "tenant-1", participantNames: ["Tenant One"], participantCount: 1, startDate: "2026-01-01", endDate: "2027-01-01", executionStatus: "fully_executed", occupancyEffective: true, activeTenancyCount: 1 },
+          { id: "lease-b", reference: "Lease E5F6A7B8", label: "Harbour House · Unit 1A", tenantId: "tenant-2", participantNames: ["Tenant Two"], participantCount: 1, startDate: "2026-02-01", endDate: "2027-02-01", executionStatus: "fully_executed", occupancyEffective: true, activeTenancyCount: 1 },
+        ],
+      },
+    });
+    render(<ResolveOccupancyDrawer open propertyId="property-1" unitId="unit-1" onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByLabelText("Select the lease that supports current occupancy"));
+    expect(screen.getAllByRole("radio", { name: /Lease option/ })).toHaveLength(2);
+    expect(screen.getByRole("radio", { name: /Lease option 1/ })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: /Lease option 2/ })).not.toBeChecked();
+    expect(screen.getByText("Tenant One")).toBeInTheDocument();
+    expect(screen.getByText("Tenant Two")).toBeInTheDocument();
+    const confirm = screen.getByRole("button", { name: "Confirm operational reconciliation" });
+    expect(confirm).toBeDisabled();
+    fireEvent.click(screen.getByRole("radio", { name: /Lease option 2/ }));
+    expect(confirm).toBeDisabled();
+    fireEvent.click(screen.getByLabelText(/does not by itself determine the legal validity or termination/i));
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ type: "resolve_multiple_current_leases", selectedLeaseId: "lease-b" })));
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the workflow open and refreshes context after a stale-state response", async () => {
     submit.mockRejectedValue(Object.assign(new Error("stale"), { body: { error: "occupancy_state_stale", freshContext: { ...context, expectedStateToken: "token-2" } } }));
     render(<ResolveOccupancyDrawer open propertyId="property-1" unitId="unit-1" tenantId="tenant-1" onClose={vi.fn()} />);
