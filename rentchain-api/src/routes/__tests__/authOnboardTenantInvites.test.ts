@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { occupancySyncMock } = vi.hoisted(() => ({
+  occupancySyncMock: vi.fn(async () => ({ updated: false, reason: "missing_context" })),
+}));
+
 const collections = new Map<string, Map<string, any>>();
 
 function ensureCollection(name: string) {
@@ -72,6 +76,10 @@ vi.mock("../../services/tenantPortal/tenantEventLogService", () => ({
   recordTenantEvent: vi.fn(async () => ({ id: "event-1" })),
 }));
 
+vi.mock("../../services/tenantPortal/tenantOccupancySyncService", () => ({
+  syncPropertyUnitOccupancyForTenantContext: occupancySyncMock,
+}));
+
 async function invokeRouter(router: any, options: { method: string; url: string; body?: any }) {
   return await new Promise<{ status: number; body: any }>((resolve, reject) => {
     const [pathWithQuery, queryRaw = ""] = options.url.split("?");
@@ -119,6 +127,7 @@ async function invokeRouter(router: any, options: { method: string; url: string;
 describe("auth onboard tenant invites", () => {
   beforeEach(() => {
     collections.clear();
+    occupancySyncMock.mockClear();
     process.env.JWT_SECRET = "test-secret";
   });
 
@@ -327,7 +336,7 @@ describe("auth onboard tenant invites", () => {
     });
   });
 
-  it("syncs property and unit occupancy from an active lease after invite acceptance", async () => {
+  it("delegates an eligible-looking lease to the canonical occupancy adapter after invite acceptance", async () => {
     ensureCollection("rentalApplications").set("app-with-lease", {
       id: "app-with-lease",
       landlordId: "landlord-1",
@@ -379,20 +388,17 @@ describe("auth onboard tenant invites", () => {
     });
 
     expect(acceptRes.status).toBe(200);
-    expect(ensureCollection("units").get("unit-doc-1")).toMatchObject({
-      status: "occupied",
-      occupancyStatus: "occupied",
+    expect(occupancySyncMock).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: "converted-tenant-1",
       leaseId: "lease-1",
-      occupancySource: "canonical_lease",
-    });
-    expect(ensureCollection("properties").get("property-1").units[0]).toMatchObject({
-      status: "occupied",
-      occupancyStatus: "occupied",
-      tenantId: "converted-tenant-1",
-      leaseId: "lease-1",
-      occupancySource: "canonical_lease",
-    });
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      source: "tenant_invite_onboarding",
+    }));
+    expect(ensureCollection("units").get("unit-doc-1")).toMatchObject({ status: "vacant", occupancyStatus: "vacant" });
+    expect(ensureCollection("properties").get("property-1").units[0]).toMatchObject({ status: "vacant", occupancyStatus: "vacant" });
+    expect(ensureCollection("tenants").get("converted-tenant-1")).not.toHaveProperty("currentLeaseId");
   });
 
   it("reports replaced tenancy_invites tokens as expired instead of not found", async () => {

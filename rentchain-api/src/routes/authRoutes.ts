@@ -251,6 +251,7 @@ async function normalizeTenantInviteIdentity(input: {
         asOnboardString(input.application?.data?.leaseStartDate) ||
         asOnboardString(input.application?.data?.moveInDate) ||
         null,
+      status: "inactive",
     });
   }
 
@@ -266,7 +267,6 @@ async function normalizeTenantInviteIdentity(input: {
       unitId,
       unit: unitId,
       leaseId,
-      currentLeaseId: leaseId || null,
       applicationId,
       applicantUserId: input.uid,
       source: "invite",
@@ -283,6 +283,9 @@ async function normalizeTenantInviteIdentity(input: {
       landlordId,
       propertyId,
       unitId,
+      actorId: input.uid,
+      idempotencyKey: asOnboardString(input.invite?.id) || applicationId,
+      source: "tenant_invite_onboarding",
     });
   } catch (error) {
     console.warn("[auth.onboard.tenant_occupancy_sync_failed]", {

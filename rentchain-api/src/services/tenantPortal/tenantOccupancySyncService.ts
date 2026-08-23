@@ -1,4 +1,9 @@
 import { db } from "../../firebase";
+import {
+  getCanonicalLeaseStartContext,
+  startCanonicalLeaseOccupancy,
+  type LeaseStartServiceResult,
+} from "../leaseStart/leaseStartService";
 
 type OccupancySyncInput = {
   tenantId: string;
@@ -7,173 +12,109 @@ type OccupancySyncInput = {
   landlordId?: string | null;
   propertyId?: string | null;
   unitId?: string | null;
+  actorId?: string | null;
+  idempotencyKey?: string | null;
+  source: "application_conversion" | "tenant_invite_onboarding";
+  firestore?: any;
+  evaluationInstant?: string;
 };
 
-type OccupancySyncResult = {
+export type OccupancySyncResult = {
   updated: boolean;
   reason:
     | "missing_context"
     | "lease_not_found"
-    | "lease_not_occupying"
-    | "unit_not_found"
-    | "occupied";
+    | "renewal_handoff_required"
+    | "occupancy_excluded"
+    | "created_without_occupancy"
+    | "rejected"
+    | "occupancy_effective"
+    | "already_coherent";
+  canonicalResult?: LeaseStartServiceResult;
 };
 
-const OCCUPYING_LEASE_STATUSES = new Set([
-  "active",
-  "current",
-  "signed",
-  "executed",
-  "notice_pending",
-  "renewal_pending",
-  "renewal_accepted",
-  "move_out_pending",
-]);
-
-const NON_OCCUPYING_LEASE_STATUSES = new Set([
-  "draft",
-  "pending",
-  "sent",
-  "expired",
-  "ended",
-  "terminated",
-  "cancelled",
-  "canceled",
-  "revoked",
-  "archived",
-]);
-
-function asString(value: unknown): string | null {
-  const next = String(value || "").trim();
-  return next || null;
+function text(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
-function normalizeUnitToken(value: unknown): string {
-  return String(value || "").trim().toUpperCase().replace(/[\s_-]+/g, "");
+function isRenewalLease(lease: Record<string, unknown>): boolean {
+  return [
+    lease.predecessorLeaseId,
+    lease.renewalOfLeaseId,
+    lease.renewedFromLeaseId,
+    lease.replacesLeaseId,
+  ].some((value) => Boolean(text(value)));
 }
 
-function unitMatches(unit: any, unitId: string): boolean {
-  const targetRaw = String(unitId || "").trim();
-  const targetToken = normalizeUnitToken(targetRaw);
-  if (!targetRaw && !targetToken) return false;
-  const candidates = [
-    unit?.id,
-    unit?.unitId,
-    unit?.unitNumber,
-    unit?.unit,
-    unit?.label,
-    unit?.name,
-    unit?.displayLabel,
-  ];
-  return candidates.some((candidate) => {
-    const raw = String(candidate || "").trim();
-    return raw === targetRaw || normalizeUnitToken(raw) === targetToken;
-  });
+function isOccupancyExcluded(lease: Record<string, any>): boolean {
+  return text(lease.occupancyDisposition?.status) === "excluded_from_current_occupancy_by_resolution";
 }
 
-function isOccupyingLease(lease: any): boolean {
-  const status = String(lease?.status || lease?.lifecycleStatus || "").trim().toLowerCase();
-  if (NON_OCCUPYING_LEASE_STATUSES.has(status)) return false;
-  if (OCCUPYING_LEASE_STATUSES.has(status)) return true;
-  return Boolean(lease?.activatedAt || lease?.signedAt || lease?.fullySignedAt || lease?.executedAt);
-}
-
-async function findUnitDoc(propertyId: string, landlordId: string | null, unitId: string) {
-  const snap = await db.collection("units").where("propertyId", "==", propertyId).get();
-  const matches = snap.docs
-    .map((doc: any) => ({ id: doc.id, data: doc.data() || {} }))
-    .filter(({ id, data }: any) => {
-      if (landlordId && asString(data?.landlordId) && asString(data?.landlordId) !== landlordId) return false;
-      return unitMatches({ ...data, id: data?.id || data?.unitId || id }, unitId);
-    });
-  if (matches.length !== 1) return null;
-  return matches[0];
-}
-
-async function updateEmbeddedPropertyUnit(propertyId: string, unitId: string, patch: Record<string, unknown>) {
-  const propertyRef = db.collection("properties").doc(propertyId);
-  const propertySnap = await propertyRef.get();
-  if (!propertySnap.exists) return false;
-  const property = propertySnap.data() || {};
-  const units = Array.isArray((property as any)?.units) ? (property as any).units : [];
-  const matchingIndexes = units
-    .map((unit: any, index: number) => ({ unit, index }))
-    .filter(({ unit }: any) => unitMatches(unit, unitId));
-  if (matchingIndexes.length !== 1) return false;
-  const nextUnits = units.map((unit: any, index: number) =>
-    index === matchingIndexes[0].index ? { ...unit, ...patch } : unit
-  );
-  await propertyRef.set({ units: nextUnits, updatedAt: Date.now() }, { merge: true });
-  return true;
-}
-
-async function loadTenantDisplayFields(tenantId: string): Promise<Record<string, string>> {
-  const snap = await db.collection("tenants").doc(tenantId).get().catch(() => null);
-  if (!snap?.exists) return {};
-  const tenant = snap.data() || {};
-  const displayName = asString(
-    (tenant as any)?.fullName ||
-      (tenant as any)?.name ||
-      (tenant as any)?.tenantName ||
-      (tenant as any)?.displayName
-  );
-  if (!displayName) return {};
-  return {
-    tenantName: displayName,
-    tenantFullName: displayName,
-    currentTenantName: displayName,
-  };
-}
-
+/**
+ * Narrow adapter from tenant setup workflows to the canonical lease-start
+ * authority. This service never writes occupancy projections itself.
+ */
 export async function syncPropertyUnitOccupancyForTenantContext(
   input: OccupancySyncInput
 ): Promise<OccupancySyncResult> {
-  const tenantId = asString(input.tenantId);
-  const leaseId = asString(input.leaseId);
-  const propertyId = asString(input.propertyId);
-  const unitId = asString(input.unitId);
-  if (!tenantId || !leaseId || !propertyId || !unitId) {
+  const tenantId = text(input.tenantId);
+  const leaseId = text(input.leaseId);
+  const landlordId = text(input.landlordId);
+  const propertyId = text(input.propertyId);
+  const unitId = text(input.unitId);
+  const idempotencyKey = text(input.idempotencyKey || input.applicationId);
+  if (!tenantId || !leaseId || !landlordId || !propertyId || !unitId || !idempotencyKey) {
     return { updated: false, reason: "missing_context" };
   }
 
-  const leaseSnap = await db.collection("leases").doc(leaseId).get();
-  if (!leaseSnap.exists) {
-    return { updated: false, reason: "lease_not_found" };
-  }
-  const lease = leaseSnap.data() || {};
-  if (!isOccupyingLease(lease)) {
-    return { updated: false, reason: "lease_not_occupying" };
-  }
+  const firestore = input.firestore || db;
+  const leaseSnap = await firestore.collection("leases").doc(leaseId).get();
+  if (!leaseSnap.exists) return { updated: false, reason: "lease_not_found" };
+  const lease = { id: leaseSnap.id, ...(leaseSnap.data() || {}) };
 
-  const leasePropertyId = asString((lease as any)?.propertyId);
-  const leaseUnitId = asString((lease as any)?.unitId || (lease as any)?.unitNumber || (lease as any)?.unit);
-  if (leasePropertyId && leasePropertyId !== propertyId) {
-    return { updated: false, reason: "missing_context" };
-  }
-  const unitReference = leaseUnitId || unitId;
+  // Renewal occupancy is governed exclusively by the explicit PR G handoff.
+  // The expected-state token generated below includes the complete lease, so
+  // a concurrent linkage/disposition change makes the canonical commit stale.
+  if (isRenewalLease(lease)) return { updated: false, reason: "renewal_handoff_required" };
+  if (isOccupancyExcluded(lease)) return { updated: false, reason: "occupancy_excluded" };
 
-  const now = Date.now();
-  const tenantDisplayFields = await loadTenantDisplayFields(tenantId);
-  const occupancyPatch = {
-    status: "occupied",
-    occupancyStatus: "occupied",
+  const evaluationInstant = input.evaluationInstant || new Date().toISOString();
+  const context = await getCanonicalLeaseStartContext({
+    landlordId,
+    propertyId,
+    unitId,
     tenantId,
-    currentTenantId: tenantId,
     leaseId,
-    currentLeaseId: leaseId,
-    applicationId: asString(input.applicationId),
-    ...tenantDisplayFields,
-    occupancySource: "canonical_lease",
-    occupancyUpdatedAt: now,
-    updatedAt: now,
+    evaluationInstant,
+    firestore,
+  });
+
+  // A replay after a successful setup is already coherent and needs no new
+  // request record. Ineligible decisions still pass through the canonical
+  // engine, which guarantees zero occupancy-bearing writes.
+  if (context.decision.outcome === "already_coherent") {
+    return { updated: false, reason: "already_coherent" };
+  }
+  const canonicalResult = await startCanonicalLeaseOccupancy({
+    landlordId,
+    propertyId,
+    unitId,
+    tenantId,
+    leaseId,
+    operationKind: "conversion",
+    trigger: "conversion",
+    idempotencyKey,
+    expectedStateToken: context.expectedStateToken,
+    evaluationInstant: context.evaluationInstant,
+    actorId: text(input.actorId) || landlordId,
+    source: input.source,
+    persistRejectedAttempt: false,
+    firestore,
+  });
+  const reason = canonicalResult.canonicalOutcome;
+  return {
+    updated: canonicalResult.occupancyEffective,
+    reason,
+    canonicalResult,
   };
-  const unitDoc = await findUnitDoc(propertyId, asString(input.landlordId), unitReference);
-  const updatedEmbedded = await updateEmbeddedPropertyUnit(propertyId, unitReference, occupancyPatch);
-  if (!unitDoc && !updatedEmbedded) {
-    return { updated: false, reason: "unit_not_found" };
-  }
-  if (unitDoc) {
-    await db.collection("units").doc(unitDoc.id).set(occupancyPatch, { merge: true });
-  }
-  return { updated: true, reason: "occupied" };
 }

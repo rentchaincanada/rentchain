@@ -225,6 +225,7 @@ export async function createTenancyIfMissing(input: {
   unitId?: string | null;
   unitLabel?: string | null;
   moveInAt?: string | null;
+  status?: TenancyStatus;
 }): Promise<TenancyRecord | null> {
   const tenantId = String(input.tenantId || "").trim();
   const landlordId = String(input.landlordId || "").trim();
@@ -253,7 +254,7 @@ export async function createTenancyIfMissing(input: {
     propertyId: propertyId || null,
     unitId: unitId || unitLabel || null,
     unitLabel: unitLabel || unitId || null,
-    status: "active" as TenancyStatus,
+    status: input.status === "inactive" ? "inactive" as TenancyStatus : "active" as TenancyStatus,
     moveInAt: toIso(input.moveInAt) || now.toISOString(),
     moveOutAt: null,
     moveOutReason: null,
