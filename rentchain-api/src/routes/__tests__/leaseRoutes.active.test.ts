@@ -3279,9 +3279,24 @@ describe("leaseRoutes GET /active", () => {
     const futureProperty = futureProperties.body.items.find((entry: any) => entry.id === "property-renewal");
     expect(futureProperty.units.find((entry: any) => entry.id === futureUnit.id)).toMatchObject({ currentLeaseId: "lease-future-predecessor" });
     const futureLeases = await invokeRouter(leaseRouter, { method: "GET", url: "/tenant/tenant-future" });
+    expect(futureLeases.body.leases.find((entry: any) => entry.id === "lease-future-predecessor")?.canonicalState).toMatchObject({
+      occupancyState: "occupied", supportingLeaseId: "lease-future-predecessor",
+    });
     expect(futureLeases.body.leases.find((entry: any) => entry.id === "lease-future-successor")?.canonicalState?.supportingLeaseId).not.toBe("lease-future-successor");
+    const futureTenants = await invokeRouter(tenantsRouter, { method: "GET", url: "/" });
+    expect(futureTenants.status).toBe(200);
+    expect(futureTenants.body.tenants.find((entry: any) => entry.id === "tenant-future")).toMatchObject({
+      currentLeaseId: "lease-future-predecessor",
+      canonicalState: expect.objectContaining({ supportingLeaseId: "lease-future-predecessor" }),
+    });
     const futureTenant = await invokeRouter(tenantsRouter, { method: "GET", url: "/tenant-future" });
     expect(futureTenant.body?.tenant?.currentLeaseId).toBe("lease-future-predecessor");
+    expect(futureTenant.body?.canonicalState).toMatchObject({
+      occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-future-predecessor",
+    });
+    const futureReview = await invokeRouter(occupancyReviewRouter, { method: "GET", url: "/" });
+    expect(futureReview.status).toBe(200);
+    expect(futureReview.body.items.filter((item: any) => item.propertyId === "property-renewal" && item.unitId === futureUnit.id)).toEqual([]);
 
     const { getRenewalContinuityContext, handoffRenewalContinuity } = await import("../../services/leaseStart/renewalContinuityService");
     const context = await getRenewalContinuityContext({
@@ -3306,7 +3321,7 @@ describe("leaseRoutes GET /active", () => {
     expect(activeLeases.body.leases.find((entry: any) => entry.id === "lease-successor")?.canonicalState).toMatchObject({
       occupancyState: "occupied", supportingLeaseId: "lease-successor", reasons: [],
     });
-    expect(activeLeases.body.leases.find((entry: any) => entry.id === "lease-predecessor")?.canonicalState?.supportingLeaseId).not.toBe("lease-predecessor");
+    expect(activeLeases.body.leases.find((entry: any) => entry.id === "lease-predecessor")).toBeUndefined();
 
     const tenants = await invokeRouter(tenantsRouter, { method: "GET", url: "/" });
     expect(tenants.status).toBe(200);
@@ -3319,6 +3334,20 @@ describe("leaseRoutes GET /active", () => {
       expect(detail.body.tenant).toMatchObject({ currentLeaseId: "lease-successor" });
       expect(detail.body.canonicalState).toMatchObject({ occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-successor" });
       expect(detail.body.lease).toMatchObject({ id: "lease-successor" });
+
+      // TenantLeasePanel consumes this route as the tenant-detail workspace's
+      // current and historical lease source. It must retain the renewed
+      // predecessor while classifying only the successor as current.
+      const leaseHistory = await invokeRouter(leaseRouter, { method: "GET", url: `/tenant/${tenantId}` });
+      expect(leaseHistory.status).toBe(200);
+      expect(leaseHistory.body.leases.find((entry: any) => entry.id === "lease-successor")?.canonicalState).toMatchObject({
+        occupancyState: "occupied", supportingLeaseId: "lease-successor", reasons: [],
+      });
+      expect(leaseHistory.body.leases.find((entry: any) => entry.id === "lease-predecessor")).toMatchObject({
+        id: "lease-predecessor", status: "renewed", startDate: "2025-08-23", endDate: "2026-08-22",
+        monthlyRent: 1800, occupancyEffective: false,
+        canonicalState: expect.objectContaining({ occupancyState: "occupied", supportingLeaseId: "lease-successor" }),
+      });
     }
 
     const review = await invokeRouter(occupancyReviewRouter, { method: "GET", url: "/" });
