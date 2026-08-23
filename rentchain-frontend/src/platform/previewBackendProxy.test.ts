@@ -190,6 +190,21 @@ describe("Preview backend proxy", () => {
     });
   });
 
+  it("couples the authorized PR #1568 service URL and audience internally", () => {
+    const target = resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: PREVIEW_BACKEND_TARGET_KEYS.pr1568,
+    });
+    expect(target).toEqual({
+      key: "pr1568-renewal-continuity-cert",
+      cloudRunServiceUrl:
+        "https://rentchain-pr1568-qa-renewal-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1568-qa-renewal-glistw4pya-nn.a.run.app",
+      temporary: true,
+    });
+  });
+
   it.each([
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
@@ -201,6 +216,8 @@ describe("Preview backend proxy", () => {
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1566],
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1567],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1567],
+    ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1568],
+    ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1568],
     ["preview", ""],
     ["preview", "unknown"],
     ["preview", "pr1562"],
@@ -212,6 +229,11 @@ describe("Preview backend proxy", () => {
     ["preview", "https://rentchain-pr1566-qa-multicurrent-glistw4pya-nn.a.run.app"],
     ["preview", "rentchain-pr1555-qa-wrong-region"],
     ["preview", "rentchain-pr1555-qa-cross-project"],
+    ["preview", "pr1568-renewal-continuity-cert-evil"],
+    ["preview", "PR1568-RENEWAL-CONTINUITY-CERT"],
+    ["preview", "rentchain-pr1568-qa-renewal"],
+    ["preview", "*.run.app"],
+    ["preview", "https://rentchain-pr1568-qa-renewal-glistw4pya-nn.a.run.app"],
   ])("rejects unsafe target selection for %s / %s", (vercelEnvironment, targetKey) => {
     expect(() => resolvePreviewBackendTarget({ vercelEnvironment, targetKey })).toThrow(
       "PREVIEW_PROXY_TARGET_REJECTED",
@@ -442,6 +464,35 @@ describe("Preview backend proxy", () => {
     );
   });
 
+  it.each([
+    ["mismatched audience", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1568,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1568-qa-renewal-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-preview-backend-glistw4pya-nn.a.run.app",
+      temporary: true,
+    }],
+    ["attacker host", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1568,
+      cloudRunServiceUrl: "https://attacker.example",
+      cloudRunIdTokenAudience: "https://attacker.example",
+      temporary: true,
+    }],
+    ["temporary flag", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1568,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1568-qa-renewal-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1568-qa-renewal-glistw4pya-nn.a.run.app",
+      temporary: false,
+    }],
+  ])("rejects a tampered PR #1568 mapping: %s", (_label, target) => {
+    expect(() => assertPreviewBackendTarget(target, "preview")).toThrow(
+      "PREVIEW_PROXY_TARGET_REJECTED",
+    );
+  });
+
   it("routes the authorized target using the same URL for ID-token audience and upstream", async () => {
     process.env.PREVIEW_BACKEND_TARGET = PREVIEW_BACKEND_TARGET_KEYS.pr1555;
     const { requests, dependencies } = successfulDependencies();
@@ -561,6 +612,36 @@ describe("Preview backend proxy", () => {
     );
     expect(requests[2].url).toBe(`${expected}/api/occupancy-reviews`);
     expect(requests[2].init?.method).toBe("GET");
+  });
+
+  it("routes PR #1568 only to its fixed backend despite caller-controlled target-like input", async () => {
+    process.env.PREVIEW_BACKEND_TARGET = PREVIEW_BACKEND_TARGET_KEYS.pr1568;
+    const { requests, dependencies } = successfulDependencies();
+    const res = responseRecorder();
+
+    await handlePreviewBackendProxy(
+      request("/api/preview-backend/api/leases/renewal-continuity/context?target=https://attacker.example", "POST", {
+        headers: {
+          host: "attacker.example",
+          cookie: "PREVIEW_BACKEND_TARGET=https://attacker.example",
+          "x-preview-backend-target": "https://attacker.example",
+        },
+        query: { target: "https://attacker.example" },
+        body: { target: "https://attacker.example" },
+      }),
+      res,
+      dependencies,
+    );
+
+    const expected =
+      "https://rentchain-pr1568-qa-renewal-glistw4pya-nn.a.run.app";
+    expect(requests[1].init?.body).toBe(
+      JSON.stringify({ audience: expected, includeEmail: false }),
+    );
+    expect(requests[2].url).toBe(
+      `${expected}/api/leases/renewal-continuity/context?target=https://attacker.example`,
+    );
+    expect(requests.every(({ url }) => !url.startsWith("https://attacker.example"))).toBe(true);
   });
 
   it("accepts only Preview and rejects Production or Development", async () => {
