@@ -2,6 +2,7 @@ import { db } from "../../firebase";
 import { evaluateCanonicalLeaseStart, type CanonicalLeaseStartInput } from "../../lib/leases/canonicalLeaseStart";
 import { buildLeaseStartExpectedStateToken, leaseStartDeterministicId, leaseStartHash } from "./leaseStartExpectedState";
 import { LeaseStartServiceError, type LeaseStartOperationKind, type LeaseStartServiceResult } from "./leaseStartService";
+import { runLeaseStartTransaction } from "./leaseStartTransaction";
 
 export type CreateCanonicalLeaseInput = {
   landlordId: string;
@@ -140,14 +141,17 @@ export async function createCanonicalLease(input: CreateCanonicalLeaseInput): Pr
     source: input.source,
   });
 
-  return firestore.runTransaction(async (transaction: any) => {
-    const prior = await transaction.get(requestRef);
-    if (prior.exists) {
-      const priorData = prior.data() || {};
-      if (priorData.payloadHash !== payloadHash) throw new LeaseStartServiceError("lease_start_idempotency_key_reused");
-      return { ...priorData.result, leaseId: input.leaseId, outcome: "idempotent_replay", idempotency: { ...priorData.result.idempotency, replay: true } };
-    }
-
+  return runLeaseStartTransaction<{ expectedStateToken: string }, LeaseStartServiceResult & { leaseId: string }>({
+    firestore,
+    requestRef,
+    payloadHash,
+    error: (kind) => new LeaseStartServiceError(kind === "idempotency" ? "lease_start_idempotency_key_reused" : "lease_start_state_stale"),
+    loadAuthoritativeState: async () => ({ expectedStateToken: "creation_state_is_transaction_authoritative" }),
+    getExpectedStateToken: (loaded) => loaded.expectedStateToken,
+    buildPlan: async ({ transaction }) => {
+    const mutations: Array<() => void> = [];
+    const events: Array<{ ref: any; record: Record<string, unknown> }> = [];
+    let assertPostcondition: (() => void) | undefined;
     const unitsQuery = firestore.collection("units").where("landlordId", "==", input.landlordId).where("propertyId", "==", input.propertyId);
     const leasesQuery = firestore.collection("leases").where("landlordId", "==", input.landlordId).where("propertyId", "==", input.propertyId);
     const tenanciesQuery = firestore.collection("tenancies").where("propertyId", "==", input.propertyId);
@@ -226,26 +230,28 @@ export async function createCanonicalLease(input: CreateCanonicalLeaseInput): Pr
 
     if (decision.outcome === "rejected") {
       const result = { ...baseResult(input, decision, expectedStateToken, requestId, [rejectionEventId]), leaseId: input.leaseId };
-      transaction.create(firestore.collection("canonicalEvents").doc(rejectionEventId), canonicalEvent(input, rejectionEventId, "lease.occupancy_start_rejected", instant, requestId, result.reasons));
-      transaction.create(requestRef, { landlordId: input.landlordId, operationKind: input.operationKind, idempotencyKey: input.idempotencyKey, payloadHash, leaseId: input.leaseId, canonicalOutcome: decision.outcome, reasons: result.reasons, occupancyEffective: false, canonicalEventIds: [rejectionEventId], committedAt: instant, result });
-      return result;
+      return {
+        result,
+        events: [{ ref: firestore.collection("canonicalEvents").doc(rejectionEventId), record: canonicalEvent(input, rejectionEventId, "lease.occupancy_start_rejected", instant, requestId, result.reasons) }],
+        requestRecord: { landlordId: input.landlordId, operationKind: input.operationKind, idempotencyKey: input.idempotencyKey, payloadHash, leaseId: input.leaseId, canonicalOutcome: decision.outcome, reasons: result.reasons, occupancyEffective: false, canonicalEventIds: [rejectionEventId], committedAt: instant, result },
+      };
     }
 
     const eventIds = decision.outcome === "occupancy_effective" ? [creationEventId, occupancyEventId] : [creationEventId];
     const result = { ...baseResult(input, decision, expectedStateToken, requestId, eventIds), leaseId: input.leaseId };
     const compatibilityStatus = decision.outcome === "occupancy_effective" ? "active" : "pending";
-    transaction.create(leaseRef, {
+    mutations.push(() => transaction.create(leaseRef, {
       ...input.leaseRecord,
       ...(input.renewalLink ? { predecessorLeaseId: input.renewalLink.predecessorLeaseId } : {}),
       id: input.leaseId,
       status: compatibilityStatus,
       occupancyEffective: decision.occupancyEffective,
       occupancyEffectiveAt: decision.occupancyEffective ? instant : null,
-    });
-    if (predecessorRef) transaction.set(predecessorRef, { renewedByLeaseId: input.leaseId, updatedAt: instant }, { merge: true });
-    if (input.tenantRecord) transaction.create(tenantRef, { ...input.tenantRecord, id: input.tenantId });
-    if (draftRef) transaction.set(draftRef, { status: "activated", leaseId: input.leaseId, activatedAt: instant, updatedAt: instant }, { merge: true });
-    transaction.create(firestore.collection("canonicalEvents").doc(creationEventId), canonicalEvent(input, creationEventId, creationType, instant, requestId));
+    }));
+    if (predecessorRef) mutations.push(() => transaction.set(predecessorRef, { renewedByLeaseId: input.leaseId, updatedAt: instant }, { merge: true }));
+    if (input.tenantRecord) mutations.push(() => transaction.create(tenantRef, { ...input.tenantRecord, id: input.tenantId }));
+    if (draftRef) mutations.push(() => transaction.set(draftRef, { status: "activated", leaseId: input.leaseId, activatedAt: instant, updatedAt: instant }, { merge: true }));
+    events.push({ ref: firestore.collection("canonicalEvents").doc(creationEventId), record: canonicalEvent(input, creationEventId, creationType, instant, requestId) });
 
     if (decision.outcome === "occupancy_effective") {
       const postcondition = decision.postcondition;
@@ -260,21 +266,29 @@ export async function createCanonicalLease(input: CreateCanonicalLeaseInput): Pr
       const nextTenant = { ...tenant, currentLeaseId: input.leaseId, status: "current", updatedAt: instant };
       const nextTenancies = postcondition.tenancy.action === "create" ? [...tenancies, nextTenancy] : tenancies.map((entry: any) => entry.id === tenancyId ? nextTenancy : entry);
       const verified = evaluateCanonicalLeaseStart({ ...canonicalInput, candidateLease: { ...candidateLease, occupancyEffective: true, occupancyEffectiveAt: instant }, standaloneUnits: [nextUnit], embeddedUnits: [{ ...nextEmbedded, landlordId: input.landlordId, propertyId: input.propertyId }], tenant: nextTenant, tenancies: nextTenancies });
-      if (verified.outcome !== "already_coherent" || verified.postcondition !== null) throw new LeaseStartServiceError("lease_start_postcondition_failed");
+      assertPostcondition = () => {
+        if (verified.outcome !== "already_coherent" || verified.postcondition !== null) throw new LeaseStartServiceError("lease_start_postcondition_failed");
+      };
       result.expectedStateToken = buildLeaseStartExpectedStateToken(
         { ...canonicalInput, candidateLease: { ...candidateLease, occupancyEffective: true, occupancyEffectiveAt: instant }, standaloneUnits: [nextUnit], embeddedUnits: [{ ...nextEmbedded, landlordId: input.landlordId, propertyId: input.propertyId }], tenant: nextTenant, tenancies: nextTenancies },
         verified,
         { propertyUpdatedAt: instant }
       );
-      transaction.set(propertyRef, { units: nextEmbeddedUnits, updatedAt: instant }, { merge: true });
-      transaction.set(unitRef, nextUnit, { merge: true });
-      transaction.set(tenantRef, { currentLeaseId: input.leaseId, status: "current", updatedAt: instant }, { merge: true });
-      if (postcondition.tenancy.action === "create") transaction.create(tenancyRef, nextTenancy);
-      else if (postcondition.tenancy.action === "reconcile") transaction.set(tenancyRef, nextTenancy, { merge: true });
-      transaction.create(firestore.collection("canonicalEvents").doc(occupancyEventId), canonicalEvent(input, occupancyEventId, "lease.occupancy_started", instant, requestId));
+      mutations.push(() => transaction.set(propertyRef, { units: nextEmbeddedUnits, updatedAt: instant }, { merge: true }));
+      mutations.push(() => transaction.set(unitRef, nextUnit, { merge: true }));
+      mutations.push(() => transaction.set(tenantRef, { currentLeaseId: input.leaseId, status: "current", updatedAt: instant }, { merge: true }));
+      if (postcondition.tenancy.action === "create") mutations.push(() => transaction.create(tenancyRef, nextTenancy));
+      else if (postcondition.tenancy.action === "reconcile") mutations.push(() => transaction.set(tenancyRef, nextTenancy, { merge: true }));
+      events.push({ ref: firestore.collection("canonicalEvents").doc(occupancyEventId), record: canonicalEvent(input, occupancyEventId, "lease.occupancy_started", instant, requestId) });
     }
 
-    transaction.create(requestRef, { landlordId: input.landlordId, operationKind: input.operationKind, idempotencyKey: input.idempotencyKey, payloadHash, leaseId: input.leaseId, canonicalOutcome: decision.outcome, reasons: result.reasons, occupancyEffective: result.occupancyEffective, canonicalEventIds: eventIds, committedAt: instant, result });
-    return result;
+    return {
+      result,
+      applyMutations: () => mutations.forEach((mutation) => mutation()),
+      assertPostcondition,
+      events,
+      requestRecord: { landlordId: input.landlordId, operationKind: input.operationKind, idempotencyKey: input.idempotencyKey, payloadHash, leaseId: input.leaseId, canonicalOutcome: decision.outcome, reasons: result.reasons, occupancyEffective: result.occupancyEffective, canonicalEventIds: eventIds, committedAt: instant, result },
+    };
+    },
   });
 }

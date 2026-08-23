@@ -3221,4 +3221,108 @@ describe("leaseRoutes GET /active", () => {
       expect.objectContaining({ id: "unit-dup", unitNumber: "102", status: "vacant" }),
     ]);
   });
+
+  it("projects one coherent renewal handoff through Properties, Leases, Tenants, tenant detail, and Review Needed", async () => {
+    const futureUnit = {
+      id: "unit-renewal-future", unitNumber: "F1", status: "occupied", occupancyStatus: "occupied",
+      tenantId: "tenant-future", currentTenantId: "tenant-future", leaseId: "lease-future-predecessor", currentLeaseId: "lease-future-predecessor",
+    };
+    const handoffUnit = {
+      id: "unit-renewal", unitNumber: "R1", status: "occupied", occupancyStatus: "occupied",
+      tenantId: "tenant-renewal-a", currentTenantId: "tenant-renewal-a", leaseId: "lease-predecessor", currentLeaseId: "lease-predecessor",
+    };
+    seedDoc("properties", "property-renewal", {
+      landlordId: "landlord-1", ownerUserId: "landlord-1", name: "Renewal House", units: [futureUnit, handoffUnit],
+    });
+    seedDoc("units", futureUnit.id, { ...futureUnit, landlordId: "landlord-1", propertyId: "property-renewal" });
+    seedDoc("units", handoffUnit.id, { ...handoffUnit, landlordId: "landlord-1", propertyId: "property-renewal" });
+    seedDoc("tenants", "tenant-future", { landlordId: "landlord-1", fullName: "Future Tenant", status: "current", currentLeaseId: "lease-future-predecessor", propertyId: "property-renewal", unitId: futureUnit.id });
+    seedDoc("tenants", "tenant-renewal-a", { landlordId: "landlord-1", fullName: "Renewal Tenant A", status: "current", currentLeaseId: "lease-predecessor", propertyId: "property-renewal", unitId: handoffUnit.id });
+    seedDoc("tenants", "tenant-renewal-b", { landlordId: "landlord-1", fullName: "Renewal Tenant B", status: "current", currentLeaseId: "lease-predecessor", propertyId: "property-renewal", unitId: handoffUnit.id });
+    seedDoc("leases", "lease-future-predecessor", {
+      landlordId: "landlord-1", propertyId: "property-renewal", unitId: futureUnit.id,
+      tenantId: "tenant-future", tenantIds: ["tenant-future"], status: "active", executionStatus: "fully_executed",
+      occupancyEffective: true, renewedByLeaseId: "lease-future-successor", startDate: "2026-01-01", endDate: "2026-12-31",
+    });
+    seedDoc("leases", "lease-future-successor", {
+      landlordId: "landlord-1", propertyId: "property-renewal", unitId: futureUnit.id,
+      tenantId: "tenant-future", tenantIds: ["tenant-future"], status: "pending", executionStatus: "fully_executed",
+      occupancyEffective: false, predecessorLeaseId: "lease-future-predecessor", startDate: "2099-01-01", endDate: "2099-12-31",
+    });
+    const participants = ["tenant-renewal-a", "tenant-renewal-b"];
+    seedDoc("leases", "lease-predecessor", {
+      landlordId: "landlord-1", propertyId: "property-renewal", unitId: handoffUnit.id,
+      tenantId: participants[0], primaryTenantId: participants[0], tenantIds: participants,
+      status: "active", executionStatus: "fully_executed", occupancyEffective: true,
+      renewedByLeaseId: "lease-successor", startDate: "2025-08-23", endDate: "2026-08-22", monthlyRent: 1800,
+    });
+    seedDoc("leases", "lease-successor", {
+      landlordId: "landlord-1", propertyId: "property-renewal", unitId: handoffUnit.id,
+      tenantId: participants[0], primaryTenantId: participants[0], tenantIds: participants,
+      status: "active", executionStatus: "fully_executed", occupancyEffective: false,
+      predecessorLeaseId: "lease-predecessor", startDate: "2026-08-23", endDate: "2027-08-22", monthlyRent: 1850,
+    });
+    for (const tenantId of participants) {
+      seedDoc("tenancies", `predecessor-${tenantId}`, {
+        landlordId: "landlord-1", propertyId: "property-renewal", unitId: handoffUnit.id,
+        tenantId, leaseId: "lease-predecessor", status: "active", moveOutAt: null,
+      });
+    }
+
+    const leaseRouter = (await import("../leaseRoutes")).default;
+    const propertiesRouter = (await import("../propertiesRoutes")).default;
+    const tenantsRouter = (await import("../tenantsRoutes")).default;
+    const occupancyReviewRouter = (await import("../occupancyReviewRoutes")).default;
+
+    const futureProperties = await invokeRouter(propertiesRouter, { method: "GET", url: "/" });
+    expect(futureProperties.status).toBe(200);
+    const futureProperty = futureProperties.body.items.find((entry: any) => entry.id === "property-renewal");
+    expect(futureProperty.units.find((entry: any) => entry.id === futureUnit.id)).toMatchObject({ currentLeaseId: "lease-future-predecessor" });
+    const futureLeases = await invokeRouter(leaseRouter, { method: "GET", url: "/tenant/tenant-future" });
+    expect(futureLeases.body.leases.find((entry: any) => entry.id === "lease-future-successor")?.canonicalState?.supportingLeaseId).not.toBe("lease-future-successor");
+    const futureTenant = await invokeRouter(tenantsRouter, { method: "GET", url: "/tenant-future" });
+    expect(futureTenant.body?.tenant?.currentLeaseId).toBe("lease-future-predecessor");
+
+    const { getRenewalContinuityContext, handoffRenewalContinuity } = await import("../../services/leaseStart/renewalContinuityService");
+    const context = await getRenewalContinuityContext({
+      landlordId: "landlord-1", successorLeaseId: "lease-successor",
+      evaluationInstant: "2026-08-23T12:00:00.000Z", firestore: fakeDb,
+    });
+    await handoffRenewalContinuity({
+      landlordId: "landlord-1", successorLeaseId: "lease-successor",
+      evaluationInstant: "2026-08-23T12:00:00.000Z", expectedStateToken: context.expectedStateToken,
+      idempotencyKey: "renewal-cross-surface", actorId: "landlord-1", source: "cross_surface_test", firestore: fakeDb,
+    });
+
+    const properties = await invokeRouter(propertiesRouter, { method: "GET", url: "/" });
+    expect(properties.status).toBe(200);
+    const property = properties.body.items.find((entry: any) => entry.id === "property-renewal");
+    expect(property.units.find((entry: any) => entry.id === handoffUnit.id)).toMatchObject({
+      status: "occupied", occupancyStatus: "occupied", currentLeaseId: "lease-successor", currentTenantId: "tenant-renewal-a",
+    });
+
+    const activeLeases = await invokeRouter(leaseRouter, { method: "GET", url: "/active" });
+    expect(activeLeases.status).toBe(200);
+    expect(activeLeases.body.leases.find((entry: any) => entry.id === "lease-successor")?.canonicalState).toMatchObject({
+      occupancyState: "occupied", supportingLeaseId: "lease-successor", reasons: [],
+    });
+    expect(activeLeases.body.leases.find((entry: any) => entry.id === "lease-predecessor")?.canonicalState?.supportingLeaseId).not.toBe("lease-predecessor");
+
+    const tenants = await invokeRouter(tenantsRouter, { method: "GET", url: "/" });
+    expect(tenants.status).toBe(200);
+    for (const tenantId of participants) {
+      expect(tenants.body.tenants.find((entry: any) => entry.id === tenantId)).toMatchObject({
+        currentLeaseId: "lease-successor", canonicalState: expect.objectContaining({ tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-successor" }),
+      });
+      const detail = await invokeRouter(tenantsRouter, { method: "GET", url: `/${tenantId}` });
+      expect(detail.status).toBe(200);
+      expect(detail.body.tenant).toMatchObject({ currentLeaseId: "lease-successor" });
+      expect(detail.body.canonicalState).toMatchObject({ occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "lease-successor" });
+      expect(detail.body.lease).toMatchObject({ id: "lease-successor" });
+    }
+
+    const review = await invokeRouter(occupancyReviewRouter, { method: "GET", url: "/" });
+    expect(review.status).toBe(200);
+    expect(review.body.items.filter((item: any) => item.propertyId === "property-renewal" && item.unitId === handoffUnit.id)).toEqual([]);
+  });
 });

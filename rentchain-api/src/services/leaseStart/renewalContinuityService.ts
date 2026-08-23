@@ -8,9 +8,6 @@ import {
 } from "../../lib/leases/renewalContinuity";
 import { buildLeaseStartExpectedStateMaterialToken, leaseStartDeterministicId, leaseStartHash } from "./leaseStartExpectedState";
 import {
-  assertLeaseStartExpectedState,
-  persistLeaseStartAtomicResult,
-  readLeaseStartReplay,
   runLeaseStartTransaction,
 } from "./leaseStartTransaction";
 
@@ -236,15 +233,18 @@ export async function handoffRenewalContinuity(input: RenewalHandoffInput): Prom
     evaluationInstant,
   });
 
-  return runLeaseStartTransaction(firestore, async (transaction: any) => {
-    const replay = await readLeaseStartReplay<RenewalContinuityResult>({
-      transaction, requestRef, payloadHash,
-      error: (kind) => new RenewalContinuityServiceError(kind === "idempotency" ? "renewal_idempotency_key_reused" : "renewal_state_stale"),
-    });
-    if (replay) return replay;
-    const loaded = await readRenewalContext(transaction, { ...input, evaluationInstant, firestore });
-    assertLeaseStartExpectedState(loaded.context.expectedStateToken, input.expectedStateToken, () =>
-      new RenewalContinuityServiceError("renewal_state_stale", loaded.context));
+  return runLeaseStartTransaction<Awaited<ReturnType<typeof readRenewalContext>>, RenewalContinuityResult>({
+    firestore,
+    requestRef,
+    payloadHash,
+    expectedStateToken: input.expectedStateToken,
+    error: (kind, loaded) => new RenewalContinuityServiceError(
+      kind === "idempotency" ? "renewal_idempotency_key_reused" : "renewal_state_stale",
+      loaded?.context
+    ),
+    loadAuthoritativeState: (transaction) => readRenewalContext(transaction, { ...input, evaluationInstant, firestore }),
+    getExpectedStateToken: (loaded) => loaded.context.expectedStateToken,
+    buildPlan: async ({ transaction, loaded }) => {
     if (!loaded.evaluation.eligible) {
       throw new RenewalContinuityServiceError("renewal_handoff_ineligible", loaded.context, loaded.evaluation.reasons);
     }
@@ -319,16 +319,6 @@ export async function handoffRenewalContinuity(input: RenewalHandoffInput): Prom
     const unrelatedTenanciesUnchanged = loaded.records.tenancies
       .filter((entry: any) => ![loaded.context.predecessorLeaseId, loaded.context.successorLeaseId].includes(text(entry.leaseId)))
       .every((entry: any) => leaseStartHash(entry) === leaseStartHash(finalTenancies.find((next: any) => next.id === entry.id)));
-    if (
-      text(nextUnit.currentLeaseId) !== loaded.context.successorLeaseId ||
-      text(nextEmbedded.currentLeaseId) !== loaded.context.successorLeaseId ||
-      text(nextUnit.currentTenantId) !== loaded.records.tenantId ||
-      text(nextEmbedded.currentTenantId) !== loaded.records.tenantId ||
-      state(nextUnit.status) !== "occupied" ||
-      state(nextEmbedded.status) !== "occupied" ||
-      finalPredecessorActive.length !== 0 || finalSuccessors.length !== participantIds.size ||
-      [...participantIds].some((id) => !finalSuccessorIds.has(id)) || !unrelatedTenanciesUnchanged
-    ) throw new RenewalContinuityServiceError("renewal_postcondition_failed", loaded.context);
     const eventId = leaseStartDeterministicId("renewal_occupancy_handoff", [input.landlordId, input.idempotencyKey, loaded.context.predecessorLeaseId, loaded.context.successorLeaseId]);
     const result: RenewalContinuityResult = {
       outcome: "renewal_handoff_completed",
@@ -339,20 +329,6 @@ export async function handoffRenewalContinuity(input: RenewalHandoffInput): Prom
       idempotency: { key: input.idempotencyKey, replay: false, resultId: requestId },
     };
 
-    transaction.set(loaded.records.predecessorRef, { status: "renewed", occupancyEffective: false, occupancyEndedAt: evaluationInstant, updatedAt: evaluationInstant }, { merge: true });
-    transaction.set(loaded.records.successorRef, { status: "active", occupancyEffective: true, occupancyEffectiveAt: evaluationInstant, updatedAt: evaluationInstant }, { merge: true });
-    transaction.set(loaded.records.propertyRef, { units: nextEmbeddedUnits, updatedAt: evaluationInstant }, { merge: true });
-    transaction.set(loaded.records.unitRef, nextUnit, { merge: true });
-    for (const tenantRef of loaded.records.tenantRefs) {
-      transaction.set(tenantRef, { currentLeaseId: loaded.context.successorLeaseId, status: "current", updatedAt: evaluationInstant }, { merge: true });
-    }
-    for (const predecessorTenancy of predecessorTenancies) {
-      transaction.set(firestore.collection("tenancies").doc(predecessorTenancy.id), { status: "inactive", moveOutAt: evaluationInstant, updatedAt: evaluationInstant }, { merge: true });
-    }
-    for (const plan of successorPlans) {
-      if (plan.existing) transaction.set(plan.ref, plan.record, { merge: true });
-      else transaction.create(plan.ref, plan.record);
-    }
     const eventRef = firestore.collection("canonicalEvents").doc(eventId);
     const eventRecord = {
       id: eventId, version: "v1", type: "lease.renewal_occupancy_handoff", domain: "lease", action: "renewal_occupancy_handoff", status: "succeeded",
@@ -370,12 +346,44 @@ export async function handoffRenewalContinuity(input: RenewalHandoffInput): Prom
       },
       tags: ["lease_start", "renewal_handoff"], appendOnly: true, immutable: true,
     };
-    persistLeaseStartAtomicResult({ transaction, requestRef, events: [{ ref: eventRef, record: eventRecord }], requestRecord: {
-      landlordId: input.landlordId, operationKind: "renewal_handoff", idempotencyKey: input.idempotencyKey,
-      payloadHash, leaseId: loaded.context.successorLeaseId, predecessorLeaseId: loaded.context.predecessorLeaseId,
-      canonicalEventIds: [eventId], committedAt: evaluationInstant, result,
-    }});
-    return result;
+    return {
+      result,
+      applyMutations: () => {
+        transaction.set(loaded.records.predecessorRef, { status: "renewed", occupancyEffective: false, occupancyEndedAt: evaluationInstant, updatedAt: evaluationInstant }, { merge: true });
+        transaction.set(loaded.records.successorRef, { status: "active", occupancyEffective: true, occupancyEffectiveAt: evaluationInstant, updatedAt: evaluationInstant }, { merge: true });
+        transaction.set(loaded.records.propertyRef, { units: nextEmbeddedUnits, updatedAt: evaluationInstant }, { merge: true });
+        transaction.set(loaded.records.unitRef, nextUnit, { merge: true });
+        for (const tenantRef of loaded.records.tenantRefs) {
+          transaction.set(tenantRef, { currentLeaseId: loaded.context.successorLeaseId, status: "current", updatedAt: evaluationInstant }, { merge: true });
+        }
+        for (const predecessorTenancy of predecessorTenancies) {
+          transaction.set(firestore.collection("tenancies").doc(predecessorTenancy.id), { status: "inactive", moveOutAt: evaluationInstant, updatedAt: evaluationInstant }, { merge: true });
+        }
+        for (const successorPlan of successorPlans) {
+          if (successorPlan.existing) transaction.set(successorPlan.ref, successorPlan.record, { merge: true });
+          else transaction.create(successorPlan.ref, successorPlan.record);
+        }
+      },
+      assertPostcondition: () => {
+        if (
+          text(nextUnit.currentLeaseId) !== loaded.context.successorLeaseId ||
+          text(nextEmbedded.currentLeaseId) !== loaded.context.successorLeaseId ||
+          text(nextUnit.currentTenantId) !== loaded.records.tenantId ||
+          text(nextEmbedded.currentTenantId) !== loaded.records.tenantId ||
+          state(nextUnit.status) !== "occupied" ||
+          state(nextEmbedded.status) !== "occupied" ||
+          finalPredecessorActive.length !== 0 || finalSuccessors.length !== participantIds.size ||
+          [...participantIds].some((id) => !finalSuccessorIds.has(id)) || !unrelatedTenanciesUnchanged
+        ) throw new RenewalContinuityServiceError("renewal_postcondition_failed", loaded.context);
+      },
+      events: [{ ref: eventRef, record: eventRecord }],
+      requestRecord: {
+        landlordId: input.landlordId, operationKind: "renewal_handoff", idempotencyKey: input.idempotencyKey,
+        payloadHash, leaseId: loaded.context.successorLeaseId, predecessorLeaseId: loaded.context.predecessorLeaseId,
+        canonicalEventIds: [eventId], committedAt: evaluationInstant, result,
+      },
+    };
+    },
   });
 }
 

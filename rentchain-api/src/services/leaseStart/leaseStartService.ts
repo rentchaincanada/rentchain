@@ -8,9 +8,6 @@ import {
 import type { CanonicalLeaseConflictReason, CanonicalLeaseStateInput } from "../../lib/leases/canonicalLeaseOccupancyState";
 import { buildLeaseStartExpectedStateToken, leaseStartDeterministicId, leaseStartHash } from "./leaseStartExpectedState";
 import {
-  assertLeaseStartExpectedState,
-  persistLeaseStartAtomicResult,
-  readLeaseStartReplay,
   runLeaseStartTransaction,
 } from "./leaseStartTransaction";
 
@@ -247,15 +244,18 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
     evaluationInstant: normalizedInstant,
   });
 
-  return runLeaseStartTransaction(firestore, async (transaction: any) => {
-    const replay = await readLeaseStartReplay<LeaseStartServiceResult>({
-      transaction, requestRef, payloadHash,
-      error: (kind) => new LeaseStartServiceError(kind === "idempotency" ? "lease_start_idempotency_key_reused" : "lease_start_state_stale"),
-    });
-    if (replay) return replay;
-    const loaded = await readContext(transaction, { ...input, evaluationInstant: normalizedInstant, firestore });
-    assertLeaseStartExpectedState(loaded.context.expectedStateToken, input.expectedStateToken, () =>
-      new LeaseStartServiceError("lease_start_state_stale", loaded.context));
+  return runLeaseStartTransaction<Awaited<ReturnType<typeof readContext>>, LeaseStartServiceResult>({
+    firestore,
+    requestRef,
+    payloadHash,
+    expectedStateToken: input.expectedStateToken,
+    error: (kind, loaded) => new LeaseStartServiceError(
+      kind === "idempotency" ? "lease_start_idempotency_key_reused" : "lease_start_state_stale",
+      loaded?.context
+    ),
+    loadAuthoritativeState: (transaction) => readContext(transaction, { ...input, evaluationInstant: normalizedInstant, firestore }),
+    getExpectedStateToken: (loaded) => loaded.context.expectedStateToken,
+    buildPlan: async ({ transaction, loaded }) => {
     // D2 has no live route caller. Canonical rejected and deferred decisions
     // therefore return deterministically with no durable audit or idempotency
     // record. D3 must define authenticated route-attempt persistence policy.
@@ -280,30 +280,28 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
         },
         tags: ["lease_start", input.trigger, "rejected"], appendOnly: true, immutable: true,
       };
-      persistLeaseStartAtomicResult({ transaction, requestRef, events: [{ ref: eventRef, record: eventRecord }], requestRecord: {
-        landlordId: input.landlordId, operationKind: input.operationKind, idempotencyKey: input.idempotencyKey,
-        payloadHash, leaseId: input.leaseId, canonicalOutcome: rejectedResult.canonicalOutcome,
-        reasons: rejectedResult.reasons, occupancyEffective: false,
-        resultingExpectedStateToken: rejectedResult.expectedStateToken, canonicalEventIds: [eventId], committedAt: normalizedInstant,
-        result: rejectedResult,
-      }});
-      return rejectedResult;
+      return { result: rejectedResult, events: [{ ref: eventRef, record: eventRecord }], requestRecord: {
+          landlordId: input.landlordId, operationKind: input.operationKind, idempotencyKey: input.idempotencyKey,
+          payloadHash, leaseId: input.leaseId, canonicalOutcome: rejectedResult.canonicalOutcome,
+          reasons: rejectedResult.reasons, occupancyEffective: false,
+          resultingExpectedStateToken: rejectedResult.expectedStateToken, canonicalEventIds: [eventId], committedAt: normalizedInstant,
+          result: rejectedResult,
+        } };
     }
     if (loaded.context.decision.outcome === "rejected" || loaded.context.decision.outcome === "created_without_occupancy") {
-      return resultFrom(loaded.context, input, null);
+      return { result: resultFrom(loaded.context, input, null) };
     }
 
     const baseResult = resultFrom(loaded.context, input, requestId);
     if (loaded.context.decision.outcome === "already_coherent") {
       const committedResult = { ...baseResult, idempotency: { ...baseResult.idempotency, resultId: requestId } };
-      persistLeaseStartAtomicResult({ transaction, requestRef, requestRecord: {
-        landlordId: input.landlordId, operationKind: input.operationKind, idempotencyKey: input.idempotencyKey,
-        payloadHash, leaseId: input.leaseId, canonicalOutcome: committedResult.canonicalOutcome,
-        reasons: committedResult.reasons, occupancyEffective: committedResult.occupancyEffective,
-        resultingExpectedStateToken: committedResult.expectedStateToken, canonicalEventIds: [], committedAt: normalizedInstant,
-        result: committedResult,
-      }});
-      return committedResult;
+      return { result: committedResult, requestRecord: {
+          landlordId: input.landlordId, operationKind: input.operationKind, idempotencyKey: input.idempotencyKey,
+          payloadHash, leaseId: input.leaseId, canonicalOutcome: committedResult.canonicalOutcome,
+          reasons: committedResult.reasons, occupancyEffective: committedResult.occupancyEffective,
+          resultingExpectedStateToken: committedResult.expectedStateToken, canonicalEventIds: [], committedAt: normalizedInstant,
+          result: committedResult,
+        } };
     }
 
     const postcondition = loaded.context.decision.postcondition;
@@ -318,8 +316,6 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
     const nextTenancy = postcondition.tenancy.action === "reuse"
       ? { ...existingTenancy }
       : { ...existingTenancy, ...postcondition.tenancy, id: tenancyId, updatedAt: normalizedInstant, moveOutAt: null };
-    assertPostcondition(loaded.context, { unit: nextUnit, embedded: nextEmbedded, tenant: nextTenant, tenancy: nextTenancy });
-
     const nextEmbeddedUnits = loaded.records.embeddedUnits.map((entry: any, index: number) => index === loaded.records.embeddedIndex ? nextEmbedded : entry);
     const nextTenancies = postcondition.tenancy.action === "create"
       ? [...loaded.records.tenancies, nextTenancy]
@@ -333,9 +329,6 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
       tenancies: nextTenancies,
     };
     const verifiedDecision = evaluateCanonicalLeaseStart(nextCanonicalInput);
-    if (verifiedDecision.outcome !== "already_coherent" || verifiedDecision.postcondition !== null) {
-      throw new LeaseStartServiceError("lease_start_postcondition_failed", loaded.context);
-    }
     const resultingExpectedStateToken = buildLeaseStartExpectedStateToken(
       nextCanonicalInput,
       verifiedDecision,
@@ -350,12 +343,6 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
       expectedStateToken: resultingExpectedStateToken,
     };
 
-    transaction.set(loaded.records.leaseRef, { ...(input.leasePatch || {}), occupancyEffective: true, occupancyEffectiveAt: normalizedInstant, updatedAt: normalizedInstant }, { merge: true });
-    transaction.set(loaded.records.propertyRef, { units: nextEmbeddedUnits, updatedAt: normalizedInstant }, { merge: true });
-    transaction.set(loaded.records.unitRef, nextUnit, { merge: true });
-    transaction.set(loaded.records.tenantRef, { currentLeaseId: input.leaseId, status: "current", updatedAt: normalizedInstant }, { merge: true });
-    if (postcondition.tenancy.action === "create") transaction.create(tenancyRef, nextTenancy);
-    else if (postcondition.tenancy.action === "reconcile") transaction.set(tenancyRef, nextTenancy, { merge: true });
     const eventRecord = {
       id: eventId, version: "v1", type: "lease.occupancy_started", domain: "lease", action: "occupancy_started", status: "succeeded",
       actor: { type: "landlord", id: leaseStartDeterministicId("actor", [input.actorId || input.landlordId]), role: "landlord", displayName: null },
@@ -369,13 +356,31 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
       },
       tags: ["lease_start", input.trigger], appendOnly: true, immutable: true,
     };
-    persistLeaseStartAtomicResult({ transaction, requestRef, events: [{ ref: eventRef, record: eventRecord }], requestRecord: {
-      landlordId: input.landlordId, operationKind: input.operationKind, idempotencyKey: input.idempotencyKey,
-      payloadHash, leaseId: input.leaseId, canonicalOutcome: committedResult.canonicalOutcome,
-      reasons: committedResult.reasons, occupancyEffective: committedResult.occupancyEffective,
-      resultingExpectedStateToken: committedResult.expectedStateToken, canonicalEventIds: [eventId], committedAt: normalizedInstant,
+    return {
       result: committedResult,
-    }});
-    return committedResult;
+      applyMutations: () => {
+        transaction.set(loaded.records.leaseRef, { ...(input.leasePatch || {}), occupancyEffective: true, occupancyEffectiveAt: normalizedInstant, updatedAt: normalizedInstant }, { merge: true });
+        transaction.set(loaded.records.propertyRef, { units: nextEmbeddedUnits, updatedAt: normalizedInstant }, { merge: true });
+        transaction.set(loaded.records.unitRef, nextUnit, { merge: true });
+        transaction.set(loaded.records.tenantRef, { currentLeaseId: input.leaseId, status: "current", updatedAt: normalizedInstant }, { merge: true });
+        if (postcondition.tenancy.action === "create") transaction.create(tenancyRef, nextTenancy);
+        else if (postcondition.tenancy.action === "reconcile") transaction.set(tenancyRef, nextTenancy, { merge: true });
+      },
+      assertPostcondition: () => {
+        assertPostcondition(loaded.context, { unit: nextUnit, embedded: nextEmbedded, tenant: nextTenant, tenancy: nextTenancy });
+        if (verifiedDecision.outcome !== "already_coherent" || verifiedDecision.postcondition !== null) {
+          throw new LeaseStartServiceError("lease_start_postcondition_failed", loaded.context);
+        }
+      },
+      events: [{ ref: eventRef, record: eventRecord }],
+      requestRecord: {
+        landlordId: input.landlordId, operationKind: input.operationKind, idempotencyKey: input.idempotencyKey,
+        payloadHash, leaseId: input.leaseId, canonicalOutcome: committedResult.canonicalOutcome,
+        reasons: committedResult.reasons, occupancyEffective: committedResult.occupancyEffective,
+        resultingExpectedStateToken: committedResult.expectedStateToken, canonicalEventIds: [eventId], committedAt: normalizedInstant,
+        result: committedResult,
+      },
+    };
+    },
   });
 }
