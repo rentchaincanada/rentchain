@@ -152,10 +152,27 @@ describe("leaseSigningService", () => {
     const signingRequest = ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId));
     await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-future-1", type: "signed", occurredAt: "2026-08-19T12:00:00.000Z" } });
     await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-future-1", type: "signed", occurredAt: "2026-08-19T12:00:00.000Z" } });
-    expect(ensureCollection("leases").get("lease-future")).toEqual(expect.objectContaining({ executionStatus: "fully_executed", status: "active" }));
+    expect(ensureCollection("leases").get("lease-future")).toEqual(expect.objectContaining({ executionStatus: "fully_executed", status: "pending" }));
     expect(ensureCollection("leases").get("lease-future")).not.toHaveProperty("occupancyStartReview");
-    expect(startCanonicalLeaseOccupancyMock).toHaveBeenCalledTimes(1);
-    expect(ensureCollection("leaseSigningCompletionOperations").size).toBe(1);
+    expect(startCanonicalLeaseOccupancyMock).not.toHaveBeenCalled();
+    expect(ensureCollection("leaseSigningCompletionOperations").size).toBe(0);
+  });
+
+  it("never hands linked renewal occupancy over when signing completes on its effective date", async () => {
+    const { processSigningWebhook, sendLeaseForSignature } = await import("../signing/leaseSigningService");
+    ensureCollection("leases").set("lease-renewal-effective", {
+      landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1",
+      status: "pending", predecessorLeaseId: "lease-predecessor", occupancyEffective: false,
+      startDate: "2027-01-01", endDate: "2027-12-31",
+    });
+    const sent = await sendLeaseForSignature({ leaseId: "lease-renewal-effective", landlordId: "landlord-1", lease: { startDate: "2027-01-01" }, tenantEmails: ["tenant@example.com"] });
+    const signingRequest = ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId));
+    await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-renewal-effective", type: "signed", occurredAt: "2027-01-01T12:00:00.000Z" } });
+    expect(ensureCollection("leases").get("lease-renewal-effective")).toEqual(expect.objectContaining({
+      executionStatus: "fully_executed", status: "pending", occupancyEffective: false,
+    }));
+    expect(startCanonicalLeaseOccupancyMock).not.toHaveBeenCalled();
+    expect(getCanonicalLeaseStartContextMock).not.toHaveBeenCalled();
   });
 
   it("creates a pending signing request without exposing raw provider references in projected snapshot", async () => {

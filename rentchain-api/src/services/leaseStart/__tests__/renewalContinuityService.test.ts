@@ -4,6 +4,8 @@ import {
   handoffRenewalContinuity,
   RenewalContinuityServiceError,
 } from "../renewalContinuityService";
+import { buildCanonicalLeaseOccupancyProjection } from "../../../lib/leases/canonicalLeaseOccupancyProjection";
+import { deriveLeaseLifecycleReviewQueue } from "../../../lib/leases/leaseLifecycleReviewQueue";
 
 function createFakeFirestore() {
   const store = new Map<string, Map<string, any>>();
@@ -139,8 +141,26 @@ describe("renewal continuity service", () => {
     expect(fake.read("tenancies", "predecessor-tenancy")).toMatchObject({ status: "inactive", moveOutAt: evaluationInstant });
     expect(fake.list("tenancies").filter((entry) => entry.leaseId === "successor" && entry.status === "active")).toHaveLength(1);
     expect(fake.list("canonicalEvents")).toHaveLength(1);
-    expect(fake.read("leases", "predecessor")).toMatchObject({ startDate: predecessorBefore.startDate, endDate: predecessorBefore.endDate, status: predecessorBefore.status, monthlyRent: predecessorBefore.monthlyRent });
-    expect(fake.read("leases", "successor")).toMatchObject({ startDate: successorBefore.startDate, endDate: successorBefore.endDate, executionStatus: successorBefore.executionStatus, monthlyRent: successorBefore.monthlyRent });
+    expect(fake.read("leases", "predecessor")).toMatchObject({ startDate: predecessorBefore.startDate, endDate: predecessorBefore.endDate, status: "renewed", monthlyRent: predecessorBefore.monthlyRent, occupancyEffective: false });
+    expect(fake.read("leases", "successor")).toMatchObject({ startDate: successorBefore.startDate, endDate: successorBefore.endDate, executionStatus: successorBefore.executionStatus, monthlyRent: successorBefore.monthlyRent, status: "active", occupancyEffective: true });
+    const projectedLeases = [
+      { id: "predecessor", ...fake.read("leases", "predecessor") },
+      { id: "successor", ...fake.read("leases", "successor") },
+    ];
+    const projection = buildCanonicalLeaseOccupancyProjection({
+      leases: projectedLeases,
+      context: { asOfDate: evaluationInstant },
+      persistedUnitOccupancy: fake.read("units", "unit-1").occupancyStatus,
+      persistedTenancyStatus: "active",
+      persistedTenantStatus: fake.read("tenants", "tenant-1").status,
+      currentLeasePointerId: fake.read("units", "unit-1").currentLeaseId,
+      tenantId: "tenant-1",
+    });
+    expect(projection).toMatchObject({
+      occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: "successor", reasons: [],
+    });
+    const review = deriveLeaseLifecycleReviewQueue({ leases: projectedLeases, units: [{ id: "unit-1", ...fake.read("units", "unit-1") }], today: evaluationInstant, detectedAt: evaluationInstant });
+    expect(review.items.filter((item) => ["predecessor", "successor"].includes(item.leaseId))).toHaveLength(0);
   });
 
   it("replays the same logical request without duplicate tenancy or audit", async () => {
@@ -187,5 +207,42 @@ describe("renewal continuity service", () => {
     expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(1);
     expect(fake.list("canonicalEvents")).toHaveLength(1);
     expect(fake.list("tenancies").filter((entry) => entry.leaseId === "successor" && entry.status === "active")).toHaveLength(1);
+  });
+
+  it("reconciles every participant tenancy, reuses a successor row, and preserves unrelated rows", async () => {
+    fake.seed("tenants", "tenant-2", { landlordId: "landlord-1", status: "current", currentLeaseId: "predecessor" });
+    fake.seed("leases", "predecessor", { ...fake.read("leases", "predecessor"), tenantIds: ["tenant-1", "tenant-2"] });
+    fake.seed("leases", "successor", { ...fake.read("leases", "successor"), tenantIds: ["tenant-1", "tenant-2"] });
+    fake.seed("tenancies", "predecessor-tenancy-2", {
+      landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-2", leaseId: "predecessor",
+      status: "active", moveInAt: "2026-01-01T00:00:00.000Z", moveOutAt: null,
+    });
+    fake.seed("tenancies", "successor-tenancy-2", {
+      landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-2", leaseId: "successor",
+      status: "pending", moveInAt: "2027-01-01T00:00:00.000Z", moveOutAt: null, source: "existing",
+    });
+    fake.seed("tenancies", "unrelated", {
+      landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-foreign", leaseId: "historical",
+      status: "inactive", moveOutAt: "2025-01-01T00:00:00.000Z", marker: "unchanged",
+    });
+    await handoffRenewalContinuity(await request());
+    expect(fake.list("tenancies").filter((entry) => entry.leaseId === "predecessor" && entry.status === "active")).toHaveLength(0);
+    const successors = fake.list("tenancies").filter((entry) => entry.leaseId === "successor" && entry.status === "active");
+    expect(successors).toHaveLength(2);
+    expect(new Set(successors.map((entry) => entry.tenantId))).toEqual(new Set(["tenant-1", "tenant-2"]));
+    expect(fake.read("tenancies", "successor-tenancy-2")).toMatchObject({ status: "active", source: "existing" });
+    expect(fake.read("tenancies", "unrelated")).toMatchObject({ status: "inactive", marker: "unchanged" });
+    expect(fake.read("tenants", "tenant-2")).toMatchObject({ currentLeaseId: "successor" });
+  });
+
+  it("rejects an occupancy-excluded successor before writes", async () => {
+    fake.seed("leases", "successor", {
+      ...fake.read("leases", "successor"),
+      occupancyDisposition: { status: "excluded_from_current_occupancy_by_resolution" },
+    });
+    const input = await request();
+    await expect(handoffRenewalContinuity(input)).rejects.toMatchObject({ code: "renewal_handoff_ineligible" });
+    expect(fake.list("canonicalEvents")).toHaveLength(0);
+    expect(fake.read("units", "unit-1")).toMatchObject({ currentLeaseId: "predecessor" });
   });
 });

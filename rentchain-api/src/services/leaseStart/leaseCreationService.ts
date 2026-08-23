@@ -233,9 +233,7 @@ export async function createCanonicalLease(input: CreateCanonicalLeaseInput): Pr
 
     const eventIds = decision.outcome === "occupancy_effective" ? [creationEventId, occupancyEventId] : [creationEventId];
     const result = { ...baseResult(input, decision, expectedStateToken, requestId, eventIds), leaseId: input.leaseId };
-    const renewalFullyExecuted = Boolean(input.renewalLink) &&
-      text(input.leaseRecord.executionStatus || input.leaseRecord.executionState) === "fully_executed";
-    const compatibilityStatus = decision.outcome === "occupancy_effective" || renewalFullyExecuted ? "active" : "pending";
+    const compatibilityStatus = decision.outcome === "occupancy_effective" ? "active" : "pending";
     transaction.create(leaseRef, {
       ...input.leaseRecord,
       ...(input.renewalLink ? { predecessorLeaseId: input.renewalLink.predecessorLeaseId } : {}),

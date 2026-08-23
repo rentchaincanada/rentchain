@@ -64,6 +64,7 @@ describe("renewal continuity contract", () => {
     ["invalid dates", { successor: { startDate: "2027-12-31", endDate: "2027-01-01" } }, "RENEWAL_SUCCESSOR_INELIGIBLE"],
     ["participant mismatch", { successor: { tenantId: "tenant-2", tenantIds: ["tenant-2"] } }, "RENEWAL_PARTICIPANTS_MISMATCH"],
     ["superseded successor", { successor: { renewedByLeaseId: "successor-2" } }, "RENEWAL_SUCCESSOR_SUPERSEDED"],
+    ["occupancy-excluded successor", { successor: { occupancyDisposition: { status: "excluded_from_current_occupancy_by_resolution" } } }, "RENEWAL_SUCCESSOR_INELIGIBLE"],
     ["stale unit pointer", { unit: { currentLeaseId: "other", leaseId: "other" } }, "RENEWAL_PROJECTION_MISMATCH"],
     ["stale tenant pointer", { tenant: { currentLeaseId: "other" } }, "RENEWAL_PROJECTION_MISMATCH"],
   ] as const)("fails closed for %s", (_label, input, reason) => {

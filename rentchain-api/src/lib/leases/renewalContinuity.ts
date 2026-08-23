@@ -21,6 +21,7 @@ export type RenewalContinuityLease = CanonicalLeaseStateInput & {
   replacedByLeaseId?: unknown;
   predecessorLeaseId?: unknown;
   occupancyEffective?: unknown;
+  occupancyDisposition?: { status?: unknown } | null;
 };
 
 export type RenewalContinuityEvaluation = {
@@ -128,7 +129,8 @@ export function evaluateRenewalContinuity(input: {
   if (normalized(input.successor.executionState || input.successor.executionStatus) !== "fully_executed") {
     reasons.push("RENEWAL_EXECUTION_INCOMPLETE");
   }
-  if (successorTerm.state !== "active" || TERMINAL.has(normalized(input.successor.status)) || input.successor.occupancyEffective === true) {
+  if (successorTerm.state !== "active" || TERMINAL.has(normalized(input.successor.status)) || input.successor.occupancyEffective === true ||
+      normalized(input.successor.occupancyDisposition?.status) === "excluded_from_current_occupancy_by_resolution") {
     reasons.push("RENEWAL_SUCCESSOR_INELIGIBLE");
   }
   if (successorLinks(input.successor).length > 0) reasons.push("RENEWAL_SUCCESSOR_SUPERSEDED");

@@ -189,7 +189,7 @@ describe("createCanonicalLease", () => {
       leaseRecord: { startDate: "2026-09-01", endDate: "2027-08-31", executionStatus: "fully_executed" },
     }));
     expect(result.canonicalOutcome).toBe("created_without_occupancy");
-    expect(fake.read("leases", "lease-create-1")).toMatchObject({ status: "active", predecessorLeaseId: "predecessor", occupancyEffective: false });
+    expect(fake.read("leases", "lease-create-1")).toMatchObject({ status: "pending", predecessorLeaseId: "predecessor", occupancyEffective: false });
     expect(fake.read("leases", "predecessor")).toMatchObject({ renewedByLeaseId: "lease-create-1" });
   });
 

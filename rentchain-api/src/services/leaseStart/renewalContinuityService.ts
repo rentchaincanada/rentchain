@@ -7,6 +7,12 @@ import {
   type RenewalContinuityLease,
 } from "../../lib/leases/renewalContinuity";
 import { leaseStartDeterministicId, leaseStartHash } from "./leaseStartExpectedState";
+import {
+  assertLeaseStartExpectedState,
+  persistLeaseStartAtomicResult,
+  readLeaseStartReplay,
+  runLeaseStartTransaction,
+} from "./leaseStartTransaction";
 
 export type RenewalContinuityContext = {
   expectedStateToken: string;
@@ -116,6 +122,13 @@ function contextToken(records: any, evaluation: RenewalContinuityEvaluation, eva
     unit: records.unit,
     embedded: records.embedded,
     tenant: records.tenant,
+    tenants: records.tenants.map((tenant: any) => ({
+      id: tenant.id,
+      landlordId: tenant.landlordId ?? null,
+      currentLeaseId: tenant.currentLeaseId ?? null,
+      status: tenant.status ?? null,
+      updatedAt: tenant.updatedAt ?? null,
+    })).sort((left: any, right: any) => left.id.localeCompare(right.id)),
     tenancies: tenancyMaterial,
     propertyUpdatedAt: records.property.updatedAt ?? null,
   });
@@ -164,15 +177,23 @@ async function readRenewalContext(reader: any, input: RenewalContextInput) {
   const occupantIds = [...new Set(pointerIds)];
   if (occupantIds.length !== 1 || !participantIds.includes(occupantIds[0])) throw new RenewalContinuityServiceError("renewal_context_ambiguous");
   const tenantId = occupantIds[0];
-  const tenantRef = firestore.collection("tenants").doc(tenantId);
-  const tenantSnap = await get(tenantRef);
-  const tenant = docData(tenantSnap);
-  if (!tenant || text(tenant.landlordId) !== input.landlordId) throw new RenewalContinuityServiceError("renewal_context_ambiguous");
+  const tenantRefs = participantIds.map((participantId) => firestore.collection("tenants").doc(participantId));
+  const tenantSnaps = await Promise.all(tenantRefs.map(get));
+  const tenants = tenantSnaps.map(docData);
+  if (tenants.some((entry: any) => !entry || text(entry.landlordId) !== input.landlordId)) {
+    throw new RenewalContinuityServiceError("renewal_context_ambiguous");
+  }
+  const tenant = tenants.find((entry: any) => entry.id === tenantId);
+  const tenantRef = tenantRefs[participantIds.indexOf(tenantId)];
   const tenancies = (tenanciesSnap.docs || []).map(docData).filter((tenancy: any) => tenancy && text(tenancy.unitId) === unitId);
   const evaluation = evaluateRenewalContinuity({ predecessor, successor, contextLeases, evaluationInstant: input.evaluationInstant, standaloneUnit: unit, embeddedUnit: embedded, tenant });
+  if (tenants.some((entry: any) => text(entry.currentLeaseId) && text(entry.currentLeaseId) !== predecessorId)) {
+    evaluation.reasons = [...new Set([...evaluation.reasons, "RENEWAL_PROJECTION_MISMATCH" as const])];
+    evaluation.eligible = false;
+  }
   const records = {
     predecessorRef, successorRef, propertyRef, unitRef, tenantRef, predecessor, successor, property, unit, embedded,
-    embeddedUnits, embeddedIndex: embeddedMatches[0].index, contextLeases, tenant, tenantId, tenancies,
+    embeddedUnits, embeddedIndex: embeddedMatches[0].index, contextLeases, tenant, tenantId, tenantRefs, tenants, tenancies,
   };
   const context: RenewalContinuityContext = {
     expectedStateToken: contextToken(records, evaluation, input.evaluationInstant),
@@ -216,33 +237,39 @@ export async function handoffRenewalContinuity(input: RenewalHandoffInput): Prom
     evaluationInstant,
   });
 
-  return firestore.runTransaction(async (transaction: any) => {
-    const prior = await transaction.get(requestRef);
-    if (prior.exists) {
-      const data = prior.data() || {};
-      if (data.payloadHash !== payloadHash) throw new RenewalContinuityServiceError("renewal_idempotency_key_reused");
-      return { ...data.result, outcome: "idempotent_replay", idempotency: { ...data.result.idempotency, replay: true } };
-    }
+  return runLeaseStartTransaction(firestore, async (transaction: any) => {
+    const replay = await readLeaseStartReplay<RenewalContinuityResult>({
+      transaction, requestRef, payloadHash,
+      error: (kind) => new RenewalContinuityServiceError(kind === "idempotency" ? "renewal_idempotency_key_reused" : "renewal_state_stale"),
+    });
+    if (replay) return replay;
     const loaded = await readRenewalContext(transaction, { ...input, evaluationInstant, firestore });
-    if (loaded.context.expectedStateToken !== input.expectedStateToken) {
-      throw new RenewalContinuityServiceError("renewal_state_stale", loaded.context);
-    }
+    assertLeaseStartExpectedState(loaded.context.expectedStateToken, input.expectedStateToken, () =>
+      new RenewalContinuityServiceError("renewal_state_stale", loaded.context));
     if (!loaded.evaluation.eligible) {
       throw new RenewalContinuityServiceError("renewal_handoff_ineligible", loaded.context, loaded.evaluation.reasons);
     }
+    const participantIds = new Set(loaded.context.participantIds);
     const predecessorTenancies = loaded.records.tenancies.filter((tenancy: any) =>
+      text(tenancy.landlordId) === input.landlordId && text(tenancy.propertyId) === loaded.context.propertyId && text(tenancy.unitId) === loaded.context.unitId &&
       text(tenancy.leaseId) === loaded.context.predecessorLeaseId &&
-      text(tenancy.tenantId) === loaded.records.tenantId &&
+      participantIds.has(text(tenancy.tenantId)) &&
       ["active", "current", "occupied"].includes(state(tenancy.status)) && !text(tenancy.moveOutAt)
     );
     const successorTenancies = loaded.records.tenancies.filter((tenancy: any) =>
-      text(tenancy.leaseId) === loaded.context.successorLeaseId && ["active", "current", "occupied"].includes(state(tenancy.status)) && !text(tenancy.moveOutAt)
+      text(tenancy.landlordId) === input.landlordId && text(tenancy.propertyId) === loaded.context.propertyId && text(tenancy.unitId) === loaded.context.unitId &&
+      text(tenancy.leaseId) === loaded.context.successorLeaseId && participantIds.has(text(tenancy.tenantId))
     );
     const unrelatedActiveTenancies = loaded.records.tenancies.filter((tenancy: any) =>
+      text(tenancy.landlordId) === input.landlordId &&
       ["active", "current", "occupied"].includes(state(tenancy.status)) && !text(tenancy.moveOutAt) &&
-      text(tenancy.leaseId) !== loaded.context.predecessorLeaseId
+      ![loaded.context.predecessorLeaseId, loaded.context.successorLeaseId].includes(text(tenancy.leaseId))
     );
-    if (predecessorTenancies.length !== 1 || successorTenancies.length !== 0 || unrelatedActiveTenancies.length !== 0) {
+    const predecessorTenantIds = new Set(predecessorTenancies.map((entry: any) => text(entry.tenantId)));
+    const successorCounts = new Map<string, number>();
+    successorTenancies.forEach((entry: any) => successorCounts.set(text(entry.tenantId), (successorCounts.get(text(entry.tenantId)) || 0) + 1));
+    if (predecessorTenancies.length !== participantIds.size || [...participantIds].some((id) => !predecessorTenantIds.has(id)) ||
+        [...successorCounts.values()].some((count) => count > 1) || unrelatedActiveTenancies.length !== 0) {
       throw new RenewalContinuityServiceError("renewal_handoff_ineligible", loaded.context, ["RENEWAL_PROJECTION_MISMATCH"]);
     }
 
@@ -265,24 +292,34 @@ export async function handoffRenewalContinuity(input: RenewalHandoffInput): Prom
     if (Object.prototype.hasOwnProperty.call(loaded.records.embedded, "occupied")) nextEmbedded.occupied = true;
     if (Object.prototype.hasOwnProperty.call(loaded.records.embedded, "isOccupied")) nextEmbedded.isOccupied = true;
     const nextEmbeddedUnits = loaded.records.embeddedUnits.map((entry: any, index: number) => index === loaded.records.embeddedIndex ? nextEmbedded : entry);
-    const predecessorTenancy = predecessorTenancies[0];
-    const predecessorTenancyRef = firestore.collection("tenancies").doc(predecessorTenancy.id);
-    const successorTenancyId = leaseStartDeterministicId("tenancy", [input.landlordId, loaded.context.propertyId, loaded.context.unitId, loaded.records.tenantId, loaded.context.successorLeaseId]);
-    const successorTenancyRef = firestore.collection("tenancies").doc(successorTenancyId);
-    const successorTenancy = {
-      id: successorTenancyId,
-      landlordId: input.landlordId,
-      propertyId: loaded.context.propertyId,
-      unitId: loaded.context.unitId,
-      tenantId: loaded.records.tenantId,
-      leaseId: loaded.context.successorLeaseId,
-      status: "active",
-      moveInAt: evaluationInstant,
-      moveOutAt: null,
-      createdAt: evaluationInstant,
-      updatedAt: evaluationInstant,
-      source: "renewal_handoff",
-    };
+    const successorPlans = loaded.context.participantIds.map((participantId) => {
+      const existing = successorTenancies.find((entry: any) => text(entry.tenantId) === participantId);
+      const id = existing?.id || leaseStartDeterministicId("tenancy", [input.landlordId, loaded.context.propertyId, loaded.context.unitId, participantId, loaded.context.successorLeaseId]);
+      return {
+        existing: Boolean(existing),
+        ref: firestore.collection("tenancies").doc(id),
+        record: {
+          ...(existing || {}), id, landlordId: input.landlordId, propertyId: loaded.context.propertyId,
+          unitId: loaded.context.unitId, tenantId: participantId, leaseId: loaded.context.successorLeaseId,
+          status: "active", moveInAt: existing?.moveInAt || evaluationInstant, moveOutAt: null,
+          createdAt: existing?.createdAt || evaluationInstant, updatedAt: evaluationInstant, source: existing?.source || "renewal_handoff",
+        },
+      };
+    });
+    const finalTenancies = loaded.records.tenancies.map((entry: any) => {
+      if (predecessorTenancies.some((prior: any) => prior.id === entry.id)) {
+        return { ...entry, status: "inactive", moveOutAt: evaluationInstant, updatedAt: evaluationInstant };
+      }
+      const successor = successorPlans.find((plan) => plan.record.id === entry.id);
+      return successor ? successor.record : entry;
+    });
+    for (const plan of successorPlans) if (!plan.existing) finalTenancies.push(plan.record);
+    const finalPredecessorActive = finalTenancies.filter((entry: any) => text(entry.leaseId) === loaded.context.predecessorLeaseId && participantIds.has(text(entry.tenantId)) && ["active", "current", "occupied"].includes(state(entry.status)) && !text(entry.moveOutAt));
+    const finalSuccessors = finalTenancies.filter((entry: any) => text(entry.leaseId) === loaded.context.successorLeaseId && participantIds.has(text(entry.tenantId)) && ["active", "current", "occupied"].includes(state(entry.status)) && !text(entry.moveOutAt));
+    const finalSuccessorIds = new Set(finalSuccessors.map((entry: any) => text(entry.tenantId)));
+    const unrelatedTenanciesUnchanged = loaded.records.tenancies
+      .filter((entry: any) => ![loaded.context.predecessorLeaseId, loaded.context.successorLeaseId].includes(text(entry.leaseId)))
+      .every((entry: any) => leaseStartHash(entry) === leaseStartHash(finalTenancies.find((next: any) => next.id === entry.id)));
     if (
       text(nextUnit.currentLeaseId) !== loaded.context.successorLeaseId ||
       text(nextEmbedded.currentLeaseId) !== loaded.context.successorLeaseId ||
@@ -290,8 +327,8 @@ export async function handoffRenewalContinuity(input: RenewalHandoffInput): Prom
       text(nextEmbedded.currentTenantId) !== loaded.records.tenantId ||
       state(nextUnit.status) !== "occupied" ||
       state(nextEmbedded.status) !== "occupied" ||
-      successorTenancy.leaseId !== loaded.context.successorLeaseId ||
-      successorTenancy.status !== "active"
+      finalPredecessorActive.length !== 0 || finalSuccessors.length !== participantIds.size ||
+      [...participantIds].some((id) => !finalSuccessorIds.has(id)) || !unrelatedTenanciesUnchanged
     ) throw new RenewalContinuityServiceError("renewal_postcondition_failed", loaded.context);
     const eventId = leaseStartDeterministicId("renewal_occupancy_handoff", [input.landlordId, input.idempotencyKey, loaded.context.predecessorLeaseId, loaded.context.successorLeaseId]);
     const result: RenewalContinuityResult = {
@@ -303,13 +340,22 @@ export async function handoffRenewalContinuity(input: RenewalHandoffInput): Prom
       idempotency: { key: input.idempotencyKey, replay: false, resultId: requestId },
     };
 
-    transaction.set(loaded.records.successorRef, { occupancyEffective: true, occupancyEffectiveAt: evaluationInstant, updatedAt: evaluationInstant }, { merge: true });
+    transaction.set(loaded.records.predecessorRef, { status: "renewed", occupancyEffective: false, occupancyEndedAt: evaluationInstant, updatedAt: evaluationInstant }, { merge: true });
+    transaction.set(loaded.records.successorRef, { status: "active", occupancyEffective: true, occupancyEffectiveAt: evaluationInstant, updatedAt: evaluationInstant }, { merge: true });
     transaction.set(loaded.records.propertyRef, { units: nextEmbeddedUnits, updatedAt: evaluationInstant }, { merge: true });
     transaction.set(loaded.records.unitRef, nextUnit, { merge: true });
-    transaction.set(loaded.records.tenantRef, { currentLeaseId: loaded.context.successorLeaseId, status: "current", updatedAt: evaluationInstant }, { merge: true });
-    transaction.set(predecessorTenancyRef, { status: "inactive", moveOutAt: evaluationInstant, updatedAt: evaluationInstant }, { merge: true });
-    transaction.create(successorTenancyRef, successorTenancy);
-    transaction.create(firestore.collection("canonicalEvents").doc(eventId), {
+    for (const tenantRef of loaded.records.tenantRefs) {
+      transaction.set(tenantRef, { currentLeaseId: loaded.context.successorLeaseId, status: "current", updatedAt: evaluationInstant }, { merge: true });
+    }
+    for (const predecessorTenancy of predecessorTenancies) {
+      transaction.set(firestore.collection("tenancies").doc(predecessorTenancy.id), { status: "inactive", moveOutAt: evaluationInstant, updatedAt: evaluationInstant }, { merge: true });
+    }
+    for (const plan of successorPlans) {
+      if (plan.existing) transaction.set(plan.ref, plan.record, { merge: true });
+      else transaction.create(plan.ref, plan.record);
+    }
+    const eventRef = firestore.collection("canonicalEvents").doc(eventId);
+    const eventRecord = {
       id: eventId, version: "v1", type: "lease.renewal_occupancy_handoff", domain: "lease", action: "renewal_occupancy_handoff", status: "succeeded",
       actor: { type: "landlord", id: leaseStartDeterministicId("actor", [input.actorId]), role: "landlord", displayName: null },
       resource: { type: "lease", id: leaseStartDeterministicId("lease", [loaded.context.successorLeaseId]), parentType: "property", parentId: leaseStartDeterministicId("property", [loaded.context.propertyId]) },
@@ -324,12 +370,12 @@ export async function handoffRenewalContinuity(input: RenewalHandoffInput): Prom
         source: input.source, legalDetermination: false,
       },
       tags: ["lease_start", "renewal_handoff"], appendOnly: true, immutable: true,
-    });
-    transaction.create(requestRef, {
+    };
+    persistLeaseStartAtomicResult({ transaction, requestRef, events: [{ ref: eventRef, record: eventRecord }], requestRecord: {
       landlordId: input.landlordId, operationKind: "renewal_handoff", idempotencyKey: input.idempotencyKey,
       payloadHash, leaseId: loaded.context.successorLeaseId, predecessorLeaseId: loaded.context.predecessorLeaseId,
       canonicalEventIds: [eventId], committedAt: evaluationInstant, result,
-    });
+    }});
     return result;
   });
 }
