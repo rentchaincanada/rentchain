@@ -447,6 +447,7 @@ export interface CreateLeasePayload {
   endDate?: string | null;
   automationEnabled?: boolean;
   renewalStatus?: LeaseRenewalStatus;
+  predecessorLeaseId?: string | null;
   executionStatus?: string;
   status?: LeaseStatus;
 }

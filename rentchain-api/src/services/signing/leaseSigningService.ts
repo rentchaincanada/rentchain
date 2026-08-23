@@ -779,6 +779,12 @@ export async function processSigningWebhook(input: { providerId: string; headers
       await leaseRef.set({
         executionStatus: "fully_executed",
         executionState: "fully_executed",
+        ...(
+          String(lease.predecessorLeaseId || "").trim() &&
+          ["draft", "pending", "pending_signature", "sent"].includes(String(lease.status || "").trim().toLowerCase())
+            ? { status: "active" }
+            : {}
+        ),
         fullyExecutedAt: occurredAt,
         updatedAt: occurredAt,
       }, { merge: true });

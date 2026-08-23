@@ -147,6 +147,26 @@ describe("lease conflict responses", () => {
     });
   }
 
+  function seedRenewalContext() {
+    const now = new Date();
+    const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const isoDay = (day: number) => new Date(day).toISOString().slice(0, 10);
+    const unit = {
+      id: "unit-1", unitNumber: "A", status: "occupied", occupancyStatus: "occupied",
+      tenantId: "tenant-1", currentTenantId: "tenant-1", leaseId: "predecessor", currentLeaseId: "predecessor",
+      updatedAt: "2026-12-31T12:00:00.000Z",
+    };
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [unit], updatedAt: unit.updatedAt });
+    seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", ...unit });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", status: "current", currentLeaseId: "predecessor", updatedAt: unit.updatedAt });
+    seedLease("predecessor", { executionStatus: "fully_executed", occupancyEffective: true, renewedByLeaseId: "successor", startDate: isoDay(today - 365 * 86_400_000), endDate: isoDay(today - 86_400_000) });
+    seedLease("successor", { executionStatus: "fully_executed", predecessorLeaseId: "predecessor", startDate: isoDay(today), endDate: isoDay(today + 364 * 86_400_000), occupancyEffective: false });
+    seedDoc("tenancies", "predecessor-tenancy", {
+      landlordId: "landlord-1", propertyId: "prop-1", unitId: "unit-1", tenantId: "tenant-1", leaseId: "predecessor",
+      status: "active", moveInAt: "2026-01-01T00:00:00.000Z", moveOutAt: null,
+    });
+  }
+
   it("returns the machine-readable conflict code for direct create overlaps", async () => {
     seedUnit("unit-1", { unitNumber: "A", status: "occupied" });
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "A", status: "occupied", tenantId: "tenant-1" }] });
@@ -207,5 +227,35 @@ describe("lease conflict responses", () => {
     expect(getSeededDoc("tenants", "tenant-2")).toMatchObject({
       currentLeaseId: null,
     });
+  });
+
+  it("serves a read-only renewal context and requires expected state for activation", async () => {
+    seedRenewalContext();
+    const app = await makeApp();
+
+    const contextResponse = await request(app).get("/renewals/successor/context");
+    expect(contextResponse.status).toBe(200);
+    expect(contextResponse.body.context).toMatchObject({ handoffEligible: true, predecessorLeaseId: "predecessor", successorLeaseId: "successor" });
+    expect(getSeededDoc("units", "unit-1")).toMatchObject({ currentLeaseId: "predecessor" });
+
+    const missingState = await request(app).post("/renewals/successor/activate").set("Idempotency-Key", "renewal-route-1").send({});
+    expect(missingState.status).toBe(400);
+    expect(missingState.body.error).toBe("renewal_expected_state_required");
+  });
+
+  it("activates a renewal through the authenticated idempotent route", async () => {
+    seedRenewalContext();
+    const app = await makeApp();
+    const contextResponse = await request(app).get("/renewals/successor/context");
+    const context = contextResponse.body.context;
+
+    const activation = await request(app).post("/renewals/successor/activate").set("Idempotency-Key", "renewal-route-2").send({
+      expectedStateToken: context.expectedStateToken,
+      evaluationInstant: context.evaluationInstant,
+    });
+    expect(activation.status).toBe(200);
+    expect(activation.body.result).toMatchObject({ outcome: "renewal_handoff_completed", predecessorLeaseId: "predecessor", successorLeaseId: "successor" });
+    expect(getSeededDoc("units", "unit-1")).toMatchObject({ status: "occupied", currentLeaseId: "successor" });
+    expect(getSeededDoc("tenancies", "predecessor-tenancy")).toMatchObject({ status: "inactive" });
   });
 });

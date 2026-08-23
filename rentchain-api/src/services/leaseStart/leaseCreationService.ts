@@ -17,6 +17,7 @@ export type CreateCanonicalLeaseInput = {
   source: string;
   tenantRecord?: Record<string, any> | null;
   draftActivation?: { draftId: string; expectedLeaseId?: string | null } | null;
+  renewalLink?: { predecessorLeaseId: string } | null;
   firestore?: any;
 };
 
@@ -112,6 +113,7 @@ export async function createCanonicalLease(input: CreateCanonicalLeaseInput): Pr
   const unitRef = firestore.collection("units").doc(input.unitId);
   const tenantRef = firestore.collection("tenants").doc(input.tenantId);
   const draftRef = input.draftActivation ? firestore.collection("leaseDrafts").doc(input.draftActivation.draftId) : null;
+  const predecessorRef = input.renewalLink ? firestore.collection("leases").doc(input.renewalLink.predecessorLeaseId) : null;
   const {
     risk: _risk,
     riskScore: _riskScore,
@@ -131,6 +133,7 @@ export async function createCanonicalLease(input: CreateCanonicalLeaseInput): Pr
     leaseRecord: semanticLeaseRecord,
     tenantRecord: input.tenantRecord || null,
     draftActivation: input.draftActivation || null,
+    renewalLink: input.renewalLink || null,
     operationKind: input.operationKind,
     idempotencyKey: input.idempotencyKey,
     actorId: input.actorId,
@@ -148,7 +151,7 @@ export async function createCanonicalLease(input: CreateCanonicalLeaseInput): Pr
     const unitsQuery = firestore.collection("units").where("landlordId", "==", input.landlordId).where("propertyId", "==", input.propertyId);
     const leasesQuery = firestore.collection("leases").where("landlordId", "==", input.landlordId).where("propertyId", "==", input.propertyId);
     const tenanciesQuery = firestore.collection("tenancies").where("propertyId", "==", input.propertyId);
-    const [leaseSnap, propertySnap, unitSnap, tenantSnap, unitsSnap, leasesSnap, tenanciesSnap, draftSnap] = await Promise.all([
+    const [leaseSnap, propertySnap, unitSnap, tenantSnap, unitsSnap, leasesSnap, tenanciesSnap, draftSnap, predecessorSnap] = await Promise.all([
       transaction.get(leaseRef),
       transaction.get(propertyRef),
       transaction.get(unitRef),
@@ -157,6 +160,7 @@ export async function createCanonicalLease(input: CreateCanonicalLeaseInput): Pr
       transaction.get(leasesQuery),
       transaction.get(tenanciesQuery),
       draftRef ? transaction.get(draftRef) : Promise.resolve(null),
+      predecessorRef ? transaction.get(predecessorRef) : Promise.resolve(null),
     ]);
     if (leaseSnap.exists) throw new LeaseStartServiceError("lease_start_idempotency_key_reused");
     const property = data(propertySnap);
@@ -173,6 +177,19 @@ export async function createCanonicalLease(input: CreateCanonicalLeaseInput): Pr
     }
     if (draftRef && text(draftSnap.data()?.leaseId) && text(draftSnap.data()?.leaseId) !== input.leaseId) {
       throw new LeaseStartServiceError("lease_start_idempotency_key_reused");
+    }
+    if (predecessorRef) {
+      const predecessor = data(predecessorSnap);
+      const existingLinks = [predecessor?.renewedByLeaseId, predecessor?.renewalLeaseId, predecessor?.successorLeaseId, predecessor?.replacedByLeaseId]
+        .map(text).filter(Boolean);
+      const predecessorParticipants = [...new Set([...(Array.isArray(predecessor?.tenantIds) ? predecessor.tenantIds : []), predecessor?.tenantId, predecessor?.primaryTenantId].map(text).filter(Boolean))].sort();
+      const successorParticipants = [...new Set([...(Array.isArray(input.leaseRecord?.tenantIds) ? input.leaseRecord.tenantIds : []), input.leaseRecord?.tenantId, input.leaseRecord?.primaryTenantId].map(text).filter(Boolean))].sort();
+      if (!predecessor || text(predecessor.landlordId) !== input.landlordId || text(predecessor.propertyId) !== input.propertyId ||
+          text(predecessor.unitId) !== input.unitId || existingLinks.some((link) => link !== input.leaseId) ||
+          predecessorParticipants.length === 0 || predecessorParticipants.length !== successorParticipants.length ||
+          predecessorParticipants.some((participant, index) => participant !== successorParticipants[index])) {
+        throw new LeaseStartServiceError("lease_start_context_ambiguous");
+      }
     }
 
     const embeddedUnits = Array.isArray(property.units) ? property.units : [];
@@ -216,8 +233,18 @@ export async function createCanonicalLease(input: CreateCanonicalLeaseInput): Pr
 
     const eventIds = decision.outcome === "occupancy_effective" ? [creationEventId, occupancyEventId] : [creationEventId];
     const result = { ...baseResult(input, decision, expectedStateToken, requestId, eventIds), leaseId: input.leaseId };
-    const compatibilityStatus = decision.outcome === "occupancy_effective" ? "active" : "pending";
-    transaction.create(leaseRef, { ...input.leaseRecord, id: input.leaseId, status: compatibilityStatus, occupancyEffective: decision.occupancyEffective, occupancyEffectiveAt: decision.occupancyEffective ? instant : null });
+    const renewalFullyExecuted = Boolean(input.renewalLink) &&
+      text(input.leaseRecord.executionStatus || input.leaseRecord.executionState) === "fully_executed";
+    const compatibilityStatus = decision.outcome === "occupancy_effective" || renewalFullyExecuted ? "active" : "pending";
+    transaction.create(leaseRef, {
+      ...input.leaseRecord,
+      ...(input.renewalLink ? { predecessorLeaseId: input.renewalLink.predecessorLeaseId } : {}),
+      id: input.leaseId,
+      status: compatibilityStatus,
+      occupancyEffective: decision.occupancyEffective,
+      occupancyEffectiveAt: decision.occupancyEffective ? instant : null,
+    });
+    if (predecessorRef) transaction.set(predecessorRef, { renewedByLeaseId: input.leaseId, updatedAt: instant }, { merge: true });
     if (input.tenantRecord) transaction.create(tenantRef, { ...input.tenantRecord, id: input.tenantId });
     if (draftRef) transaction.set(draftRef, { status: "activated", leaseId: input.leaseId, activatedAt: instant, updatedAt: instant }, { merge: true });
     transaction.create(firestore.collection("canonicalEvents").doc(creationEventId), canonicalEvent(input, creationEventId, creationType, instant, requestId));

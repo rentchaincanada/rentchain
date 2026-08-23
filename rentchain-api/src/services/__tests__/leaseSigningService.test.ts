@@ -146,13 +146,13 @@ describe("leaseSigningService", () => {
     startCanonicalLeaseOccupancyMock.mockResolvedValueOnce({ canonicalOutcome: "created_without_occupancy", occupancyEffective: false, reasons: ["UPCOMING_LEASE_CANNOT_SUPPORT_OCCUPANCY"] });
     ensureCollection("leases").set("lease-future", {
       landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1",
-      status: "active", startDate: "2027-01-01", endDate: "2027-12-31",
+      status: "pending", predecessorLeaseId: "lease-predecessor", startDate: "2027-01-01", endDate: "2027-12-31",
     });
     const sent = await sendLeaseForSignature({ leaseId: "lease-future", landlordId: "landlord-1", lease: { startDate: "2027-01-01" }, tenantEmails: ["tenant@example.com"] });
     const signingRequest = ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId));
     await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-future-1", type: "signed", occurredAt: "2026-08-19T12:00:00.000Z" } });
     await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-future-1", type: "signed", occurredAt: "2026-08-19T12:00:00.000Z" } });
-    expect(ensureCollection("leases").get("lease-future")).toEqual(expect.objectContaining({ executionStatus: "fully_executed" }));
+    expect(ensureCollection("leases").get("lease-future")).toEqual(expect.objectContaining({ executionStatus: "fully_executed", status: "active" }));
     expect(ensureCollection("leases").get("lease-future")).not.toHaveProperty("occupancyStartReview");
     expect(startCanonicalLeaseOccupancyMock).toHaveBeenCalledTimes(1);
     expect(ensureCollection("leaseSigningCompletionOperations").size).toBe(1);

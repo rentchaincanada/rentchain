@@ -178,4 +178,31 @@ describe("createCanonicalLease", () => {
     expect(result.occupancyEffective).toBe(true);
     expect(fake.read("leaseDrafts", "draft-1")).toMatchObject({ status: "activated", leaseId: "lease-create-1" });
   });
+
+  it("creates a future renewal and both durable links in the lease-creation transaction", async () => {
+    fake.seed("leases", "predecessor", {
+      landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", tenantIds: ["tenant-1"],
+      status: "active", executionStatus: "fully_executed", startDate: "2025-09-01", endDate: "2026-08-31", occupancyEffective: true,
+    });
+    const result = await createCanonicalLease(input({
+      renewalLink: { predecessorLeaseId: "predecessor" },
+      leaseRecord: { startDate: "2026-09-01", endDate: "2027-08-31", executionStatus: "fully_executed" },
+    }));
+    expect(result.canonicalOutcome).toBe("created_without_occupancy");
+    expect(fake.read("leases", "lease-create-1")).toMatchObject({ status: "active", predecessorLeaseId: "predecessor", occupancyEffective: false });
+    expect(fake.read("leases", "predecessor")).toMatchObject({ renewedByLeaseId: "lease-create-1" });
+  });
+
+  it("rejects a renewal link when participant sets differ without changing the predecessor", async () => {
+    fake.seed("leases", "predecessor", {
+      landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-2", tenantIds: ["tenant-2"],
+      status: "active", executionStatus: "fully_executed", startDate: "2025-09-01", endDate: "2026-08-31", occupancyEffective: true,
+    });
+    await expect(createCanonicalLease(input({
+      renewalLink: { predecessorLeaseId: "predecessor" },
+      leaseRecord: { startDate: "2026-09-01", endDate: "2027-08-31" },
+    }))).rejects.toMatchObject({ code: "lease_start_context_ambiguous" });
+    expect(fake.read("leases", "predecessor").renewedByLeaseId).toBeUndefined();
+    expect(fake.read("leases", "lease-create-1")).toBeUndefined();
+  });
 });
