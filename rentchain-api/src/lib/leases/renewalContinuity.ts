@@ -77,6 +77,19 @@ function successorLinks(lease: RenewalContinuityLease): string[] {
   ].map(text).filter(Boolean))].sort();
 }
 
+/**
+ * Returns whether one authoritative lease snapshot participates in the
+ * durable renewal-continuity linkage governed by this module. This is link
+ * detection only; renewal eligibility remains exclusively owned by
+ * evaluateRenewalContinuity().
+ */
+export function hasRenewalContinuityLink(lease: Record<string, unknown>): boolean {
+  return Boolean(
+    text(lease.predecessorLeaseId) ||
+    successorLinks(lease as RenewalContinuityLease).length > 0
+  );
+}
+
 function sameValues(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }

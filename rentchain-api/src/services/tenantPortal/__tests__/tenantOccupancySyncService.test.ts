@@ -5,6 +5,7 @@ import { syncPropertyUnitOccupancyForTenantContext } from "../tenantOccupancySyn
 
 function createFakeFirestore() {
   const store = new Map<string, Map<string, any>>();
+  let afterRead: { collection: string; id: string; callback: () => void } | null = null;
   const collectionData = (name: string) => {
     if (!store.has(name)) store.set(name, new Map());
     return store.get(name)!;
@@ -14,7 +15,13 @@ function createFakeFirestore() {
     collectionName: name,
     get: async () => {
       const value = collectionData(name).get(id);
-      return { id, exists: value !== undefined, data: () => structuredClone(value), ref: ref(name, id) };
+      const snapshot = { id, exists: value !== undefined, data: () => structuredClone(value), ref: ref(name, id) };
+      if (afterRead?.collection === name && afterRead.id === id) {
+        const callback = afterRead.callback;
+        afterRead = null;
+        callback();
+      }
+      return snapshot;
     },
     set: async (value: any, options?: any) => {
       const current = collectionData(name).get(id) || {};
@@ -56,6 +63,9 @@ function createFakeFirestore() {
     seed: (name: string, id: string, value: any) => collectionData(name).set(id, structuredClone(value)),
     read: (name: string, id: string) => structuredClone(collectionData(name).get(id)),
     list: (name: string) => [...collectionData(name).entries()].map(([id, value]) => ({ id, ...structuredClone(value) })),
+    afterNextRead: (collection: string, id: string, callback: () => void) => {
+      afterRead = { collection, id, callback };
+    },
     domain: () => structuredClone({
       properties: [...collectionData("properties")],
       units: [...collectionData("units")],
@@ -233,9 +243,44 @@ describe("tenantOccupancySyncService canonical adapter", () => {
     }
   });
 
-  it("does not bypass renewal handoff or reactivate an occupancy-excluded lease", async () => {
-    fake.seed("leases", "lease-1", { ...fake.read("leases", "lease-1"), predecessorLeaseId: "lease-old" });
+  it.each([
+    ["successor", { predecessorLeaseId: "lease-old" }],
+    ["predecessor", { renewedByLeaseId: "lease-new" }],
+    ["ambiguous predecessor", { renewedByLeaseId: "lease-new", successorLeaseId: "lease-other" }],
+  ])("rejects a stable renewal-linked %s from the fresh transaction snapshot", async (_label, link) => {
+    fake.seed("leases", "lease-1", { ...fake.read("leases", "lease-1"), ...link });
     expect(await activate()).toEqual({ updated: false, reason: "renewal_handoff_required" });
+    expect(fake.read("units", "unit-1")).toMatchObject({ status: "vacant", occupancyStatus: "vacant" });
+    expect(fake.read("tenancies", "tenancy-1")).toMatchObject({ status: "inactive" });
+    expect(fake.list("canonicalEvents")).toEqual([]);
+    expect(fake.list("leaseStartRequests")).toEqual([]);
+  });
+
+  it.each([
+    ["application conversion", "application_conversion", "app-race"],
+    ["tenant invite onboarding", "tenant_invite_onboarding", "invite-race"],
+  ] as const)("closes the renewal-link TOCTOU window for %s", async (_label, source, idempotencyKey) => {
+    fake.afterNextRead("leases", "lease-1", () => {
+      fake.seed("leases", "lease-1", {
+        ...fake.read("leases", "lease-1"),
+        predecessorLeaseId: "lease-old",
+      });
+    });
+
+    expect(await activate({ source, idempotencyKey })).toEqual({
+      updated: false,
+      reason: "renewal_handoff_required",
+    });
+    expect(fake.read("leases", "lease-1")).not.toHaveProperty("occupancyEffective");
+    expect(fake.read("units", "unit-1")).toMatchObject({ status: "vacant", occupancyStatus: "vacant" });
+    expect(fake.read("properties", "property-1").units[0]).toMatchObject({ status: "vacant", occupancyStatus: "vacant" });
+    expect(fake.read("tenants", "tenant-1")).not.toHaveProperty("currentLeaseId");
+    expect(fake.read("tenancies", "tenancy-1")).toMatchObject({ status: "inactive" });
+    expect(fake.list("canonicalEvents")).toEqual([]);
+    expect(fake.list("leaseStartRequests")).toEqual([]);
+  });
+
+  it("does not reactivate an occupancy-excluded lease", async () => {
     fake.seed("leases", "lease-1", { ...fake.read("leases", "lease-1"), predecessorLeaseId: null, occupancyDisposition: { status: "excluded_from_current_occupancy_by_resolution" } });
     expect(await activate()).toEqual({ updated: false, reason: "occupancy_excluded" });
     expect(fake.read("units", "unit-1")).toMatchObject({ status: "vacant", occupancyStatus: "vacant" });

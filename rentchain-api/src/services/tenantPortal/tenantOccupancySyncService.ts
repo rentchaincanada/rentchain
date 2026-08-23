@@ -1,4 +1,5 @@
 import { db } from "../../firebase";
+import { hasRenewalContinuityLink } from "../../lib/leases/renewalContinuity";
 import {
   getCanonicalLeaseStartContext,
   startCanonicalLeaseOccupancy,
@@ -37,15 +38,6 @@ function text(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function isRenewalLease(lease: Record<string, unknown>): boolean {
-  return [
-    lease.predecessorLeaseId,
-    lease.renewalOfLeaseId,
-    lease.renewedFromLeaseId,
-    lease.replacesLeaseId,
-  ].some((value) => Boolean(text(value)));
-}
-
 function isOccupancyExcluded(lease: Record<string, any>): boolean {
   return text(lease.occupancyDisposition?.status) === "excluded_from_current_occupancy_by_resolution";
 }
@@ -72,10 +64,6 @@ export async function syncPropertyUnitOccupancyForTenantContext(
   if (!leaseSnap.exists) return { updated: false, reason: "lease_not_found" };
   const lease = { id: leaseSnap.id, ...(leaseSnap.data() || {}) };
 
-  // Renewal occupancy is governed exclusively by the explicit PR G handoff.
-  // The expected-state token generated below includes the complete lease, so
-  // a concurrent linkage/disposition change makes the canonical commit stale.
-  if (isRenewalLease(lease)) return { updated: false, reason: "renewal_handoff_required" };
   if (isOccupancyExcluded(lease)) return { updated: false, reason: "occupancy_excluded" };
 
   const evaluationInstant = input.evaluationInstant || new Date().toISOString();
@@ -95,22 +83,33 @@ export async function syncPropertyUnitOccupancyForTenantContext(
   if (context.decision.outcome === "already_coherent") {
     return { updated: false, reason: "already_coherent" };
   }
-  const canonicalResult = await startCanonicalLeaseOccupancy({
-    landlordId,
-    propertyId,
-    unitId,
-    tenantId,
-    leaseId,
-    operationKind: "conversion",
-    trigger: "conversion",
-    idempotencyKey,
-    expectedStateToken: context.expectedStateToken,
-    evaluationInstant: context.evaluationInstant,
-    actorId: text(input.actorId) || landlordId,
-    source: input.source,
-    persistRejectedAttempt: false,
-    firestore,
-  });
+  let canonicalResult: LeaseStartServiceResult;
+  try {
+    canonicalResult = await startCanonicalLeaseOccupancy({
+      landlordId,
+      propertyId,
+      unitId,
+      tenantId,
+      leaseId,
+      operationKind: "conversion",
+      trigger: "conversion",
+      idempotencyKey,
+      expectedStateToken: context.expectedStateToken,
+      evaluationInstant: context.evaluationInstant,
+      actorId: text(input.actorId) || landlordId,
+      source: input.source,
+      persistRejectedAttempt: false,
+      transactionEligibilityGuard: ({ candidateLease }) =>
+        hasRenewalContinuityLink(candidateLease) ? "renewal_handoff_required" : null,
+      firestore,
+    });
+  } catch (error: any) {
+    if (error?.code === "lease_start_transaction_ineligible" &&
+        error?.transactionEligibilityReason === "renewal_handoff_required") {
+      return { updated: false, reason: "renewal_handoff_required" };
+    }
+    throw error;
+  }
   const reason = canonicalResult.canonicalOutcome;
   return {
     updated: canonicalResult.occupancyEffective,
