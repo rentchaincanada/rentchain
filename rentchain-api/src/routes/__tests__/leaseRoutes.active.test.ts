@@ -2532,6 +2532,11 @@ describe("leaseRoutes GET /active", () => {
     expect((await fakeDb.collection("tenants").doc("tenant-shared").get()).data()).toMatchObject({ status: "current", currentLeaseId: "lease-current" });
     expect((await fakeDb.collection("tenancies").doc("tenancy-ending").get()).data()).toMatchObject({ status: "inactive" });
     expect((await fakeDb.collection("tenancies").doc("tenancy-current").get()).data()).toMatchObject({ status: "active" });
+    const tenantsRouter = (await import("../tenantsRoutes")).default;
+    const detail = await invokeRouter(tenantsRouter, { method: "GET", url: "/tenant-shared" });
+    expect(detail.body.lease).toMatchObject({ id: "lease-current" });
+    expect(detail.body.canonicalState).toMatchObject({ supportingLeaseId: "lease-current" });
+    expect(detail.body.currentLease).toMatchObject({ id: "lease-current" });
   });
 
   it("projects one completed End Lease postcondition through all five product paths without Review Needed", async () => {

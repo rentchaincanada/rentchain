@@ -512,6 +512,53 @@ describe("getTenantDetailBundle", () => {
     expect(bundle.currentLease?.id).toBe(bundle.canonicalState?.supportingLeaseId);
   });
 
+  it("preserves a display lease while projecting a different canonical supporting lease as current", async () => {
+    tenantDocs.set("tenant-1", {
+      landlordId: "landlord-1",
+      fullName: "Tenant One",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      currentLeaseId: "lease-display",
+      status: "Current",
+    });
+    propertyDocs.set("property-1", { landlordId: "landlord-1", name: "Property" });
+    unitDocs.set("unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "1",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      currentLeaseId: "lease-current",
+      currentTenantId: "tenant-1",
+    });
+    leaseDocs.set("lease-display", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      status: "pending_signature",
+      startDate: "2026-01-01",
+      endDate: "2027-01-01",
+      monthlyRent: 1700,
+    });
+    leaseDocs.set("lease-current", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      status: "active",
+      startDate: "2026-01-01",
+      endDate: "2027-01-01",
+    });
+    const { getTenantDetailBundle } = await import("../tenantDetailsService");
+    const bundle = await getTenantDetailBundle("tenant-1", { landlordId: "landlord-1" });
+
+    expect(bundle.lease?.id).toBe("lease-display");
+    expect(bundle.canonicalState?.supportingLeaseId).toBe("lease-current");
+    expect(bundle.currentLease?.id).toBe("lease-current");
+    expect(bundle.currentLease?.id).not.toBe(bundle.lease?.id);
+  });
+
   it("projects signed lease signing request state into tenant profile readiness and coherence", async () => {
     propertyDocs.set("property-1", {
       landlordId: "landlord-1",
