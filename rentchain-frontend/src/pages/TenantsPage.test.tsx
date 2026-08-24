@@ -387,6 +387,91 @@ describe("TenantsPage", () => {
     expect(screen.getByRole("button", { name: "Open payment ledger" })).toBeEnabled();
   });
 
+  it("does not substitute list canonical state while tenant detail is loading", async () => {
+    mocks.fetchTenantsMock.mockResolvedValue([{
+      id: "tenant-1",
+      fullName: "Taylor Tenant",
+      propertyName: "Main Street",
+      propertyId: "property-1",
+      unit: "Unit 4",
+      unitId: "unit-4",
+      canonicalState: {
+        leaseTermState: "active",
+        occupancyState: "occupied",
+        tenantRelationshipState: "current_occupant",
+        supportingLeaseId: "lease-primary",
+        reasons: [],
+      },
+    }]);
+    mocks.useTenantDetailMock.mockReturnValue({ bundle: null, loading: true, error: null });
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Loading tenant details…")).toBeInTheDocument();
+    expect(screen.getByText("Payment ledger loading with tenant details…")).toBeInTheDocument();
+    expect(screen.queryByText("No current lease linked")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open payment ledger" })).not.toBeInTheDocument();
+  });
+
+  it("does not convert a tenant detail error into no-current-lease truth", async () => {
+    mocks.fetchTenantsMock.mockResolvedValue([{
+      id: "tenant-1",
+      fullName: "Taylor Tenant",
+      canonicalState: {
+        leaseTermState: "active",
+        occupancyState: "occupied",
+        tenantRelationshipState: "current_occupant",
+        supportingLeaseId: "lease-primary",
+        reasons: [],
+      },
+    }]);
+    mocks.useTenantDetailMock.mockReturnValue({ bundle: null, loading: false, error: "request failed" });
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Tenant details are unavailable/)).toBeInTheDocument();
+    expect(screen.getByText(/Payment ledger unavailable/)).toBeInTheDocument();
+    expect(screen.queryByText("No current lease linked")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open payment ledger" })).not.toBeInTheDocument();
+  });
+
+  it("does not use a stale previous tenant detail bundle for the selected tenant", async () => {
+    mocks.fetchTenantsMock.mockResolvedValue([{ id: "tenant-b", fullName: "Tenant B" }]);
+    mocks.useTenantDetailMock.mockReturnValue({
+      bundle: {
+        tenant: { id: "tenant-a", fullName: "Tenant A" },
+        canonicalState: {
+          leaseTermState: "active",
+          occupancyState: "occupied",
+          tenantRelationshipState: "current_occupant",
+          supportingLeaseId: "lease-a",
+          reasons: [],
+        },
+        currentLease: { id: "lease-a", tenantId: "tenant-a", status: "active" },
+      },
+      loading: true,
+      error: null,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-b"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Loading tenant details…")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Lease/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("No current lease linked")).not.toBeInTheDocument();
+  });
+
   it("keeps signed lease document links inside the lease summary workspace when a lease id is available", async () => {
     mocks.useCapabilitiesMock.mockReturnValue({
       features: { tenant_invites: true },
@@ -431,6 +516,13 @@ describe("TenantsPage", () => {
           signedDocumentUrl: "https://storage.googleapis.com/rentchain-documents-prod/lease-signing/1?X-Goog-Signature=safe",
           signedDocumentExpiresInSeconds: 1800,
           signedDocumentSource: "signedDocument",
+        },
+        canonicalState: {
+          leaseTermState: "active",
+          occupancyState: "occupied",
+          tenantRelationshipState: "current_occupant",
+          supportingLeaseId: "lease-signed-1",
+          reasons: [],
         },
       },
       loading: false,
@@ -486,6 +578,13 @@ describe("TenantsPage", () => {
           signedDocumentUrl: "https://storage.googleapis.com/rentchain-documents-prod/lease-signing/1?X-Goog-Signature=safe",
           signedDocumentExpiresInSeconds: 1800,
           signedDocumentSource: "signedDocument",
+        },
+        canonicalState: {
+          leaseTermState: "none",
+          occupancyState: "vacant",
+          tenantRelationshipState: "no_current_occupancy",
+          supportingLeaseId: null,
+          reasons: [],
         },
       },
       loading: false,
@@ -678,6 +777,13 @@ describe("TenantsPage", () => {
         tenant: { id: "tenant-1", fullName: "Taylor Tenant" },
         currentLease: null,
         lease: null,
+        canonicalState: {
+          leaseTermState: "none",
+          occupancyState: "vacant",
+          tenantRelationshipState: "no_current_occupancy",
+          supportingLeaseId: null,
+          reasons: [],
+        },
       },
       loading: false,
       error: null,
