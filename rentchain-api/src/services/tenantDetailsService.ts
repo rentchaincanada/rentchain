@@ -933,6 +933,50 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     currentLeasePointerId: tenant?.currentLeaseId,
     tenantId,
   });
+  const canonicalCurrentLeaseRecord = canonicalState.supportingLeaseId
+    ? leaseResolution.leases.find((candidate) => candidate.id === canonicalState.supportingLeaseId) || null
+    : null;
+  let currentLease: TenantLease | null = null;
+  if (canonicalCurrentLeaseRecord) {
+    if (canonicalCurrentLeaseRecord.id === lease?.id) {
+      currentLease = lease;
+    } else {
+      const [canonicalProperty, canonicalUnit, canonicalSignedDocumentLink] = await Promise.all([
+        loadPropertyRecord(canonicalCurrentLeaseRecord.propertyId || null),
+        loadUnitRecord(
+          canonicalCurrentLeaseRecord.propertyId || null,
+          canonicalCurrentLeaseRecord.unitId || null,
+          canonicalCurrentLeaseRecord.unitLabel || null,
+          landlordId
+        ),
+        loadSignedLeaseDocumentLink(canonicalCurrentLeaseRecord.id, landlordId),
+      ]);
+      currentLease = {
+        id: canonicalCurrentLeaseRecord.id,
+        tenantId,
+        propertyId: canonicalCurrentLeaseRecord.propertyId,
+        propertyName:
+          canonicalProperty?.name || canonicalCurrentLeaseRecord.propertyLabel || tenant?.propertyName || "Unknown Property",
+        propertyAddress:
+          [canonicalProperty?.addressLine1, canonicalProperty?.city, canonicalProperty?.province].filter(Boolean).join(", ") || null,
+        unitId: canonicalCurrentLeaseRecord.unitId,
+        unit:
+          pickString(
+            canonicalUnit?.unitNumber,
+            canonicalUnit?.label,
+            canonicalCurrentLeaseRecord.unitLabel,
+            canonicalCurrentLeaseRecord.unitId
+          ) || "N/A",
+        leaseStart: canonicalCurrentLeaseRecord.leaseStartDate,
+        leaseEnd: canonicalCurrentLeaseRecord.leaseEndDate,
+        monthlyRent: Number(canonicalCurrentLeaseRecord.currentRent || 0),
+        status: canonicalCurrentLeaseRecord.status,
+        signedDocumentUrl: canonicalSignedDocumentLink?.signedDocumentUrl || null,
+        signedDocumentExpiresInSeconds: canonicalSignedDocumentLink?.signedDocumentExpiresInSeconds ?? null,
+        signedDocumentSource: canonicalSignedDocumentLink?.signedDocumentSource || null,
+      };
+    }
+  }
   const insights: any[] = [];
   const credibilityInsights = buildCredibilityInsights({ tenant, leaseRaw: currentLeaseRaw });
   const moveInRequirements = buildMoveInRequirements({
@@ -965,7 +1009,7 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
   return {
     tenant,
     lease,
-    currentLease: canonicalState.supportingLeaseId === lease?.id ? lease : null,
+    currentLease,
     property,
     unit: unit
       ? {

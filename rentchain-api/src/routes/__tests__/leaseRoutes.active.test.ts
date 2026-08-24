@@ -3699,7 +3699,8 @@ describe("leaseRoutes GET /active", () => {
     const tenants = await invokeRouter(tenantsRouter, { method: "GET", url: "/" });
     expect(tenants.body.tenants.find((entry: any) => entry.id === tenantId)).toMatchObject({ currentLeaseId: leaseId, canonicalState: expect.objectContaining({ tenantRelationshipState: "current_occupant", supportingLeaseId: leaseId }) });
     const detail = await invokeRouter(tenantsRouter, { method: "GET", url: `/${tenantId}` });
-    expect(detail.body).toMatchObject({ tenant: expect.objectContaining({ currentLeaseId: leaseId }), canonicalState: expect.objectContaining({ occupancyState: "occupied", supportingLeaseId: leaseId }), lease: expect.objectContaining({ id: leaseId }) });
+    expect(detail.body).toMatchObject({ tenant: expect.objectContaining({ currentLeaseId: leaseId }), canonicalState: expect.objectContaining({ occupancyState: "occupied", supportingLeaseId: leaseId }), lease: expect.objectContaining({ id: leaseId }), currentLease: expect.objectContaining({ id: leaseId }) });
+    expect(detail.body.currentLease.id).toBe(detail.body.canonicalState.supportingLeaseId);
     const review = await invokeRouter(occupancyReviewRouter, { method: "GET", url: "/" });
     expect(review.body.items.filter((item: any) => item.propertyId === propertyId && item.unitId === unitId)).toEqual([]);
     expect(listDocs("canonicalEvents").filter((doc) => doc.data.type === "lease.occupancy_started")).toHaveLength(1);

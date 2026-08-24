@@ -287,6 +287,13 @@ describe("TenantsPage", () => {
       error: null,
       bundle: {
         tenant: { id: "tenant-1", fullName: "Taylor Tenant" },
+        canonicalState: {
+          leaseTermState: "active",
+          occupancyState: "occupied",
+          tenantRelationshipState: "current_occupant",
+          supportingLeaseId: "lease-1",
+          reasons: [],
+        },
         currentLease: {
           id: "lease-1",
           tenantId: "tenant-1",
@@ -341,6 +348,13 @@ describe("TenantsPage", () => {
     mocks.useTenantDetailMock.mockReturnValue({
       bundle: {
         tenant: { id: "tenant-1", fullName: "Taylor Tenant" },
+        canonicalState: {
+          leaseTermState: "active",
+          occupancyState: "occupied",
+          tenantRelationshipState: "current_occupant",
+          supportingLeaseId: "lease-active-1",
+          reasons: [],
+        },
         currentLease: {
           id: "lease-active-1",
           tenantId: "tenant-1",
@@ -370,6 +384,7 @@ describe("TenantsPage", () => {
     expect(leaseLinks[0]).toHaveAttribute("href", "/leases/lease-active-1/summary#signed-document");
     expect(screen.queryByText("lease-active-1")).not.toBeInTheDocument();
     expect(screen.queryByText("No current lease linked")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open payment ledger" })).toBeEnabled();
   });
 
   it("keeps signed lease document links inside the lease summary workspace when a lease id is available", async () => {

@@ -507,7 +507,9 @@ describe("getTenantDetailBundle", () => {
 
     const { getTenantDetailBundle } = await import("../tenantDetailsService");
     const bundle = await getTenantDetailBundle("tenant-1", { landlordId: "landlord-1" });
+    expect(bundle.canonicalState?.supportingLeaseId).toBe("lease-1");
     expect(bundle.currentLease).toEqual(expect.objectContaining({ id: "lease-1", status: "active", monthlyRent: 1800 }));
+    expect(bundle.currentLease?.id).toBe(bundle.canonicalState?.supportingLeaseId);
   });
 
   it("projects signed lease signing request state into tenant profile readiness and coherence", async () => {
@@ -643,6 +645,7 @@ describe("getTenantDetailBundle", () => {
     const bundle = await getTenantDetailBundle("tenant-1", { landlordId: "landlord-1" });
 
     expect(bundle.currentLease).toBeNull();
+    expect(bundle.canonicalState?.supportingLeaseId).toBeNull();
     expect(bundle.lease).toEqual(
       expect.objectContaining({
         id: "lease-1",
