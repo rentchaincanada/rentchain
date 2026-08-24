@@ -76,7 +76,7 @@ import {
   resolveCanonicalUnitProjectionInputs,
   toCanonicalLeaseStateInput,
 } from "../lib/leases/canonicalLeaseOccupancyProjection";
-import { deriveCanonicalLeaseTermState } from "../lib/leases/canonicalLeaseOccupancyState";
+import { deriveCanonicalLeaseTermState, selectCanonicalCurrentLease } from "../lib/leases/canonicalLeaseOccupancyState";
 import { readMutationIdempotencyKey } from "../lib/http/mutationIdempotency";
 import { createCanonicalLease } from "../services/leaseStart/leaseCreationService";
 import { leaseStartDeterministicId } from "../services/leaseStart/leaseStartExpectedState";
@@ -444,11 +444,13 @@ async function endFirestoreLeaseAtomically(
     const leaseRef = db.collection("leases").doc(leaseId);
     const propertyRef = db.collection("properties").doc(propertyId);
     const tenanciesQuery = db.collection("tenancies").where("leaseId", "==", leaseId);
-    const [leaseSnap, propertySnap, unitSnap, tenanciesSnap] = await Promise.all([
+    const landlordLeasesQuery = db.collection("leases").where("landlordId", "==", authority.landlordId);
+    const [leaseSnap, propertySnap, unitSnap, tenanciesSnap, landlordLeasesSnap] = await Promise.all([
       transaction.get(leaseRef),
       transaction.get(propertyRef),
       transaction.get(db.collection("units").where("propertyId", "==", propertyId)),
       transaction.get(tenanciesQuery),
+      transaction.get(landlordLeasesQuery),
     ]);
     if (!leaseSnap.exists) throw new Error("lease_end_lease_not_found");
     if (!propertySnap.exists) throw new Error("lease_end_property_not_found");
@@ -527,6 +529,23 @@ async function endFirestoreLeaseAtomically(
     // or rewrite any occupancy projection for an already-ended lease.
     if (normalizeStatus((leaseSnap.data() || {}).status) === "ended") return;
 
+    const postEndLandlordLeases = (landlordLeasesSnap?.docs || []).map((doc: any) => {
+      const data = { id: doc.id, ...(doc.data() || {}) };
+      return doc.id === leaseId
+        ? { ...data, status: "ended", occupancyEffective: false, endDate }
+        : data;
+    });
+    const participantLeaseSelections = participantTenantIds.map((participantTenantId) => {
+      const selection = selectCanonicalCurrentLease(
+        postEndLandlordLeases.map(toCanonicalLeaseStateInput),
+        { landlordId: authority.landlordId, tenantId: participantTenantId, asOfDate: endDate }
+      );
+      if (!selection.lease && selection.reasons.includes("MULTIPLE_CURRENT_LEASES")) {
+        throw new Error("lease_end_participant_occupancy_ambiguous");
+      }
+      return selection.lease?.id || null;
+    });
+
     const nextEmbeddedUnits = embeddedUnits.map((unit: any, index: number) =>
       index === matchingEmbedded[0].index
         ? { ...unit, status: "vacant", occupancyStatus: "vacant", tenantId: null, currentTenantId: null, leaseId: null, currentLeaseId: null, occupancySource: "lease_end", occupancyUpdatedAt: nowIso, updatedAt: nowIso }
@@ -571,12 +590,21 @@ async function endFirestoreLeaseAtomically(
       transaction.set(unitDocs[0].ref, { status: "vacant", occupancyStatus: "vacant", tenantId: null, currentTenantId: null, leaseId: null, currentLeaseId: null, occupancySource: "lease_end", occupancyUpdatedAt: nowIso, updatedAt: nowIso }, { merge: true });
     }
 
-    transaction.set(leaseRef, { status: "ended", endDate, updatedAt: nowIso }, { merge: true });
+    transaction.set(leaseRef, { status: "ended", occupancyEffective: false, endDate, updatedAt: nowIso }, { merge: true });
     tenantSnaps.forEach((tenantSnap: any, index: number) => {
       if (tenantSnap?.exists) {
         const tenant = tenantSnap.data() || {};
         if (String(tenant.currentLeaseId || "").trim() === leaseId) {
-          transaction.set(tenantRefs[index], { currentLeaseId: null, updatedAt: nowIso }, { merge: true });
+          const supportingLeaseId = participantLeaseSelections[index];
+          transaction.set(
+            tenantRefs[index],
+            {
+              currentLeaseId: supportingLeaseId,
+              status: supportingLeaseId ? "current" : "Past",
+              updatedAt: nowIso,
+            },
+            { merge: true }
+          );
         }
       }
     });

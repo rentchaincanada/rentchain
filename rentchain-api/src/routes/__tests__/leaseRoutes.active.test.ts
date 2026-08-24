@@ -2423,7 +2423,7 @@ describe("leaseRoutes GET /active", () => {
       leaseId: "lease-1",
       currentLeaseId: "lease-1",
     });
-    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", currentLeaseId: "lease-1" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", status: "current", currentLeaseId: "lease-1" });
     seedDoc("tenancies", "tenancy-1", { landlordId: "landlord-1", propertyId: "prop-1", unitId: "unit-1", tenantId: "tenant-1", leaseId: "lease-1", status: "active" });
 
     const router = (await import("../leaseRoutes")).default;
@@ -2447,8 +2447,8 @@ describe("leaseRoutes GET /active", () => {
         occupancySource: "lease_end",
       })
     );
-    expect((await fakeDb.collection("leases").doc("lease-1").get()).data()).toMatchObject({ status: "ended" });
-    expect((await fakeDb.collection("tenants").doc("tenant-1").get()).data()).toMatchObject({ currentLeaseId: null });
+    expect((await fakeDb.collection("leases").doc("lease-1").get()).data()).toMatchObject({ status: "ended", occupancyEffective: false });
+    expect((await fakeDb.collection("tenants").doc("tenant-1").get()).data()).toMatchObject({ status: "Past", currentLeaseId: null });
     expect((await fakeDb.collection("tenancies").doc("tenancy-1").get()).data()).toMatchObject({ status: "inactive" });
     expect(listDocs("canonicalEvents")).toHaveLength(1);
     expect(listDocs("canonicalEvents")[0].data).toMatchObject({
@@ -2483,8 +2483,8 @@ describe("leaseRoutes GET /active", () => {
   it("ends every participating tenancy and clears every matching tenant pointer for a multi-party lease", async () => {
     seedDoc("properties", "prop-multi-party", { landlordId: "landlord-1", units: [{ id: "unit-multi-party", unitNumber: "501", status: "occupied", tenantId: "tenant-b", currentTenantId: "tenant-b", currentLeaseId: "lease-multi-party" }] });
     seedDoc("units", "unit-multi-party", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitNumber: "501", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-b", currentTenantId: "tenant-b", leaseId: "lease-multi-party", currentLeaseId: "lease-multi-party" });
-    seedDoc("tenants", "tenant-a", { landlordId: "landlord-1", currentLeaseId: "lease-multi-party" });
-    seedDoc("tenants", "tenant-b", { landlordId: "landlord-1", currentLeaseId: "lease-multi-party" });
+    seedDoc("tenants", "tenant-a", { landlordId: "landlord-1", status: "current", currentLeaseId: "lease-multi-party" });
+    seedDoc("tenants", "tenant-b", { landlordId: "landlord-1", status: "current", currentLeaseId: "lease-multi-party" });
     seedDoc("leases", "lease-multi-party", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", unitNumber: "501", tenantId: "tenant-a", primaryTenantId: "tenant-a", tenantIds: ["tenant-a", "tenant-b", "tenant-a", ""], status: "active" });
     seedDoc("tenancies", "tenancy-a", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", tenantId: "tenant-a", leaseId: "lease-multi-party", status: "active" });
     seedDoc("tenancies", "tenancy-b", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", tenantId: "tenant-b", leaseId: "lease-multi-party", status: "active" });
@@ -2494,11 +2494,11 @@ describe("leaseRoutes GET /active", () => {
     const res = await invokeRouter(router, { method: "POST", url: "/lease-multi-party/end", body: {} });
 
     expect(res.status).toBe(200);
-    expect((await fakeDb.collection("leases").doc("lease-multi-party").get()).data()).toMatchObject({ status: "ended" });
+    expect((await fakeDb.collection("leases").doc("lease-multi-party").get()).data()).toMatchObject({ status: "ended", occupancyEffective: false });
     expect((await fakeDb.collection("units").doc("unit-multi-party").get()).data()).toMatchObject({ status: "vacant", currentLeaseId: null });
     expect((await fakeDb.collection("properties").doc("prop-multi-party").get()).data()?.units[0]).toMatchObject({ status: "vacant", currentLeaseId: null });
-    expect((await fakeDb.collection("tenants").doc("tenant-a").get()).data()).toMatchObject({ currentLeaseId: null });
-    expect((await fakeDb.collection("tenants").doc("tenant-b").get()).data()).toMatchObject({ currentLeaseId: null });
+    expect((await fakeDb.collection("tenants").doc("tenant-a").get()).data()).toMatchObject({ status: "Past", currentLeaseId: null });
+    expect((await fakeDb.collection("tenants").doc("tenant-b").get()).data()).toMatchObject({ status: "Past", currentLeaseId: null });
     expect((await fakeDb.collection("tenancies").doc("tenancy-a").get()).data()).toMatchObject({ status: "inactive" });
     expect((await fakeDb.collection("tenancies").doc("tenancy-b").get()).data()).toMatchObject({ status: "inactive" });
     expect((await fakeDb.collection("tenancies").doc("unrelated-tenancy").get()).data()).toMatchObject({ status: "active" });
@@ -2511,6 +2511,72 @@ describe("leaseRoutes GET /active", () => {
     expect((await fakeDb.collection("tenancies").doc("tenancy-a").get()).data()).toMatchObject({ status: "inactive" });
     expect((await fakeDb.collection("tenancies").doc("tenancy-b").get()).data()).toMatchObject({ status: "inactive" });
     expect((await fakeDb.collection("tenancies").doc("unrelated-tenancy").get()).data()).toMatchObject({ status: "active" });
+  });
+
+  it("preserves another canonical current lease when ending one participant lease", async () => {
+    seedDoc("properties", "prop-ending", { landlordId: "landlord-1", units: [{ id: "unit-ending", unitNumber: "601", status: "occupied", currentTenantId: "tenant-shared", currentLeaseId: "lease-ending" }] });
+    seedDoc("properties", "prop-current", { landlordId: "landlord-1", units: [{ id: "unit-current", unitNumber: "602", status: "occupied", currentTenantId: "tenant-shared", currentLeaseId: "lease-current" }] });
+    seedDoc("units", "unit-ending", { landlordId: "landlord-1", propertyId: "prop-ending", unitNumber: "601", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-shared", currentTenantId: "tenant-shared", leaseId: "lease-ending", currentLeaseId: "lease-ending" });
+    seedDoc("units", "unit-current", { landlordId: "landlord-1", propertyId: "prop-current", unitNumber: "602", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-shared", currentTenantId: "tenant-shared", leaseId: "lease-current", currentLeaseId: "lease-current" });
+    seedDoc("tenants", "tenant-shared", { landlordId: "landlord-1", status: "current", currentLeaseId: "lease-ending" });
+    seedDoc("leases", "lease-ending", { landlordId: "landlord-1", propertyId: "prop-ending", unitId: "unit-ending", unitNumber: "601", tenantId: "tenant-shared", tenantIds: ["tenant-shared"], status: "active", executionStatus: "fully_executed", startDate: "2026-01-01", endDate: "2027-01-01", occupancyEffective: true });
+    seedDoc("leases", "lease-current", { landlordId: "landlord-1", propertyId: "prop-current", unitId: "unit-current", unitNumber: "602", tenantId: "tenant-shared", tenantIds: ["tenant-shared"], status: "active", executionStatus: "fully_executed", startDate: "2026-02-01", endDate: "2027-02-01", occupancyEffective: true });
+    seedDoc("tenancies", "tenancy-ending", { landlordId: "landlord-1", propertyId: "prop-ending", unitId: "unit-ending", tenantId: "tenant-shared", leaseId: "lease-ending", status: "active" });
+    seedDoc("tenancies", "tenancy-current", { landlordId: "landlord-1", propertyId: "prop-current", unitId: "unit-current", tenantId: "tenant-shared", leaseId: "lease-current", status: "active" });
+    const router = (await import("../leaseRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-ending/end", body: { endDate: "2026-08-23T12:00:00.000Z" } });
+
+    expect(res.status).toBe(200);
+    expect((await fakeDb.collection("leases").doc("lease-ending").get()).data()).toMatchObject({ status: "ended", occupancyEffective: false });
+    expect((await fakeDb.collection("tenants").doc("tenant-shared").get()).data()).toMatchObject({ status: "current", currentLeaseId: "lease-current" });
+    expect((await fakeDb.collection("tenancies").doc("tenancy-ending").get()).data()).toMatchObject({ status: "inactive" });
+    expect((await fakeDb.collection("tenancies").doc("tenancy-current").get()).data()).toMatchObject({ status: "active" });
+  });
+
+  it("projects one completed End Lease postcondition through all five product paths without Review Needed", async () => {
+    const propertyId = "prop-end-cross-surface";
+    const unitId = "unit-end-cross-surface";
+    const tenantId = "tenant-end-cross-surface";
+    const leaseId = "lease-end-cross-surface";
+    seedDoc("properties", propertyId, {
+      landlordId: "landlord-1",
+      ownerUserId: "landlord-1",
+      name: "End Lease House",
+      units: [{ id: unitId, unitId, unitNumber: "701", status: "occupied", occupancyStatus: "occupied", tenantId, currentTenantId: tenantId, leaseId, currentLeaseId: leaseId }],
+    });
+    seedDoc("units", unitId, { landlordId: "landlord-1", propertyId, unitNumber: "701", status: "occupied", occupancyStatus: "occupied", tenantId, currentTenantId: tenantId, leaseId, currentLeaseId: leaseId });
+    seedDoc("tenants", tenantId, { landlordId: "landlord-1", fullName: "Ended Tenant", status: "current", propertyId, unitId, currentLeaseId: leaseId });
+    seedDoc("leases", leaseId, { landlordId: "landlord-1", propertyId, unitId, unitNumber: "701", tenantId, primaryTenantId: tenantId, tenantIds: [tenantId], status: "active", executionStatus: "fully_executed", startDate: "2026-01-01", endDate: "2027-01-01", occupancyEffective: true });
+    seedDoc("tenancies", "tenancy-end-cross-surface", { landlordId: "landlord-1", propertyId, unitId, tenantId, leaseId, status: "active" });
+
+    const leaseRouter = (await import("../leaseRoutes")).default;
+    const propertiesRouter = (await import("../propertiesRoutes")).default;
+    const tenantsRouter = (await import("../tenantsRoutes")).default;
+    const occupancyReviewRouter = (await import("../occupancyReviewRoutes")).default;
+    const ended = await invokeRouter(leaseRouter, { method: "POST", url: `/${leaseId}/end`, body: { endDate: "2026-08-23T12:00:00.000Z" } });
+    expect(ended.status).toBe(200);
+
+    const properties = await invokeRouter(propertiesRouter, { method: "GET", url: "/" });
+    const property = properties.body.items.find((entry: any) => entry.id === propertyId);
+    expect(property.units.find((entry: any) => entry.id === unitId)).toMatchObject({ status: "vacant", occupancyStatus: "vacant", tenantId: null, currentTenantId: null, leaseId: null, currentLeaseId: null });
+
+    const leases = await invokeRouter(leaseRouter, { method: "GET", url: `/tenant/${tenantId}` });
+    const historicalLease = leases.body.leases.find((entry: any) => entry.id === leaseId);
+    expect(historicalLease).toMatchObject({ status: "ended", occupancyEffective: false, canonicalState: expect.objectContaining({ leaseTermState: "ended", occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null }) });
+
+    const tenants = await invokeRouter(tenantsRouter, { method: "GET", url: "/" });
+    const tenant = tenants.body.tenants.find((entry: any) => entry.id === tenantId);
+    expect(tenant).toMatchObject({ status: "Past", currentLeaseId: null, canonicalState: expect.objectContaining({ occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null }) });
+
+    const detail = await invokeRouter(tenantsRouter, { method: "GET", url: `/${tenantId}` });
+    expect(detail.body.tenant).toMatchObject({ status: "Past", currentLeaseId: null });
+    expect(detail.body.canonicalState).toMatchObject({ occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null });
+    expect(detail.body.lease).toBeNull();
+
+    const review = await invokeRouter(occupancyReviewRouter, { method: "GET", url: "/" });
+    expect(review.body.items.filter((item: any) => item.propertyId === propertyId || item.unitId === unitId || item.tenantId === tenantId)).toEqual([]);
+    expect(listDocs("canonicalEvents")).toHaveLength(1);
   });
 
   it.each([
