@@ -518,7 +518,7 @@ describe("getTenantDetailBundle", () => {
       fullName: "Tenant One",
       propertyId: "property-1",
       unitId: "unit-1",
-      currentLeaseId: "lease-display",
+      currentLeaseId: "lease-A",
       status: "Current",
     });
     propertyDocs.set("property-1", { landlordId: "landlord-1", name: "Property" });
@@ -528,10 +528,10 @@ describe("getTenantDetailBundle", () => {
       unitNumber: "1",
       status: "occupied",
       occupancyStatus: "occupied",
-      currentLeaseId: "lease-current",
+      currentLeaseId: "lease-B",
       currentTenantId: "tenant-1",
     });
-    leaseDocs.set("lease-display", {
+    leaseDocs.set("lease-A", {
       landlordId: "landlord-1",
       tenantId: "tenant-1",
       propertyId: "property-1",
@@ -541,7 +541,7 @@ describe("getTenantDetailBundle", () => {
       endDate: "2027-01-01",
       monthlyRent: 1700,
     });
-    leaseDocs.set("lease-current", {
+    leaseDocs.set("lease-B", {
       landlordId: "landlord-1",
       tenantId: "tenant-1",
       propertyId: "property-1",
@@ -553,9 +553,9 @@ describe("getTenantDetailBundle", () => {
     const { getTenantDetailBundle } = await import("../tenantDetailsService");
     const bundle = await getTenantDetailBundle("tenant-1", { landlordId: "landlord-1" });
 
-    expect(bundle.lease?.id).toBe("lease-display");
-    expect(bundle.canonicalState?.supportingLeaseId).toBe("lease-current");
-    expect(bundle.currentLease?.id).toBe("lease-current");
+    expect(bundle.lease?.id).toBe("lease-A");
+    expect(bundle.canonicalState?.supportingLeaseId).toBe("lease-B");
+    expect(bundle.currentLease?.id).toBe("lease-B");
     expect(bundle.currentLease?.id).not.toBe(bundle.lease?.id);
   });
 
