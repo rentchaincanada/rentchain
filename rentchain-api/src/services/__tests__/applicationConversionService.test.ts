@@ -12,10 +12,11 @@ function clone(value: any) {
   return JSON.parse(JSON.stringify(value));
 }
 
-const { sendEmailMock, logAuditEventMock, createTenancyIfMissingMock } = vi.hoisted(() => ({
+const { sendEmailMock, logAuditEventMock, createTenancyIfMissingMock, occupancySyncMock } = vi.hoisted(() => ({
   sendEmailMock: vi.fn(async () => undefined),
   logAuditEventMock: vi.fn(async () => undefined),
   createTenancyIfMissingMock: vi.fn(async () => undefined),
+  occupancySyncMock: vi.fn(async () => ({ updated: false, reason: "missing_context" })),
 }));
 
 const dbMock = {
@@ -62,6 +63,9 @@ vi.mock("../../email/templates/baseEmailTemplate", () => ({
   buildEmailText: vi.fn(() => "invite"),
 }));
 vi.mock("../tenanciesService", () => ({ createTenancyIfMissing: createTenancyIfMissingMock }));
+vi.mock("../tenantPortal/tenantOccupancySyncService", () => ({
+  syncPropertyUnitOccupancyForTenantContext: occupancySyncMock,
+}));
 vi.mock("../tenantPortal/tenantEventLogService", () => ({
   recordTenantEvent: vi.fn(async () => ({ id: "event-1" })),
 }));
@@ -72,6 +76,7 @@ describe("applicationConversionService", () => {
     sendEmailMock.mockClear();
     logAuditEventMock.mockClear();
     createTenancyIfMissingMock.mockClear();
+    occupancySyncMock.mockClear();
     process.env.EMAIL_FROM = "noreply@rentchain.test";
     process.env.PUBLIC_APP_URL = "https://www.rentchain.test";
   });
@@ -137,6 +142,14 @@ describe("applicationConversionService", () => {
     expect(ensureCollection("messages").size).toBe(0);
     expect(ensureCollection("emailOutbox").size).toBe(0);
     expect(ensureCollection("outbox").size).toBe(0);
+    expect(createTenancyIfMissingMock).toHaveBeenCalledWith(expect.objectContaining({ status: "inactive" }));
+    expect(occupancySyncMock).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: result.tenantId,
+      leaseId: null,
+      applicationId: "app-1",
+      idempotencyKey: "app-1",
+      source: "application_conversion",
+    }));
   });
 
   it("does not create another tenant when conversion is repeated for the same application", async () => {

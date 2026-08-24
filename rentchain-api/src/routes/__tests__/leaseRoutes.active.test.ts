@@ -8,8 +8,9 @@ const getPrimaryLeaseDocumentSummaryMock = vi.fn(async () => null);
 const generatePrimaryLeaseDocumentMock = vi.fn();
 const lockPrimaryLeaseDocumentForSigningMock = vi.fn();
 
-const { fakeDb, listDocs, resetFakeDb, seedDoc } = vi.hoisted(() => {
+const { clearWriteLog, fakeDb, listDocs, resetFakeDb, seedDoc, writeLog } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
+  const writes: Array<{ collection: string; id: string }> = [];
   let idSeq = 0;
 
   function ensureCollection(name: string) {
@@ -48,6 +49,7 @@ const { fakeDb, listDocs, resetFakeDb, seedDoc } = vi.hoisted(() => {
     return {
       id: actualId,
       set: async (value: any, options?: { merge?: boolean }) => {
+        writes.push({ collection: name, id: actualId });
         const current = col.get(actualId)?.data || {};
         col.set(actualId, { id: actualId, data: options?.merge ? { ...current, ...value } : value });
       },
@@ -61,8 +63,11 @@ const { fakeDb, listDocs, resetFakeDb, seedDoc } = vi.hoisted(() => {
   return {
     resetFakeDb: () => {
       store.clear();
+      writes.splice(0);
       idSeq = 0;
     },
+    clearWriteLog: () => writes.splice(0),
+    writeLog: writes,
     seedDoc: (name: string, id: string, data: any) => ensureCollection(name).set(id, { id, data }),
     listDocs: (name: string) => Array.from(ensureCollection(name).values()).map((doc) => ({ id: doc.id, data: doc.data })),
     fakeDb: {
@@ -143,6 +148,7 @@ async function invokeRouter(router: any, options: {
   url: string;
   body?: any;
   headers?: Record<string, string>;
+  user?: any;
 }) {
   return await new Promise<{ status: number; body: any; headers: Record<string, any> }>((resolve, reject) => {
     const headers: Record<string, any> = {};
@@ -153,7 +159,9 @@ async function invokeRouter(router: any, options: {
       path: options.url,
       body: options.body ?? {},
       headers: options.headers ?? {},
-      user: { id: "landlord-1", landlordId: "landlord-1", role: "landlord" },
+      user: Object.prototype.hasOwnProperty.call(options, "user")
+        ? options.user
+        : { id: "landlord-1", landlordId: "landlord-1", role: "landlord" },
     };
     const res: any = {
       statusCode: 200,
@@ -193,6 +201,7 @@ describe("leaseRoutes GET /active", () => {
     lockPrimaryLeaseDocumentForSigningMock.mockRejectedValue(Object.assign(new Error("signing_document_url_required"), { status: 400 }));
     sendEmailMock.mockResolvedValue(undefined);
     process.env.EMAIL_FROM = "noreply@example.com";
+    process.env.JWT_SECRET = "test-secret";
     process.env.SIGNING_PROVIDER = "mock";
     process.env.PUBLIC_APP_URL = "http://localhost:5173";
   });
@@ -2414,7 +2423,7 @@ describe("leaseRoutes GET /active", () => {
       leaseId: "lease-1",
       currentLeaseId: "lease-1",
     });
-    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", currentLeaseId: "lease-1" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", status: "current", currentLeaseId: "lease-1" });
     seedDoc("tenancies", "tenancy-1", { landlordId: "landlord-1", propertyId: "prop-1", unitId: "unit-1", tenantId: "tenant-1", leaseId: "lease-1", status: "active" });
 
     const router = (await import("../leaseRoutes")).default;
@@ -2438,8 +2447,8 @@ describe("leaseRoutes GET /active", () => {
         occupancySource: "lease_end",
       })
     );
-    expect((await fakeDb.collection("leases").doc("lease-1").get()).data()).toMatchObject({ status: "ended" });
-    expect((await fakeDb.collection("tenants").doc("tenant-1").get()).data()).toMatchObject({ currentLeaseId: null });
+    expect((await fakeDb.collection("leases").doc("lease-1").get()).data()).toMatchObject({ status: "ended", occupancyEffective: false });
+    expect((await fakeDb.collection("tenants").doc("tenant-1").get()).data()).toMatchObject({ status: "Past", currentLeaseId: null });
     expect((await fakeDb.collection("tenancies").doc("tenancy-1").get()).data()).toMatchObject({ status: "inactive" });
     expect(listDocs("canonicalEvents")).toHaveLength(1);
     expect(listDocs("canonicalEvents")[0].data).toMatchObject({
@@ -2474,8 +2483,8 @@ describe("leaseRoutes GET /active", () => {
   it("ends every participating tenancy and clears every matching tenant pointer for a multi-party lease", async () => {
     seedDoc("properties", "prop-multi-party", { landlordId: "landlord-1", units: [{ id: "unit-multi-party", unitNumber: "501", status: "occupied", tenantId: "tenant-b", currentTenantId: "tenant-b", currentLeaseId: "lease-multi-party" }] });
     seedDoc("units", "unit-multi-party", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitNumber: "501", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-b", currentTenantId: "tenant-b", leaseId: "lease-multi-party", currentLeaseId: "lease-multi-party" });
-    seedDoc("tenants", "tenant-a", { landlordId: "landlord-1", currentLeaseId: "lease-multi-party" });
-    seedDoc("tenants", "tenant-b", { landlordId: "landlord-1", currentLeaseId: "lease-multi-party" });
+    seedDoc("tenants", "tenant-a", { landlordId: "landlord-1", status: "current", currentLeaseId: "lease-multi-party" });
+    seedDoc("tenants", "tenant-b", { landlordId: "landlord-1", status: "current", currentLeaseId: "lease-multi-party" });
     seedDoc("leases", "lease-multi-party", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", unitNumber: "501", tenantId: "tenant-a", primaryTenantId: "tenant-a", tenantIds: ["tenant-a", "tenant-b", "tenant-a", ""], status: "active" });
     seedDoc("tenancies", "tenancy-a", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", tenantId: "tenant-a", leaseId: "lease-multi-party", status: "active" });
     seedDoc("tenancies", "tenancy-b", { landlordId: "landlord-1", propertyId: "prop-multi-party", unitId: "unit-multi-party", tenantId: "tenant-b", leaseId: "lease-multi-party", status: "active" });
@@ -2485,11 +2494,11 @@ describe("leaseRoutes GET /active", () => {
     const res = await invokeRouter(router, { method: "POST", url: "/lease-multi-party/end", body: {} });
 
     expect(res.status).toBe(200);
-    expect((await fakeDb.collection("leases").doc("lease-multi-party").get()).data()).toMatchObject({ status: "ended" });
+    expect((await fakeDb.collection("leases").doc("lease-multi-party").get()).data()).toMatchObject({ status: "ended", occupancyEffective: false });
     expect((await fakeDb.collection("units").doc("unit-multi-party").get()).data()).toMatchObject({ status: "vacant", currentLeaseId: null });
     expect((await fakeDb.collection("properties").doc("prop-multi-party").get()).data()?.units[0]).toMatchObject({ status: "vacant", currentLeaseId: null });
-    expect((await fakeDb.collection("tenants").doc("tenant-a").get()).data()).toMatchObject({ currentLeaseId: null });
-    expect((await fakeDb.collection("tenants").doc("tenant-b").get()).data()).toMatchObject({ currentLeaseId: null });
+    expect((await fakeDb.collection("tenants").doc("tenant-a").get()).data()).toMatchObject({ status: "Past", currentLeaseId: null });
+    expect((await fakeDb.collection("tenants").doc("tenant-b").get()).data()).toMatchObject({ status: "Past", currentLeaseId: null });
     expect((await fakeDb.collection("tenancies").doc("tenancy-a").get()).data()).toMatchObject({ status: "inactive" });
     expect((await fakeDb.collection("tenancies").doc("tenancy-b").get()).data()).toMatchObject({ status: "inactive" });
     expect((await fakeDb.collection("tenancies").doc("unrelated-tenancy").get()).data()).toMatchObject({ status: "active" });
@@ -2502,6 +2511,72 @@ describe("leaseRoutes GET /active", () => {
     expect((await fakeDb.collection("tenancies").doc("tenancy-a").get()).data()).toMatchObject({ status: "inactive" });
     expect((await fakeDb.collection("tenancies").doc("tenancy-b").get()).data()).toMatchObject({ status: "inactive" });
     expect((await fakeDb.collection("tenancies").doc("unrelated-tenancy").get()).data()).toMatchObject({ status: "active" });
+  });
+
+  it("preserves another canonical current lease when ending one participant lease", async () => {
+    seedDoc("properties", "prop-ending", { landlordId: "landlord-1", units: [{ id: "unit-ending", unitNumber: "601", status: "occupied", currentTenantId: "tenant-shared", currentLeaseId: "lease-ending" }] });
+    seedDoc("properties", "prop-current", { landlordId: "landlord-1", units: [{ id: "unit-current", unitNumber: "602", status: "occupied", currentTenantId: "tenant-shared", currentLeaseId: "lease-current" }] });
+    seedDoc("units", "unit-ending", { landlordId: "landlord-1", propertyId: "prop-ending", unitNumber: "601", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-shared", currentTenantId: "tenant-shared", leaseId: "lease-ending", currentLeaseId: "lease-ending" });
+    seedDoc("units", "unit-current", { landlordId: "landlord-1", propertyId: "prop-current", unitNumber: "602", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-shared", currentTenantId: "tenant-shared", leaseId: "lease-current", currentLeaseId: "lease-current" });
+    seedDoc("tenants", "tenant-shared", { landlordId: "landlord-1", status: "current", currentLeaseId: "lease-ending" });
+    seedDoc("leases", "lease-ending", { landlordId: "landlord-1", propertyId: "prop-ending", unitId: "unit-ending", unitNumber: "601", tenantId: "tenant-shared", tenantIds: ["tenant-shared"], status: "active", executionStatus: "fully_executed", startDate: "2026-01-01", endDate: "2027-01-01", occupancyEffective: true });
+    seedDoc("leases", "lease-current", { landlordId: "landlord-1", propertyId: "prop-current", unitId: "unit-current", unitNumber: "602", tenantId: "tenant-shared", tenantIds: ["tenant-shared"], status: "active", executionStatus: "fully_executed", startDate: "2026-02-01", endDate: "2027-02-01", occupancyEffective: true });
+    seedDoc("tenancies", "tenancy-ending", { landlordId: "landlord-1", propertyId: "prop-ending", unitId: "unit-ending", tenantId: "tenant-shared", leaseId: "lease-ending", status: "active" });
+    seedDoc("tenancies", "tenancy-current", { landlordId: "landlord-1", propertyId: "prop-current", unitId: "unit-current", tenantId: "tenant-shared", leaseId: "lease-current", status: "active" });
+    const router = (await import("../leaseRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-ending/end", body: { endDate: "2026-08-23T12:00:00.000Z" } });
+
+    expect(res.status).toBe(200);
+    expect((await fakeDb.collection("leases").doc("lease-ending").get()).data()).toMatchObject({ status: "ended", occupancyEffective: false });
+    expect((await fakeDb.collection("tenants").doc("tenant-shared").get()).data()).toMatchObject({ status: "current", currentLeaseId: "lease-current" });
+    expect((await fakeDb.collection("tenancies").doc("tenancy-ending").get()).data()).toMatchObject({ status: "inactive" });
+    expect((await fakeDb.collection("tenancies").doc("tenancy-current").get()).data()).toMatchObject({ status: "active" });
+  });
+
+  it("projects one completed End Lease postcondition through all five product paths without Review Needed", async () => {
+    const propertyId = "prop-end-cross-surface";
+    const unitId = "unit-end-cross-surface";
+    const tenantId = "tenant-end-cross-surface";
+    const leaseId = "lease-end-cross-surface";
+    seedDoc("properties", propertyId, {
+      landlordId: "landlord-1",
+      ownerUserId: "landlord-1",
+      name: "End Lease House",
+      units: [{ id: unitId, unitId, unitNumber: "701", status: "occupied", occupancyStatus: "occupied", tenantId, currentTenantId: tenantId, leaseId, currentLeaseId: leaseId }],
+    });
+    seedDoc("units", unitId, { landlordId: "landlord-1", propertyId, unitNumber: "701", status: "occupied", occupancyStatus: "occupied", tenantId, currentTenantId: tenantId, leaseId, currentLeaseId: leaseId });
+    seedDoc("tenants", tenantId, { landlordId: "landlord-1", fullName: "Ended Tenant", status: "current", propertyId, unitId, currentLeaseId: leaseId });
+    seedDoc("leases", leaseId, { landlordId: "landlord-1", propertyId, unitId, unitNumber: "701", tenantId, primaryTenantId: tenantId, tenantIds: [tenantId], status: "active", executionStatus: "fully_executed", startDate: "2026-01-01", endDate: "2027-01-01", occupancyEffective: true });
+    seedDoc("tenancies", "tenancy-end-cross-surface", { landlordId: "landlord-1", propertyId, unitId, tenantId, leaseId, status: "active" });
+
+    const leaseRouter = (await import("../leaseRoutes")).default;
+    const propertiesRouter = (await import("../propertiesRoutes")).default;
+    const tenantsRouter = (await import("../tenantsRoutes")).default;
+    const occupancyReviewRouter = (await import("../occupancyReviewRoutes")).default;
+    const ended = await invokeRouter(leaseRouter, { method: "POST", url: `/${leaseId}/end`, body: { endDate: "2026-08-23T12:00:00.000Z" } });
+    expect(ended.status).toBe(200);
+
+    const properties = await invokeRouter(propertiesRouter, { method: "GET", url: "/" });
+    const property = properties.body.items.find((entry: any) => entry.id === propertyId);
+    expect(property.units.find((entry: any) => entry.id === unitId)).toMatchObject({ status: "vacant", occupancyStatus: "vacant", tenantId: null, currentTenantId: null, leaseId: null, currentLeaseId: null });
+
+    const leases = await invokeRouter(leaseRouter, { method: "GET", url: `/tenant/${tenantId}` });
+    const historicalLease = leases.body.leases.find((entry: any) => entry.id === leaseId);
+    expect(historicalLease).toMatchObject({ status: "ended", occupancyEffective: false, canonicalState: expect.objectContaining({ leaseTermState: "ended", occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null }) });
+
+    const tenants = await invokeRouter(tenantsRouter, { method: "GET", url: "/" });
+    const tenant = tenants.body.tenants.find((entry: any) => entry.id === tenantId);
+    expect(tenant).toMatchObject({ status: "Past", currentLeaseId: null, canonicalState: expect.objectContaining({ occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null }) });
+
+    const detail = await invokeRouter(tenantsRouter, { method: "GET", url: `/${tenantId}` });
+    expect(detail.body.tenant).toMatchObject({ status: "Past", currentLeaseId: null });
+    expect(detail.body.canonicalState).toMatchObject({ occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null });
+    expect(detail.body.lease).toBeNull();
+
+    const review = await invokeRouter(occupancyReviewRouter, { method: "GET", url: "/" });
+    expect(review.body.items.filter((item: any) => item.propertyId === propertyId || item.unitId === unitId || item.tenantId === tenantId)).toEqual([]);
+    expect(listDocs("canonicalEvents")).toHaveLength(1);
   });
 
   it.each([
@@ -3220,6 +3295,307 @@ describe("leaseRoutes GET /active", () => {
       expect.objectContaining({ id: "unit-1", unitNumber: "101", status: "occupied" }),
       expect.objectContaining({ id: "unit-dup", unitNumber: "102", status: "vacant" }),
     ]);
+  });
+
+  it.each([
+    ["eligible current", "2026-08-01", true],
+    ["future ineligible", "2027-01-01", false],
+  ] as const)("projects the exact %s onboarding fixture through all five product paths", async (_label, startDate, eligible) => {
+    const propertyId = `property-onboarding-${eligible ? "current" : "future"}`;
+    const unitId = `unit-onboarding-${eligible ? "current" : "future"}`;
+    const tenantId = `tenant-onboarding-${eligible ? "current" : "future"}`;
+    const leaseId = `lease-onboarding-${eligible ? "current" : "future"}`;
+    const tenancyId = `tenancy-onboarding-${eligible ? "current" : "future"}`;
+    const unit = {
+      id: unitId,
+      unitId,
+      unitNumber: eligible ? "C1" : "F1",
+      status: "vacant",
+      occupancyStatus: "vacant",
+    };
+    seedDoc("properties", propertyId, {
+      landlordId: "landlord-1",
+      ownerUserId: "landlord-1",
+      name: eligible ? "Current Onboarding House" : "Future Onboarding House",
+      units: [unit],
+    });
+    seedDoc("units", unitId, { ...unit, landlordId: "landlord-1", propertyId });
+    seedDoc("tenants", tenantId, {
+      landlordId: "landlord-1",
+      fullName: eligible ? "Current Onboarding Tenant" : "Future Onboarding Tenant",
+      status: "invited",
+      propertyId,
+      unitId,
+    });
+    seedDoc("tenancies", tenancyId, {
+      landlordId: "landlord-1",
+      propertyId,
+      unitId,
+      tenantId,
+      leaseId,
+      status: "inactive",
+      source: "application_conversion",
+    });
+    seedDoc("leases", leaseId, {
+      landlordId: "landlord-1",
+      propertyId,
+      unitId,
+      tenantId,
+      tenantIds: [tenantId],
+      primaryTenantId: tenantId,
+      status: "active",
+      executionStatus: "fully_executed",
+      startDate,
+      endDate: "2027-07-31",
+    });
+
+    const { syncPropertyUnitOccupancyForTenantContext } = await import("../../services/tenantPortal/tenantOccupancySyncService");
+    const sync = await syncPropertyUnitOccupancyForTenantContext({
+      tenantId,
+      leaseId,
+      applicationId: `application-${eligible ? "current" : "future"}`,
+      landlordId: "landlord-1",
+      propertyId,
+      unitId,
+      actorId: "landlord-1",
+      idempotencyKey: `application-${eligible ? "current" : "future"}`,
+      source: "application_conversion",
+      firestore: fakeDb,
+      evaluationInstant: "2026-08-23T12:00:00.000Z",
+    });
+    expect(sync).toMatchObject(eligible
+      ? { updated: true, reason: "occupancy_effective" }
+      : { updated: false, reason: "created_without_occupancy" });
+
+    const leaseRouter = (await import("../leaseRoutes")).default;
+    const propertiesRouter = (await import("../propertiesRoutes")).default;
+    const tenantsRouter = (await import("../tenantsRoutes")).default;
+    const occupancyReviewRouter = (await import("../occupancyReviewRoutes")).default;
+
+    const properties = await invokeRouter(propertiesRouter, { method: "GET", url: "/" });
+    expect(properties.status).toBe(200);
+    const property = properties.body.items.find((entry: any) => entry.id === propertyId);
+    const projectedUnit = property.units.find((entry: any) => entry.id === unitId);
+    expect(projectedUnit).toMatchObject(eligible
+      ? { status: "occupied", occupancyStatus: "occupied", currentLeaseId: leaseId, currentTenantId: tenantId }
+      : { status: "vacant", occupancyStatus: "vacant" });
+    if (!eligible) {
+      expect(projectedUnit.currentLeaseId ?? null).toBeNull();
+      expect(projectedUnit.currentTenantId ?? null).toBeNull();
+    }
+
+    const leases = await invokeRouter(leaseRouter, { method: "GET", url: `/tenant/${tenantId}` });
+    expect(leases.status).toBe(200);
+    const projectedLease = leases.body.leases.find((entry: any) => entry.id === leaseId);
+    expect(projectedLease).toBeDefined();
+    expect(projectedLease.canonicalState).toMatchObject(eligible
+      ? { occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: leaseId, reasons: [] }
+      : { leaseTermState: "upcoming", occupancyState: "vacant", supportingLeaseId: null });
+    expect(leases.body.leases.filter((entry: any) =>
+      entry.canonicalState?.supportingLeaseId === leaseId && entry.canonicalState?.tenantRelationshipState === "current_occupant"
+    )).toHaveLength(eligible ? 1 : 0);
+
+    const tenants = await invokeRouter(tenantsRouter, { method: "GET", url: "/" });
+    expect(tenants.status).toBe(200);
+    const projectedTenant = tenants.body.tenants.find((entry: any) => entry.id === tenantId);
+    expect(projectedTenant).toBeDefined();
+    expect(projectedTenant.currentLeaseId ?? null).toBe(eligible ? leaseId : null);
+    expect(projectedTenant.canonicalState).toMatchObject(eligible
+      ? { occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: leaseId }
+      : { occupancyState: "vacant", supportingLeaseId: null });
+    if (!eligible) expect(projectedTenant.canonicalState.tenantRelationshipState).not.toBe("current_occupant");
+
+    const detail = await invokeRouter(tenantsRouter, { method: "GET", url: `/${tenantId}` });
+    expect(detail.status).toBe(200);
+    expect(detail.body.tenant.currentLeaseId ?? null).toBe(eligible ? leaseId : null);
+    expect(detail.body.canonicalState).toMatchObject(eligible
+      ? { occupancyState: "occupied", tenantRelationshipState: "current_occupant", supportingLeaseId: leaseId }
+      : { occupancyState: "vacant", supportingLeaseId: null });
+    if (eligible) expect(detail.body.lease).toMatchObject({ id: leaseId });
+    else {
+      expect(detail.body.canonicalState.tenantRelationshipState).not.toBe("current_occupant");
+      expect(detail.body.lease).toMatchObject({ id: leaseId });
+    }
+
+    const review = await invokeRouter(occupancyReviewRouter, { method: "GET", url: "/" });
+    expect(review.status).toBe(200);
+    const fixtureReviewItems = review.body.items.filter((item: any) => item.propertyId === propertyId && item.unitId === unitId);
+    expect(fixtureReviewItems).toEqual([]);
+  });
+
+  it("keeps one foreign invite account-only across Properties, Leases, Tenants, tenant detail, and Review Needed", async () => {
+    const propertyId = "property-onboarding-foreign";
+    const unitId = "unit-onboarding-foreign";
+    const leaseId = "lease-onboarding-foreign";
+    const contractualTenantId = "tenant-onboarding-contractual";
+    const foreignTenantId = "tenant-onboarding-foreign";
+    const applicationId = "application-onboarding-foreign";
+    const occupiedUnit = {
+      id: unitId,
+      unitId,
+      unitNumber: "X1",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: contractualTenantId,
+      currentTenantId: contractualTenantId,
+      leaseId,
+      currentLeaseId: leaseId,
+    };
+    const leaseBefore = {
+      landlordId: "landlord-1",
+      propertyId,
+      unitId,
+      tenantId: contractualTenantId,
+      primaryTenantId: contractualTenantId,
+      tenantIds: [contractualTenantId],
+      status: "active",
+      executionStatus: "fully_executed",
+      executionEvidence: { provider: "synthetic", completedAt: "2026-07-31T12:00:00.000Z" },
+      occupancyEffective: true,
+      startDate: "2026-08-01",
+      endDate: "2027-07-31",
+      predecessorLeaseId: "lease-onboarding-foreign-predecessor",
+      renewalSequence: 2,
+    };
+    seedDoc("properties", propertyId, {
+      landlordId: "landlord-1",
+      ownerUserId: "landlord-1",
+      name: "Foreign Invite House",
+      units: [occupiedUnit],
+    });
+    seedDoc("units", unitId, { ...occupiedUnit, landlordId: "landlord-1", propertyId });
+    seedDoc("leases", leaseId, leaseBefore);
+    seedDoc("tenants", contractualTenantId, {
+      landlordId: "landlord-1",
+      fullName: "Contractual Tenant",
+      status: "current",
+      currentLeaseId: leaseId,
+      propertyId,
+      unitId,
+    });
+    seedDoc("tenancies", "tenancy-onboarding-contractual", {
+      landlordId: "landlord-1",
+      propertyId,
+      unitId,
+      tenantId: contractualTenantId,
+      leaseId,
+      status: "active",
+    });
+    seedDoc("rentalApplications", applicationId, {
+      id: applicationId,
+      landlordId: "landlord-1",
+      propertyId,
+      unitId,
+      leaseId,
+      convertedTenantId: foreignTenantId,
+      applicantEmail: "foreign-tenant@example.com",
+      applicantFullName: "Foreign Invite Tenant",
+      status: "converted",
+    });
+
+    const leaseRouter = (await import("../leaseRoutes")).default;
+    const propertiesRouter = (await import("../propertiesRoutes")).default;
+    const tenantsRouter = (await import("../tenantsRoutes")).default;
+    const occupancyReviewRouter = (await import("../occupancyReviewRoutes")).default;
+    const authRouter = (await import("../authRoutes")).default;
+    const { createTenancyInvite } = await import("../../services/tenantPortal/tenantInviteService");
+
+    const reviewBefore = await invokeRouter(occupancyReviewRouter, { method: "GET", url: "/" });
+    expect(reviewBefore.status).toBe(200);
+    const fixtureReviewBefore = reviewBefore.body.items
+      .filter((item: any) => item.propertyId === propertyId && item.unitId === unitId)
+      .map((item: any) => ({ reasons: item.reasons, tenantId: item.tenantId, supportingLeaseId: item.supportingLeaseId }));
+    const foreignReviewBefore = reviewBefore.body.items.filter((item: any) => item.tenantId === foreignTenantId);
+    const propertyBefore = JSON.parse(JSON.stringify(listDocs("properties").find((doc) => doc.id === propertyId)?.data));
+    const unitBefore = JSON.parse(JSON.stringify(listDocs("units").find((doc) => doc.id === unitId)?.data));
+    const canonicalEventCountBefore = listDocs("canonicalEvents").length;
+    const leaseStartRequestCountBefore = listDocs("leaseStartRequests").length;
+
+    const created = await createTenancyInvite({
+      landlordId: "landlord-1",
+      propertyId,
+      tenantId: foreignTenantId,
+      applicationId,
+      unitId,
+      leaseId,
+      invitedEmail: "foreign-tenant@example.com",
+      invitedName: "Foreign Invite Tenant",
+      createdBy: "landlord-1",
+    });
+    clearWriteLog();
+    const accepted = await invokeRouter(authRouter, {
+      method: "POST",
+      url: "/onboard/accept",
+      body: { source: "tenant", token: created.token },
+      user: null,
+    });
+    expect(accepted.status).toBe(200);
+    expect(accepted.body).toMatchObject({ ok: true, accepted: true, role: "tenant", redirectTo: "/tenant" });
+
+    expect(listDocs("leases").find((doc) => doc.id === leaseId)?.data).toEqual(leaseBefore);
+    expect(listDocs("properties").find((doc) => doc.id === propertyId)?.data).toEqual(propertyBefore);
+    expect(listDocs("units").find((doc) => doc.id === unitId)?.data).toEqual(unitBefore);
+    expect(listDocs("tenants").find((doc) => doc.id === foreignTenantId)?.data).toMatchObject({
+      tenantId: foreignTenantId,
+      leaseId: null,
+    });
+    expect(listDocs("tenants").find((doc) => doc.id === foreignTenantId)?.data).not.toHaveProperty("currentLeaseId");
+    expect(listDocs("tenancies").filter((doc) =>
+      doc.data.tenantId === foreignTenantId && doc.data.status === "active"
+    )).toEqual([]);
+    expect(listDocs("canonicalEvents")).toHaveLength(canonicalEventCountBefore);
+    expect(listDocs("leaseStartRequests")).toHaveLength(leaseStartRequestCountBefore);
+    expect(writeLog.filter((write) =>
+      ["properties", "units", "leases", "canonicalEvents", "leaseStartRequests"].includes(write.collection)
+    )).toEqual([]);
+
+    const properties = await invokeRouter(propertiesRouter, { method: "GET", url: "/" });
+    expect(properties.status).toBe(200);
+    const property = properties.body.items.find((entry: any) => entry.id === propertyId);
+    expect(property.units.find((entry: any) => entry.id === unitId)).toMatchObject({
+      status: "occupied",
+      occupancyStatus: "occupied",
+      currentLeaseId: leaseId,
+      currentTenantId: contractualTenantId,
+    });
+    expect(property.units.find((entry: any) => entry.id === unitId).currentTenantId).not.toBe(foreignTenantId);
+
+    const leases = await invokeRouter(leaseRouter, { method: "GET", url: `/tenant/${foreignTenantId}` });
+    expect(leases.status).toBe(200);
+    expect(leases.body.leases.find((entry: any) => entry.id === leaseId)).toBeUndefined();
+
+    const tenants = await invokeRouter(tenantsRouter, { method: "GET", url: "/" });
+    expect(tenants.status).toBe(200);
+    const foreignTenant = tenants.body.tenants.find((entry: any) => entry.id === foreignTenantId);
+    expect(foreignTenant).toBeDefined();
+    expect(foreignTenant.currentLeaseId ?? null).toBeNull();
+    expect(foreignTenant.canonicalState).toMatchObject({ supportingLeaseId: null });
+    expect(foreignTenant.canonicalState.tenantRelationshipState).not.toBe("current_occupant");
+    expect(tenants.body.tenants.find((entry: any) => entry.id === contractualTenantId)).toMatchObject({
+      currentLeaseId: leaseId,
+      canonicalState: expect.objectContaining({
+        occupancyState: "occupied",
+        tenantRelationshipState: "current_occupant",
+        supportingLeaseId: leaseId,
+      }),
+    });
+
+    const detail = await invokeRouter(tenantsRouter, { method: "GET", url: `/${foreignTenantId}` });
+    expect(detail.status).toBe(200);
+    expect(detail.body.tenant.currentLeaseId ?? null).toBeNull();
+    expect(detail.body.lease ?? null).toBeNull();
+    expect(detail.body.canonicalState).toMatchObject({ supportingLeaseId: null });
+    expect(detail.body.canonicalState.tenantRelationshipState).not.toBe("current_occupant");
+
+    const reviewAfter = await invokeRouter(occupancyReviewRouter, { method: "GET", url: "/" });
+    expect(reviewAfter.status).toBe(200);
+    const fixtureReviewAfter = reviewAfter.body.items
+      .filter((item: any) => item.propertyId === propertyId && item.unitId === unitId)
+      .map((item: any) => ({ reasons: item.reasons, tenantId: item.tenantId, supportingLeaseId: item.supportingLeaseId }));
+    expect(fixtureReviewAfter).toEqual(fixtureReviewBefore);
+    expect(reviewAfter.body.items.filter((item: any) => item.tenantId === foreignTenantId)).toEqual(foreignReviewBefore);
+    expect(fixtureReviewAfter.flatMap((item: any) => item.reasons)).not.toContain("TENANT_CURRENT_WITHOUT_CURRENT_LEASE");
+    expect(fixtureReviewAfter.map((item: any) => item.tenantId)).not.toContain(foreignTenantId);
   });
 
   it("projects one coherent renewal handoff through Properties, Leases, Tenants, tenant detail, and Review Needed", async () => {

@@ -24,6 +24,7 @@ export const PREVIEW_BACKEND_TARGET_KEYS = {
   pr1566: "pr1566-multiple-current-cert",
   pr1567: "pr1567-review-needed-cert",
   pr1568: "pr1568-renewal-continuity-cert",
+  pr1569: "pr1569-onboarding-occupancy-cert",
 } as const;
 
 export type PreviewBackendTarget = {
@@ -86,6 +87,14 @@ const PREVIEW_BACKEND_TARGETS: Record<string, PreviewBackendTarget> = {
       "https://rentchain-pr1568-qa-renewal-glistw4pya-nn.a.run.app",
     cloudRunIdTokenAudience:
       "https://rentchain-pr1568-qa-renewal-glistw4pya-nn.a.run.app",
+    temporary: true,
+  },
+  [PREVIEW_BACKEND_TARGET_KEYS.pr1569]: {
+    key: PREVIEW_BACKEND_TARGET_KEYS.pr1569,
+    cloudRunServiceUrl:
+      "https://rentchain-pr1569-qa-onboarding-glistw4pya-nn.a.run.app",
+    cloudRunIdTokenAudience:
+      "https://rentchain-pr1569-qa-onboarding-glistw4pya-nn.a.run.app",
     temporary: true,
   },
 };

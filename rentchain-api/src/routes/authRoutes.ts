@@ -167,6 +167,14 @@ async function loadApplicationForTenantInvite(applicationId: string | null) {
   return null;
 }
 
+function leaseParticipantIds(lease: any): Set<string> {
+  return new Set(
+    [lease?.tenantId, lease?.primaryTenantId, ...(Array.isArray(lease?.tenantIds) ? lease.tenantIds : [])]
+      .map(asOnboardString)
+      .filter((tenantId): tenantId is string => Boolean(tenantId))
+  );
+}
+
 async function normalizeTenantInviteIdentity(input: {
   tenantId: string;
   uid: string;
@@ -201,6 +209,11 @@ async function normalizeTenantInviteIdentity(input: {
     asOnboardString(input.application?.data?.phone) ||
     asOnboardString(input.application?.data?.applicant?.phoneHome) ||
     asOnboardString(input.application?.data?.applicant?.phoneWork);
+  let leaseParticipantMatch = false;
+  if (leaseId) {
+    const leaseSnap = await db.collection("leases").doc(leaseId).get();
+    leaseParticipantMatch = leaseSnap.exists && leaseParticipantIds(leaseSnap.data()).has(input.tenantId);
+  }
 
   if (input.application) {
     const applicationPatch = {
@@ -227,19 +240,6 @@ async function normalizeTenantInviteIdentity(input: {
     }
   }
 
-  if (leaseId) {
-    await db.collection("leases").doc(leaseId).set(
-      {
-        tenantId: input.tenantId,
-        tenantIds: FieldValue.arrayUnion(input.tenantId),
-        primaryTenantId: input.tenantId,
-        applicationId: applicationId || null,
-        updatedAt: now,
-      },
-      { merge: true }
-    );
-  }
-
   if (landlordId) {
     await createTenancyIfMissing({
       tenantId: input.tenantId,
@@ -251,6 +251,7 @@ async function normalizeTenantInviteIdentity(input: {
         asOnboardString(input.application?.data?.leaseStartDate) ||
         asOnboardString(input.application?.data?.moveInDate) ||
         null,
+      status: "inactive",
     });
   }
 
@@ -265,8 +266,7 @@ async function normalizeTenantInviteIdentity(input: {
       propertyId,
       unitId,
       unit: unitId,
-      leaseId,
-      currentLeaseId: leaseId || null,
+      leaseId: leaseParticipantMatch ? leaseId : null,
       applicationId,
       applicantUserId: input.uid,
       source: "invite",
@@ -275,23 +275,28 @@ async function normalizeTenantInviteIdentity(input: {
     { merge: true }
   );
 
-  try {
-    await syncPropertyUnitOccupancyForTenantContext({
-      tenantId: input.tenantId,
-      leaseId,
-      applicationId,
-      landlordId,
-      propertyId,
-      unitId,
-    });
-  } catch (error) {
-    console.warn("[auth.onboard.tenant_occupancy_sync_failed]", {
-      applicationId,
-      leaseId,
-      propertyId,
-      unitId,
-      reason: error instanceof Error ? error.message : "unknown",
-    });
+  if (leaseParticipantMatch) {
+    try {
+      await syncPropertyUnitOccupancyForTenantContext({
+        tenantId: input.tenantId,
+        leaseId,
+        applicationId,
+        landlordId,
+        propertyId,
+        unitId,
+        actorId: input.uid,
+        idempotencyKey: asOnboardString(input.invite?.id) || applicationId,
+        source: "tenant_invite_onboarding",
+      });
+    } catch (error) {
+      console.warn("[auth.onboard.tenant_occupancy_sync_failed]", {
+        applicationId,
+        leaseId,
+        propertyId,
+        unitId,
+        reason: error instanceof Error ? error.message : "unknown",
+      });
+    }
   }
 }
 

@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { occupancySyncMock } = vi.hoisted(() => ({
+  occupancySyncMock: vi.fn(async () => ({ updated: false, reason: "missing_context" })),
+}));
+
 const collections = new Map<string, Map<string, any>>();
 
 function ensureCollection(name: string) {
@@ -72,6 +76,10 @@ vi.mock("../../services/tenantPortal/tenantEventLogService", () => ({
   recordTenantEvent: vi.fn(async () => ({ id: "event-1" })),
 }));
 
+vi.mock("../../services/tenantPortal/tenantOccupancySyncService", () => ({
+  syncPropertyUnitOccupancyForTenantContext: occupancySyncMock,
+}));
+
 async function invokeRouter(router: any, options: { method: string; url: string; body?: any }) {
   return await new Promise<{ status: number; body: any }>((resolve, reject) => {
     const [pathWithQuery, queryRaw = ""] = options.url.split("?");
@@ -119,6 +127,7 @@ async function invokeRouter(router: any, options: { method: string; url: string;
 describe("auth onboard tenant invites", () => {
   beforeEach(() => {
     collections.clear();
+    occupancySyncMock.mockClear();
     process.env.JWT_SECRET = "test-secret";
   });
 
@@ -327,7 +336,7 @@ describe("auth onboard tenant invites", () => {
     });
   });
 
-  it("syncs property and unit occupancy from an active lease after invite acceptance", async () => {
+  it("delegates an eligible-looking lease to the canonical occupancy adapter after invite acceptance", async () => {
     ensureCollection("rentalApplications").set("app-with-lease", {
       id: "app-with-lease",
       landlordId: "landlord-1",
@@ -344,6 +353,9 @@ describe("auth onboard tenant invites", () => {
       landlordId: "landlord-1",
       propertyId: "property-1",
       unitId: "unit-1",
+      tenantId: "converted-tenant-1",
+      primaryTenantId: "converted-tenant-1",
+      tenantIds: ["converted-tenant-1"],
       status: "active",
     });
     ensureCollection("units").set("unit-doc-1", {
@@ -379,20 +391,154 @@ describe("auth onboard tenant invites", () => {
     });
 
     expect(acceptRes.status).toBe(200);
-    expect(ensureCollection("units").get("unit-doc-1")).toMatchObject({
-      status: "occupied",
-      occupancyStatus: "occupied",
+    expect(occupancySyncMock).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: "converted-tenant-1",
       leaseId: "lease-1",
-      occupancySource: "canonical_lease",
-    });
-    expect(ensureCollection("properties").get("property-1").units[0]).toMatchObject({
-      status: "occupied",
-      occupancyStatus: "occupied",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      source: "tenant_invite_onboarding",
+    }));
+    expect(ensureCollection("units").get("unit-doc-1")).toMatchObject({ status: "vacant", occupancyStatus: "vacant" });
+    expect(ensureCollection("properties").get("property-1").units[0]).toMatchObject({ status: "vacant", occupancyStatus: "vacant" });
+    expect(ensureCollection("tenants").get("converted-tenant-1")).not.toHaveProperty("currentLeaseId");
+    expect(ensureCollection("leases").get("lease-1")).toEqual({
+      id: "lease-1",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
       tenantId: "converted-tenant-1",
-      leaseId: "lease-1",
-      occupancySource: "canonical_lease",
+      primaryTenantId: "converted-tenant-1",
+      tenantIds: ["converted-tenant-1"],
+      status: "active",
     });
+  });
+
+  it("keeps a secondary lease participant authorized without rewriting primary or participant order", async () => {
+    ensureCollection("rentalApplications").set("app-secondary", {
+      id: "app-secondary",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      leaseId: "lease-multi",
+      convertedTenantId: "tenant-b",
+      applicantEmail: "tenant-b@example.com",
+      status: "converted",
+    });
+    const leaseBefore = {
+      id: "lease-multi",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      tenantId: "tenant-a",
+      primaryTenantId: "tenant-a",
+      tenantIds: ["tenant-b", "tenant-a"],
+      status: "active",
+    };
+    ensureCollection("leases").set("lease-multi", leaseBefore);
+
+    const { createTenancyInvite } = await import("../../services/tenantPortal/tenantInviteService");
+    const created = await createTenancyInvite({
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      tenantId: "tenant-b",
+      applicationId: "app-secondary",
+      unitId: "unit-1",
+      leaseId: "lease-multi",
+      invitedEmail: "tenant-b@example.com",
+      createdBy: "landlord-1",
+    });
+
+    const router = (await import("../authRoutes")).default;
+    const acceptRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/onboard/accept",
+      body: { source: "tenant", token: created.token },
+    });
+
+    expect(acceptRes.status).toBe(200);
+    expect(occupancySyncMock).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: "tenant-b",
+      leaseId: "lease-multi",
+    }));
+    expect(ensureCollection("leases").get("lease-multi")).toEqual(leaseBefore);
+  });
+
+  it("keeps a foreign invite account-only with zero lease or occupancy mutation", async () => {
+    ensureCollection("rentalApplications").set("app-foreign", {
+      id: "app-foreign",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      leaseId: "lease-multi",
+      convertedTenantId: "tenant-c",
+      applicantEmail: "tenant-c@example.com",
+      status: "converted",
+    });
+    const leaseBefore = {
+      id: "lease-multi",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      tenantId: "tenant-a",
+      primaryTenantId: "tenant-a",
+      tenantIds: ["tenant-a", "tenant-b"],
+      status: "active",
+      executionStatus: "fully_executed",
+      occupancyEffective: false,
+      startDate: "2026-01-01",
+      endDate: "2027-01-01",
+      rent: 1800,
+    };
+    ensureCollection("leases").set("lease-multi", leaseBefore);
+    ensureCollection("units").set("unit-1", {
+      id: "unit-1",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+    ensureCollection("properties").set("property-1", {
+      id: "property-1",
+      landlordId: "landlord-1",
+      units: [{ id: "unit-1", status: "vacant", occupancyStatus: "vacant" }],
+    });
+    const propertyBefore = clone(ensureCollection("properties").get("property-1"));
+    const unitBefore = clone(ensureCollection("units").get("unit-1"));
+
+    const { createTenancyInvite } = await import("../../services/tenantPortal/tenantInviteService");
+    const created = await createTenancyInvite({
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      tenantId: "tenant-c",
+      applicationId: "app-foreign",
+      unitId: "unit-1",
+      leaseId: "lease-multi",
+      invitedEmail: "tenant-c@example.com",
+      createdBy: "landlord-1",
+    });
+
+    const router = (await import("../authRoutes")).default;
+    const acceptRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/onboard/accept",
+      body: { source: "tenant", token: created.token },
+    });
+
+    expect(acceptRes.status).toBe(200);
+    expect(acceptRes.body).toMatchObject({ ok: true, accepted: true, role: "tenant" });
+    expect(occupancySyncMock).not.toHaveBeenCalled();
+    expect(ensureCollection("leases").get("lease-multi")).toEqual(leaseBefore);
+    expect(ensureCollection("units").get("unit-1")).toEqual(unitBefore);
+    expect(ensureCollection("properties").get("property-1")).toEqual(propertyBefore);
+    expect(ensureCollection("tenants").get("tenant-c")).toMatchObject({
+      tenantId: "tenant-c",
+      leaseId: null,
+    });
+    expect(ensureCollection("tenants").get("tenant-c")).not.toHaveProperty("currentLeaseId");
+    expect(Array.from(ensureCollection("tenancies").values())).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ tenantId: "tenant-c", status: "active" })])
+    );
   });
 
   it("reports replaced tenancy_invites tokens as expired instead of not found", async () => {

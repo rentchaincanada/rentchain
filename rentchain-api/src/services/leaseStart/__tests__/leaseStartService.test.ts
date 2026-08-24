@@ -214,6 +214,25 @@ describe("leaseStartService", () => {
     expect(result.expectedStateToken).toBe(fresh.expectedStateToken);
   });
 
+  it("runs a caller eligibility guard against the authoritative transaction snapshot", async () => {
+    seedBase({ lease: { predecessorLeaseId: "lease-predecessor" } });
+    const before = domainSnapshot();
+    const input = await mutationInput({
+      operationKind: "conversion",
+      trigger: "conversion",
+      transactionEligibilityGuard: ({ candidateLease }) =>
+        candidateLease.predecessorLeaseId ? "renewal_handoff_required" : null,
+    });
+
+    await expect(startCanonicalLeaseOccupancy(input)).rejects.toMatchObject({
+      code: "lease_start_transaction_ineligible",
+      transactionEligibilityReason: "renewal_handoff_required",
+      freshContext: expect.objectContaining({ expectedStateToken: input.expectedStateToken }),
+    });
+    expect(domainSnapshot()).toEqual(before);
+    expect(fake.list("leaseStartRequests")).toEqual([]);
+  });
+
   it("reuses a coherent active tenancy without rewriting it", async () => {
     fake.seed("tenancies", "tenancy-existing", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", leaseId: "lease-1", status: "active", moveInAt: "2026-04-01T12:00:00.000Z" });
     const result = await startCanonicalLeaseOccupancy(await mutationInput());

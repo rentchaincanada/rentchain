@@ -96,6 +96,7 @@ function successfulDependencies(upstreamStatus = 200) {
 describe("Preview backend proxy", () => {
   const originalVercelEnv = process.env.VERCEL_ENV;
   const originalPreviewBackendTarget = process.env.PREVIEW_BACKEND_TARGET;
+  const originalPreviewBackendUrl = process.env.PREVIEW_BACKEND_URL;
 
   beforeEach(() => {
     process.env.VERCEL_ENV = "preview";
@@ -108,6 +109,8 @@ describe("Preview backend proxy", () => {
     else process.env.VERCEL_ENV = originalVercelEnv;
     if (originalPreviewBackendTarget == null) delete process.env.PREVIEW_BACKEND_TARGET;
     else process.env.PREVIEW_BACKEND_TARGET = originalPreviewBackendTarget;
+    if (originalPreviewBackendUrl == null) delete process.env.PREVIEW_BACKEND_URL;
+    else process.env.PREVIEW_BACKEND_URL = originalPreviewBackendUrl;
   });
 
   it("keeps the permanent Preview backend as the default target", () => {
@@ -205,6 +208,21 @@ describe("Preview backend proxy", () => {
     });
   });
 
+  it("couples the authorized PR #1569 service URL and audience internally", () => {
+    const target = resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: PREVIEW_BACKEND_TARGET_KEYS.pr1569,
+    });
+    expect(target).toEqual({
+      key: "pr1569-onboarding-occupancy-cert",
+      cloudRunServiceUrl:
+        "https://rentchain-pr1569-qa-onboarding-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1569-qa-onboarding-glistw4pya-nn.a.run.app",
+      temporary: true,
+    });
+  });
+
   it.each([
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
@@ -218,7 +236,10 @@ describe("Preview backend proxy", () => {
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1567],
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1568],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1568],
+    ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1569],
+    ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1569],
     ["preview", ""],
+    ["preview", "   "],
     ["preview", "unknown"],
     ["preview", "pr1562"],
     ["preview", "arbitrary"],
@@ -234,6 +255,10 @@ describe("Preview backend proxy", () => {
     ["preview", "rentchain-pr1568-qa-renewal"],
     ["preview", "*.run.app"],
     ["preview", "https://rentchain-pr1568-qa-renewal-glistw4pya-nn.a.run.app"],
+    ["preview", "pr1569-onboarding-occupancy-cert-evil"],
+    ["preview", "PR1569-ONBOARDING-OCCUPANCY-CERT"],
+    ["preview", "rentchain-pr1569-qa-onboarding"],
+    ["preview", "https://rentchain-pr1569-qa-onboarding-glistw4pya-nn.a.run.app"],
   ])("rejects unsafe target selection for %s / %s", (vercelEnvironment, targetKey) => {
     expect(() => resolvePreviewBackendTarget({ vercelEnvironment, targetKey })).toThrow(
       "PREVIEW_PROXY_TARGET_REJECTED",
@@ -493,6 +518,35 @@ describe("Preview backend proxy", () => {
     );
   });
 
+  it.each([
+    ["mismatched audience", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1569,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1569-qa-onboarding-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-preview-backend-glistw4pya-nn.a.run.app",
+      temporary: true,
+    }],
+    ["attacker host", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1569,
+      cloudRunServiceUrl: "https://attacker.example",
+      cloudRunIdTokenAudience: "https://attacker.example",
+      temporary: true,
+    }],
+    ["temporary flag", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1569,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1569-qa-onboarding-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1569-qa-onboarding-glistw4pya-nn.a.run.app",
+      temporary: false,
+    }],
+  ])("rejects a tampered PR #1569 mapping: %s", (_label, target) => {
+    expect(() => assertPreviewBackendTarget(target, "preview")).toThrow(
+      "PREVIEW_PROXY_TARGET_REJECTED",
+    );
+  });
+
   it("routes the authorized target using the same URL for ID-token audience and upstream", async () => {
     process.env.PREVIEW_BACKEND_TARGET = PREVIEW_BACKEND_TARGET_KEYS.pr1555;
     const { requests, dependencies } = successfulDependencies();
@@ -641,6 +695,38 @@ describe("Preview backend proxy", () => {
     expect(requests[2].url).toBe(
       `${expected}/api/leases/renewal-continuity/context?target=https://attacker.example`,
     );
+    expect(requests.every(({ url }) => !url.startsWith("https://attacker.example"))).toBe(true);
+  });
+
+  it("routes PR #1569 only to its fixed backend despite caller-controlled target-like input", async () => {
+    process.env.PREVIEW_BACKEND_TARGET = PREVIEW_BACKEND_TARGET_KEYS.pr1569;
+    process.env.PREVIEW_BACKEND_URL = "https://attacker.example";
+    const { requests, dependencies } = successfulDependencies();
+    const res = responseRecorder();
+
+    await handlePreviewBackendProxy(
+      request("/api/preview-backend/api/leases/tenant/synthetic-tenant?target=https://attacker.example", "GET", {
+        headers: {
+          host: "attacker.example",
+          cookie: "PREVIEW_BACKEND_TARGET=https://attacker.example",
+          "x-preview-backend-target": "https://attacker.example",
+        },
+        query: { target: "https://attacker.example" },
+        body: { target: "https://attacker.example" },
+      }),
+      res,
+      dependencies,
+    );
+
+    const expected =
+      "https://rentchain-pr1569-qa-onboarding-glistw4pya-nn.a.run.app";
+    expect(requests[1].init?.body).toBe(
+      JSON.stringify({ audience: expected, includeEmail: false }),
+    );
+    expect(requests[2].url).toBe(
+      `${expected}/api/leases/tenant/synthetic-tenant?target=https://attacker.example`,
+    );
+    expect(requests[2].init?.method).toBe("GET");
     expect(requests.every(({ url }) => !url.startsWith("https://attacker.example"))).toBe(true);
   });
 

@@ -93,7 +93,7 @@ export async function convertApplicationToTenant(params: {
     leaseStart: application.leaseStartDate ?? application.moveInDate ?? null,
     leaseEnd: null,
     monthlyRent: application.requestedRent ?? null,
-    status: "active",
+    status: "invited",
     balance: 0,
     riskLevel: "Low",
     source: "application_conversion",
@@ -115,6 +115,7 @@ export async function convertApplicationToTenant(params: {
       unitId,
       unitLabel: unitId,
       moveInAt: application.leaseStartDate ?? application.moveInDate ?? null,
+      status: "inactive",
     });
   } catch (err) {
     console.warn("[applicationConversion] tenancy backfill failed", err);
@@ -128,6 +129,9 @@ export async function convertApplicationToTenant(params: {
       landlordId: params.landlordId,
       propertyId: application.propertyId ?? null,
       unitId,
+      actorId: params.actorUserId || params.landlordId,
+      idempotencyKey: application.id,
+      source: "application_conversion",
     });
   } catch (err) {
     console.warn("[applicationConversion] occupancy sync skipped", err);

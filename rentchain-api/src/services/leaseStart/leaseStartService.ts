@@ -25,7 +25,13 @@ export type LeaseStartErrorCode =
   | "lease_start_state_stale"
   | "lease_start_idempotency_key_reused"
   | "lease_start_postcondition_failed"
-  | "lease_start_context_ambiguous";
+  | "lease_start_context_ambiguous"
+  | "lease_start_transaction_ineligible";
+
+export type LeaseStartTransactionEligibilityContext = {
+  candidateLease: Record<string, unknown>;
+  contextLeases: Array<Record<string, unknown>>;
+};
 
 export type LeaseStartContext = {
   expectedStateToken: string;
@@ -67,13 +73,18 @@ export type StartCanonicalLeaseOccupancyInput = {
   source?: string | null;
   leasePatch?: Record<string, unknown> | null;
   persistRejectedAttempt?: boolean;
+  transactionEligibilityGuard?: (context: LeaseStartTransactionEligibilityContext) => string | null;
   firestore?: any;
 };
 
 type ContextInput = Pick<StartCanonicalLeaseOccupancyInput, "landlordId" | "propertyId" | "unitId" | "tenantId" | "leaseId" | "evaluationInstant" | "leasePatch"> & { firestore?: any };
 
 export class LeaseStartServiceError extends Error {
-  constructor(public code: LeaseStartErrorCode, public freshContext?: LeaseStartContext) {
+  constructor(
+    public code: LeaseStartErrorCode,
+    public freshContext?: LeaseStartContext,
+    public transactionEligibilityReason?: string
+  ) {
     super(code);
   }
 }
@@ -256,6 +267,17 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
     loadAuthoritativeState: (transaction) => readContext(transaction, { ...input, evaluationInstant: normalizedInstant, firestore }),
     getExpectedStateToken: (loaded) => loaded.context.expectedStateToken,
     buildPlan: async ({ transaction, loaded }) => {
+    const transactionEligibilityReason = input.transactionEligibilityGuard?.({
+      candidateLease: loaded.records.candidateLease,
+      contextLeases: loaded.records.canonicalInput.contextLeases,
+    });
+    if (transactionEligibilityReason) {
+      throw new LeaseStartServiceError(
+        "lease_start_transaction_ineligible",
+        loaded.context,
+        transactionEligibilityReason
+      );
+    }
     // D2 has no live route caller. Canonical rejected and deferred decisions
     // therefore return deterministically with no durable audit or idempotency
     // record. D3 must define authenticated route-attempt persistence policy.
