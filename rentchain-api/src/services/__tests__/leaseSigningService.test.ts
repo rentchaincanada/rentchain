@@ -86,7 +86,7 @@ describe("leaseSigningService", () => {
     delete process.env.SIGNING_PROVIDER_TEST_MODE;
   });
 
-  it("uses stable provider event identity for canonical occupancy completion", async () => {
+  it("keeps current non-renewal signing completion execution-only and idempotent", async () => {
     const { processSigningWebhook, sendLeaseForSignature } = await import("../signing/leaseSigningService");
     ensureCollection("leases").set("lease-1", {
       landlordId: "landlord-1",
@@ -113,21 +113,17 @@ describe("leaseSigningService", () => {
     await processSigningWebhook({ providerId: "mock", headers: {}, body });
     await processSigningWebhook({ providerId: "mock", headers: {}, body });
 
-    expect(startCanonicalLeaseOccupancyMock).toHaveBeenCalledTimes(1);
-    expect(startCanonicalLeaseOccupancyMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      operationKind: "signing_completion",
-      idempotencyKey: "mock:provider-event-stable-1",
-      trigger: "signing_completion",
-    }));
+    expect(startCanonicalLeaseOccupancyMock).not.toHaveBeenCalled();
+    expect(getCanonicalLeaseStartContextMock).not.toHaveBeenCalled();
     expect(ensureCollection("leases").get("lease-1")).toEqual(expect.objectContaining({ executionStatus: "fully_executed" }));
+    expect(ensureCollection("leases").get("lease-1")).not.toHaveProperty("occupancyEffective");
     expect(ensureCollection("leases").get("lease-1")).not.toHaveProperty("occupancyStartReview");
-    expect(ensureCollection("leaseSigningCompletionOperations").size).toBe(1);
+    expect(ensureCollection("leaseSigningCompletionOperations").size).toBe(0);
     expect(ensureCollection("leaseSigningEvents").size).toBe(2);
   });
 
-  it("keeps signing completion durable while marking rejected occupancy for review", async () => {
+  it("does not manually write occupancy review state from signing completion", async () => {
     const { processSigningWebhook, sendLeaseForSignature } = await import("../signing/leaseSigningService");
-    startCanonicalLeaseOccupancyMock.mockResolvedValueOnce({ canonicalOutcome: "rejected", occupancyEffective: false, reasons: ["MULTIPLE_CURRENT_LEASES"] });
     ensureCollection("leases").set("lease-conflict", {
       landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1",
       status: "active", startDate: "2026-01-01", endDate: "2026-12-31",
@@ -135,15 +131,13 @@ describe("leaseSigningService", () => {
     const sent = await sendLeaseForSignature({ leaseId: "lease-conflict", landlordId: "landlord-1", lease: { startDate: "2026-01-01" }, tenantEmails: ["tenant@example.com"] });
     const signingRequest = ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId));
     await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-conflict-1", type: "signed", occurredAt: "2026-08-19T12:00:00.000Z" } });
-    expect(ensureCollection("leases").get("lease-conflict")).toEqual(expect.objectContaining({
-      executionStatus: "fully_executed",
-      occupancyStartReview: expect.objectContaining({ status: "review_needed", reasons: ["MULTIPLE_CURRENT_LEASES"] }),
-    }));
+    expect(ensureCollection("leases").get("lease-conflict")).toEqual(expect.objectContaining({ executionStatus: "fully_executed" }));
+    expect(ensureCollection("leases").get("lease-conflict")).not.toHaveProperty("occupancyStartReview");
+    expect(startCanonicalLeaseOccupancyMock).not.toHaveBeenCalled();
   });
 
   it("keeps a fully signed future lease deferred without an occupancy rejection", async () => {
     const { processSigningWebhook, sendLeaseForSignature } = await import("../signing/leaseSigningService");
-    startCanonicalLeaseOccupancyMock.mockResolvedValueOnce({ canonicalOutcome: "created_without_occupancy", occupancyEffective: false, reasons: ["UPCOMING_LEASE_CANNOT_SUPPORT_OCCUPANCY"] });
     ensureCollection("leases").set("lease-future", {
       landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1",
       status: "pending", predecessorLeaseId: "lease-predecessor", startDate: "2027-01-01", endDate: "2027-12-31",

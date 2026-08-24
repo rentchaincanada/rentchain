@@ -1,6 +1,6 @@
 import { apiJson } from "@/api/http";
 
-export type OccupancyStartContext = { leaseId: string; propertyId: string; unitId: string; participants: Array<{ tenantId: string; displayName: string }>; executionStatus: string | null; termStatus: string; currentOccupancyState: string; eligible: boolean; expectedStateToken: string; evaluationInstant: string; canonicalBlocker: string | null; availableAction: "start_occupancy" | null };
+export type OccupancyStartContext = { leaseId: string; propertyId: string; unitId: string; leaseStartDate: string | null; leaseEndDate: string | null; participants: Array<{ tenantId: string; displayName: string }>; executionStatus: string | null; termStatus: string; currentOccupancyState: string; eligible: boolean; expectedStateToken: string; evaluationInstant: string; canonicalBlocker: string | null; availableAction: "start_occupancy" | null };
 
 export function getOccupancyStartContext(leaseId: string) {
   return apiJson<{ ok: true; context: OccupancyStartContext }>(`/leases/${encodeURIComponent(leaseId)}/occupancy-start-context`);

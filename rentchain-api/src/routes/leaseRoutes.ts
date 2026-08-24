@@ -2964,6 +2964,8 @@ router.get("/:leaseId/occupancy-start-context", requireLandlord, async (req: any
     const tenant = tenantSnap.exists ? tenantSnap.data() as any : null;
     return res.json({ ok: true, context: {
       leaseId, propertyId, unitId,
+      leaseStartDate: String(lease.startDate || "").trim() || null,
+      leaseEndDate: String(lease.endDate || "").trim() || null,
       participants: [{ tenantId, displayName: String(tenant?.name || tenant?.fullName || [tenant?.firstName, tenant?.lastName].filter(Boolean).join(" ") || "Tenant").trim() }],
       executionStatus: String(lease.executionStatus || lease.executionState || lease.leaseExecutionState || "").trim() || null,
       termStatus: deriveCanonicalLeaseTermState(lease, evaluationInstant).state,

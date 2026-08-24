@@ -83,6 +83,6 @@ export default function ReviewNeededPage() {
       })}</section>
     </> : null}
     {resolving?.propertyId && resolving.unitId ? <ResolveOccupancyDrawer open propertyId={resolving.propertyId} unitId={resolving.unitId} tenantId={resolving.tenantId} onClose={() => setResolving(null)} onResolved={() => { setResolving(null); void load(); }} /> : null}
-    {starting?.supportingLeaseId ? <StartOccupancyDrawer leaseId={starting.supportingLeaseId} onClose={() => setStarting(null)} onStarted={() => { setStarting(null); void load(); }} /> : null}
+    {starting?.supportingLeaseId ? <StartOccupancyDrawer leaseId={starting.supportingLeaseId} propertyLabel={starting.propertyName} unitLabel={starting.unitLabel} onClose={() => setStarting(null)} onStarted={() => { setStarting(null); void load(); }} /> : null}
   </main>;
 }
