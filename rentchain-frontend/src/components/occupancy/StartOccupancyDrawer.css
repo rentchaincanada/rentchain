@@ -1,0 +1,12 @@
+.start-occupancy-drawer { position: fixed; inset: 0; z-index: 80; display: flex; justify-content: flex-end; background: rgba(15, 23, 42, .42); }
+.start-occupancy-panel { width: min(480px, 100%); height: 100%; overflow: auto; background: #fff; padding: 32px; box-shadow: -12px 0 36px rgba(15, 23, 42, .18); }
+.start-occupancy-panel h2 { margin-top: 0; }
+.start-occupancy-panel dl { display: grid; gap: 12px; }
+.start-occupancy-panel dl div { display: flex; justify-content: space-between; gap: 24px; border-bottom: 1px solid #e4e9e6; padding-bottom: 10px; }
+.start-occupancy-panel dt { font-weight: 750; }
+.start-occupancy-panel dd { margin: 0; text-align: right; }
+.start-occupancy-confirm { display: flex; align-items: flex-start; gap: 10px; margin: 24px 0; line-height: 1.5; }
+.start-occupancy-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.start-occupancy-actions button { border: 1px solid #b9c5bd; border-radius: 999px; padding: 11px 18px; background: #fff; font-weight: 750; }
+.start-occupancy-actions button:last-child { background: #244f40; color: #fff; }
+.start-occupancy-actions button:disabled { opacity: .5; }

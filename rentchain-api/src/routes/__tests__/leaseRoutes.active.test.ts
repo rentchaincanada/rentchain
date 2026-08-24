@@ -3598,6 +3598,39 @@ describe("leaseRoutes GET /active", () => {
     expect(fixtureReviewAfter.map((item: any) => item.tenantId)).not.toContain(foreignTenantId);
   });
 
+  it("projects one explicit occupancy start through Properties, Leases, Tenants, tenant detail, and Review Needed", async () => {
+    const propertyId = "property-explicit-start";
+    const unitId = "unit-explicit-start";
+    const leaseId = "lease-explicit-start";
+    const tenantId = "tenant-explicit-start";
+    const unit = { id: unitId, unitId, unitNumber: "S1", status: "vacant", occupancyStatus: "vacant", updatedAt: "2026-08-23T00:00:00.000Z" };
+    seedDoc("properties", propertyId, { landlordId: "landlord-1", ownerUserId: "landlord-1", name: "Explicit Start House", units: [unit], updatedAt: unit.updatedAt });
+    seedDoc("units", unitId, { ...unit, landlordId: "landlord-1", propertyId });
+    seedDoc("tenants", tenantId, { landlordId: "landlord-1", fullName: "Explicit Tenant", status: "past", propertyId, unitId, updatedAt: unit.updatedAt });
+    seedDoc("leases", leaseId, { landlordId: "landlord-1", propertyId, unitId, tenantId, primaryTenantId: tenantId, tenantIds: [tenantId], status: "active", executionStatus: "fully_executed", occupancyEffective: false, startDate: "2026-08-01", endDate: "2027-07-31", monthlyRent: 1800, updatedAt: unit.updatedAt });
+
+    const leaseRouter = (await import("../leaseRoutes")).default;
+    const propertiesRouter = (await import("../propertiesRoutes")).default;
+    const tenantsRouter = (await import("../tenantsRoutes")).default;
+    const occupancyReviewRouter = (await import("../occupancyReviewRoutes")).default;
+    const context = await invokeRouter(leaseRouter, { method: "GET", url: `/${leaseId}/occupancy-start-context` });
+    expect(context.body.context).toMatchObject({ eligible: true, availableAction: "start_occupancy" });
+    const started = await invokeRouter(leaseRouter, { method: "POST", url: `/${leaseId}/start-occupancy`, headers: { "idempotency-key": "explicit-cross-surface" }, body: { expectedStateToken: context.body.context.expectedStateToken, evaluationInstant: context.body.context.evaluationInstant, possessionConfirmed: true } });
+    expect(started.status).toBe(200);
+
+    const properties = await invokeRouter(propertiesRouter, { method: "GET", url: "/" });
+    expect(properties.body.items.find((entry: any) => entry.id === propertyId).units.find((entry: any) => entry.id === unitId)).toMatchObject({ status: "occupied", currentLeaseId: leaseId, currentTenantId: tenantId });
+    const leases = await invokeRouter(leaseRouter, { method: "GET", url: "/active" });
+    expect(leases.body.leases.find((entry: any) => entry.id === leaseId)?.canonicalState).toMatchObject({ occupancyState: "occupied", supportingLeaseId: leaseId, reasons: [] });
+    const tenants = await invokeRouter(tenantsRouter, { method: "GET", url: "/" });
+    expect(tenants.body.tenants.find((entry: any) => entry.id === tenantId)).toMatchObject({ currentLeaseId: leaseId, canonicalState: expect.objectContaining({ tenantRelationshipState: "current_occupant", supportingLeaseId: leaseId }) });
+    const detail = await invokeRouter(tenantsRouter, { method: "GET", url: `/${tenantId}` });
+    expect(detail.body).toMatchObject({ tenant: expect.objectContaining({ currentLeaseId: leaseId }), canonicalState: expect.objectContaining({ occupancyState: "occupied", supportingLeaseId: leaseId }), lease: expect.objectContaining({ id: leaseId }) });
+    const review = await invokeRouter(occupancyReviewRouter, { method: "GET", url: "/" });
+    expect(review.body.items.filter((item: any) => item.propertyId === propertyId && item.unitId === unitId)).toEqual([]);
+    expect(listDocs("canonicalEvents").filter((doc) => doc.data.type === "lease.occupancy_started")).toHaveLength(1);
+  });
+
   it("projects one coherent renewal handoff through Properties, Leases, Tenants, tenant detail, and Review Needed", async () => {
     const futureUnit = {
       id: "unit-renewal-future", unitNumber: "F1", status: "occupied", occupancyStatus: "occupied",

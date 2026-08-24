@@ -167,6 +167,53 @@ describe("lease conflict responses", () => {
     });
   }
 
+  function seedExplicitStartContext(overrides: any = {}) {
+    const now = new Date();
+    const startDate = new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
+    const endDate = new Date(now.getTime() + 300 * 86_400_000).toISOString().slice(0, 10);
+    const unit = { id: "unit-1", unitNumber: "A", status: "vacant", occupancyStatus: "vacant", updatedAt: "2026-08-01T00:00:00.000Z" };
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour House", units: [unit], updatedAt: unit.updatedAt });
+    seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", ...unit });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", name: "Taylor Tenant", status: "past", updatedAt: unit.updatedAt });
+    seedLease("lease-start", { executionStatus: "fully_executed", startDate, endDate, occupancyEffective: false, ...overrides });
+  }
+
+  it("serves a read-only explicit-start context and requires landlord possession confirmation", async () => {
+    seedExplicitStartContext();
+    const app = await makeApp();
+    const context = await request(app).get("/lease-start/occupancy-start-context");
+    expect(context.status).toBe(200);
+    expect(context.body.context).toMatchObject({ leaseId: "lease-start", eligible: true, availableAction: "start_occupancy", participants: [{ displayName: "Taylor Tenant" }] });
+    expect(getSeededDoc("units", "unit-1")).toMatchObject({ status: "vacant" });
+    const rejected = await request(app).post("/lease-start/start-occupancy").set("Idempotency-Key", "explicit-1").send({ expectedStateToken: context.body.context.expectedStateToken, evaluationInstant: context.body.context.evaluationInstant });
+    expect(rejected.status).toBe(400);
+    expect(getSeededDoc("units", "unit-1")).toMatchObject({ status: "vacant" });
+  });
+
+  it("starts occupancy only through the explicit canonical command and replays safely", async () => {
+    seedExplicitStartContext();
+    const app = await makeApp();
+    const context = (await request(app).get("/lease-start/occupancy-start-context")).body.context;
+    const command = () => request(app).post("/lease-start/start-occupancy").set("Idempotency-Key", "explicit-2").send({ expectedStateToken: context.expectedStateToken, evaluationInstant: context.evaluationInstant, possessionConfirmed: true });
+    const first = await command();
+    const replay = await command();
+    expect(first.status).toBe(200);
+    expect(replay.body.result).toMatchObject({ outcome: "idempotent_replay" });
+    expect(getSeededDoc("units", "unit-1")).toMatchObject({ status: "occupied", currentLeaseId: "lease-start", currentTenantId: "tenant-1" });
+    expect(getSeededDoc("leases", "lease-start")).toMatchObject({ occupancyEffective: true });
+  });
+
+  it.each([
+    ["renewal-linked", { predecessorLeaseId: "lease-old" }, "renewal_handoff_required"],
+    ["occupancy-excluded", { occupancyDisposition: { status: "excluded_from_current_occupancy_by_resolution" } }, "occupancy_excluded"],
+  ])("rejects %s explicit start without mutation", async (_label, override, blocker) => {
+    seedExplicitStartContext(override);
+    const app = await makeApp();
+    const context = await request(app).get("/lease-start/occupancy-start-context");
+    expect(context.body.context).toMatchObject({ eligible: false, canonicalBlocker: blocker, availableAction: null });
+    expect(getSeededDoc("units", "unit-1")).toMatchObject({ status: "vacant" });
+  });
+
   it("returns the machine-readable conflict code for direct create overlaps", async () => {
     seedUnit("unit-1", { unitNumber: "A", status: "occupied" });
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "A", status: "occupied", tenantId: "tenant-1" }] });

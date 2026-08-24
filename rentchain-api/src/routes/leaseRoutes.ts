@@ -2935,6 +2935,89 @@ router.get("/renewals/:successorLeaseId/context", requireLandlord, async (req: a
   }
 });
 
+function explicitStartBlocker(lease: any, context: any): string | null {
+  const renewalLinked = [lease?.predecessorLeaseId, lease?.renewedByLeaseId, lease?.renewalLeaseId, lease?.successorLeaseId, lease?.replacedByLeaseId]
+    .some((value) => String(value || "").trim());
+  if (renewalLinked) return "renewal_handoff_required";
+  if (String(lease?.occupancyDisposition?.status || "").trim() === "excluded_from_current_occupancy_by_resolution") return "occupancy_excluded";
+  if (context?.decision?.outcome === "already_coherent") return "occupancy_already_effective";
+  if (context?.decision?.outcome !== "occupancy_effective") return context?.decision?.reasons?.[0] || "lease_start_context_ambiguous";
+  return null;
+}
+
+router.get("/:leaseId/occupancy-start-context", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.leaseId || "").trim();
+    const leaseResult = await getLeaseForLandlord(leaseId, landlordId);
+    if (!leaseResult.ok) return res.status(leaseResult.status).json({ ok: false, error: leaseResult.error });
+    const lease: any = leaseResult.lease;
+    const propertyId = String(lease.propertyId || "").trim();
+    const unitId = String(lease.unitId || "").trim();
+    const tenantId = String(lease.tenantId || lease.primaryTenantId || "").trim();
+    if (!propertyId || !unitId || !tenantId) return res.status(409).json({ ok: false, error: "lease_start_context_ambiguous" });
+    const evaluationInstant = new Date().toISOString();
+    const context = await getCanonicalLeaseStartContext({ landlordId, propertyId, unitId, tenantId, leaseId, evaluationInstant });
+    const blocker = explicitStartBlocker(lease, context);
+    const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+    const tenant = tenantSnap.exists ? tenantSnap.data() as any : null;
+    return res.json({ ok: true, context: {
+      leaseId, propertyId, unitId,
+      participants: [{ tenantId, displayName: String(tenant?.name || tenant?.fullName || [tenant?.firstName, tenant?.lastName].filter(Boolean).join(" ") || "Tenant").trim() }],
+      executionStatus: String(lease.executionStatus || lease.executionState || lease.leaseExecutionState || "").trim() || null,
+      termStatus: deriveCanonicalLeaseTermState(lease, evaluationInstant).state,
+      currentOccupancyState: context.decision.outcome === "already_coherent" ? "occupied" : "not_occupancy_effective",
+      eligible: blocker === null, expectedStateToken: context.expectedStateToken,
+      evaluationInstant: context.evaluationInstant, canonicalBlocker: blocker,
+      availableAction: blocker === null ? "start_occupancy" : null,
+    } });
+  } catch (error) {
+    if (leaseStartErrorResponse(error, res)) return;
+    console.error("[GET /api/leases/:leaseId/occupancy-start-context] error", error);
+    return res.status(500).json({ ok: false, error: "occupancy_start_context_failed" });
+  }
+});
+
+router.post("/:leaseId/start-occupancy", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const idempotencyKey = mutationIdempotencyKeyOrReject(req, res);
+    if (!idempotencyKey) return;
+    const expectedStateToken = String(req.body?.expectedStateToken || "").trim();
+    if (!expectedStateToken || req.body?.possessionConfirmed !== true) {
+      return res.status(400).json({ ok: false, error: "occupancy_start_confirmation_required" });
+    }
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.leaseId || "").trim();
+    const leaseResult = await getLeaseForLandlord(leaseId, landlordId);
+    if (!leaseResult.ok) return res.status(leaseResult.status).json({ ok: false, error: leaseResult.error });
+    const lease: any = leaseResult.lease;
+    const propertyId = String(lease.propertyId || "").trim();
+    const unitId = String(lease.unitId || "").trim();
+    const tenantId = String(lease.tenantId || lease.primaryTenantId || "").trim();
+    if (!propertyId || !unitId || !tenantId) return res.status(409).json({ ok: false, error: "lease_start_context_ambiguous" });
+    const evaluationInstant = String(req.body?.evaluationInstant || "").trim();
+    if (!evaluationInstant) return res.status(400).json({ ok: false, error: "occupancy_start_expected_state_required" });
+    const result = await startCanonicalLeaseOccupancy({
+      landlordId, propertyId, unitId, tenantId, leaseId, operationKind: "explicit_start", trigger: "explicit_start",
+      idempotencyKey, expectedStateToken, evaluationInstant,
+      actorId: String(req.user?.id || req.user?.email || landlordId).trim() || landlordId,
+      source: "explicit_occupancy_start_route", persistRejectedAttempt: true,
+      transactionEligibilityGuard: ({ candidateLease }) => explicitStartBlocker(candidateLease, { decision: { outcome: "occupancy_effective" } }),
+    });
+    if (result.canonicalOutcome === "rejected" || !result.occupancyEffective) return canonicalLeaseStartRejection(res, result);
+    return res.json({ ok: true, result });
+  } catch (error) {
+    if (error instanceof LeaseStartServiceError && error.code === "lease_start_transaction_ineligible") {
+      return res.status(409).json({ ok: false, error: error.transactionEligibilityReason, freshContext: error.freshContext });
+    }
+    if (leaseStartErrorResponse(error, res)) return;
+    console.error("[POST /api/leases/:leaseId/start-occupancy] error", error);
+    return res.status(500).json({ ok: false, error: "occupancy_start_failed" });
+  }
+});
+
 router.post("/renewals/:successorLeaseId/activate", requireLandlord, async (req: any, res: Response) => {
   try {
     if (!(await enforceLeaseCapability(req, res))) return;
@@ -3891,38 +3974,7 @@ router.put("/:id", requireLandlord, async (req: any, res: Response) => {
         return res.status(409).json({ ok: false, error: "restore_active_workflow_required" });
       }
 
-      const executionStatus = String((proposedLease as any).executionStatus || (proposedLease as any).executionState || (proposedLease as any).leaseExecutionState || "").trim();
-      const startsCurrentOccupancy = before.state === "upcoming" && after.state === "active" && executionStatus === "fully_executed";
-      if (startsCurrentOccupancy) {
-        const idempotencyKey = mutationIdempotencyKeyOrReject(req, res);
-        if (!idempotencyKey) return;
-        const propertyId = String((proposedLease as any).propertyId || "").trim();
-        const unitId = String((proposedLease as any).unitId || "").trim();
-        const tenantId = String((proposedLease as any).tenantId || (proposedLease as any).primaryTenantId || "").trim();
-        if (!propertyId || !unitId || !tenantId) return res.status(409).json({ ok: false, error: "lease_start_context_ambiguous" });
-        const context = await getCanonicalLeaseStartContext({ landlordId, propertyId, unitId, tenantId, leaseId: currentLease.id, evaluationInstant, leasePatch: next });
-        const result = await startCanonicalLeaseOccupancy({
-          landlordId,
-          propertyId,
-          unitId,
-          tenantId,
-          leaseId: currentLease.id,
-          operationKind: "date_transition",
-          idempotencyKey,
-          expectedStateToken: context.expectedStateToken,
-          evaluationInstant,
-          trigger: "date_transition",
-          actorId: String(req.user?.id || req.user?.email || landlordId).trim() || landlordId,
-          source: "lease_update_route",
-          leasePatch: next,
-          persistRejectedAttempt: true,
-        });
-        if (result.canonicalOutcome === "rejected" || !result.occupancyEffective) {
-          return canonicalLeaseStartRejection(res, result);
-        }
-      } else {
-        await db.collection("leases").doc(currentLease.id).set(next, { merge: true });
-      }
+      await db.collection("leases").doc(currentLease.id).set(next, { merge: true });
       const refreshed = await getLeaseEntityForLandlord(String(req.params?.id || "").trim(), landlordId);
       if (!refreshed.ok) return res.status(refreshed.status).json({ error: refreshed.error });
       return res.json({ lease: await enrichLeaseRow({ id: String(req.params?.id || "").trim(), ...(refreshed.lease as any) }) });
