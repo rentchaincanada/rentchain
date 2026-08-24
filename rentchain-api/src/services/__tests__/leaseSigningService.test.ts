@@ -140,7 +140,7 @@ describe("leaseSigningService", () => {
     const { processSigningWebhook, sendLeaseForSignature } = await import("../signing/leaseSigningService");
     ensureCollection("leases").set("lease-future", {
       landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1",
-      status: "pending", predecessorLeaseId: "lease-predecessor", startDate: "2027-01-01", endDate: "2027-12-31",
+      status: "pending", startDate: "2027-01-01", endDate: "2027-12-31",
     });
     const sent = await sendLeaseForSignature({ leaseId: "lease-future", landlordId: "landlord-1", lease: { startDate: "2027-01-01" }, tenantEmails: ["tenant@example.com"] });
     const signingRequest = ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId));
