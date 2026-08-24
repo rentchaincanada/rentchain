@@ -542,7 +542,7 @@ describe("TenantsPage", () => {
     expect(leaseLinks[0]).not.toHaveAttribute("target", "_blank");
   });
 
-  it("preserves the signed document URL fallback only when no lease id is available", async () => {
+  it("preserves signed-document routing for a coherently identified current lease", async () => {
     mocks.useCapabilitiesMock.mockReturnValue({
       features: { tenant_invites: true },
     });
@@ -555,7 +555,7 @@ describe("TenantsPage", () => {
         propertyId: "property-1",
         unit: "Unit 4",
         unitId: "unit-4",
-        currentLeaseId: null,
+        currentLeaseId: "lease-signed-fallback-1",
       },
     ]);
     mocks.fetchTenantTenanciesMock.mockResolvedValue([
@@ -565,7 +565,7 @@ describe("TenantsPage", () => {
       bundle: {
         tenant: { id: "tenant-1", fullName: "Taylor Tenant" },
         currentLease: {
-          id: "",
+          id: "lease-signed-fallback-1",
           tenantId: "tenant-1",
           propertyId: "property-1",
           propertyName: "Main Street",
@@ -580,10 +580,10 @@ describe("TenantsPage", () => {
           signedDocumentSource: "signedDocument",
         },
         canonicalState: {
-          leaseTermState: "none",
-          occupancyState: "vacant",
-          tenantRelationshipState: "no_current_occupancy",
-          supportingLeaseId: null,
+          leaseTermState: "active",
+          occupancyState: "occupied",
+          tenantRelationshipState: "current_occupant",
+          supportingLeaseId: "lease-signed-fallback-1",
           reasons: [],
         },
       },
@@ -598,15 +598,68 @@ describe("TenantsPage", () => {
     );
 
     expect(await screen.findByText("Tenant actions")).toBeInTheDocument();
-    const leaseLinks = screen.getAllByRole("link", { name: "No current lease linked" });
+    const leaseLinks = screen.getAllByRole("link", { name: "Main Street · Unit 4 · Lease" });
     expect(leaseLinks.length).toBeGreaterThan(0);
-    expect(leaseLinks[0]).toHaveAttribute(
-      "href",
-      "https://storage.googleapis.com/rentchain-documents-prod/lease-signing/1?X-Goog-Signature=safe"
-    );
-    expect(leaseLinks[0]).toHaveAttribute("target", "_blank");
-    expect(leaseLinks[0]).toHaveAttribute("rel", "noreferrer");
+    expect(leaseLinks[0]).toHaveAttribute("href", "/leases/lease-signed-fallback-1/summary#signed-document");
+    expect(leaseLinks[0]).not.toHaveAttribute("target", "_blank");
     expect(document.body).not.toHaveTextContent("X-Goog-Signature");
+  });
+
+  it.each([
+    {
+      label: "an empty-id current lease object with null canonical support",
+      supportingLeaseId: null,
+      currentLease: { id: "", tenantId: "tenant-1", status: "active" },
+    },
+    {
+      label: "a missing-id current lease object with null canonical support",
+      supportingLeaseId: null,
+      currentLease: { tenantId: "tenant-1", status: "active" },
+    },
+    {
+      label: "a current lease id that differs from canonical support",
+      supportingLeaseId: "lease-a",
+      currentLease: { id: "lease-b", tenantId: "tenant-1", status: "active" },
+    },
+  ])("fails closed for $label", async ({ supportingLeaseId, currentLease }) => {
+    mocks.fetchTenantsMock.mockResolvedValue([
+      {
+        id: "tenant-1",
+        fullName: "Taylor Tenant",
+        propertyName: "Main Street",
+        propertyId: "property-1",
+        unit: "Unit 4",
+        unitId: "unit-4",
+      },
+    ]);
+    mocks.useTenantDetailMock.mockReturnValue({
+      bundle: {
+        tenant: { id: "tenant-1", fullName: "Taylor Tenant" },
+        canonicalState: {
+          leaseTermState: supportingLeaseId ? "active" : "none",
+          occupancyState: supportingLeaseId ? "occupied" : "vacant",
+          tenantRelationshipState: supportingLeaseId ? "current_occupant" : "no_current_occupancy",
+          supportingLeaseId,
+          reasons: [],
+        },
+        currentLease,
+      },
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Loading tenant details…")).toBeInTheDocument();
+    expect(screen.getByText("Payment ledger loading with tenant details…")).toBeInTheDocument();
+    expect(screen.queryByText("No current lease linked")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open payment ledger" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Record payment" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export payment ledger" })).not.toBeInTheDocument();
   });
 
   it("uses the current lease as the active unit link when tenancy registration is stale", async () => {

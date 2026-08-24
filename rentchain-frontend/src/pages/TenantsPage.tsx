@@ -577,17 +577,23 @@ const loadTenants = useCallback(async () => {
     loading: selectedTenantDetailLoading,
     error: selectedTenantDetailError,
   } = useTenantDetail(tenantExists ? selectedTenantId : null);
-  const detailCanonicalLeaseId = String(
-    selectedTenantDetailBundle?.canonicalState?.supportingLeaseId || ""
-  );
-  const detailCurrentLeaseId = String(selectedTenantDetailBundle?.currentLease?.id || "");
+  const detailCanonicalLeaseId = selectedTenantDetailBundle?.canonicalState?.supportingLeaseId;
+  const detailCurrentLease = selectedTenantDetailBundle?.currentLease;
+  const detailCurrentLeaseId = String(detailCurrentLease?.id || "").trim();
+  const selectedTenantDetailLeaseStateIsCoherent = detailCanonicalLeaseId === null
+    ? detailCurrentLease === null
+    : typeof detailCanonicalLeaseId === "string" &&
+      detailCanonicalLeaseId.length > 0 &&
+      detailCurrentLease != null &&
+      detailCurrentLeaseId.length > 0 &&
+      detailCanonicalLeaseId === detailCurrentLeaseId;
   const selectedTenantDetailIsCoherent = Boolean(
     selectedTenantDetailBundle &&
       selectedTenantDetailBundle.canonicalState &&
       !selectedTenantDetailLoading &&
       !selectedTenantDetailError &&
       String(selectedTenantDetailBundle.tenant?.id || "") === String(selectedTenantId || "") &&
-      detailCanonicalLeaseId === detailCurrentLeaseId
+      selectedTenantDetailLeaseStateIsCoherent
   );
   const selectedCanonicalState = selectedTenantDetailIsCoherent
     ? selectedTenantDetailBundle?.canonicalState || null
