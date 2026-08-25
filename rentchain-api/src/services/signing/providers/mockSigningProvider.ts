@@ -17,6 +17,23 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function normalizeWebhookBody(body: unknown): Record<string, unknown> {
+  let normalized = body;
+  if (Buffer.isBuffer(normalized)) normalized = normalized.toString("utf8");
+  if (typeof normalized === "string") {
+    if (!normalized.trim()) throw new Error("signing_webhook_payload_invalid");
+    try {
+      normalized = JSON.parse(normalized);
+    } catch {
+      throw new Error("signing_webhook_payload_invalid");
+    }
+  }
+  if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) {
+    throw new Error("signing_webhook_payload_invalid");
+  }
+  return normalized as Record<string, unknown>;
+}
+
 export class MockSigningProvider implements ISigningProvider {
   getProviderId() {
     return "mock" as const;
@@ -65,20 +82,21 @@ export class MockSigningProvider implements ISigningProvider {
     return String((input.headers as any)?.["x-mock-signing-secret"] || "").trim() === expected;
   }
 
-  async parseWebhookPayload(body: any): Promise<SigningProviderParsedWebhook> {
-    const providerRequestId = String(body?.providerRequestId || body?.signingRequestId || "").trim();
+  async parseWebhookPayload(body: unknown): Promise<SigningProviderParsedWebhook> {
+    const normalizedBody = normalizeWebhookBody(body);
+    const providerRequestId = String(normalizedBody.providerRequestId || normalizedBody.signingRequestId || "").trim();
     if (!providerRequestId) throw new Error("signing_webhook_request_missing");
-    const type = String(body?.type || body?.eventType || "signed").trim().toLowerCase();
+    const type = String(normalizedBody.type || normalizedBody.eventType || "signed").trim().toLowerCase();
     const allowed = new Set(["sent", "viewed", "signed", "rejected", "expired", "cancelled", "failed", "downloaded"]);
     if (!allowed.has(type)) throw new Error("signing_webhook_type_invalid");
-    const providerEventId = String(body?.eventId || "").trim();
+    const providerEventId = String(normalizedBody.eventId || "").trim();
     if (!providerEventId) throw new Error("signing_webhook_event_identity_missing");
     return {
       providerRequestId,
       providerEventId,
       type: type as any,
-      signerEmail: String(body?.signerEmail || "").trim().toLowerCase() || null,
-      occurredAt: String(body?.occurredAt || nowIso()),
+      signerEmail: String(normalizedBody.signerEmail || "").trim().toLowerCase() || null,
+      occurredAt: String(normalizedBody.occurredAt || nowIso()),
     };
   }
 }
