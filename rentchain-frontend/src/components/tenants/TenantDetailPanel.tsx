@@ -170,7 +170,8 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
   const ledgerEnabled = features?.ledger !== false;
 
   const tenant = bundle.tenant || bundle;
-  const lease = bundle.currentLease || bundle.lease;
+  const lease = bundle.currentLease || null;
+  const currentLeaseId = typeof bundle.currentLease?.id === "string" ? bundle.currentLease.id.trim() : "";
   const lifecycle = bundle.lifecycle || tenant.lifecycle || null;
   const stateCoherence = bundle.stateCoherence || null;
   const canonicalState = bundle.canonicalState || null;
@@ -194,6 +195,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
   const [financialActivityLoading, setFinancialActivityLoading] = useState(false);
   const [financialActivityError, setFinancialActivityError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
+  const ledgerRequestGenerationRef = useRef(0);
 
   const [signals, setSignals] = useState<TenantSignals | null>(null);
   const [signalsError, setSignalsError] = useState<string | null>(null);
@@ -232,9 +234,8 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
   const hasMoveInReadiness = entitlements.hasMoveInReadiness;
 
   const handleViewInLedger = () => {
-    const leaseId = String(lease?.id || tenant?.currentLeaseId || tenant?.leaseId || "").trim();
-    if (leaseId) {
-      navigate(`/leases/${encodeURIComponent(leaseId)}/ledger`);
+    if (currentLeaseId) {
+      navigate(`/leases/${encodeURIComponent(currentLeaseId)}/ledger`);
       return;
     }
     showToast({
@@ -245,47 +246,55 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
   };
 
   const loadLedger = React.useCallback(async () => {
-    const currentLeaseId = String(lease?.id || tenant?.currentLeaseId || tenant?.leaseId || "").trim();
+    const requestGeneration = ++ledgerRequestGenerationRef.current;
+    const isCurrentRequest = () => ledgerRequestGenerationRef.current === requestGeneration;
     if (!tenantId) {
       setLedgerItems([]);
       setLeaseLedgerItems([]);
+      setLedgerLoading(false);
+      setLedgerError(null);
       return;
     }
     if (!ledgerEnabled) {
       setLedgerItems([]);
       setLeaseLedgerItems([]);
+      setLedgerLoading(false);
+      setLedgerError(null);
       return;
+    }
+    setLedgerMode(currentLeaseId ? "lease" : "tenant");
+    if (currentLeaseId) {
+      setLedgerItems([]);
+    } else {
+      setLeaseLedgerItems([]);
     }
     setLedgerLoading(true);
     setLedgerError(null);
     try {
       if (currentLeaseId) {
         const ledger = await fetchLeaseLedger(currentLeaseId);
-        if (!cancelledRef.current) {
-          setLedgerMode("lease");
+        if (isCurrentRequest()) {
           setLeaseLedgerItems(Array.isArray(ledger.entries) ? ledger.entries : []);
           setLedgerItems([]);
         }
       } else {
         const items = await fetchLedger({ tenantId, limit: 50 });
-        if (!cancelledRef.current) {
-          setLedgerMode("tenant");
+        if (isCurrentRequest()) {
           setLedgerItems(items || []);
           setLeaseLedgerItems([]);
         }
       }
     } catch (err: any) {
-      if (!cancelledRef.current) setLedgerError(err?.message || "Failed to load ledger");
+      if (isCurrentRequest()) setLedgerError(err?.message || "Lease payment history is temporarily unavailable.");
     } finally {
-      if (!cancelledRef.current) setLedgerLoading(false);
+      if (isCurrentRequest()) setLedgerLoading(false);
     }
-  }, [lease?.id, ledgerEnabled, tenant?.currentLeaseId, tenant?.leaseId, tenantId]);
+  }, [currentLeaseId, ledgerEnabled, tenantId]);
 
   useEffect(() => {
-    cancelledRef.current = false;
     void loadLedger();
     return () => {
-      cancelledRef.current = true;
+      ledgerRequestGenerationRef.current += 1;
     };
   }, [loadLedger]);
 
@@ -929,7 +938,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
                 Showing the latest {RECENT_LEASE_LEDGER_ENTRY_LIMIT} entries here. Open payment ledger for the full history.
               </span>
             ) : null}
-            {ledgerMode === "tenant" ? (
+            {!currentLeaseId ? (
               <span style={{ color: text.muted, fontSize: "0.75rem", fontWeight: 400 }}>
                 No current lease is linked, so this view is showing the existing tenant-level ledger source.
               </span>
@@ -952,7 +961,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
             >
               Record tenant activity
             </button>
-            {ledgerMode === "tenant" ? <VerifyLedgerButton onVerified={() => void loadLedger()} /> : null}
+            {!currentLeaseId ? <VerifyLedgerButton onVerified={() => void loadLedger()} /> : null}
           </div>
         </div>
         {ledgerLoading ? (

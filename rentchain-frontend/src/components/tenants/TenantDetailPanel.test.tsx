@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TenantDetailPanel } from "./TenantDetailPanel";
@@ -102,8 +102,39 @@ vi.mock("./LeasePackWizardModal", () => ({
   LeasePackWizardModal: () => null,
 }));
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function tenantDetailBundle(tenantId: string, currentLeaseId: string | null, displayLeaseId?: string) {
+  return {
+    tenant: { id: tenantId, fullName: `${tenantId} name`, currentLeaseId: `stale-${tenantId}` },
+    currentLease: currentLeaseId
+      ? { id: currentLeaseId, tenantId, leaseStart: "2026-01-01", leaseEnd: "2026-12-31", status: "active" }
+      : null,
+    lease: displayLeaseId ? { id: displayLeaseId, tenantId, status: "ended" } : null,
+    canonicalState: {
+      supportingLeaseId: currentLeaseId,
+      leaseTermState: currentLeaseId ? "current" : "none",
+      occupancyState: currentLeaseId ? "occupied" : "vacant",
+      tenantRelationshipState: currentLeaseId ? "current" : "past",
+      reasons: [],
+    },
+    property: { id: `property-${tenantId}`, name: "Harbour View" },
+    unit: { id: `unit-${tenantId}`, unitNumber: "101", status: currentLeaseId ? "occupied" : "vacant" },
+    moveInReadiness: null,
+  };
+}
+
 describe("TenantDetailPanel", () => {
   beforeEach(() => {
+    cleanup();
     vi.clearAllMocks();
     mocks.getTenantSignals.mockResolvedValue({ signals: null });
     mocks.printSummaryDocument.mockResolvedValue(undefined);
@@ -380,5 +411,91 @@ describe("TenantDetailPanel", () => {
     expect((await screen.findAllByText("Expired")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Review needed").length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText("Current")).not.toBeInTheDocument();
+  });
+
+  it("keeps authoritative current-lease copy coherent while its ledger request is pending and after success", async () => {
+    const leaseLedger = deferred<any>();
+    mocks.fetchLeaseLedger.mockReturnValueOnce(leaseLedger.promise);
+    mocks.useTenantDetail.mockReturnValue({
+      loading: false,
+      error: null,
+      bundle: tenantDetailBundle("tenant-1", "lease-current", "lease-historical"),
+    });
+
+    render(<MemoryRouter><TenantDetailPanel tenantId="tenant-1" /></MemoryRouter>);
+
+    expect(await screen.findByText("Loading ledger...")).toBeInTheDocument();
+    expect(screen.queryByText(/No current lease is linked/i)).not.toBeInTheDocument();
+    expect(mocks.fetchLeaseLedger).toHaveBeenCalledWith("lease-current");
+    expect(mocks.fetchLeaseLedger).not.toHaveBeenCalledWith("lease-historical");
+    expect(mocks.fetchLeaseLedger).not.toHaveBeenCalledWith("stale-tenant-1");
+
+    leaseLedger.resolve({
+      entries: [{
+        id: "entry-current",
+        leaseId: "lease-current",
+        entryType: "charge",
+        category: "rent",
+        amountCents: 100000,
+        effectiveDate: "2026-08-01",
+        signedAmountCents: 100000,
+        balanceCents: 100000,
+      }],
+    });
+
+    expect(await screen.findByText(/Charge · rent/i)).toBeInTheDocument();
+    expect(screen.queryByText(/No current lease is linked/i)).not.toBeInTheDocument();
+  });
+
+  it("does not deny the authoritative current lease when its ledger request fails", async () => {
+    const leaseLedger = deferred<any>();
+    mocks.fetchLeaseLedger.mockReturnValueOnce(leaseLedger.promise);
+    mocks.useTenantDetail.mockReturnValue({
+      loading: false,
+      error: null,
+      bundle: tenantDetailBundle("tenant-1", "lease-current"),
+    });
+
+    render(<MemoryRouter><TenantDetailPanel tenantId="tenant-1" /></MemoryRouter>);
+    expect(await screen.findByText("Loading ledger...")).toBeInTheDocument();
+
+    leaseLedger.reject(new Error("Lease payment history is temporarily unavailable."));
+
+    expect(await screen.findByText("Lease payment history is temporarily unavailable.")).toBeInTheDocument();
+    expect(screen.queryByText(/No current lease is linked/i)).not.toBeInTheDocument();
+  });
+
+  it("ignores a prior tenant's late lease-ledger result after selection changes", async () => {
+    const tenantALedger = deferred<any>();
+    mocks.fetchLeaseLedger.mockReturnValueOnce(tenantALedger.promise);
+    mocks.fetchLedger.mockResolvedValueOnce([]);
+    mocks.useTenantDetail.mockImplementation((tenantId: string) => ({
+      loading: false,
+      error: null,
+      bundle: tenantDetailBundle(tenantId, tenantId === "tenant-a" ? "lease-a" : null),
+    }));
+
+    const view = render(<MemoryRouter><TenantDetailPanel tenantId="tenant-a" /></MemoryRouter>);
+    expect(await screen.findByText("Loading ledger...")).toBeInTheDocument();
+
+    view.rerender(<MemoryRouter><TenantDetailPanel tenantId="tenant-b" /></MemoryRouter>);
+    expect(await screen.findByText(/No current lease is linked/i)).toBeInTheDocument();
+    await waitFor(() => expect(mocks.fetchLedger).toHaveBeenCalledWith({ tenantId: "tenant-b", limit: 50 }));
+
+    tenantALedger.resolve({
+      entries: [{
+        id: "late-a-entry",
+        leaseId: "lease-a",
+        entryType: "charge",
+        category: "late-a-only",
+        amountCents: 100,
+        effectiveDate: "2026-08-01",
+        signedAmountCents: 100,
+        balanceCents: 100,
+      }],
+    });
+
+    await waitFor(() => expect(screen.queryByText(/late-a-only/i)).not.toBeInTheDocument());
+    expect(screen.getByText(/No current lease is linked/i)).toBeInTheDocument();
   });
 });
