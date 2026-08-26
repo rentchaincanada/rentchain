@@ -601,6 +601,7 @@ async function endFirestoreLeaseAtomically(
             {
               currentLeaseId: supportingLeaseId,
               status: supportingLeaseId ? "current" : "Past",
+              relationshipStatus: supportingLeaseId ? "current" : "past",
               updatedAt: nowIso,
             },
             { merge: true }
