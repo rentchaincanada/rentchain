@@ -4,6 +4,7 @@ const setMock = vi.fn(async () => undefined);
 const getTenantDetailBundleMock = vi.fn();
 const getTenantsListMock = vi.fn();
 const deriveFinancialProjectionRowsMock = vi.fn();
+const mutateTenantArchiveStateMock = vi.fn();
 const leaseDocs = new Map<string, any>();
 const propertyDocs = new Map<string, any>();
 
@@ -81,6 +82,13 @@ vi.mock("../../services/capabilityGuard", () => ({
   requireCapability: vi.fn(async () => ({ ok: true })),
 }));
 
+vi.mock("../../services/tenantLifecycleArchiveService", () => ({
+  mutateTenantArchiveState: mutateTenantArchiveStateMock,
+  TenantArchiveCommandError: class TenantArchiveCommandError extends Error {
+    constructor(public code: string, public status: number) { super(code); }
+  },
+}));
+
 async function invokeRouter(router: any, options: {
   method: string;
   url: string;
@@ -125,6 +133,7 @@ describe("tenantsRoutes", () => {
     getTenantDetailBundleMock.mockReset();
     getTenantsListMock.mockReset();
     deriveFinancialProjectionRowsMock.mockReset();
+    mutateTenantArchiveStateMock.mockReset();
     leaseDocs.clear();
     propertyDocs.clear();
   });
@@ -180,6 +189,24 @@ describe("tenantsRoutes", () => {
       { merge: true }
     );
     expect(result.body?.tenant?.fullName).toBe("Taylor Tenant");
+  });
+
+  it.each(["archive", "restore"] as const)("runs the explicit %s command and returns refreshed server lifecycle", async (command) => {
+    mutateTenantArchiveStateMock.mockResolvedValue({ command });
+    getTenantDetailBundleMock.mockResolvedValue({
+      tenant: { id: "tenant-1", landlordId: "landlord-1" },
+      workspaceLifecycle: { category: command === "archive" ? "archived" : "past" },
+    });
+    const router = (await import("../tenantsRoutes")).default;
+    const result = await invokeRouter(router, { method: "POST", url: `/tenant-1/${command}` });
+    expect(result.status).toBe(200);
+    expect(mutateTenantArchiveStateMock).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      actorRole: "landlord",
+      command,
+    }));
+    expect(result.body.workspaceLifecycle.category).toBe(command === "archive" ? "archived" : "past");
   });
 
   it("returns landlord-safe lease labels for tenant lease history", async () => {

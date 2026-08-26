@@ -8,6 +8,8 @@ import { TenantPaymentsPanel } from "../components/tenants/TenantPaymentsPanel";
 import {
   fetchTenantTenancies,
   fetchTenants,
+  archiveTenant,
+  restoreTenant,
   type TenancyApiModel,
   type TenantApiModel,
   updateTenantRecord,
@@ -149,6 +151,7 @@ function tenantLifecycleLabel(
   tenant?: TenantApiModel | null,
   canonicalState: CanonicalLeaseOccupancyState | null | undefined = tenant?.canonicalState
 ): string {
+  if (tenant?.workspaceLifecycle?.label) return tenant.workspaceLifecycle.label;
   if (canonicalState) return canonicalTenantRelationshipLabel(canonicalState.tenantRelationshipState);
   return tenant?.lifecycle?.lifecycleLabel || tenant?.status || "Unknown";
 }
@@ -371,6 +374,8 @@ export const TenantsPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [lifecycleFilter, setLifecycleFilter] = useState<"active" | "current" | "upcoming" | "past" | "archived">("active");
+  const [savingArchiveState, setSavingArchiveState] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [tenantEdit, setTenantEdit] = useState<TenantEditState>(EMPTY_TENANT_EDIT);
   const [tenantNote, setTenantNote] = useState<TenantNoteState>(EMPTY_TENANT_NOTE);
@@ -611,16 +616,44 @@ const loadTenants = useCallback(async () => {
   const selectedLeaseLink = buildTenantLeaseLink(selectedTenant, selectedCurrentLease);
 
   const filteredTenants = useMemo(() => {
-    const base = tenants || [];
-    if (!searchQuery.trim()) return base;
+    const lifecycleRows = (tenants || []).filter((tenant) => {
+      const category = tenant.workspaceLifecycle?.category;
+      return lifecycleFilter === "active" ? category !== "archived" : category === lifecycleFilter;
+    });
+    if (!searchQuery.trim()) return lifecycleRows;
     const q = searchQuery.toLowerCase();
-    return base.filter((t) => {
+    return lifecycleRows.filter((t) => {
       const name = (t.name || t.fullName || "").toLowerCase();
       const property = (t.propertyName || t.propertyId || "").toLowerCase();
       const unit = (t.unitLabel || t.unit || "").toLowerCase();
       return name.includes(q) || property.includes(q) || unit.includes(q);
     });
-  }, [tenants, searchQuery]);
+  }, [lifecycleFilter, tenants, searchQuery]);
+
+  const selectedWorkspaceLifecycle = selectedTenantDetailBundle?.workspaceLifecycle || selectedTenant?.workspaceLifecycle || null;
+
+  const handleArchiveStateChange = async (command: "archive" | "restore") => {
+    if (!selectedTenantId) return;
+    const tenantName = selectedTenant?.name || selectedTenant?.fullName || "this tenant";
+    const confirmed = window.confirm(
+      command === "archive"
+        ? `Archive ${tenantName}? Lease, payment, note, document, application, tenancy, and audit history will be preserved.`
+        : `Restore ${tenantName}? Their canonical relationship will determine the workspace category.`
+    );
+    if (!confirmed) return;
+    try {
+      setSavingArchiveState(true);
+      if (command === "archive") await archiveTenant(selectedTenantId);
+      else await restoreTenant(selectedTenantId);
+      await loadTenants();
+      setActivityRefreshKey((value) => value + 1);
+      showToast({ message: command === "archive" ? "Tenant archived" : "Tenant restored", variant: "success" });
+    } catch (error) {
+      showToast({ message: command === "archive" ? "Unable to archive tenant" : "Unable to restore tenant", description: getErrorMessage(error, "Please refresh and try again."), variant: "error" });
+    } finally {
+      setSavingArchiveState(false);
+    }
+  };
 
   const visibleTenantIds = useMemo(
     () => (filteredTenants || []).slice(0, 50).map((t) => t.id).filter(Boolean),
@@ -802,7 +835,28 @@ const loadTenants = useCallback(async () => {
         <ResponsiveMasterDetail
           title={undefined}
           searchSlot={
-            <div className="rc-tenants-search">
+            <div className="rc-tenants-search" style={{ display: "grid", gap: 8 }}>
+              <div role="group" aria-label="Tenant lifecycle filters" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {(["active", "current", "upcoming", "past", "archived"] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    aria-pressed={lifecycleFilter === filter}
+                    onClick={() => setLifecycleFilter(filter)}
+                    style={{
+                      padding: "6px 9px",
+                      borderRadius: radius.pill,
+                      border: `1px solid ${lifecycleFilter === filter ? landlordWorkspaceTheme.borderStrong : colors.border}`,
+                      background: lifecycleFilter === filter ? landlordWorkspaceTheme.pineSoft : colors.panel,
+                      color: text.primary,
+                      textTransform: "capitalize",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {filter}
+                  </button>
+                ))}
+              </div>
               <Input
                 type="text"
                 placeholder="Search by name, property, unit"
@@ -1072,9 +1126,31 @@ const loadTenants = useCallback(async () => {
                             color: text.primary,
                             cursor: "pointer",
                           }}
-                        >
-                          {inviteEnabled ? "Send tenant invite" : "Unlock Tenant Invites"}
-                        </button>
+                          >
+                            {inviteEnabled ? "Send tenant invite" : "Unlock Tenant Invites"}
+                          </button>
+                        {selectedWorkspaceLifecycle?.archiveEligibility.allowed ? (
+                          <button
+                            type="button"
+                            className="rc-tenants-action-button"
+                            disabled={savingArchiveState}
+                            onClick={() => void handleArchiveStateChange("archive")}
+                            style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${landlordWorkspaceTheme.borderStrong}`, background: landlordWorkspaceTheme.card, color: text.primary, cursor: savingArchiveState ? "wait" : "pointer" }}
+                          >
+                            Archive tenant
+                          </button>
+                        ) : null}
+                        {selectedWorkspaceLifecycle?.isArchived ? (
+                          <button
+                            type="button"
+                            className="rc-tenants-action-button"
+                            disabled={savingArchiveState}
+                            onClick={() => void handleArchiveStateChange("restore")}
+                            style={{ padding: "8px 10px", borderRadius: radius.md, border: `1px solid ${landlordWorkspaceTheme.borderStrong}`, background: landlordWorkspaceTheme.card, color: text.primary, cursor: savingArchiveState ? "wait" : "pointer" }}
+                          >
+                            Restore tenant
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                     {selectedTenantLinkage ? <><div
@@ -1087,8 +1163,13 @@ const loadTenants = useCallback(async () => {
                       <Card style={tenantWorkspaceCardStyle}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Lifecycle</div>
                         <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
-                          {tenantLifecycleLabel(selectedTenant, selectedCanonicalState)}
+                          {selectedWorkspaceLifecycle?.label || tenantLifecycleLabel(selectedTenant, selectedCanonicalState)}
                         </div>
+                        {selectedWorkspaceLifecycle?.actualEndDate ? (
+                          <div style={{ marginTop: 4, fontSize: 12, color: text.muted }}>
+                            Actual end date: {formatDate(selectedWorkspaceLifecycle.actualEndDate)}
+                          </div>
+                        ) : null}
                         {selectedCanonicalState?.tenantRelationshipState === "occupancy_unresolved" && selectedTenant.propertyId && selectedTenant.unitId ? <button type="button" onClick={() => setResolveOccupancyOpen(true)}>Resolve occupancy</button> : null}
                       </Card>
                       <Card style={tenantWorkspaceCardStyle}>

@@ -40,6 +40,10 @@ import {
   type CanonicalLeaseOccupancyProjection,
 } from "../lib/leases/canonicalLeaseOccupancyProjection";
 import { selectCanonicalCurrentLease } from "../lib/leases/canonicalLeaseOccupancyState";
+import {
+  deriveTenantWorkspaceLifecycle,
+  type TenantWorkspaceLifecycle,
+} from "../lib/tenants/deriveTenantWorkspaceLifecycle";
 import { getSignedLeaseDocumentDownload } from "./signing/leaseSigningService";
 
 export interface TenantRecord {
@@ -70,7 +74,11 @@ export interface TenantRecord {
   tenantScoreTimeline?: TenantScoreTimelineEntry[];
   source?: string | null;
   createdAt?: string | number | null;
+  archivedAt?: string | null;
+  archivedByUserId?: string | null;
+  restoredAt?: string | null;
   lifecycle?: TenantLifecycleResult;
+  workspaceLifecycle?: TenantWorkspaceLifecycle;
   canonicalState?: CanonicalLeaseOccupancyProjection;
 }
 
@@ -352,6 +360,9 @@ function mapTenant(docId: string, data: any): TenantRecord {
     tenantScoreTimeline: Array.isArray(data.tenantScoreTimeline) ? data.tenantScoreTimeline : [],
     source: data.source ?? null,
     createdAt: createdAtIso ?? createdAt ?? null,
+    archivedAt: data.archivedAt ?? null,
+    archivedByUserId: data.archivedByUserId ?? null,
+    restoredAt: data.restoredAt ?? null,
   };
 }
 
@@ -768,6 +779,11 @@ async function hydrateTenantDisplayFields(tenant: TenantRecord, landlordId?: str
     source: hydrated.source,
     hiddenFromActiveLists: hydrated.hiddenFromActiveLists,
   });
+  hydrated.workspaceLifecycle = deriveTenantWorkspaceLifecycle({
+    canonicalState,
+    leases: leaseResolution.leases.map(toCanonicalLeaseStateInput),
+    archivedAt: hydrated.archivedAt,
+  });
 
   return hydrated;
 }
@@ -936,6 +952,12 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
   const canonicalCurrentLeaseRecord = canonicalState.supportingLeaseId
     ? leaseResolution.leases.find((candidate) => candidate.id === canonicalState.supportingLeaseId) || null
     : null;
+  const workspaceLifecycle = deriveTenantWorkspaceLifecycle({
+    canonicalState,
+    leases: leaseResolution.leases.map(toCanonicalLeaseStateInput),
+    archivedAt: tenant?.archivedAt,
+  });
+  if (tenant) tenant.workspaceLifecycle = workspaceLifecycle;
   let currentLease: TenantLease | null = null;
   if (canonicalCurrentLeaseRecord) {
     if (canonicalCurrentLeaseRecord.id === lease?.id) {
@@ -1028,6 +1050,7 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     moveInReadiness,
     ledgerSummary,
     lifecycle,
+    workspaceLifecycle,
     stateCoherence,
     canonicalState,
   };
