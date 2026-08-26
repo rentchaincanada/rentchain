@@ -43,6 +43,20 @@ describe("deriveTenantWorkspaceLifecycle", () => {
     expect(result).toMatchObject({ category: "archived", isArchived: true, hasCanonicalCurrentLease: false, archiveEligibility: { allowed: false, reason: "already_archived" } });
   });
 
+  it("keeps canonical Current visible when an archive overlay is also present", () => {
+    const result = project([
+      { id: "lease-current", landlordId: "landlord-1", tenantId: "tenant-1", status: "active", executionStatus: "fully_executed", startDate: "2026-01-01", endDate: "2026-12-31" },
+    ], { archivedAt: "2026-08-25T00:00:00.000Z", persistedUnitOccupancy: "occupied", currentLeasePointerId: "lease-current", persistedTenantStatus: "current" });
+    expect(result).toMatchObject({ category: "current", isArchived: true, hasCanonicalCurrentLease: true, archiveEligibility: { allowed: false, reason: "already_archived" } });
+  });
+
+  it("keeps canonical Upcoming visible when an archive overlay is also present", () => {
+    const result = project([
+      { id: "lease-upcoming", landlordId: "landlord-1", tenantId: "tenant-1", status: "signed", executionStatus: "fully_executed", startDate: "2026-10-01", endDate: "2027-09-30" },
+    ], { archivedAt: "2026-08-25T00:00:00.000Z", persistedUnitOccupancy: "vacant", persistedTenantStatus: "past" });
+    expect(result).toMatchObject({ category: "upcoming", isArchived: true, hasCanonicalCurrentLease: false, hasUpcomingLease: true, archiveEligibility: { allowed: false, reason: "already_archived" } });
+  });
+
   it("rejects archive for unresolved canonical occupancy conflicts", () => {
     const leases = [
       { id: "lease-a", landlordId: "landlord-1", tenantId: "tenant-1", status: "active", executionStatus: "fully_executed", startDate: "2026-01-01", endDate: "2026-12-31" },

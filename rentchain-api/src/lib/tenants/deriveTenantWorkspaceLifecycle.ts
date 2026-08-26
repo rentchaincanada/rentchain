@@ -66,12 +66,12 @@ export function deriveTenantWorkspaceLifecycle(input: {
     input.canonicalState.occupancyState === "review_needed" ||
     input.canonicalState.reasons.some((reason) => UNRESOLVED_OCCUPANCY_REASONS.has(reason));
 
-  const category: TenantWorkspaceCategory = archivedAt
-    ? "archived"
-    : hasCanonicalCurrentLease
-      ? "current"
-      : hasUpcomingLease
-        ? "upcoming"
+  const category: TenantWorkspaceCategory = hasCanonicalCurrentLease
+    ? "current"
+    : hasUpcomingLease
+      ? "upcoming"
+      : archivedAt
+        ? "archived"
         : "past";
   const label = `${category.charAt(0).toUpperCase()}${category.slice(1)}` as TenantWorkspaceLifecycle["label"];
 

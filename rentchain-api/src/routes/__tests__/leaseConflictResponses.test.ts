@@ -167,14 +167,14 @@ describe("lease conflict responses", () => {
     });
   }
 
-  function seedExplicitStartContext(overrides: any = {}) {
+  function seedExplicitStartContext(overrides: any = {}, tenantOverrides: any = {}) {
     const now = new Date();
     const startDate = new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
     const endDate = new Date(now.getTime() + 300 * 86_400_000).toISOString().slice(0, 10);
     const unit = { id: "unit-1", unitNumber: "A", status: "vacant", occupancyStatus: "vacant", updatedAt: "2026-08-01T00:00:00.000Z" };
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour House", units: [unit], updatedAt: unit.updatedAt });
     seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", ...unit });
-    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", name: "Taylor Tenant", status: "past", updatedAt: unit.updatedAt });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", name: "Taylor Tenant", status: "past", updatedAt: unit.updatedAt, ...tenantOverrides });
     seedLease("lease-start", { executionStatus: "fully_executed", startDate, endDate, occupancyEffective: false, ...overrides });
   }
 
@@ -201,6 +201,21 @@ describe("lease conflict responses", () => {
     expect(replay.body.result).toMatchObject({ outcome: "idempotent_replay" });
     expect(getSeededDoc("units", "unit-1")).toMatchObject({ status: "occupied", currentLeaseId: "lease-start", currentTenantId: "tenant-1" });
     expect(getSeededDoc("leases", "lease-start")).toMatchObject({ occupancyEffective: true });
+  });
+
+  it("hides the explicit Start action and rejects the command while the tenant is archived", async () => {
+    seedExplicitStartContext({}, { archivedAt: "2026-08-20T00:00:00.000Z" });
+    const app = await makeApp();
+    const context = (await request(app).get("/lease-start/occupancy-start-context")).body.context;
+    expect(context).toMatchObject({ eligible: false, availableAction: null, canonicalBlocker: "tenant_archived_restore_required" });
+
+    const response = await request(app).post("/lease-start/start-occupancy")
+      .set("Idempotency-Key", "explicit-archived")
+      .send({ expectedStateToken: context.expectedStateToken, evaluationInstant: context.evaluationInstant, possessionConfirmed: true });
+    expect(response).toMatchObject({ status: 409, body: { error: "tenant_archived_restore_required" } });
+    expect(getSeededDoc("tenants", "tenant-1")).toMatchObject({ archivedAt: "2026-08-20T00:00:00.000Z", status: "past" });
+    expect(getSeededDoc("leases", "lease-start")).toMatchObject({ occupancyEffective: false });
+    expect(getSeededDoc("units", "unit-1")).toMatchObject({ status: "vacant", occupancyStatus: "vacant" });
   });
 
   it.each([

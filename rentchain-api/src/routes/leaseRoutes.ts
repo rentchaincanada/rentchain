@@ -2937,6 +2937,7 @@ router.get("/renewals/:successorLeaseId/context", requireLandlord, async (req: a
 });
 
 function explicitStartBlocker(lease: any, context: any): string | null {
+  if (context?.tenantArchived === true) return "tenant_archived_restore_required";
   const renewalLinked = [lease?.predecessorLeaseId, lease?.renewedByLeaseId, lease?.renewalLeaseId, lease?.successorLeaseId, lease?.replacedByLeaseId]
     .some((value) => String(value || "").trim());
   if (renewalLinked) return "renewal_handoff_required";

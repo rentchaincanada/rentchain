@@ -100,4 +100,22 @@ describe("tenantLifecycleArchiveService", () => {
     await expect(mutateTenantArchiveState({ tenantId: "tenant-upcoming", landlordId: "landlord-1", actorRole: "landlord", command: "archive" }))
       .rejects.toMatchObject<TenantArchiveCommandError>({ code: "tenant_archive_upcoming_relationship", status: 409 });
   });
+
+  it("rejects foreign Archive at the real service boundary with no mutation or audit", async () => {
+    seed("tenants", "tenant-foreign", { landlordId: "landlord-a", status: "past", currentLeaseId: null });
+    const before = { ...read("tenants", "tenant-foreign") };
+    await expect(mutateTenantArchiveState({ tenantId: "tenant-foreign", landlordId: "landlord-b", actorRole: "landlord", command: "archive" }))
+      .rejects.toMatchObject<TenantArchiveCommandError>({ code: "tenant_forbidden", status: 403 });
+    expect(read("tenants", "tenant-foreign")).toEqual(before);
+    expect(list("canonicalEvents")).toEqual([]);
+  });
+
+  it("rejects foreign Restore at the real service boundary with no mutation or audit", async () => {
+    seed("tenants", "tenant-foreign", { landlordId: "landlord-a", status: "past", currentLeaseId: null, archivedAt: "2026-08-25T00:00:00.000Z" });
+    const before = { ...read("tenants", "tenant-foreign") };
+    await expect(mutateTenantArchiveState({ tenantId: "tenant-foreign", landlordId: "landlord-b", actorRole: "landlord", command: "restore" }))
+      .rejects.toMatchObject<TenantArchiveCommandError>({ code: "tenant_forbidden", status: 403 });
+    expect(read("tenants", "tenant-foreign")).toEqual(before);
+    expect(list("canonicalEvents")).toEqual([]);
+  });
 });
