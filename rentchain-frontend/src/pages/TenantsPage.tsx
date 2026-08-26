@@ -572,12 +572,37 @@ const loadTenants = useCallback(async () => {
     ? tenants.find((t) => t.id === selectedTenantId) || null
     : null;
   const tenantExists = Boolean(selectedTenant);
-  const { bundle: selectedTenantDetailBundle } = useTenantDetail(tenantExists ? selectedTenantId : null);
-  const selectedCanonicalState =
-    selectedTenantDetailBundle?.canonicalState || selectedTenant?.canonicalState || null;
-  const selectedCurrentLease = selectedTenantDetailBundle?.currentLease || null;
+  const {
+    bundle: selectedTenantDetailBundle,
+    loading: selectedTenantDetailLoading,
+    error: selectedTenantDetailError,
+  } = useTenantDetail(tenantExists ? selectedTenantId : null);
+  const detailCanonicalLeaseId = selectedTenantDetailBundle?.canonicalState?.supportingLeaseId;
+  const detailCurrentLease = selectedTenantDetailBundle?.currentLease;
+  const detailCurrentLeaseId = String(detailCurrentLease?.id || "").trim();
+  const selectedTenantDetailLeaseStateIsCoherent = detailCanonicalLeaseId === null
+    ? detailCurrentLease === null
+    : typeof detailCanonicalLeaseId === "string" &&
+      detailCanonicalLeaseId.length > 0 &&
+      detailCurrentLease != null &&
+      detailCurrentLeaseId.length > 0 &&
+      detailCanonicalLeaseId === detailCurrentLeaseId;
+  const selectedTenantDetailIsCoherent = Boolean(
+    selectedTenantDetailBundle &&
+      selectedTenantDetailBundle.canonicalState &&
+      !selectedTenantDetailLoading &&
+      !selectedTenantDetailError &&
+      String(selectedTenantDetailBundle.tenant?.id || "") === String(selectedTenantId || "") &&
+      selectedTenantDetailLeaseStateIsCoherent
+  );
+  const selectedCanonicalState = selectedTenantDetailIsCoherent
+    ? selectedTenantDetailBundle?.canonicalState || null
+    : null;
+  const selectedCurrentLease = selectedTenantDetailIsCoherent
+    ? selectedTenantDetailBundle?.currentLease || null
+    : null;
   const selectedCurrentLeaseId = getTenantCurrentLeaseId(selectedTenant, selectedCurrentLease);
-  const selectedTenantLinkage = selectedTenant
+  const selectedTenantLinkage = selectedTenant && selectedTenantDetailIsCoherent
     ? describeTenantLinkage(selectedTenant, selectedCurrentLease, selectedCanonicalState)
     : null;
   const selectedLeaseLedgerPath = selectedCurrentLeaseId
@@ -984,7 +1009,7 @@ const loadTenants = useCallback(async () => {
           }}
           detail={
             <div className="rc-tenants-detail">
-              {selectedTenant && selectedTenantLinkage ? (
+              {selectedTenant ? (
                 <Section style={tenantWorkspaceSectionStyle}>
                   <div style={{ display: "grid", gap: 12 }}>
                     <div
@@ -1052,7 +1077,7 @@ const loadTenants = useCallback(async () => {
                         </button>
                       </div>
                     </div>
-                    <div
+                    {selectedTenantLinkage ? <><div
                       style={{
                         display: "grid",
                         gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
@@ -1091,15 +1116,21 @@ const loadTenants = useCallback(async () => {
                         </div>
                       </Card>
                     </div>
-                    <div style={{ fontSize: 12, color: text.muted }}>{selectedTenantLinkage.linkageNote}</div>
+                    <div style={{ fontSize: 12, color: text.muted }}>{selectedTenantLinkage.linkageNote}</div></> : (
+                      <div role={selectedTenantDetailError ? "alert" : "status"} style={{ fontSize: 13, color: text.muted }}>
+                        {selectedTenantDetailError
+                          ? "Tenant details are unavailable. Lease and payment information cannot be shown right now."
+                          : "Loading tenant details…"}
+                      </div>
+                    )}
                   </div>
                 </Section>
               ) : null}
-              {selectedTenant && selectedTenantLinkage ? (
+              {selectedTenant ? (
                 <Section style={tenantWorkspaceSectionStyle}>
                   <Card style={tenantWorkspaceCardStyle}>
                     <div style={{ display: "grid", gap: 12 }}>
-                      <div
+                      {selectedTenantLinkage ? <><div
                         style={{
                           display: "flex",
                           alignItems: "flex-start",
@@ -1169,8 +1200,14 @@ const loadTenants = useCallback(async () => {
                             <TenantLeaseLink link={selectedLeaseLink}>{selectedTenantLinkage.leaseLabel}</TenantLeaseLink>
                           </div>
                         </div>
-                      </div>
-                      {!selectedLeaseLedgerPath ? (
+                      </div></> : (
+                        <div role={selectedTenantDetailError ? "alert" : "status"} style={{ fontSize: 12, color: text.muted }}>
+                          {selectedTenantDetailError
+                            ? "Payment ledger unavailable until tenant details can be loaded."
+                            : "Payment ledger loading with tenant details…"}
+                        </div>
+                      )}
+                      {selectedTenantLinkage && !selectedLeaseLedgerPath ? (
                         <div style={{ fontSize: 12, color: text.muted }}>
                           Link a current lease before using payment ledger actions.
                         </div>

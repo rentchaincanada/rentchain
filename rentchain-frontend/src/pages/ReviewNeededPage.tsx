@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { getOccupancyReviewWorkspace, type OccupancyReviewItem, type OccupancyReviewReason, type OccupancyReviewWorkspace } from "@/api/occupancyReviewApi";
+import { getOccupancyStartContext } from "@/api/occupancyStartApi";
 import { ResolveOccupancyDrawer } from "@/components/occupancy/ResolveOccupancyDrawer";
+import { StartOccupancyDrawer } from "@/components/occupancy/StartOccupancyDrawer";
 import "./ReviewNeededPage.css";
 
 type Filter = "all" | OccupancyReviewItem["category"];
@@ -36,9 +38,20 @@ export default function ReviewNeededPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("all");
   const [resolving, setResolving] = useState<OccupancyReviewItem | null>(null);
+  const [starting, setStarting] = useState<OccupancyReviewItem | null>(null);
+  const [startEligibility, setStartEligibility] = useState<Record<string, boolean>>({});
   const load = useCallback(async () => {
     setLoading(true); setError(null);
-    try { const response = await getOccupancyReviewWorkspace(); setWorkspace({ items: response.items, counts: response.counts }); }
+    try {
+      const response = await getOccupancyReviewWorkspace();
+      setWorkspace({ items: response.items, counts: response.counts });
+      const candidates = response.items.filter((item) => item.reasons.length === 1 && item.reasons[0] === "VACANT_WITH_CURRENT_LEASE" && item.supportingLeaseId);
+      const eligibility = await Promise.all(candidates.map(async (item) => {
+        try { return [item.supportingLeaseId!, (await getOccupancyStartContext(item.supportingLeaseId!)).context.eligible] as const; }
+        catch { return [item.supportingLeaseId!, false] as const; }
+      }));
+      setStartEligibility(Object.fromEntries(eligibility));
+    }
     catch { setWorkspace(null); setError("Review Needed is temporarily unavailable. No records have been treated as resolved."); }
     finally { setLoading(false); }
   }, []);
@@ -58,15 +71,18 @@ export default function ReviewNeededPage() {
       {workspace.items.length > 0 && items.length === 0 ? <section className="review-needed-state">No items match this filter.</section> : null}
       <section className="review-needed-list" aria-label="Review items">{items.map((item) => {
         const primary = reasonPresentation(item.reasons[0] || "");
-        const canResolve = (item.action === "resolve_multiple_current" || item.action === "resolve_occupancy") && item.propertyId && item.unitId;
+        const isExplicitStartCandidate = item.reasons.length === 1 && item.reasons[0] === "VACANT_WITH_CURRENT_LEASE" && Boolean(item.supportingLeaseId);
+        const canStart = Boolean(isExplicitStartCandidate && item.supportingLeaseId && startEligibility[item.supportingLeaseId] === true);
+        const canResolve = !isExplicitStartCandidate && (item.action === "resolve_multiple_current" || item.action === "resolve_occupancy") && item.propertyId && item.unitId;
         return <article key={item.id} className={`review-needed-card review-needed-card--${item.severity}`}>
           <div className="review-needed-card-heading"><AlertTriangle size={20} /><div><h2>{primary.title}</h2><p>{[item.propertyName, item.unitLabel, item.tenantName].filter(Boolean).join(" · ") || "Canonical occupancy context"}</p></div><span>{item.canonicalState.occupancyState.replace("_", " ")}</span></div>
           <p>{primary.explanation}</p>
           {item.reasons.length > 1 ? <ul>{item.reasons.slice(1).map((reason) => <li key={reason}><strong>{reasonPresentation(reason).title}:</strong> {reasonPresentation(reason).explanation}</li>)}</ul> : null}
-          <div className="review-needed-actions">{canResolve ? <button type="button" onClick={() => setResolving(item)}>{ACTION_COPY[item.action]}</button> : item.actionTarget ? <Link to={item.actionTarget}>{ACTION_COPY[item.action]}</Link> : <span>Review the linked records before making changes.</span>}</div>
+          <div className="review-needed-actions">{canStart ? <button type="button" onClick={() => setStarting(item)}>Start Occupancy</button> : isExplicitStartCandidate ? <span>Start Occupancy is unavailable under the current authoritative context.</span> : canResolve ? <button type="button" onClick={() => setResolving(item)}>{ACTION_COPY[item.action]}</button> : item.actionTarget ? <Link to={item.actionTarget}>{ACTION_COPY[item.action]}</Link> : <span>Review the linked records before making changes.</span>}</div>
         </article>;
       })}</section>
     </> : null}
     {resolving?.propertyId && resolving.unitId ? <ResolveOccupancyDrawer open propertyId={resolving.propertyId} unitId={resolving.unitId} tenantId={resolving.tenantId} onClose={() => setResolving(null)} onResolved={() => { setResolving(null); void load(); }} /> : null}
+    {starting?.supportingLeaseId ? <StartOccupancyDrawer leaseId={starting.supportingLeaseId} propertyLabel={starting.propertyName} unitLabel={starting.unitLabel} onClose={() => setStarting(null)} onStarted={() => { setStarting(null); void load(); }} /> : null}
   </main>;
 }

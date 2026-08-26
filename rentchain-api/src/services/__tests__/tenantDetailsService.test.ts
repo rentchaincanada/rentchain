@@ -507,7 +507,56 @@ describe("getTenantDetailBundle", () => {
 
     const { getTenantDetailBundle } = await import("../tenantDetailsService");
     const bundle = await getTenantDetailBundle("tenant-1", { landlordId: "landlord-1" });
+    expect(bundle.canonicalState?.supportingLeaseId).toBe("lease-1");
     expect(bundle.currentLease).toEqual(expect.objectContaining({ id: "lease-1", status: "active", monthlyRent: 1800 }));
+    expect(bundle.currentLease?.id).toBe(bundle.canonicalState?.supportingLeaseId);
+  });
+
+  it("preserves a display lease while projecting a different canonical supporting lease as current", async () => {
+    tenantDocs.set("tenant-1", {
+      landlordId: "landlord-1",
+      fullName: "Tenant One",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      currentLeaseId: "lease-A",
+      status: "Current",
+    });
+    propertyDocs.set("property-1", { landlordId: "landlord-1", name: "Property" });
+    unitDocs.set("unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "1",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      currentLeaseId: "lease-B",
+      currentTenantId: "tenant-1",
+    });
+    leaseDocs.set("lease-A", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      status: "pending_signature",
+      startDate: "2026-01-01",
+      endDate: "2027-01-01",
+      monthlyRent: 1700,
+    });
+    leaseDocs.set("lease-B", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      status: "active",
+      startDate: "2026-01-01",
+      endDate: "2027-01-01",
+    });
+    const { getTenantDetailBundle } = await import("../tenantDetailsService");
+    const bundle = await getTenantDetailBundle("tenant-1", { landlordId: "landlord-1" });
+
+    expect(bundle.lease?.id).toBe("lease-A");
+    expect(bundle.canonicalState?.supportingLeaseId).toBe("lease-B");
+    expect(bundle.currentLease?.id).toBe("lease-B");
+    expect(bundle.currentLease?.id).not.toBe(bundle.lease?.id);
   });
 
   it("projects signed lease signing request state into tenant profile readiness and coherence", async () => {
@@ -643,6 +692,7 @@ describe("getTenantDetailBundle", () => {
     const bundle = await getTenantDetailBundle("tenant-1", { landlordId: "landlord-1" });
 
     expect(bundle.currentLease).toBeNull();
+    expect(bundle.canonicalState?.supportingLeaseId).toBeNull();
     expect(bundle.lease).toEqual(
       expect.objectContaining({
         id: "lease-1",

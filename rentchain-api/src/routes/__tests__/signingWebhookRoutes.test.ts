@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { signingWebhookBrowserReturnHandler, signingWebhookHandler } from "../webhooks/signingWebhookRoutes";
+import { MockSigningProvider } from "../../services/signing/providers/mockSigningProvider";
 
 const { processSigningWebhookMock } = vi.hoisted(() => ({
   processSigningWebhookMock: vi.fn(),
@@ -107,6 +108,41 @@ describe("signingWebhookHandler", () => {
 
     await signingWebhookHandler(req, res);
 
+    expect(res.statusCode).toBe(200);
+    expect(res.json).toHaveBeenCalledWith({ ok: true });
+  });
+
+  it("passes a raw JSON Buffer through the route boundary to the mock provider", async () => {
+    const provider = new MockSigningProvider();
+    processSigningWebhookMock.mockImplementationOnce(async ({ body }) => {
+      const parsed = await provider.parseWebhookPayload(body);
+      expect(parsed).toMatchObject({
+        providerRequestId: "mock_request",
+        providerEventId: "event-1",
+        type: "signed",
+      });
+      return {};
+    });
+    const body = Buffer.from(JSON.stringify({
+      providerRequestId: "mock_request",
+      eventId: "event-1",
+      type: "signed",
+    }));
+    const req: any = {
+      params: { providerId: "mock" },
+      query: {},
+      headers: { "content-type": "application/json" },
+      body,
+    };
+    const res = makeRes();
+
+    await signingWebhookHandler(req, res);
+
+    expect(processSigningWebhookMock).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: "mock",
+      body,
+      rawBody: body,
+    }));
     expect(res.statusCode).toBe(200);
     expect(res.json).toHaveBeenCalledWith({ ok: true });
   });

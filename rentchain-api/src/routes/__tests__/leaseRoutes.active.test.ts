@@ -2552,6 +2552,11 @@ describe("leaseRoutes GET /active", () => {
     expect((await fakeDb.collection("tenants").doc("tenant-shared").get()).data()).toMatchObject({ status: "current", relationshipStatus: "current", currentLeaseId: "lease-current" });
     expect((await fakeDb.collection("tenancies").doc("tenancy-ending").get()).data()).toMatchObject({ status: "inactive" });
     expect((await fakeDb.collection("tenancies").doc("tenancy-current").get()).data()).toMatchObject({ status: "active" });
+    const tenantsRouter = (await import("../tenantsRoutes")).default;
+    const detail = await invokeRouter(tenantsRouter, { method: "GET", url: "/tenant-shared" });
+    expect(detail.body.lease).toMatchObject({ id: "lease-current" });
+    expect(detail.body.canonicalState).toMatchObject({ supportingLeaseId: "lease-current" });
+    expect(detail.body.currentLease).toMatchObject({ id: "lease-current" });
   });
 
   it("projects one completed End Lease postcondition through all five product paths without Review Needed", async () => {
@@ -3617,6 +3622,114 @@ describe("leaseRoutes GET /active", () => {
     expect(reviewAfter.body.items.filter((item: any) => item.tenantId === foreignTenantId)).toEqual(foreignReviewBefore);
     expect(fixtureReviewAfter.flatMap((item: any) => item.reasons)).not.toContain("TENANT_CURRENT_WITHOUT_CURRENT_LEASE");
     expect(fixtureReviewAfter.map((item: any) => item.tenantId)).not.toContain(foreignTenantId);
+  });
+
+  it("rejects one future explicit start with zero occupancy writes across all five product surfaces", async () => {
+    const propertyId = "property-rejected-explicit-start";
+    const unitId = "unit-rejected-explicit-start";
+    const leaseId = "lease-rejected-explicit-start";
+    const tenantId = "tenant-rejected-explicit-start";
+    const unit = { id: unitId, unitId, unitNumber: "F1", status: "vacant", occupancyStatus: "vacant", updatedAt: "2026-08-23T00:00:00.000Z" };
+    seedDoc("properties", propertyId, { landlordId: "landlord-1", ownerUserId: "landlord-1", name: "Future Start House", units: [unit], updatedAt: unit.updatedAt });
+    seedDoc("units", unitId, { ...unit, landlordId: "landlord-1", propertyId });
+    seedDoc("tenants", tenantId, { landlordId: "landlord-1", fullName: "Future Tenant", status: "past", updatedAt: unit.updatedAt });
+    seedDoc("leases", leaseId, { landlordId: "landlord-1", propertyId, unitId, tenantId, primaryTenantId: tenantId, tenantIds: [tenantId], status: "active", executionStatus: "fully_executed", occupancyEffective: false, startDate: "2099-08-01", endDate: "2100-07-31", monthlyRent: 1800, updatedAt: unit.updatedAt });
+
+    const leaseRouter = (await import("../leaseRoutes")).default;
+    const propertiesRouter = (await import("../propertiesRoutes")).default;
+    const tenantsRouter = (await import("../tenantsRoutes")).default;
+    const occupancyReviewRouter = (await import("../occupancyReviewRoutes")).default;
+    const project = async () => {
+      const properties = await invokeRouter(propertiesRouter, { method: "GET", url: "/" });
+      const leases = await invokeRouter(leaseRouter, { method: "GET", url: "/active" });
+      const tenants = await invokeRouter(tenantsRouter, { method: "GET", url: "/" });
+      const detail = await invokeRouter(tenantsRouter, { method: "GET", url: `/${tenantId}` });
+      const review = await invokeRouter(occupancyReviewRouter, { method: "GET", url: "/" });
+      return {
+        property: properties.body.items.find((entry: any) => entry.id === propertyId),
+        lease: leases.body.leases.find((entry: any) => entry.id === leaseId),
+        tenant: tenants.body.tenants.find((entry: any) => entry.id === tenantId),
+        detail: detail.body,
+        review: review.body.items.filter((item: any) => item.propertyId === propertyId && item.unitId === unitId),
+      };
+    };
+    const before = await project();
+    const context = await invokeRouter(leaseRouter, { method: "GET", url: `/${leaseId}/occupancy-start-context` });
+    expect(context.body.context).toMatchObject({ eligible: false, canonicalBlocker: "UPCOMING_LEASE_CANNOT_SUPPORT_OCCUPANCY" });
+    clearWriteLog();
+    const rejected = await invokeRouter(leaseRouter, { method: "POST", url: `/${leaseId}/start-occupancy`, headers: { "idempotency-key": "rejected-explicit-cross-surface" }, body: { expectedStateToken: context.body.context.expectedStateToken, evaluationInstant: context.body.context.evaluationInstant, possessionConfirmed: true } });
+    expect(rejected.status).toBe(409);
+    expect(rejected.body.ok).toBe(false);
+    expect(writeLog.filter((write) => ["properties", "units", "leases", "tenants", "tenancies", "canonicalEvents"].includes(write.collection))).toEqual([]);
+    expect(listDocs("tenancies").filter((doc) => doc.data.leaseId === leaseId && doc.data.status === "active")).toEqual([]);
+    expect(listDocs("canonicalEvents").filter((doc) => doc.data.type === "lease.occupancy_started")).toEqual([]);
+    expect(await project()).toEqual(before);
+  });
+
+  it("projects current signing completion as executed but vacant through Review Needed", async () => {
+    process.env.SIGNING_PROVIDER = "mock";
+    process.env.PUBLIC_APP_URL = "http://localhost:5173";
+    const propertyId = "property-signing-execution-only";
+    const unitId = "unit-signing-execution-only";
+    const leaseId = "lease-signing-execution-only";
+    const tenantId = "tenant-signing-execution-only";
+    const unit = { id: unitId, unitId, unitNumber: "S2", status: "vacant", occupancyStatus: "vacant" };
+    seedDoc("properties", propertyId, { landlordId: "landlord-1", ownerUserId: "landlord-1", name: "Signing House", units: [unit] });
+    seedDoc("units", unitId, { ...unit, landlordId: "landlord-1", propertyId });
+    seedDoc("tenants", tenantId, { landlordId: "landlord-1", fullName: "Signed Tenant", status: "past" });
+    seedDoc("leases", leaseId, { landlordId: "landlord-1", propertyId, unitId, tenantId, primaryTenantId: tenantId, tenantIds: [tenantId], status: "active", executionStatus: "pending_signature", occupancyEffective: false, startDate: "2026-08-01", endDate: "2027-07-31" });
+
+    const { processSigningWebhook, sendLeaseForSignature } = await import("../../services/signing/leaseSigningService");
+    const sent = await sendLeaseForSignature({ leaseId, landlordId: "landlord-1", lease: { startDate: "2026-08-01" }, tenantEmails: ["signed@example.com"] });
+    const signingRequest = listDocs("leaseSigningRequests").find((doc) => doc.id === sent.signingRequestId)?.data;
+    const body = { providerRequestId: signingRequest.providerRequestId, eventId: "provider-execution-only-1", type: "signed", occurredAt: "2026-08-24T12:00:00.000Z" };
+    await processSigningWebhook({ providerId: "mock", headers: {}, body });
+    await processSigningWebhook({ providerId: "mock", headers: {}, body });
+
+    expect(listDocs("leases").find((doc) => doc.id === leaseId)?.data).toMatchObject({ executionStatus: "fully_executed", occupancyEffective: false });
+    expect(listDocs("units").find((doc) => doc.id === unitId)?.data).toMatchObject({ status: "vacant", occupancyStatus: "vacant" });
+    expect(listDocs("tenancies").filter((doc) => doc.data.leaseId === leaseId && doc.data.status === "active")).toEqual([]);
+    expect(listDocs("canonicalEvents").filter((doc) => doc.data.type === "lease.occupancy_started")).toEqual([]);
+    expect(listDocs("leaseSigningEvents").filter((doc) => doc.data.type === "signed")).toHaveLength(1);
+    const reviewRouter = (await import("../occupancyReviewRoutes")).default;
+    const review = await invokeRouter(reviewRouter, { method: "GET", url: "/" });
+    expect(review.body.items.filter((item: any) => item.propertyId === propertyId && item.unitId === unitId)).toEqual([
+      expect.objectContaining({ reasons: ["VACANT_WITH_CURRENT_LEASE"], supportingLeaseId: leaseId }),
+    ]);
+  });
+
+  it("projects one explicit occupancy start through Properties, Leases, Tenants, tenant detail, and Review Needed", async () => {
+    const propertyId = "property-explicit-start";
+    const unitId = "unit-explicit-start";
+    const leaseId = "lease-explicit-start";
+    const tenantId = "tenant-explicit-start";
+    const unit = { id: unitId, unitId, unitNumber: "S1", status: "vacant", occupancyStatus: "vacant", updatedAt: "2026-08-23T00:00:00.000Z" };
+    seedDoc("properties", propertyId, { landlordId: "landlord-1", ownerUserId: "landlord-1", name: "Explicit Start House", units: [unit], updatedAt: unit.updatedAt });
+    seedDoc("units", unitId, { ...unit, landlordId: "landlord-1", propertyId });
+    seedDoc("tenants", tenantId, { landlordId: "landlord-1", fullName: "Explicit Tenant", status: "past", propertyId, unitId, updatedAt: unit.updatedAt });
+    seedDoc("leases", leaseId, { landlordId: "landlord-1", propertyId, unitId, tenantId, primaryTenantId: tenantId, tenantIds: [tenantId], status: "active", executionStatus: "fully_executed", occupancyEffective: false, startDate: "2026-08-01", endDate: "2027-07-31", monthlyRent: 1800, updatedAt: unit.updatedAt });
+
+    const leaseRouter = (await import("../leaseRoutes")).default;
+    const propertiesRouter = (await import("../propertiesRoutes")).default;
+    const tenantsRouter = (await import("../tenantsRoutes")).default;
+    const occupancyReviewRouter = (await import("../occupancyReviewRoutes")).default;
+    const context = await invokeRouter(leaseRouter, { method: "GET", url: `/${leaseId}/occupancy-start-context` });
+    expect(context.body.context).toMatchObject({ eligible: true, availableAction: "start_occupancy" });
+    const started = await invokeRouter(leaseRouter, { method: "POST", url: `/${leaseId}/start-occupancy`, headers: { "idempotency-key": "explicit-cross-surface" }, body: { expectedStateToken: context.body.context.expectedStateToken, evaluationInstant: context.body.context.evaluationInstant, possessionConfirmed: true } });
+    expect(started.status).toBe(200);
+
+    const properties = await invokeRouter(propertiesRouter, { method: "GET", url: "/" });
+    expect(properties.body.items.find((entry: any) => entry.id === propertyId).units.find((entry: any) => entry.id === unitId)).toMatchObject({ status: "occupied", currentLeaseId: leaseId, currentTenantId: tenantId });
+    const leases = await invokeRouter(leaseRouter, { method: "GET", url: "/active" });
+    expect(leases.body.leases.find((entry: any) => entry.id === leaseId)?.canonicalState).toMatchObject({ occupancyState: "occupied", supportingLeaseId: leaseId, reasons: [] });
+    const tenants = await invokeRouter(tenantsRouter, { method: "GET", url: "/" });
+    expect(tenants.body.tenants.find((entry: any) => entry.id === tenantId)).toMatchObject({ currentLeaseId: leaseId, canonicalState: expect.objectContaining({ tenantRelationshipState: "current_occupant", supportingLeaseId: leaseId }) });
+    const detail = await invokeRouter(tenantsRouter, { method: "GET", url: `/${tenantId}` });
+    expect(detail.body).toMatchObject({ tenant: expect.objectContaining({ currentLeaseId: leaseId }), canonicalState: expect.objectContaining({ occupancyState: "occupied", supportingLeaseId: leaseId }), lease: expect.objectContaining({ id: leaseId }), currentLease: expect.objectContaining({ id: leaseId }) });
+    expect(detail.body.currentLease.id).toBe(detail.body.canonicalState.supportingLeaseId);
+    const review = await invokeRouter(occupancyReviewRouter, { method: "GET", url: "/" });
+    expect(review.body.items.filter((item: any) => item.propertyId === propertyId && item.unitId === unitId)).toEqual([]);
+    expect(listDocs("canonicalEvents").filter((doc) => doc.data.type === "lease.occupancy_started")).toHaveLength(1);
   });
 
   it("projects one coherent renewal handoff through Properties, Leases, Tenants, tenant detail, and Review Needed", async () => {

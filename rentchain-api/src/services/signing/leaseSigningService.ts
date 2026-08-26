@@ -6,8 +6,6 @@ import { writeCanonicalEvent } from "../../lib/events/buildEvent";
 import { deriveLeaseSigningState, type DerivedLeaseSigningState } from "../leaseStateHelper";
 import { getConfiguredSigningProvider, signingProviderRegistry } from "./providers";
 import type { ISigningProvider, SigningProviderEventType, SigningProviderFieldPlacement } from "./providers/types";
-import { getCanonicalLeaseStartContext, startCanonicalLeaseOccupancy } from "../leaseStart/leaseStartService";
-import { leaseStartDeterministicId } from "../leaseStart/leaseStartExpectedState";
 
 export type LeaseSigningStatus =
   | "not_started"
@@ -55,7 +53,6 @@ export type SignedLeaseDocumentDownload = {
 
 const REQUESTS = "leaseSigningRequests";
 const EVENTS = "leaseSigningEvents";
-const COMPLETION_OPERATIONS = "leaseSigningCompletionOperations";
 const DEAD_LETTERS = "leaseSigningWebhookDeadLetters";
 let lastGeneratedTimestampMs = 0;
 
@@ -640,59 +637,6 @@ export type SigningWebhookProcessResult = {
   providerResponseText?: string;
 };
 
-export async function startSigningCompletionOccupancy(input: {
-  firestore?: any;
-  providerId: string;
-  providerEventId: string;
-  occurredAt: string;
-  landlordId: string;
-  leaseId: string;
-  propertyId: string;
-  unitId: string;
-  tenantId: string;
-}) {
-  const firestore = input.firestore || db;
-  const idempotencyKey = `${input.providerId}:${input.providerEventId}`;
-  const completionOperationRef = firestore.collection(COMPLETION_OPERATIONS).doc(`lsco_${digest(idempotencyKey, 28)}`);
-  const priorCompletion = await completionOperationRef.get();
-  if (priorCompletion.exists) return { replay: true, result: priorCompletion.data()?.result || null };
-
-  const operationId = leaseStartDeterministicId("lease_start", [input.landlordId, "signing_completion", idempotencyKey]);
-  const priorOperation = await firestore.collection("leaseStartRequests").doc(operationId).get();
-  const occupancyResult = priorOperation.exists
-    ? priorOperation.data()?.result
-    : await (async () => {
-        const context = await getCanonicalLeaseStartContext({ ...input, evaluationInstant: input.occurredAt, firestore });
-        return startCanonicalLeaseOccupancy({
-          landlordId: input.landlordId, propertyId: input.propertyId, unitId: input.unitId, tenantId: input.tenantId,
-          leaseId: input.leaseId, operationKind: "signing_completion", idempotencyKey,
-          expectedStateToken: context.expectedStateToken, evaluationInstant: input.occurredAt,
-          trigger: "signing_completion", actorId: `provider:${input.providerId}`, source: "signing_provider_webhook", firestore,
-        });
-      })();
-  const completionResult = occupancyResult ? {
-    outcome: occupancyResult.outcome || occupancyResult.canonicalOutcome || null,
-    canonicalOutcome: occupancyResult.canonicalOutcome || null,
-    occupancyEffective: occupancyResult.occupancyEffective === true,
-    reasons: Array.isArray(occupancyResult.reasons) ? occupancyResult.reasons : [],
-    auditEventIds: Array.isArray(occupancyResult.auditEventIds) ? occupancyResult.auditEventIds : [],
-  } : null;
-  await completionOperationRef.set({
-    providerId: input.providerId,
-    providerEventRef: `${input.providerId}_evt_${digest(input.providerEventId, 18)}`,
-    leaseId: input.leaseId,
-    landlordId: input.landlordId,
-    canonicalOutcome: occupancyResult?.canonicalOutcome || null,
-    occupancyEffective: occupancyResult?.occupancyEffective === true,
-    canonicalEventIds: Array.isArray(occupancyResult?.auditEventIds) ? occupancyResult.auditEventIds : [],
-    completedAt: input.occurredAt,
-    result: completionResult,
-    rawIdsIncluded: false,
-    payloadIncluded: false,
-  });
-  return { replay: priorOperation.exists, result: completionResult };
-}
-
 export async function processSigningWebhook(input: { providerId: string; headers: any; body: any; rawBody?: Buffer }): Promise<SigningWebhookProcessResult> {
   const provider = signingProviderRegistry.getProvider(input.providerId);
   if (!provider?.isConfigured()) {
@@ -776,47 +720,12 @@ export async function processSigningWebhook(input: { providerId: string; headers
     const leaseSnap = await leaseRef.get();
     const lease = leaseSnap.exists ? leaseSnap.data() as any : null;
     if (lease && String(lease.landlordId || "").trim() === landlordId) {
-      const isLinkedRenewal = Boolean(String(lease.predecessorLeaseId || "").trim());
       await leaseRef.set({
         executionStatus: "fully_executed",
         executionState: "fully_executed",
         fullyExecutedAt: occurredAt,
         updatedAt: occurredAt,
       }, { merge: true });
-      const propertyId = String(lease.propertyId || "").trim();
-      const unitId = String(lease.unitId || "").trim();
-      const tenantId = String(lease.tenantId || lease.primaryTenantId || lease.tenantIds?.[0] || "").trim();
-      // A linked renewal is execution-complete here, never occupancy-effective.
-      // Its explicit renewal activation route owns the atomic handoff at every
-      // date boundary, including on or after the successor start date.
-      if (!isLinkedRenewal && propertyId && unitId && tenantId) {
-        try {
-          const completion = await startSigningCompletionOccupancy({
-            providerId: provider.getProviderId(), providerEventId: eventIdentity, occurredAt,
-            landlordId, leaseId, propertyId, unitId, tenantId,
-          });
-          const occupancyResult = completion.result;
-          if (occupancyResult.canonicalOutcome === "rejected") {
-            await leaseRef.set({
-              occupancyStartReview: {
-                status: "review_needed",
-                reasons: occupancyResult.reasons,
-                evaluatedAt: occurredAt,
-              },
-            }, { merge: true });
-          }
-        } catch (occupancyError: any) {
-          // Signing evidence is independently durable. Canonical occupancy must
-          // fail closed without rolling back a legitimate provider completion.
-          await leaseRef.set({
-            occupancyStartReview: {
-              status: "review_needed",
-              code: String(occupancyError?.code || occupancyError?.message || "lease_start_failed"),
-              evaluatedAt: occurredAt,
-            },
-          }, { merge: true });
-        }
-      }
     }
   }
   return {};

@@ -223,6 +223,21 @@ describe("Preview backend proxy", () => {
     });
   });
 
+  it("couples the authorized PR #1570 service URL and audience internally", () => {
+    const target = resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: PREVIEW_BACKEND_TARGET_KEYS.pr1570,
+    });
+    expect(target).toEqual({
+      key: "pr1570-occupancy-start-cert",
+      cloudRunServiceUrl:
+        "https://rentchain-pr1570-qa-occupancy-start-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1570-qa-occupancy-start-glistw4pya-nn.a.run.app",
+      temporary: true,
+    });
+  });
+
   it.each([
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
@@ -238,6 +253,8 @@ describe("Preview backend proxy", () => {
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1568],
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1569],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1569],
+    ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1570],
+    ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1570],
     ["preview", ""],
     ["preview", "   "],
     ["preview", "unknown"],
@@ -547,6 +564,35 @@ describe("Preview backend proxy", () => {
     );
   });
 
+  it.each([
+    ["mismatched audience", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1570,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1570-qa-occupancy-start-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-preview-backend-glistw4pya-nn.a.run.app",
+      temporary: true,
+    }],
+    ["attacker host", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1570,
+      cloudRunServiceUrl: "https://attacker.example",
+      cloudRunIdTokenAudience: "https://attacker.example",
+      temporary: true,
+    }],
+    ["temporary flag", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1570,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1570-qa-occupancy-start-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1570-qa-occupancy-start-glistw4pya-nn.a.run.app",
+      temporary: false,
+    }],
+  ])("rejects a tampered PR #1570 mapping: %s", (_label, target) => {
+    expect(() => assertPreviewBackendTarget(target, "preview")).toThrow(
+      "PREVIEW_PROXY_TARGET_REJECTED",
+    );
+  });
+
   it("routes the authorized target using the same URL for ID-token audience and upstream", async () => {
     process.env.PREVIEW_BACKEND_TARGET = PREVIEW_BACKEND_TARGET_KEYS.pr1555;
     const { requests, dependencies } = successfulDependencies();
@@ -727,6 +773,43 @@ describe("Preview backend proxy", () => {
       `${expected}/api/leases/tenant/synthetic-tenant?target=https://attacker.example`,
     );
     expect(requests[2].init?.method).toBe("GET");
+    expect(requests.every(({ url }) => !url.startsWith("https://attacker.example"))).toBe(true);
+  });
+
+  it("routes PR #1570 only to its fixed backend despite caller-controlled target-like input", async () => {
+    process.env.PREVIEW_BACKEND_TARGET = PREVIEW_BACKEND_TARGET_KEYS.pr1570;
+    process.env.PREVIEW_BACKEND_URL = "https://attacker.example";
+    const { requests, dependencies } = successfulDependencies();
+    const res = responseRecorder();
+
+    await handlePreviewBackendProxy(
+      request("/api/preview-backend/api/leases/synthetic-lease/start-occupancy?target=https://attacker.example", "POST", {
+        headers: {
+          host: "attacker.example",
+          cookie: "PREVIEW_BACKEND_TARGET=https://attacker.example",
+          "x-preview-backend-target": "https://attacker.example",
+          "idempotency-key": "pr1570-target-key",
+        },
+        query: { target: "https://attacker.example" },
+        body: { target: "https://attacker.example", possessionConfirmed: true },
+      }),
+      res,
+      dependencies,
+    );
+
+    const expected =
+      "https://rentchain-pr1570-qa-occupancy-start-glistw4pya-nn.a.run.app";
+    expect(requests[1].init?.body).toBe(
+      JSON.stringify({ audience: expected, includeEmail: false }),
+    );
+    expect(requests[2].url).toBe(
+      `${expected}/api/leases/synthetic-lease/start-occupancy?target=https://attacker.example`,
+    );
+    expect(requests[2].init?.method).toBe("POST");
+    expect(requests[2].init?.headers).toMatchObject({
+      "idempotency-key": "pr1570-target-key",
+      "X-Serverless-Authorization": `Bearer ${token("google-id-token")}`,
+    });
     expect(requests.every(({ url }) => !url.startsWith("https://attacker.example"))).toBe(true);
   });
 

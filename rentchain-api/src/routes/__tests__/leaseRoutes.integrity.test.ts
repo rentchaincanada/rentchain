@@ -1035,7 +1035,7 @@ describe("leaseRoutes integrity repairs", () => {
     expect((await fakeDb.collection("leases").get()).docs).toHaveLength(0);
   });
 
-  it("atomically starts occupancy when an executed upcoming lease is edited to current", async () => {
+  it("does not infer occupancy when an executed upcoming lease is edited to current", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitId: "unit-1", unitNumber: "101", status: "vacant", occupancyStatus: "vacant" }] });
     seedDoc("units", "unit-1", { landlordId: "landlord-1", propertyId: "prop-1", unitNumber: "101", status: "vacant", occupancyStatus: "vacant" });
     seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", currentLeaseId: null, status: "applicant" });
@@ -1046,8 +1046,9 @@ describe("leaseRoutes integrity repairs", () => {
     const app = await makeApp();
     const res = await request(app).put("/lease-upcoming").set("Idempotency-Key", "date-start-1").send({ startDate: "2026-08-01" });
     expect(res.status).toBe(200);
-    expect((await fakeDb.collection("leases").doc("lease-upcoming").get()).data()).toMatchObject({ startDate: "2026-08-01", occupancyEffective: true });
-    expect((await fakeDb.collection("units").doc("unit-1").get()).data()).toMatchObject({ status: "occupied", currentLeaseId: "lease-upcoming" });
+    expect((await fakeDb.collection("leases").doc("lease-upcoming").get()).data()).toMatchObject({ startDate: "2026-08-01", occupancyEffective: false });
+    expect((await fakeDb.collection("units").doc("unit-1").get()).data()).toMatchObject({ status: "vacant", occupancyStatus: "vacant" });
+    expect((await fakeDb.collection("canonicalEvents").get()).docs).toHaveLength(0);
   });
 
   it.each([
