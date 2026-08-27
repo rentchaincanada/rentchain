@@ -27,6 +27,7 @@ export const PREVIEW_BACKEND_TARGET_KEYS = {
   pr1569: "pr1569-onboarding-occupancy-cert",
   pr1570: "pr1570-occupancy-start-cert",
   pr1573: "pr1573-tenant-lifecycle-cert",
+  pr1576: "pr1576-context-mismatch-cert",
 } as const;
 
 export type PreviewBackendTarget = {
@@ -113,6 +114,14 @@ const PREVIEW_BACKEND_TARGETS: Record<string, PreviewBackendTarget> = {
       "https://rentchain-pr1573-qa-tenant-lifecycle-glistw4pya-nn.a.run.app",
     cloudRunIdTokenAudience:
       "https://rentchain-pr1573-qa-tenant-lifecycle-glistw4pya-nn.a.run.app",
+    temporary: true,
+  },
+  [PREVIEW_BACKEND_TARGET_KEYS.pr1576]: {
+    key: PREVIEW_BACKEND_TARGET_KEYS.pr1576,
+    cloudRunServiceUrl:
+      "https://rentchain-pr1576-qa-context-mismatch-501298948635.northamerica-northeast1.run.app",
+    cloudRunIdTokenAudience:
+      "https://rentchain-pr1576-qa-context-mismatch-501298948635.northamerica-northeast1.run.app",
     temporary: true,
   },
 };
