@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fakeDb, seed, read, list, failAudit, reset } = vi.hoisted(() => {
+const { fakeDb, seed, read, remove, list, failAudit, reset } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
   let rejectAudit = false;
   let transactionTail = Promise.resolve();
@@ -50,6 +50,7 @@ const { fakeDb, seed, read, list, failAudit, reset } = vi.hoisted(() => {
     fakeDb,
     seed: (name: string, id: string, value: any) => collection(name).set(id, value),
     read: (name: string, id: string) => collection(name).get(id),
+    remove: (name: string, id: string) => collection(name).delete(id),
     list: (name: string) => [...collection(name).values()],
     failAudit: (value: boolean) => { rejectAudit = value; },
     reset: () => { store.clear(); rejectAudit = false; transactionTail = Promise.resolve(); },
@@ -167,6 +168,13 @@ describe("occupancyResolutionService", () => {
     const changed = await getOccupancyResolutionContext({ ...base, tenantId: "tenant-stale" });
     expect(changed.expectedStateToken).not.toBe(initial.expectedStateToken);
     expect(changed.contextMismatchRemediation).toMatchObject({ classification: "ownership_mismatch", repairEligible: false });
+    seed("tenancies", "foreign-after-read", { ...read("tenancies", "foreign-after-read"), status: "inactive", updatedAt: "2026-08-27T12:00:00.000Z" });
+    const updated = await getOccupancyResolutionContext({ ...base, tenantId: "tenant-stale" });
+    expect(updated.expectedStateToken).not.toBe(changed.expectedStateToken);
+    remove("tenancies", "foreign-after-read");
+    const removed = await getOccupancyResolutionContext({ ...base, tenantId: "tenant-stale" });
+    expect(removed.expectedStateToken).toBe(initial.expectedStateToken);
+    seed("tenancies", "foreign-after-read", { landlordId: "landlord-2", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-2", leaseId: "lease-2", status: "active", updatedAt: "2026-08-27T11:00:00.000Z" });
 
     await expect(resolveOccupancy({ ...base, tenantId: "tenant-stale", actorId: "landlord-1", type: "reconcile_stale_occupancy_linkage", expectedStateToken: initial.expectedStateToken, idempotencyKey: "foreign-toctou", confirmation: true })).rejects.toMatchObject({ code: "occupancy_state_stale", status: 409 });
     expect(list("tenancies")).toHaveLength(1);
