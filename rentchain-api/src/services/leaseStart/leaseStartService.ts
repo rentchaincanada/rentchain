@@ -36,6 +36,7 @@ export type LeaseStartTransactionEligibilityContext = {
 export type LeaseStartContext = {
   expectedStateToken: string;
   evaluationInstant: string;
+  tenantArchived: boolean;
   decision: CanonicalLeaseStartResult;
   stateSummary: {
     leaseId: string;
@@ -195,7 +196,7 @@ async function readContext(reader: any, input: ContextInput): Promise<{ context:
     tenancyIds: [...decision.context.tenancyIds],
   };
   return {
-    context: { expectedStateToken, evaluationInstant: decision.context.evaluationInstant, decision, stateSummary },
+    context: { expectedStateToken, evaluationInstant: decision.context.evaluationInstant, tenantArchived: Boolean(tenant.archivedAt), decision, stateSummary },
     records: { propertyRef, unitRef, leaseRef, tenantRef, property, unit, candidateLease, tenant, embeddedUnits, embeddedIndex: matches[0].index, tenancies, canonicalInput },
   };
 }
@@ -267,6 +268,13 @@ export async function startCanonicalLeaseOccupancy(input: StartCanonicalLeaseOcc
     loadAuthoritativeState: (transaction) => readContext(transaction, { ...input, evaluationInstant: normalizedInstant, firestore }),
     getExpectedStateToken: (loaded) => loaded.context.expectedStateToken,
     buildPlan: async ({ transaction, loaded }) => {
+    if (loaded.context.tenantArchived) {
+      throw new LeaseStartServiceError(
+        "lease_start_transaction_ineligible",
+        loaded.context,
+        "tenant_archived_restore_required"
+      );
+    }
     const transactionEligibilityReason = input.transactionEligibilityGuard?.({
       candidateLease: loaded.records.candidateLease,
       contextLeases: loaded.records.canonicalInput.contextLeases,

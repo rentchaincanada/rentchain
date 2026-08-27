@@ -431,7 +431,6 @@ async function resolvePropertyUnitForLease(lease: any, errorPrefix: string) {
 async function endFirestoreLeaseAtomically(
   leaseId: string,
   lease: any,
-  endDate: string,
   authority: { landlordId: string; actorId: string }
 ) {
   const propertyId = String(lease?.propertyId || "").trim();
@@ -532,13 +531,13 @@ async function endFirestoreLeaseAtomically(
     const postEndLandlordLeases = (landlordLeasesSnap?.docs || []).map((doc: any) => {
       const data = { id: doc.id, ...(doc.data() || {}) };
       return doc.id === leaseId
-        ? { ...data, status: "ended", occupancyEffective: false, endDate }
+        ? { ...data, status: "ended", occupancyEffective: false, endedAt: nowIso }
         : data;
     });
     const participantLeaseSelections = participantTenantIds.map((participantTenantId) => {
       const selection = selectCanonicalCurrentLease(
         postEndLandlordLeases.map(toCanonicalLeaseStateInput),
-        { landlordId: authority.landlordId, tenantId: participantTenantId, asOfDate: endDate }
+        { landlordId: authority.landlordId, tenantId: participantTenantId, asOfDate: nowIso }
       );
       if (!selection.lease && selection.reasons.includes("MULTIPLE_CURRENT_LEASES")) {
         throw new Error("lease_end_participant_occupancy_ambiguous");
@@ -576,7 +575,7 @@ async function endFirestoreLeaseAtomically(
         source: "lease_end_route",
         previousCanonicalOccupancyState: "occupied",
         resultingCanonicalOccupancyState: "vacant",
-        effectiveDate: endDate,
+        effectiveDate: nowIso,
         legalDetermination: false,
       },
       tags: ["lease_end", "occupancy_ended"],
@@ -590,7 +589,9 @@ async function endFirestoreLeaseAtomically(
       transaction.set(unitDocs[0].ref, { status: "vacant", occupancyStatus: "vacant", tenantId: null, currentTenantId: null, leaseId: null, currentLeaseId: null, occupancySource: "lease_end", occupancyUpdatedAt: nowIso, updatedAt: nowIso }, { merge: true });
     }
 
-    transaction.set(leaseRef, { status: "ended", occupancyEffective: false, endDate, updatedAt: nowIso }, { merge: true });
+    // `endDate` remains the scheduled contractual term end. `endedAt` is the
+    // canonical, server-authoritative actual End Lease timestamp.
+    transaction.set(leaseRef, { status: "ended", occupancyEffective: false, endedAt: nowIso, updatedAt: nowIso }, { merge: true });
     tenantSnaps.forEach((tenantSnap: any, index: number) => {
       if (tenantSnap?.exists) {
         const tenant = tenantSnap.data() || {};
@@ -610,7 +611,7 @@ async function endFirestoreLeaseAtomically(
       }
     });
     activeTenancies.forEach((tenancy: any) => {
-      transaction.set(tenancy.ref, { status: "inactive", moveOutAt: endDate, updatedAt: nowIso }, { merge: true });
+      transaction.set(tenancy.ref, { status: "inactive", moveOutAt: nowIso, updatedAt: nowIso }, { merge: true });
     });
   });
 }
@@ -2937,6 +2938,7 @@ router.get("/renewals/:successorLeaseId/context", requireLandlord, async (req: a
 });
 
 function explicitStartBlocker(lease: any, context: any): string | null {
+  if (context?.tenantArchived === true) return "tenant_archived_restore_required";
   const renewalLinked = [lease?.predecessorLeaseId, lease?.renewedByLeaseId, lease?.renewalLeaseId, lease?.successorLeaseId, lease?.replacedByLeaseId]
     .some((value) => String(value || "").trim());
   if (renewalLinked) return "renewal_handoff_required";
@@ -3998,7 +4000,6 @@ router.put("/:id", requireLandlord, async (req: any, res: Response) => {
 router.post("/:id/end", requireLandlord, async (req: any, res: Response) => {
   try {
     if (!(await enforceLeaseCapability(req, res))) return;
-    const endDate: string = req.body?.endDate || new Date().toISOString();
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     const leaseResult = await getLeaseEntityForLandlord(String(req.params?.id || "").trim(), landlordId);
     if (!leaseResult.ok) {
@@ -4009,7 +4010,6 @@ router.post("/:id/end", requireLandlord, async (req: any, res: Response) => {
         await endFirestoreLeaseAtomically(
           String(req.params?.id || "").trim(),
           leaseResult.lease as any,
-          endDate,
           {
             landlordId,
             actorId: String(req.user?.id || req.user?.email || landlordId).trim() || landlordId,
@@ -4031,7 +4031,7 @@ router.post("/:id/end", requireLandlord, async (req: any, res: Response) => {
       if (!refreshed.ok) return res.status(refreshed.status).json({ error: refreshed.error });
       return res.json({ lease: await enrichLeaseRow({ id: String(req.params?.id || "").trim(), ...(refreshed.lease as any) }) });
     }
-    const lease = leaseService.endLease(req.params.id, endDate);
+    const lease = leaseService.endLease(req.params.id);
     if (!lease) {
       return res.status(404).json({ error: "Lease not found" });
     }

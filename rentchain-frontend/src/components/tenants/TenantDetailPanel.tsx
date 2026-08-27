@@ -173,6 +173,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
   const lease = bundle.currentLease || null;
   const currentLeaseId = typeof bundle.currentLease?.id === "string" ? bundle.currentLease.id.trim() : "";
   const lifecycle = bundle.lifecycle || tenant.lifecycle || null;
+  const workspaceLifecycle = bundle.workspaceLifecycle || tenant.workspaceLifecycle || null;
   const stateCoherence = bundle.stateCoherence || null;
   const canonicalState = bundle.canonicalState || null;
   const property = bundle.property || null;
@@ -453,7 +454,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
             }}
           >
             {tenant.fullName || tenant.name || tenant.email || "Tenant"}
-            {lifecycle?.lifecycleLabel ? (
+            {workspaceLifecycle?.label || lifecycle?.lifecycleLabel ? (
               <span
                 style={{
                   padding: "0.15rem 0.45rem",
@@ -464,7 +465,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
                   color: text.primary,
                 }}
               >
-                {lifecycle.lifecycleLabel}
+                {workspaceLifecycle?.label || lifecycle.lifecycleLabel}
               </span>
             ) : null}
           </div>
@@ -613,7 +614,9 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
           label="Lease Status"
           value={canonicalState ? canonicalLeaseTermLabel(canonicalState.leaseTermState) : lease?.status ? formatLeaseStatus(lease.status) : activeOccupantWithoutLease ? "Active occupant — no lease linked" : "--"}
         />
-        <DetailField label="Lifecycle" value={canonicalState ? canonicalLeaseTermLabel(canonicalState.leaseTermState) : lifecycle?.lifecycleLabel ?? "--"} />
+        <DetailField label="Workspace lifecycle" value={workspaceLifecycle?.label ?? "--"} />
+        <DetailField label="Lease lifecycle" value={canonicalState ? canonicalLeaseTermLabel(canonicalState.leaseTermState) : lifecycle?.lifecycleLabel ?? "--"} />
+        {workspaceLifecycle?.actualEndDate ? <DetailField label="Actual end date" value={formatDateLabel(workspaceLifecycle.actualEndDate)} /> : null}
         {canonicalState ? <DetailField label="Occupancy" value={canonicalOccupancyLabel(canonicalState.occupancyState)} /> : null}
         {stateCoherence ? (
           <DetailField

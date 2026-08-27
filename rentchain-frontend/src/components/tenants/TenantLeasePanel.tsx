@@ -253,7 +253,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId, on
     try {
       setEndingLeaseId(leaseId);
       setError(null);
-      await endLease(leaseId, new Date().toISOString());
+      await endLease(leaseId);
       await loadLeases();
       await onLeaseEnded?.();
       setConfirmingLeaseId(null);

@@ -1,5 +1,5 @@
 // rentchain-frontend/src/api/tenantDetail.ts
-import type { TenantApiModel, TenantLifecycle } from "./tenants";
+import type { TenantApiModel, TenantLifecycle, TenantWorkspaceLifecycle } from "./tenants";
 import type { CredibilityInsights } from "@/types/credibilityInsights";
 import type { LeaseStateCoherence } from "./leasesApi";
 import type { CanonicalLeaseOccupancyState } from "@/lib/leases/canonicalStatePresentation";
@@ -246,6 +246,7 @@ export interface TenantDetailBundle {
   moveInRequirements?: MoveInRequirements | null;
   moveInReadiness?: MoveInReadiness | null;
   lifecycle?: TenantLifecycle | null;
+  workspaceLifecycle?: TenantWorkspaceLifecycle | null;
   stateCoherence?: LeaseStateCoherence | null;
   canonicalState?: CanonicalLeaseOccupancyState | null;
 }

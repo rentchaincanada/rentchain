@@ -74,6 +74,23 @@ export interface TenantLifecycle {
   };
 }
 
+export type TenantWorkspaceCategory = "current" | "upcoming" | "past" | "archived";
+
+export interface TenantWorkspaceLifecycle {
+  category: TenantWorkspaceCategory;
+  label: "Current" | "Upcoming" | "Past" | "Archived";
+  isArchived: boolean;
+  archivedAt: string | null;
+  actualEndDate: string | null;
+  hasCanonicalCurrentLease: boolean;
+  hasUpcomingLease: boolean;
+  hasUnresolvedOccupancyConflict: boolean;
+  archiveEligibility: {
+    allowed: boolean;
+    reason: "already_archived" | "current_relationship" | "upcoming_relationship" | "occupancy_conflict" | null;
+  };
+}
+
 export interface TenantApiModel {
   id: string;
   name?: string;
@@ -91,6 +108,7 @@ export interface TenantApiModel {
   hiddenFromActiveLists?: boolean;
   tenancies?: TenancyApiModel[];
   lifecycle?: TenantLifecycle;
+  workspaceLifecycle?: TenantWorkspaceLifecycle;
   canonicalState?: CanonicalLeaseOccupancyState;
 }
 
@@ -224,6 +242,20 @@ export async function updateTenantRecord(
   });
   if (data?.tenant) return data.tenant as TenantApiModel;
   return data as TenantApiModel;
+}
+
+export async function archiveTenant(tenantId: string): Promise<TenantApiModel> {
+  const data = await apiJson<{ ok: true; tenant: TenantApiModel }>(`/tenants/${encodeURIComponent(tenantId)}/archive`, {
+    method: "POST",
+  });
+  return data.tenant;
+}
+
+export async function restoreTenant(tenantId: string): Promise<TenantApiModel> {
+  const data = await apiJson<{ ok: true; tenant: TenantApiModel }>(`/tenants/${encodeURIComponent(tenantId)}/restore`, {
+    method: "POST",
+  });
+  return data.tenant;
 }
 
 export async function impersonateTenant(tenantId: string): Promise<{ ok: boolean; token: string; tenantId: string; exp?: number }> {

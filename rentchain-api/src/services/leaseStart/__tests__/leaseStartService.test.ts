@@ -213,6 +213,39 @@ describe("leaseStartService", () => {
     expect(result.expectedStateToken).toBe(fresh.expectedStateToken);
   });
 
+  it("rejects an archived tenant inside the authoritative start transaction with zero writes", async () => {
+    seedBase({ tenant: { archivedAt: "2026-04-30T13:00:00.000Z" } });
+    const context = await getCanonicalLeaseStartContext({ ...base, firestore: fake.firestore });
+    const before = domainSnapshot();
+
+    expect(context).toMatchObject({ tenantArchived: true, decision: { outcome: "occupancy_effective" } });
+    await expect(startCanonicalLeaseOccupancy(await mutationInput())).rejects.toMatchObject({
+      code: "lease_start_transaction_ineligible",
+      transactionEligibilityReason: "tenant_archived_restore_required",
+      freshContext: expect.objectContaining({ tenantArchived: true }),
+    });
+    expect(domainSnapshot()).toEqual(before);
+    expect(fake.list("leaseStartRequests")).toEqual([]);
+  });
+
+  it("supports explicit restore followed by the ordinary canonical start command", async () => {
+    seedBase({ tenant: { archivedAt: "2026-04-30T13:00:00.000Z" } });
+    expect((await getCanonicalLeaseStartContext({ ...base, firestore: fake.firestore })).tenantArchived).toBe(true);
+
+    fake.seed("tenants", "tenant-1", {
+      ...fake.read("tenants", "tenant-1"),
+      archivedAt: null,
+      restoredAt: "2026-05-01T11:00:00.000Z",
+      updatedAt: "2026-05-01T11:00:00.000Z",
+    });
+    const restoredContext = await getCanonicalLeaseStartContext({ ...base, firestore: fake.firestore });
+    expect(restoredContext).toMatchObject({ tenantArchived: false, decision: { outcome: "occupancy_effective" } });
+
+    const result = await startCanonicalLeaseOccupancy(await mutationInput());
+    expect(result).toMatchObject({ outcome: "occupancy_effective", occupancyEffective: true });
+    expect(fake.read("tenants", "tenant-1")).toMatchObject({ archivedAt: null, currentLeaseId: "lease-1" });
+  });
+
   it("runs a caller eligibility guard against the authoritative transaction snapshot", async () => {
     seedBase({ lease: { predecessorLeaseId: "lease-predecessor" } });
     const before = domainSnapshot();

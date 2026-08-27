@@ -17,6 +17,10 @@ import {
 } from "../services/tenantMoveInReadinessService";
 import { requireCapability } from "../services/capabilityGuard";
 import { slugifyOperationalReference } from "../lib/identityReferences";
+import {
+  mutateTenantArchiveState,
+  TenantArchiveCommandError,
+} from "../services/tenantLifecycleArchiveService";
 
 const router = Router();
 
@@ -118,6 +122,33 @@ router.patch("/:tenantId", async (req: any, res) => {
     });
   }
 });
+
+async function handleArchiveCommand(req: any, res: any, command: "archive" | "restore") {
+  const tenantId = String(req.params?.tenantId || "").trim();
+  const role = String(req.user?.role || "").trim().toLowerCase();
+  try {
+    await mutateTenantArchiveState({
+      tenantId,
+      landlordId: getLandlordId(req),
+      actorUserId: String(req.user?.id || req.user?.email || "").trim() || null,
+      actorRole: role === "admin" ? "admin" : "landlord",
+      command,
+    });
+    const refreshed = await getTenantDetailBundle(tenantId, {
+      landlordId: getLandlordId(req) || undefined,
+    });
+    return res.status(200).json({ ok: true, tenant: refreshed.tenant, workspaceLifecycle: refreshed.workspaceLifecycle });
+  } catch (error) {
+    if (error instanceof TenantArchiveCommandError) {
+      return res.status(error.status).json({ ok: false, error: error.code });
+    }
+    console.error(`[POST /api/tenants/:tenantId/${command}] error`, error);
+    return res.status(500).json({ ok: false, error: `tenant_${command}_failed` });
+  }
+}
+
+router.post("/:tenantId/archive", async (req: any, res) => handleArchiveCommand(req, res, "archive"));
+router.post("/:tenantId/restore", async (req: any, res) => handleArchiveCommand(req, res, "restore"));
 
 /**
  * GET /api/tenants/:tenantId

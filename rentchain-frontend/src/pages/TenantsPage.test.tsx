@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   fetchTenantTenanciesMock: vi.fn(),
   updateTenantRecordMock: vi.fn(),
   updateTenancyMock: vi.fn(),
+  archiveTenantMock: vi.fn(),
+  restoreTenantMock: vi.fn(),
   useTenantDetailMock: vi.fn(),
   createTenantEventMock: vi.fn(),
   hydrateTenantSummariesBatchMock: vi.fn(),
@@ -53,6 +55,8 @@ vi.mock("@/api/tenantsApi", () => ({
   fetchTenantTenancies: mocks.fetchTenantTenanciesMock,
   updateTenantRecord: mocks.updateTenantRecordMock,
   updateTenancy: mocks.updateTenancyMock,
+  archiveTenant: mocks.archiveTenantMock,
+  restoreTenant: mocks.restoreTenantMock,
 }));
 
 vi.mock("@/hooks/useTenantDetail", () => ({
@@ -131,6 +135,8 @@ describe("TenantsPage", () => {
     mocks.fetchTenantTenanciesMock.mockResolvedValue([]);
     mocks.updateTenantRecordMock.mockResolvedValue({});
     mocks.updateTenancyMock.mockResolvedValue({});
+    mocks.archiveTenantMock.mockResolvedValue({});
+    mocks.restoreTenantMock.mockResolvedValue({});
     mocks.useTenantDetailMock.mockReturnValue({ bundle: null, loading: false, error: null });
     mocks.createTenantEventMock.mockResolvedValue({ ok: true });
     mocks.hydrateTenantSummariesBatchMock.mockResolvedValue(undefined);
@@ -171,6 +177,59 @@ describe("TenantsPage", () => {
     expect(master.closest(".rc-master-detail-master")).toBeInTheDocument();
     expect(document.querySelector(".rc-master-detail-detail")).toBeInTheDocument();
     expect(document.querySelector(".rc-tenants-list-scroll")).toBeInTheDocument();
+  });
+
+  it("excludes Archived from the default active workspace and supports all lifecycle filters", async () => {
+    mocks.fetchTenantsMock.mockResolvedValue([
+      { id: "current", fullName: "Current Tenant", workspaceLifecycle: { category: "current", label: "Current" } },
+      { id: "upcoming", fullName: "Upcoming Tenant", workspaceLifecycle: { category: "upcoming", label: "Upcoming" } },
+      { id: "past", fullName: "Past Tenant", workspaceLifecycle: { category: "past", label: "Past" } },
+      { id: "archived", fullName: "Archived Tenant", workspaceLifecycle: { category: "archived", label: "Archived", isArchived: true } },
+    ]);
+    render(<MemoryRouter><TenantsPage /></MemoryRouter>);
+
+    expect(await screen.findByText("Current Tenant")).toBeInTheDocument();
+    expect(screen.getByText("Upcoming Tenant")).toBeInTheDocument();
+    expect(screen.getByText("Past Tenant")).toBeInTheDocument();
+    expect(screen.queryByText("Archived Tenant")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "archived" }));
+    expect(await screen.findByText("Archived Tenant")).toBeInTheDocument();
+    expect(screen.queryByText("Current Tenant")).not.toBeInTheDocument();
+    for (const filter of ["current", "upcoming", "past"] as const) {
+      fireEvent.click(screen.getByRole("button", { name: filter }));
+      expect(await screen.findByText(`${filter[0].toUpperCase()}${filter.slice(1)} Tenant`)).toBeInTheDocument();
+    }
+  });
+
+  it("shows only the server-authorized Archive action and confirms history preservation", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const workspaceLifecycle = { category: "past", label: "Past", isArchived: false, actualEndDate: "2026-08-20T00:00:00.000Z", archiveEligibility: { allowed: true, reason: null } };
+    mocks.fetchTenantsMock.mockResolvedValue([{ id: "tenant-1", fullName: "Past Tenant", workspaceLifecycle }]);
+    mocks.useTenantDetailMock.mockReturnValue({
+      bundle: { tenant: { id: "tenant-1", fullName: "Past Tenant", workspaceLifecycle }, workspaceLifecycle, canonicalState: { leaseTermState: "ended", occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null, reasons: ["ENDED_LEASE_CANNOT_SUPPORT_OCCUPANCY"] }, currentLease: null },
+      loading: false,
+      error: null,
+    });
+    render(<MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}><TenantsPage /></MemoryRouter>);
+
+    const archive = await screen.findByRole("button", { name: "Archive tenant" });
+    expect(screen.queryByRole("button", { name: "Restore tenant" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Actual end date:/)).toHaveTextContent("2026-08-20");
+    fireEvent.click(archive);
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("history will be preserved"));
+    expect(mocks.archiveTenantMock).toHaveBeenCalledWith("tenant-1");
+    confirm.mockRestore();
+  });
+
+  it("shows Restore only for server-projected Archived tenants", async () => {
+    const workspaceLifecycle = { category: "archived", label: "Archived", isArchived: true, archiveEligibility: { allowed: false, reason: "already_archived" } };
+    mocks.fetchTenantsMock.mockResolvedValue([{ id: "tenant-1", fullName: "Archived Tenant", workspaceLifecycle }]);
+    mocks.useTenantDetailMock.mockReturnValue({ bundle: { tenant: { id: "tenant-1", workspaceLifecycle }, workspaceLifecycle, canonicalState: { leaseTermState: "ended", occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null, reasons: [] }, currentLease: null }, loading: false, error: null });
+    render(<MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}><TenantsPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "archived" }));
+    expect(await screen.findByRole("button", { name: "Restore tenant" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Archive tenant" })).not.toBeInTheDocument();
   });
 
   it("fails closed when cached invite capability is true but the authenticated plan is free", async () => {

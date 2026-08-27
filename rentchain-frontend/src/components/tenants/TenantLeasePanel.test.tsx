@@ -93,7 +93,7 @@ describe("TenantLeasePanel", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "End lease" })[0]);
     fireEvent.click(screen.getByRole("button", { name: "Confirm end lease" }));
 
-    await waitFor(() => expect(mocks.endLease).toHaveBeenCalledWith("lease-1", expect.any(String)));
+    await waitFor(() => expect(mocks.endLease).toHaveBeenCalledWith("lease-1"));
   });
 
   it("restores End Lease for the runtime-shaped canonical multi-party response", async () => {
