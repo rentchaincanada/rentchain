@@ -34,7 +34,11 @@ for required_path in \
   'rentchain-api/Dockerfile' \
   'rentchain-api/package.json' \
   'rentchain-api/package-lock.json' \
-  'rentchain-api/src/index.ts'; do
+  'rentchain-api/src/index.ts' \
+  'rentchain-frontend/src/main.tsx' \
+  'rentchain-frontend/public/brand/logo-wordmark.png' \
+  'rentchain-frontend/public/templates/ns/lease-data-summary.pdf' \
+  'rentchain-frontend/public/templates/ns/lease-pack-v1-bundle.zip'; do
   if ! grep -Fxq "${required_path}" "${source_list}"; then
     printf 'Required Cloud Build source path is missing: %s\n' "${required_path}" >&2
     exit 1
