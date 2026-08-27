@@ -1,0 +1,10 @@
+# Keep Cloud Build source packaging aligned with repository exclusions.
+.gcloudignore
+.git
+.git/**
+#!include:.gitignore
+
+# Local credentials must never enter a Cloud Build source archive.
+rentchain-api/secrets/
+rentchain-api/secrets/**
+**/*service-account*.json
