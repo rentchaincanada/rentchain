@@ -238,6 +238,21 @@ describe("Preview backend proxy", () => {
     });
   });
 
+  it("couples the authorized PR #1573 service URL and audience internally", () => {
+    const target = resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: PREVIEW_BACKEND_TARGET_KEYS.pr1573,
+    });
+    expect(target).toEqual({
+      key: "pr1573-tenant-lifecycle-cert",
+      cloudRunServiceUrl:
+        "https://rentchain-pr1573-qa-tenant-lifecycle-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1573-qa-tenant-lifecycle-glistw4pya-nn.a.run.app",
+      temporary: true,
+    });
+  });
+
   it.each([
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
@@ -255,6 +270,8 @@ describe("Preview backend proxy", () => {
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1569],
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1570],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1570],
+    ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1573],
+    ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1573],
     ["preview", ""],
     ["preview", "   "],
     ["preview", "unknown"],
@@ -588,6 +605,43 @@ describe("Preview backend proxy", () => {
       temporary: false,
     }],
   ])("rejects a tampered PR #1570 mapping: %s", (_label, target) => {
+    expect(() => assertPreviewBackendTarget(target, "preview")).toThrow(
+      "PREVIEW_PROXY_TARGET_REJECTED",
+    );
+  });
+
+  it.each([
+    ["altered URL", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1573,
+      cloudRunServiceUrl: "https://attacker.example",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1573-qa-tenant-lifecycle-glistw4pya-nn.a.run.app",
+      temporary: true,
+    }],
+    ["altered audience", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1573,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1573-qa-tenant-lifecycle-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience: "https://attacker.example",
+      temporary: true,
+    }],
+    ["mismatched URL and audience", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1573,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1573-qa-tenant-lifecycle-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-preview-backend-glistw4pya-nn.a.run.app",
+      temporary: true,
+    }],
+    ["temporary flag", {
+      key: PREVIEW_BACKEND_TARGET_KEYS.pr1573,
+      cloudRunServiceUrl:
+        "https://rentchain-pr1573-qa-tenant-lifecycle-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1573-qa-tenant-lifecycle-glistw4pya-nn.a.run.app",
+      temporary: false,
+    }],
+  ])("rejects a tampered PR #1573 mapping: %s", (_label, target) => {
     expect(() => assertPreviewBackendTarget(target, "preview")).toThrow(
       "PREVIEW_PROXY_TARGET_REJECTED",
     );
