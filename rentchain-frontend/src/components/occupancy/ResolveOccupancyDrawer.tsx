@@ -28,6 +28,7 @@ const LABELS: Record<OccupancyResolutionType, string> = {
   clear_stale_occupancy_record: "Correct stale occupancy records",
   link_existing_lease: "Link an existing valid lease",
   resolve_multiple_current_leases: "Select the lease that supports current occupancy",
+  reconcile_stale_occupancy_linkage: "Correct occupancy links",
 };
 
 const OCCUPANCY_ERROR_COPY: Record<string, string> = {
@@ -41,6 +42,8 @@ const OCCUPANCY_ERROR_COPY: Record<string, string> = {
   candidate_participant_context_ambiguous: "The conflicting lease participants cannot be verified safely. Review the tenant and lease records before trying again.",
   occupancy_projection_context_ambiguous: "The current unit pointers do not match the conflicting leases safely. Review the occupancy records before trying again.",
   selected_tenancy_context_ambiguous: "The selected lease has ambiguous active tenancy records. Review those records before trying again.",
+  stale_linkage_classification_changed: "The lease and occupancy context changed while this review was open. Review the refreshed records before trying again.",
+  stale_linkage_not_repairable: "These occupancy links are no longer eligible for bounded correction. Review the underlying records.",
   unsafe_canonical_postcondition: "RentChain could not verify a safe occupancy result, so no records were changed. Review the current records before trying again.",
   idempotency_key_reused: "This request changed after an earlier attempt. Review the latest state, then start a new reconciliation.",
   confirmation_required: "Confirm the operational reconciliation before submitting it.",
@@ -202,6 +205,7 @@ export function ResolveOccupancyDrawer(props: {
         {context ? <>
           <div><strong>{context.propertyLabel} · {context.unitLabel}</strong><div style={{ color: "#92400e", marginTop: 4 }}>Current state: Review needed</div></div>
           <section><h3>Why review is required</h3><ul>{context.canonicalState.reasons.map((reason) => <li key={reason}>{REASON_COPY[reason] || "Current occupancy records require review."}</li>)}</ul></section>
+          {context.canonicalState.reasons.includes("CURRENT_LEASE_CONTEXT_MISMATCH") ? context.contextMismatchRemediation.repairEligible ? <section style={{ padding: 12, background: "#f0fdf4", borderRadius: 10 }}><h3 style={{ marginTop: 0 }}>Lease and occupancy links don&apos;t match</h3><p>We found one current lease that already matches this tenant and unit. Review the details before correcting the occupancy links.</p>{context.existingLeaseCandidates.filter((lease) => lease.id === context.contextMismatchRemediation.authoritativeLeaseId).map((lease) => <div key={lease.id}><strong>{lease.reference}</strong><div>{lease.label}</div><div>{lease.participantNames.join(", ") || "Tenant record"} · {lease.startDate || "Unknown start"} to {lease.endDate || "No end date"}</div></div>)}<p>Only stale lease, tenant, unit, and tenancy links identified by the server will be reconciled. Lease property, unit, and participant terms will not change.</p></section> : <section style={{ padding: 12, background: "#fff7ed", borderRadius: 10 }}><h3 style={{ marginTop: 0 }}>This mismatch cannot be corrected here</h3><p>{context.contextMismatchRemediation.blockedReason || "The underlying lease or occupancy context is ambiguous and requires record review."}</p></section> : null}
           {context.activeLeaseRequiresEndWorkflow ? <div style={{ padding: 12, background: "#fff7ed", borderRadius: 10 }}>A valid active lease still supports this occupancy. Use the existing End Lease workflow if the operational occupancy has ended.</div> : null}
           {context.eligibleResolutionTypes.length ? <fieldset style={{ border: 0, padding: 0, display: "grid", gap: 10 }}><legend style={{ fontWeight: 800, marginBottom: 8 }}>Choose a reconciliation action</legend>{context.eligibleResolutionTypes.map((option) => <label key={option} style={{ display: "flex", gap: 8 }}><input type="radio" name="occupancy-resolution" checked={type === option} onChange={() => { setType(option); setSelectedLeaseId(""); setMultipleCurrentAcknowledged(false); }} />{LABELS[option]}</label>)}</fieldset> : <p>These records do not have a safe automated resolution. They will remain visible for review.</p>}
           {type === "record_operational_move_out" ? <label>Effective date<input aria-label="Operational move-out effective date" type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} style={{ display: "block", marginTop: 6 }} /></label> : null}

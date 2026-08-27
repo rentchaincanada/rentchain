@@ -15,6 +15,7 @@ const TYPES = new Set<OccupancyResolutionType>([
   "clear_stale_occupancy_record",
   "link_existing_lease",
   "resolve_multiple_current_leases",
+  "reconcile_stale_occupancy_linkage",
 ]);
 
 function landlordId(req: any): string {

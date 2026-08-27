@@ -20,6 +20,7 @@ const context = {
   eligibleResolutionTypes: ["record_operational_move_out", "clear_stale_occupancy_record"],
   existingLeaseCandidates: [],
   activeLeaseRequiresEndWorkflow: false,
+  contextMismatchRemediation: { classification: "not_applicable", repairEligible: false, authoritativeLeaseId: null, blockedReason: null, mismatchedComponents: [], staleLinkageFields: [] },
 };
 
 function DrawerHarness({ removeTriggerOnResolve = false }: { removeTriggerOnResolve?: boolean }) {
@@ -55,6 +56,41 @@ describe("ResolveOccupancyDrawer", () => {
     expect(screen.getByRole("button", { name: "Confirm operational reconciliation" })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Operational move-out effective date"), { target: { value: "2026-08-18" } });
     expect(screen.getByRole("button", { name: "Confirm operational reconciliation" })).toBeEnabled();
+  });
+
+  it("shows the bounded authoritative lease and requires explicit stale-link reconciliation", async () => {
+    getContext.mockResolvedValueOnce({ ok: true, context: {
+      ...context,
+      canonicalState: { ...context.canonicalState, leaseTermState: "active", reasons: ["CURRENT_LEASE_CONTEXT_MISMATCH", "VACANT_WITH_CURRENT_LEASE"] },
+      eligibleResolutionTypes: ["reconcile_stale_occupancy_linkage"],
+      contextMismatchRemediation: { classification: "stale_occupancy_linkage_with_unique_authoritative_lease", repairEligible: true, authoritativeLeaseId: "lease-current", blockedReason: null, mismatchedComponents: ["occupancy_linkage"], staleLinkageFields: ["unit.currentLeaseId", "tenant.currentLeaseId"] },
+      existingLeaseCandidates: [{ id: "lease-current", reference: "Lease A1B2C3D4", label: "Harbour House · Unit 1A", tenantId: "tenant-1", participantNames: ["Tenant One"], participantCount: 1, startDate: "2026-01-01", endDate: "2027-01-01", executionStatus: "fully_executed", occupancyEffective: true, activeTenancyCount: 1 }],
+    } });
+    render(<ResolveOccupancyDrawer open propertyId="property-1" unitId="unit-1" tenantId="tenant-1" onClose={vi.fn()} />);
+    expect(await screen.findByText("Lease and occupancy links don't match")).toBeInTheDocument();
+    expect(screen.getByText("Lease A1B2C3D4")).toBeInTheDocument();
+    expect(screen.getByText(/Lease property, unit, and participant terms will not change/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Correct occupancy links"));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm operational reconciliation" }));
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ type: "reconcile_stale_occupancy_linkage" })));
+  });
+
+  it.each([
+    ["lease_context_mismatch", "This lease belongs to a different unit and cannot be corrected here."],
+    ["participant_mismatch", "The requested tenant is not a participant on the authoritative lease."],
+    ["ambiguous_context", "More than one record could represent the current occupancy."],
+  ])("explains non-repairable %s without a mutation action", async (classification, blockedReason) => {
+    getContext.mockResolvedValueOnce({ ok: true, context: {
+      ...context,
+      canonicalState: { ...context.canonicalState, reasons: ["CURRENT_LEASE_CONTEXT_MISMATCH"] },
+      eligibleResolutionTypes: [],
+      contextMismatchRemediation: { classification, repairEligible: false, authoritativeLeaseId: null, blockedReason, mismatchedComponents: [], staleLinkageFields: [] },
+    } });
+    render(<ResolveOccupancyDrawer open propertyId="property-1" unitId="unit-1" tenantId="tenant-1" onClose={vi.fn()} />);
+    expect(await screen.findByText("This mismatch cannot be corrected here")).toBeInTheDocument();
+    expect(screen.getByText(blockedReason)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Correct occupancy links")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm operational reconciliation" })).not.toBeInTheDocument();
   });
 
   it("shows every conflicting lease with no default and requires explicit selection plus acknowledgement", async () => {
