@@ -77,6 +77,7 @@ describe("ResolveOccupancyDrawer", () => {
 
   it.each([
     ["lease_context_mismatch", "This lease belongs to a different unit and cannot be corrected here."],
+    ["ownership_mismatch", "A tenancy record is outside the authorized landlord context."],
     ["participant_mismatch", "The requested tenant is not a participant on the authoritative lease."],
     ["ambiguous_context", "More than one record could represent the current occupancy."],
   ])("explains non-repairable %s without a mutation action", async (classification, blockedReason) => {
@@ -91,6 +92,7 @@ describe("ResolveOccupancyDrawer", () => {
     expect(screen.getByText(blockedReason)).toBeInTheDocument();
     expect(screen.queryByLabelText("Correct occupancy links")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Confirm operational reconciliation" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/foreign-landlord-secret|foreign-tenant-secret|foreign-lease-secret|foreign-tenancy-secret/i)).not.toBeInTheDocument();
   });
 
   it("shows every conflicting lease with no default and requires explicit selection plus acknowledgement", async () => {

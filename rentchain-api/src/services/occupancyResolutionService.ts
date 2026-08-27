@@ -117,6 +117,13 @@ function pointerValues(record: any, fields: string[]): string[] {
   return fields.map((field) => text(record?.[field])).filter(Boolean);
 }
 
+function matchesTenancyUnitContext(row: any, propertyId: string, unitId: string, unitLabel: string): boolean {
+  if (text(row.propertyId) !== propertyId) return false;
+  const rowUnitId = text(row.unitId);
+  const rowUnitLabel = text(row.unitLabel);
+  return rowUnitId === unitId || (Boolean(unitLabel) && rowUnitLabel === unitLabel);
+}
+
 function classifyContextMismatch(input: {
   landlordId: string;
   propertyId: string;
@@ -185,14 +192,16 @@ function classifyContextMismatch(input: {
     return blocked("participant_mismatch", "The requested tenant is not a participant on the authoritative lease.", ["tenant"]);
   }
 
-  const contextTenancies = input.tenancies.filter((row) =>
-    text(row.propertyId) === input.propertyId &&
-    (text(row.unitId) === input.unitId || text(row.unitLabel) === text(input.unit.unitNumber || input.unit.label))
-  );
-  if (contextTenancies.length > 1) return blocked("ambiguous_context", "More than one tenancy record represents this occupancy context.", ["tenancy"]);
+  const contextTenancies = input.tenancies.filter((row) => matchesTenancyUnitContext(
+    row,
+    input.propertyId,
+    input.unitId,
+    text(input.unit.unitNumber || input.unit.label)
+  ));
   if (contextTenancies.some((row) => text(row.landlordId) !== input.landlordId)) {
     return blocked("ownership_mismatch", "A tenancy record is outside the authorized landlord context.", ["landlord", "tenancy"]);
   }
+  if (contextTenancies.length > 1) return blocked("ambiguous_context", "More than one tenancy record represents this occupancy context.", ["tenancy"]);
   if (contextTenancies.some((row) => text(row.tenantId) !== authoritativeTenantId)) {
     return blocked("participant_mismatch", "The tenancy points to a different tenant.", ["tenant", "tenancy"]);
   }
@@ -256,7 +265,7 @@ function stateToken(input: {
       occupancyEffective: lease.occupancyEffective === true,
       occupancyDisposition: lease.occupancyDisposition || null,
     })).sort((a, b) => a.id.localeCompare(b.id)),
-    tenancies: input.tenancies.map((row) => ({ id: row.id, landlordId: row.landlordId, propertyId: row.propertyId, unitId: row.unitId, tenantId: row.tenantId, leaseId: row.leaseId, status: row.status, moveOutAt: row.moveOutAt, updatedAt: row.updatedAt }))
+    tenancies: input.tenancies.map((row) => ({ id: row.id, landlordId: row.landlordId, propertyId: row.propertyId, unitId: row.unitId, unitLabel: row.unitLabel, tenantId: row.tenantId, leaseId: row.leaseId, status: row.status, moveOutAt: row.moveOutAt, updatedAt: row.updatedAt }))
       .sort((a, b) => a.id.localeCompare(b.id)),
   });
 }
@@ -269,7 +278,7 @@ async function readResolutionContext(
   const unitRef = db.collection("units").doc(input.unitId);
   const unitsQuery = db.collection("units").where("propertyId", "==", input.propertyId).where("landlordId", "==", input.landlordId);
   const leasesQuery = db.collection("leases").where("landlordId", "==", input.landlordId);
-  const tenanciesQuery = db.collection("tenancies").where("landlordId", "==", input.landlordId).where("propertyId", "==", input.propertyId);
+  const tenanciesQuery = db.collection("tenancies").where("propertyId", "==", input.propertyId);
   const get = (target: any) => typeof reader.get === "function" ? reader.get(target) : target.get();
   const [propertySnap, unitSnap, unitsSnap, leaseSnap, tenancySnap] = await Promise.all([
     get(propertyRef),
@@ -326,11 +335,10 @@ async function readResolutionContext(
   }
   const tenantId = text(input.tenantId || unitInputs.tenantId) || null;
   const tenant = tenantId ? tenantsById.get(tenantId) || null : null;
-  const tenancies = (tenancySnap.docs || [])
+  const diagnosticTenancies = (tenancySnap.docs || [])
     .map((doc: any) => ({ id: doc.id, ref: doc.ref, ...(doc.data() || {}) }))
-    .filter((row: any) => text(row.landlordId) === input.landlordId)
-    .filter((row: any) => text(row.propertyId) === input.propertyId)
-    .filter((row: any) => !row.unitId || text(row.unitId) === input.unitId || text(row.unitLabel) === text(unit.unitNumber));
+    .filter((row: any) => matchesTenancyUnitContext(row, input.propertyId, input.unitId, unitLabel));
+  const tenancies = diagnosticTenancies.filter((row: any) => text(row.landlordId) === input.landlordId);
   const canonicalState = buildCanonicalLeaseOccupancyProjection({
     leases: diagnosticLeases,
     context: { landlordId: input.landlordId, propertyId: input.propertyId, unitId: input.unitId },
@@ -360,7 +368,7 @@ async function readResolutionContext(
     strictLeases: relatedLeases,
     diagnosticLeases,
     tenantsById,
-    tenancies,
+    tenancies: diagnosticTenancies,
     canonicalState,
   });
   const activeLeaseRequiresEndWorkflow = reviewNeeded && candidates.length === 1 && canonicalState.supportingLeaseId === candidates[0].id;
@@ -407,8 +415,8 @@ async function readResolutionContext(
     activeLeaseRequiresEndWorkflow,
     contextMismatchRemediation,
   };
-  context.expectedStateToken = stateToken({ canonicalState, property, unit, tenants, leases: diagnosticLeases, tenancies });
-  return { context, records: { propertyRef, unitRef, property, unit, tenant, tenants, tenantsById, tenantRefs, leases: relatedLeases, diagnosticLeases, tenancies } };
+  context.expectedStateToken = stateToken({ canonicalState, property, unit, tenants, leases: diagnosticLeases, tenancies: diagnosticTenancies });
+  return { context, records: { propertyRef, unitRef, property, unit, tenant, tenants, tenantsById, tenantRefs, leases: relatedLeases, diagnosticLeases, diagnosticTenancies, tenancies } };
 }
 
 export async function getOccupancyResolutionContext(input: ResolutionContextInput): Promise<OccupancyResolutionContext> {
@@ -510,10 +518,21 @@ export async function resolveOccupancy(input: ResolutionContextInput & {
         nextTenant.status = "current";
         changedFields.add("tenant.status");
       }
-      const contextTenancies = records.tenancies.filter((row: any) =>
-        text(row.propertyId) === input.propertyId &&
-        (text(row.unitId) === input.unitId || text(row.unitLabel) === text(records.unit.unitNumber || records.unit.label))
-      );
+      const diagnosticContextTenancies = records.diagnosticTenancies.filter((row: any) => matchesTenancyUnitContext(
+        row,
+        input.propertyId,
+        input.unitId,
+        text(records.unit.unitNumber || records.unit.label)
+      ));
+      if (diagnosticContextTenancies.length > 1 || diagnosticContextTenancies.some((row: any) => text(row.landlordId) !== input.landlordId)) {
+        throw new OccupancyResolutionError("stale_linkage_not_repairable", 409, loaded.context);
+      }
+      const contextTenancies = records.tenancies.filter((row: any) => matchesTenancyUnitContext(
+        row,
+        input.propertyId,
+        input.unitId,
+        text(records.unit.unitNumber || records.unit.label)
+      ));
       if (contextTenancies.length > 1 || contextTenancies.some((row: any) =>
         text(row.landlordId) !== input.landlordId || text(row.tenantId) !== selectedTenantId || (text(row.leaseId) && text(row.leaseId) !== selectedLease.id)
       )) {

@@ -134,6 +134,46 @@ describe("occupancyResolutionService", () => {
     expect(read("units", "unit-1")).toMatchObject({ currentLeaseId: "lease-wrong-unit", currentTenantId: "tenant-stale" });
   });
 
+  it("fails closed without disclosing or mutating a foreign tenancy in the reviewed unit", async () => {
+    seedRepairableContextMismatch({ tenancy: {} });
+    seed("tenancies", "foreign-tenancy-secret", { landlordId: "landlord-foreign-secret", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-foreign-secret", leaseId: "lease-foreign-secret", status: "active", updatedAt: "2026-08-27T10:00:00.000Z" });
+    const before = structuredClone(read("tenancies", "foreign-tenancy-secret"));
+    const context = await getOccupancyResolutionContext({ ...base, tenantId: "tenant-stale" });
+    expect(context.contextMismatchRemediation).toMatchObject({ classification: "ownership_mismatch", repairEligible: false });
+    expect(context.contextMismatchRemediation.blockedReason).toBe("A tenancy record is outside the authorized landlord context.");
+    expect(JSON.stringify(context)).not.toMatch(/foreign-secret/);
+    expect(context.eligibleResolutionTypes).not.toContain("reconcile_stale_occupancy_linkage");
+
+    await expect(resolveOccupancy({ ...base, tenantId: "tenant-stale", actorId: "landlord-1", type: "reconcile_stale_occupancy_linkage", expectedStateToken: context.expectedStateToken, idempotencyKey: "foreign-tenancy", confirmation: true })).rejects.toMatchObject({ code: "resolution_not_applicable", status: 409 });
+    expect(read("tenancies", "foreign-tenancy-secret")).toEqual(before);
+    expect(read("tenancies", "tenancy-1")).toMatchObject({ landlordId: "landlord-1", status: "inactive" });
+    expect(list("tenancies")).toHaveLength(2);
+    expect(list("canonicalEvents")).toEqual([]);
+    expect(read("units", "unit-1")).toMatchObject({ currentLeaseId: "lease-wrong-unit", currentTenantId: "tenant-stale" });
+  });
+
+  it("fails closed when a relevant tenancy has unknown landlord ownership", async () => {
+    seedRepairableContextMismatch();
+    seed("tenancies", "unknown-owner", { propertyId: "property-1", unitLabel: "1A", tenantId: "tenant-1", leaseId: "lease-current", status: "active" });
+    const context = await getOccupancyResolutionContext({ ...base, tenantId: "tenant-stale" });
+    expect(context.contextMismatchRemediation).toMatchObject({ classification: "ownership_mismatch", repairEligible: false });
+    expect(context.eligibleResolutionTypes).not.toContain("reconcile_stale_occupancy_linkage");
+  });
+
+  it("includes foreign tenancy state in the token and rejects its transactional introduction", async () => {
+    seedRepairableContextMismatch();
+    const initial = await getOccupancyResolutionContext({ ...base, tenantId: "tenant-stale" });
+    seed("tenancies", "foreign-after-read", { landlordId: "landlord-2", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-2", leaseId: "lease-2", status: "active", updatedAt: "2026-08-27T11:00:00.000Z" });
+    const changed = await getOccupancyResolutionContext({ ...base, tenantId: "tenant-stale" });
+    expect(changed.expectedStateToken).not.toBe(initial.expectedStateToken);
+    expect(changed.contextMismatchRemediation).toMatchObject({ classification: "ownership_mismatch", repairEligible: false });
+
+    await expect(resolveOccupancy({ ...base, tenantId: "tenant-stale", actorId: "landlord-1", type: "reconcile_stale_occupancy_linkage", expectedStateToken: initial.expectedStateToken, idempotencyKey: "foreign-toctou", confirmation: true })).rejects.toMatchObject({ code: "occupancy_state_stale", status: 409 });
+    expect(list("tenancies")).toHaveLength(1);
+    expect(list("canonicalEvents")).toEqual([]);
+    expect(read("units", "unit-1")).toMatchObject({ currentLeaseId: "lease-wrong-unit", currentTenantId: "tenant-stale" });
+  });
+
   it.each([
     ["cross-property lease", () => { seedRepairableContextMismatch(); seed("units", "unit-1", { ...read("units", "unit-1"), currentLeaseId: "lease-other-property", leaseId: "lease-other-property" }); seed("properties", "property-1", { ...read("properties", "property-1"), units: [{ ...read("properties", "property-1").units[0], currentLeaseId: "lease-other-property", leaseId: "lease-other-property" }] }); seed("leases", "lease-other-property", { landlordId: "landlord-1", propertyId: "property-2", unitId: "unit-9", tenantId: "tenant-1", status: "active", executionStatus: "fully_executed", startDate: "2026-01-01", endDate: "2027-01-01" }); seed("leases", "lease-current", { ...read("leases", "lease-current"), propertyId: "property-2", unitId: "unit-9" }); }, "lease_context_mismatch"],
     ["cross-unit lease", () => { seedRepairableContextMismatch(); seed("leases", "lease-current", { ...read("leases", "lease-current"), unitId: "unit-2" }); }, "lease_context_mismatch"],
