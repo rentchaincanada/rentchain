@@ -28,6 +28,9 @@ export type CanonicalLeaseRecord = LeaseWorkflowLease & {
   occupancyEffective?: boolean;
   occupancyEffectiveAt?: unknown;
   occupancyDisposition?: unknown;
+  endedAt?: unknown;
+  terminatedAt?: unknown;
+  terminationDate?: unknown;
   sourceMonthlyRent: number;
   hasResolvedUnit: boolean;
   resolvedUnitId: string | null;
@@ -258,6 +261,9 @@ export function toCanonicalLeaseRecord(
     occupancyEffective: raw?.occupancyEffective === true,
     occupancyEffectiveAt: raw?.occupancyEffectiveAt,
     occupancyDisposition: raw?.occupancyDisposition,
+    endedAt: raw?.endedAt,
+    terminatedAt: raw?.terminatedAt,
+    terminationDate: raw?.terminationDate,
     sourceMonthlyRent: toNumberSafe(raw?.monthlyRent, raw?.currentRent, raw?.rent, raw?.rentAmount),
     hasResolvedUnit: Boolean(resolution.unit?.id) && !resolution.ambiguous,
     resolvedUnitId: resolution.unit?.id || null,

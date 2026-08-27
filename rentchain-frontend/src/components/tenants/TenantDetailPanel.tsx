@@ -616,7 +616,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
         />
         <DetailField label="Workspace lifecycle" value={workspaceLifecycle?.label ?? "--"} />
         <DetailField label="Lease lifecycle" value={canonicalState ? canonicalLeaseTermLabel(canonicalState.leaseTermState) : lifecycle?.lifecycleLabel ?? "--"} />
-        {workspaceLifecycle?.actualEndDate ? <DetailField label="Actual end date" value={formatDate(workspaceLifecycle.actualEndDate)} /> : null}
+        {workspaceLifecycle?.actualEndDate ? <DetailField label="Actual end date" value={formatDateLabel(workspaceLifecycle.actualEndDate)} /> : null}
         {canonicalState ? <DetailField label="Occupancy" value={canonicalOccupancyLabel(canonicalState.occupancyState)} /> : null}
         {stateCoherence ? (
           <DetailField

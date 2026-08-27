@@ -14,6 +14,7 @@ export interface Lease {
   monthlyRent: number;
   startDate: string;
   endDate?: string | null;
+  endedAt?: string | null;
   automationEnabled: boolean;
   renewalStatus: LeaseRenewalStatus;
   status: LeaseStatus;
@@ -145,13 +146,16 @@ export const leaseService = {
     return existing;
   },
 
-  endLease(id: string, endDate: string): Lease | undefined {
+  endLease(id: string): Lease | undefined {
     const existing = leases.find((l) => l.id === id);
     if (!existing) return undefined;
 
+    if (existing.status === "ended") return existing;
+
+    const now = new Date().toISOString();
     existing.status = "ended";
-    existing.endDate = endDate;
-    existing.updatedAt = new Date().toISOString();
+    existing.endedAt = now;
+    existing.updatedAt = now;
 
     return existing;
   },

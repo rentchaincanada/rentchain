@@ -224,6 +224,9 @@ const TENANT_PROFILE_LEASE_STATUSES = new Set([
   "active", "current", "notice_pending", "renewal_pending", "renewal_accepted", "move_out_pending",
   "signed", "signed_future", "fully_executed", "pending_signature", "sent",
   "ready_for_tenant_signature", "tenant_signed", "ready_for_landlord_signature", "landlord_signed",
+  // Preserve the ended lease as historical display context after End Lease
+  // clears the canonical current-lease pointer.
+  "ended", "terminated",
 ]);
 
 function isTenantProfileLeaseCandidate(raw: Record<string, unknown>): boolean {

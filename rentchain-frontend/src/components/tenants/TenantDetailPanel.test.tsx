@@ -465,6 +465,54 @@ describe("TenantDetailPanel", () => {
     expect(screen.queryByText(/No current lease is linked/i)).not.toBeInTheDocument();
   });
 
+  it("shows scheduled lease dates and the authoritative actual end date for a Past tenant", async () => {
+    mocks.useTenantDetail.mockReturnValue({
+      loading: false,
+      error: null,
+      bundle: {
+        tenant: {
+          id: "tenant-past",
+          fullName: "Past Tenant",
+          status: "Past",
+          currentLeaseId: null,
+          leaseStart: "2026-01-01",
+          leaseEnd: "2027-01-01",
+        },
+        currentLease: null,
+        lease: {
+          id: "lease-ended",
+          tenantId: "tenant-past",
+          leaseStart: "2026-01-01",
+          leaseEnd: "2027-01-01",
+          status: "ended",
+        },
+        workspaceLifecycle: {
+          category: "past",
+          label: "Past",
+          isArchived: false,
+          actualEndDate: "2026-08-23T12:00:00.000Z",
+        },
+        canonicalState: {
+          leaseTermState: "ended",
+          occupancyState: "vacant",
+          tenantRelationshipState: "past_tenant",
+          supportingLeaseId: null,
+          reasons: ["ENDED_LEASE_CANNOT_SUPPORT_OCCUPANCY"],
+        },
+        property: { id: "property-1", name: "Harbour View" },
+        unit: { id: "unit-1", unitNumber: "101", status: "vacant" },
+        moveInReadiness: null,
+      },
+    });
+
+    render(<MemoryRouter><TenantDetailPanel tenantId="tenant-past" /></MemoryRouter>);
+
+    expect(await screen.findAllByText("Past")).not.toHaveLength(0);
+    expect(screen.getAllByText("Jan 1, 2026").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Jan 1, 2027").length).toBeGreaterThan(0);
+    expect(screen.getByText("Aug 23, 2026")).toBeInTheDocument();
+  });
+
   it("ignores a prior tenant's late lease-ledger result after selection changes", async () => {
     const tenantALedger = deferred<any>();
     mocks.fetchLeaseLedger.mockReturnValueOnce(tenantALedger.promise);

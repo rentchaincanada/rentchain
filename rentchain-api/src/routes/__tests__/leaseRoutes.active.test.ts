@@ -2560,6 +2560,8 @@ describe("leaseRoutes GET /active", () => {
   });
 
   it("projects one completed End Lease postcondition through all five product paths without Review Needed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-23T12:00:00.000Z"));
     const propertyId = "prop-end-cross-surface";
     const unitId = "unit-end-cross-surface";
     const tenantId = "tenant-end-cross-surface";
@@ -2579,8 +2581,20 @@ describe("leaseRoutes GET /active", () => {
     const propertiesRouter = (await import("../propertiesRoutes")).default;
     const tenantsRouter = (await import("../tenantsRoutes")).default;
     const occupancyReviewRouter = (await import("../occupancyReviewRoutes")).default;
-    const ended = await invokeRouter(leaseRouter, { method: "POST", url: `/${leaseId}/end`, body: { endDate: "2026-08-23T12:00:00.000Z" } });
-    expect(ended.status).toBe(200);
+    try {
+      const ended = await invokeRouter(leaseRouter, { method: "POST", url: `/${leaseId}/end`, body: { endDate: "2099-01-01T00:00:00.000Z" } });
+      expect(ended.status).toBe(200);
+      expect((await fakeDb.collection("leases").doc(leaseId).get()).data()).toMatchObject({
+        status: "ended",
+        occupancyEffective: false,
+        startDate: "2026-01-01",
+        endDate: "2027-01-01",
+        endedAt: "2026-08-23T12:00:00.000Z",
+      });
+      expect((await fakeDb.collection("tenancies").doc("tenancy-end-cross-surface").get()).data()).toMatchObject({
+        status: "inactive",
+        moveOutAt: "2026-08-23T12:00:00.000Z",
+      });
 
     const properties = await invokeRouter(propertiesRouter, { method: "GET", url: "/" });
     const property = properties.body.items.find((entry: any) => entry.id === propertyId);
@@ -2595,14 +2609,31 @@ describe("leaseRoutes GET /active", () => {
     expect(tenant).toMatchObject({ status: "Past", currentLeaseId: null, canonicalState: expect.objectContaining({ occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null }) });
 
     const detail = await invokeRouter(tenantsRouter, { method: "GET", url: `/${tenantId}` });
-    expect(detail.body.tenant).toMatchObject({ status: "Past", currentLeaseId: null });
-    expect(detail.body.canonicalState).toMatchObject({ occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null });
-    expect(detail.body.lease).toBeNull();
+      expect(detail.body.tenant).toMatchObject({ status: "Past", currentLeaseId: null, leaseStart: "2026-01-01", leaseEnd: "2027-01-01" });
+      expect(detail.body.canonicalState).toMatchObject({ occupancyState: "vacant", tenantRelationshipState: "past_tenant", supportingLeaseId: null });
+      expect(detail.body.currentLease).toBeNull();
+      expect(detail.body.lease).toMatchObject({ id: leaseId, status: "ended", leaseStart: "2026-01-01", leaseEnd: "2027-01-01" });
+      expect(detail.body.workspaceLifecycle).toMatchObject({ category: "past", isArchived: false, actualEndDate: "2026-08-23T12:00:00.000Z" });
     expect((await fakeDb.collection("tenants").doc(tenantId).get()).data()).toMatchObject({ relationshipStatus: "past" });
 
     const review = await invokeRouter(occupancyReviewRouter, { method: "GET", url: "/" });
     expect(review.body.items.filter((item: any) => item.propertyId === propertyId || item.unitId === unitId || item.tenantId === tenantId)).toEqual([]);
-    expect(listDocs("canonicalEvents")).toHaveLength(1);
+      const events = listDocs("canonicalEvents");
+      expect(events).toHaveLength(1);
+      expect(events[0].data).toMatchObject({
+        occurredAt: "2026-08-23T12:00:00.000Z",
+        recordedAt: "2026-08-23T12:00:00.000Z",
+        metadata: { effectiveDate: "2026-08-23T12:00:00.000Z" },
+      });
+
+      vi.setSystemTime(new Date("2026-08-24T12:00:00.000Z"));
+      const replay = await invokeRouter(leaseRouter, { method: "POST", url: `/${leaseId}/end`, body: { endDate: "2099-02-01T00:00:00.000Z" } });
+      expect(replay.status).toBe(200);
+      expect((await fakeDb.collection("leases").doc(leaseId).get()).data()).toMatchObject({ endedAt: "2026-08-23T12:00:00.000Z", endDate: "2027-01-01" });
+      expect(listDocs("canonicalEvents")).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.each([
