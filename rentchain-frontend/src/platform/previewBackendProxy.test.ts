@@ -253,6 +253,21 @@ describe("Preview backend proxy", () => {
     });
   });
 
+  it("couples the authorized PR #1576 service URL and audience internally", () => {
+    const target = resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: PREVIEW_BACKEND_TARGET_KEYS.pr1576,
+    });
+    expect(target).toEqual({
+      key: "pr1576-context-mismatch-cert",
+      cloudRunServiceUrl:
+        "https://rentchain-pr1576-qa-context-mismatch-501298948635.northamerica-northeast1.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1576-qa-context-mismatch-501298948635.northamerica-northeast1.run.app",
+      temporary: true,
+    });
+  });
+
   it.each([
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
@@ -272,6 +287,8 @@ describe("Preview backend proxy", () => {
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1570],
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1573],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1573],
+    ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1576],
+    ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1576],
     ["preview", ""],
     ["preview", "   "],
     ["preview", "unknown"],
