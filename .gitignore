@@ -32,6 +32,10 @@ yarn-error.log*
 pnpm-debug.log*
 rentchain-api/sendgrid.env
 
+# Local credential material
+rentchain-api/secrets/
+**/*service-account*.json
+
 # OS / editor noise
 .DS_Store
 Thumbs.db

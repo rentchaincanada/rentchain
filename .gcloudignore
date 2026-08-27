@@ -1,0 +1,50 @@
+# Purpose-built Cloud Build source exclusions. Do not include the repository's
+# full .gitignore: it excludes tracked PNG, PDF, and ZIP runtime assets.
+.gcloudignore
+.git
+.git/**
+
+# Dependencies, generated output, and local tooling state.
+node_modules/
+**/node_modules/**
+dist/
+**/dist/**
+build/
+**/build/**
+coverage/
+**/coverage/**
+.tmp/
+**/.tmp/**
+.temp/
+**/.temp/**
+.cache/
+**/.cache/**
+.vercel/
+**/.vercel/**
+.gcloud/
+**/.gcloud/**
+.firebase/
+**/.firebase/**
+playwright-report/
+**/playwright-report/**
+test-results/
+**/test-results/**
+
+# Local environment, log, editor, and OS files.
+.env
+.env.*
+**/.env
+**/.env.*
+*.log
+**/*.log
+.DS_Store
+**/.DS_Store
+.vscode/
+**/.vscode/**
+.idea/
+**/.idea/**
+
+# Local credentials must never enter a Cloud Build source archive.
+rentchain-api/secrets/
+rentchain-api/secrets/**
+**/*service-account*.json
