@@ -1,0 +1,4 @@
+# Local credentials must never enter the repository-root Docker context.
+rentchain-api/secrets/
+rentchain-api/secrets/**
+**/*service-account*.json
