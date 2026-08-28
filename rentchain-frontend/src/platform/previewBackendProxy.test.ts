@@ -268,6 +268,21 @@ describe("Preview backend proxy", () => {
     });
   });
 
+  it("couples the authorized PR #1578 service URL and audience internally", () => {
+    const target = resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: PREVIEW_BACKEND_TARGET_KEYS.pr1578,
+    });
+    expect(target).toEqual({
+      key: "pr1578-writer-guards-cert",
+      cloudRunServiceUrl:
+        "https://rentchain-pr1578-qa-writer-guards-501298948635.northamerica-northeast1.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1578-qa-writer-guards-501298948635.northamerica-northeast1.run.app",
+      temporary: true,
+    });
+  });
+
   it.each([
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
@@ -289,6 +304,8 @@ describe("Preview backend proxy", () => {
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1573],
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1576],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1576],
+    ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1578],
+    ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1578],
     ["preview", ""],
     ["preview", "   "],
     ["preview", "unknown"],
