@@ -11,7 +11,7 @@ type Filter = "all" | OccupancyReviewItem["category"];
 const REASON_COPY: Record<OccupancyReviewReason, { title: string; explanation: string }> = {
   MULTIPLE_CURRENT_LEASES: { title: "Multiple current leases", explanation: "More than one lease currently claims this occupancy context. Choose the operationally supporting lease in Resolve Occupancy." },
   INVALID_LEASE_DATE_RANGE: { title: "Lease dates need review", explanation: "The recorded lease date range is invalid and must be reviewed without automatic correction." },
-  CURRENT_LEASE_CONTEXT_MISMATCH: { title: "Lease context does not match", explanation: "The current lease record does not match the property, unit, or tenant context." },
+  CURRENT_LEASE_CONTEXT_MISMATCH: { title: "Lease and occupancy links don't match", explanation: "The current lease record does not match this tenant or unit context. Resolve Occupancy will explain whether only stale operational links can be corrected safely." },
   DRAFT_LEASE_CANNOT_SUPPORT_OCCUPANCY: { title: "Draft lease conflicts with occupancy", explanation: "A draft lease cannot establish current occupancy." },
   UPCOMING_LEASE_CANNOT_SUPPORT_OCCUPANCY: { title: "Upcoming lease conflicts with occupancy", explanation: "A future lease cannot yet establish current occupancy." },
   PAST_LEASE_CANNOT_SUPPORT_OCCUPANCY: { title: "Past lease conflicts with occupancy", explanation: "An expired lease cannot establish current occupancy." },

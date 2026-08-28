@@ -5,7 +5,8 @@ export type OccupancyResolutionType =
   | "record_operational_move_out"
   | "clear_stale_occupancy_record"
   | "link_existing_lease"
-  | "resolve_multiple_current_leases";
+  | "resolve_multiple_current_leases"
+  | "reconcile_stale_occupancy_linkage";
 
 export type OccupancyResolutionContext = {
   propertyId: string;
@@ -18,6 +19,14 @@ export type OccupancyResolutionContext = {
   eligibleResolutionTypes: OccupancyResolutionType[];
   existingLeaseCandidates: Array<{ id: string; label: string; tenantId: string | null; startDate: string | null; endDate: string | null; executionStatus: string | null; participantNames: string[]; participantCount: number; reference: string; occupancyEffective: boolean; activeTenancyCount: number }>;
   activeLeaseRequiresEndWorkflow: boolean;
+  contextMismatchRemediation: {
+    classification: "stale_occupancy_linkage_with_unique_authoritative_lease" | "lease_context_mismatch" | "ownership_mismatch" | "ambiguous_context" | "participant_mismatch" | "missing_context" | "not_applicable";
+    repairEligible: boolean;
+    authoritativeLeaseId: string | null;
+    blockedReason: string | null;
+    mismatchedComponents: string[];
+    staleLinkageFields: string[];
+  };
 };
 
 export async function getOccupancyResolutionContext(input: { propertyId: string; unitId: string; tenantId?: string | null }) {
