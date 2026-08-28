@@ -213,6 +213,23 @@ describe("leaseStartService", () => {
     expect(result.expectedStateToken).toBe(fresh.expectedStateToken);
   });
 
+  it("allows an invited tenant to become current only through explicit Start Occupancy", async () => {
+    seedBase({ tenant: { status: "invited", currentLeaseId: null } });
+    expect(fake.read("tenants", "tenant-1")).toMatchObject({ status: "invited", currentLeaseId: null });
+
+    const result = await startCanonicalLeaseOccupancy(await mutationInput());
+
+    expect(result).toMatchObject({ outcome: "occupancy_effective", occupancyEffective: true });
+    expect(fake.read("tenants", "tenant-1")).toMatchObject({ status: "current", currentLeaseId: "lease-1" });
+    expect(fake.read("units", "unit-1")).toMatchObject({ status: "occupied", currentLeaseId: "lease-1" });
+    expect(fake.list("tenancies")).toEqual([
+      expect.objectContaining({ tenantId: "tenant-1", leaseId: "lease-1", status: "active" }),
+    ]);
+    expect(fake.list("canonicalEvents")).toEqual([
+      expect.objectContaining({ type: "lease.occupancy_started" }),
+    ]);
+  });
+
   it("rejects an archived tenant inside the authoritative start transaction with zero writes", async () => {
     seedBase({ tenant: { archivedAt: "2026-04-30T13:00:00.000Z" } });
     const context = await getCanonicalLeaseStartContext({ ...base, firestore: fake.firestore });
