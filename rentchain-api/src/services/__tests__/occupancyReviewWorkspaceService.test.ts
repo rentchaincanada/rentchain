@@ -73,6 +73,33 @@ describe("occupancyReviewWorkspaceService", () => {
     expect(result.items[0]).toMatchObject({ scope: "tenant", reasons: expect.arrayContaining(["TENANT_CURRENT_WITHOUT_CURRENT_LEASE"]), action: "review_tenant_relationship" });
   });
 
+  it("classifies a current tenant without a current lease without repairing authoritative state", () => {
+    const authoritative: OccupancyReviewRecords & { canonicalEvents: Array<Record<string, unknown>> } = {
+      ...baseRecords(),
+      canonicalEvents: [],
+    };
+    authoritative.units[0] = { ...authoritative.units[0], status: "vacant", currentTenantId: null, currentLeaseId: null };
+    authoritative.tenants[0] = { ...authoritative.tenants[0], status: "current", currentLeaseId: null };
+    authoritative.leases = [];
+    authoritative.tenancies = [];
+    const before = structuredClone(authoritative);
+
+    const result = aggregateOccupancyReviewWorkspace(landlordId, authoritative);
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      scope: "tenant",
+      canonicalState: { tenantRelationshipState: "occupancy_unresolved" },
+      reasons: expect.arrayContaining(["TENANT_CURRENT_WITHOUT_CURRENT_LEASE"]),
+    });
+    expect(authoritative).toEqual(before);
+    expect(authoritative.tenants[0].status).toBe(before.tenants[0].status);
+    expect(authoritative.leases).toHaveLength(before.leases.length);
+    expect(authoritative.tenancies).toEqual(before.tenancies);
+    expect(authoritative.units[0].status).toBe(before.units[0].status);
+    expect(authoritative.canonicalEvents).toHaveLength(before.canonicalEvents.length);
+  });
+
   it("omits coherent occupied and vacant units", () => {
     const occupied = baseRecords(); occupied.units[0].currentLeaseId = "lease-a"; occupied.leases = [activeLease("lease-a")]; occupied.tenancies = [{ id: "t", landlordId, propertyId: "property-1", unitId: "unit-1", leaseId: "lease-a", tenantId: "tenant-1", status: "active" }]; occupied.tenants[0].currentLeaseId = "lease-a";
     expect(aggregateOccupancyReviewWorkspace(landlordId, occupied).items).toEqual([]);

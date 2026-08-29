@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildCanonicalLeaseOccupancyProjection } from "../../lib/leases/canonicalLeaseOccupancyProjection";
+import { deriveCanonicalLeaseTermState } from "../../lib/leases/canonicalLeaseOccupancyState";
+import { evaluateCanonicalLeaseStart } from "../../lib/leases/canonicalLeaseStart";
 
 const { collections, resetDb } = vi.hoisted(() => {
   const collections = new Map<string, Map<string, any>>();
@@ -65,6 +67,22 @@ describe("tenant current-state writer guards", () => {
     const lease = [...collection("leases").values()][0];
     expect(tenant).toMatchObject({ status: "invited", currentLeaseId: null });
     expect(lease).not.toHaveProperty("occupancyEffective", true);
+    const lifecycle = deriveCanonicalLeaseTermState({ id: "onboarding-lease", ...lease }, "2026-09-01T12:00:00.000Z");
+    expect(lifecycle).toMatchObject({ state: "unknown", supportsCurrentOccupancy: false });
+    const startEligibility = evaluateCanonicalLeaseStart({
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      tenantId: tenant.id,
+      evaluationInstant: "2026-09-01T12:00:00.000Z",
+      candidateLease: { id: "onboarding-lease", ...lease },
+      contextLeases: [],
+      standaloneUnits: [{ id: "unit-1", landlordId: "landlord-1", propertyId: "property-1", status: "vacant" }],
+      embeddedUnits: [{ id: "unit-1", landlordId: "landlord-1", propertyId: "property-1", status: "vacant" }],
+      tenant,
+      tenancies: [],
+    });
+    expect(startEligibility).toMatchObject({ outcome: "rejected", occupancyEffective: false, reasons: ["CURRENT_LEASE_CONTEXT_MISMATCH"] });
     expect(collection("units")).toHaveLength(0);
     expect(collection("tenancies")).toHaveLength(0);
     expect(collection("canonicalEvents")).toHaveLength(0);
