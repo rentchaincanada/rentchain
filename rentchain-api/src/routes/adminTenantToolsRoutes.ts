@@ -4,6 +4,10 @@ import { db } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireRole } from "../middleware/requireRole";
 import admin from "firebase-admin";
+import {
+  isCurrentLikeTenantStatus,
+  SAFE_TENANT_CREATION_STATUS,
+} from "../lib/tenants/tenantCreationStatus";
 
 const router = Router();
 
@@ -11,6 +15,9 @@ router.post("/create", requireAuth, requireRole(["landlord", "admin"]), async (r
   const { email, password, landlordId, status } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ error: "email and password are required" });
+  }
+  if (isCurrentLikeTenantStatus(status)) {
+    return res.status(400).json({ error: "current tenant status requires canonical occupancy authority" });
   }
 
   const normalizedEmail = String(email).trim().toLowerCase();
@@ -23,7 +30,8 @@ router.post("/create", requireAuth, requireRole(["landlord", "admin"]), async (r
       email: normalizedEmail,
       landlordId: ownerLandlordId ?? null,
       role: "tenant",
-      status: status || "active",
+      status: status || SAFE_TENANT_CREATION_STATUS,
+      currentLeaseId: null,
       passwordHash: hash,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -36,7 +44,7 @@ router.post("/create", requireAuth, requireRole(["landlord", "admin"]), async (r
       tenantId: docRef.id,
       email: normalizedEmail,
       landlordId: ownerLandlordId ?? null,
-      status: status || "active",
+      status: status || SAFE_TENANT_CREATION_STATUS,
     });
   } catch (err: any) {
     console.error("[admin tenant create] error", err);

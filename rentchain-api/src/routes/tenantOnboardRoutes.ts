@@ -2,6 +2,7 @@
 import { Router } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "../firebase";
+import { SAFE_TENANT_CREATION_STATUS } from "../lib/tenants/tenantCreationStatus";
 
 const router = Router();
 
@@ -46,7 +47,8 @@ router.post("/tenants/onboard", async (req, res) => {
       propertyName,
       unit,
       balance: 0,
-      status: "active",
+      status: SAFE_TENANT_CREATION_STATUS,
+      currentLeaseId: null,
       createdAt,
       sourceApplication: applicationId ?? null,
     };

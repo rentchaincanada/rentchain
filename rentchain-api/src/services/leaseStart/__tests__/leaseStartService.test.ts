@@ -1,10 +1,19 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildCanonicalLeaseOccupancyProjection } from "../../../lib/leases/canonicalLeaseOccupancyProjection";
 import {
   getCanonicalLeaseStartContext,
   LeaseStartServiceError,
   startCanonicalLeaseOccupancy,
   type StartCanonicalLeaseOccupancyInput,
 } from "../leaseStartService";
+
+const firebaseState = vi.hoisted(() => ({ firestore: null as any }));
+vi.mock("../../../firebase", () => ({
+  db: {
+    collection: (...args: any[]) => firebaseState.firestore.collection(...args),
+    runTransaction: (...args: any[]) => firebaseState.firestore.runTransaction(...args),
+  },
+}));
 
 function createFakeFirestore() {
   const store = new Map<string, Map<string, any>>();
@@ -114,7 +123,15 @@ function createFakeFirestore() {
     return result;
   };
   const firestore: any = {
-    collection: (name: string) => ({ ...query(name), doc: (id: string) => ref(name, id) }),
+    collection: (name: string) => ({
+      ...query(name),
+      doc: (id: string) => ref(name, id),
+      add: async (value: any) => {
+        const id = `${name}-${collectionData(name).size + 1}`;
+        await ref(name, id).set(value);
+        return ref(name, id);
+      },
+    }),
     runTransaction: async (callback: any) => {
       for (let attempt = 0; attempt < 4; attempt += 1) {
         try {
@@ -190,9 +207,32 @@ function domainSnapshot() {
   };
 }
 
+async function invokeRouter(router: any, options: { method: string; url: string; body?: any }) {
+  return new Promise<{ status: number; body: any }>((resolve, reject) => {
+    const req: any = {
+      method: options.method,
+      url: options.url,
+      originalUrl: options.url,
+      path: options.url,
+      body: options.body || {},
+      headers: {},
+      query: {},
+      user: { id: "landlord-1", landlordId: "landlord-1", role: "landlord" },
+    };
+    const res: any = {
+      statusCode: 200,
+      status(code: number) { this.statusCode = code; return this; },
+      json(payload: any) { resolve({ status: this.statusCode, body: payload }); return this; },
+      send(payload: any) { resolve({ status: this.statusCode, body: payload }); return this; },
+    };
+    router.handle(req, res, (error: any) => error ? reject(error) : resolve({ status: 404, body: null }));
+  });
+}
+
 describe("leaseStartService", () => {
   beforeEach(() => {
     fake = createFakeFirestore();
+    firebaseState.firestore = fake.firestore;
     seedBase();
   });
 
@@ -211,6 +251,111 @@ describe("leaseStartService", () => {
     const fresh = await getCanonicalLeaseStartContext({ ...base, firestore: fake.firestore });
     expect(fresh.decision.outcome).toBe("already_coherent");
     expect(result.expectedStateToken).toBe(fresh.expectedStateToken);
+  });
+
+  it("allows an invited tenant to become current only through explicit Start Occupancy", async () => {
+    seedBase({ tenant: { status: "invited", currentLeaseId: null } });
+    expect(fake.read("tenants", "tenant-1")).toMatchObject({ status: "invited", currentLeaseId: null });
+
+    const result = await startCanonicalLeaseOccupancy(await mutationInput());
+
+    expect(result).toMatchObject({ outcome: "occupancy_effective", occupancyEffective: true });
+    expect(fake.read("tenants", "tenant-1")).toMatchObject({ status: "current", currentLeaseId: "lease-1" });
+    expect(fake.read("units", "unit-1")).toMatchObject({ status: "occupied", currentLeaseId: "lease-1" });
+    expect(fake.list("tenancies")).toEqual([
+      expect.objectContaining({ tenantId: "tenant-1", leaseId: "lease-1", status: "active" }),
+    ]);
+    expect(fake.list("canonicalEvents")).toEqual([
+      expect.objectContaining({ type: "lease.occupancy_started" }),
+    ]);
+  });
+
+  it("starts the same tenant and lease lineage created by the onboarding route only after explicit prerequisites", async () => {
+    fake = createFakeFirestore();
+    firebaseState.firestore = fake.firestore;
+    const onboardingRouter = (await import("../../../routes/tenantOnboardRoutes")).default;
+    const onboarded = await invokeRouter(onboardingRouter, {
+      method: "POST",
+      url: "/tenants/onboard",
+      body: {
+        fullName: "Taylor Tenant",
+        email: "tenant@example.com",
+        propertyId: "property-onboarded",
+        propertyName: "Harbour House",
+        unit: "1A",
+        moveInDate: "2026-04-01",
+        monthlyRent: 1800,
+      },
+    });
+
+    expect(onboarded.status).toBe(201);
+    const tenantId = onboarded.body.tenantId;
+    const leaseId = fake.ids("leases")[0];
+    const tenantBefore = fake.read("tenants", tenantId);
+    const onboardingLease = fake.read("leases", leaseId);
+    const beforeProjection = buildCanonicalLeaseOccupancyProjection({
+      leases: [{ id: leaseId, ...onboardingLease }],
+      context: { landlordId: "landlord-1", propertyId: "property-onboarded", tenantId, asOfDate: evaluationInstant },
+      persistedTenantStatus: tenantBefore.status,
+      currentLeasePointerId: tenantBefore.currentLeaseId,
+      tenantId,
+    });
+    expect(tenantBefore).toMatchObject({ status: "invited", currentLeaseId: null });
+    expect(beforeProjection.tenantRelationshipState).not.toBe("current_occupant");
+    expect(onboardingLease).not.toHaveProperty("occupancyEffective", true);
+    expect(fake.list("tenancies")).toEqual([]);
+
+    const unitId = "unit-onboarded";
+    const vacantUnit = { id: unitId, unitNumber: "1A", status: "vacant", occupancyStatus: "vacant", updatedAt: "2026-04-30T12:00:00.000Z" };
+    fake.seed("properties", "property-onboarded", { landlordId: "landlord-1", name: "Harbour House", units: [vacantUnit], updatedAt: vacantUnit.updatedAt });
+    fake.seed("units", unitId, { ...vacantUnit, landlordId: "landlord-1", propertyId: "property-onboarded" });
+    fake.seed("leases", leaseId, {
+      ...onboardingLease,
+      landlordId: "landlord-1",
+      unitId,
+      primaryTenantId: tenantId,
+      tenantIds: [tenantId],
+      status: "active",
+      executionStatus: "fully_executed",
+      startDate: onboardingLease.leaseStart,
+      endDate: "2027-04-30",
+      occupancyEffective: false,
+    });
+
+    const inputBase = { landlordId: "landlord-1", propertyId: "property-onboarded", unitId, tenantId, leaseId, evaluationInstant };
+    const context = await getCanonicalLeaseStartContext({ ...inputBase, firestore: fake.firestore });
+    expect(context.decision.outcome).toBe("occupancy_effective");
+    const auditCountBefore = fake.list("canonicalEvents").length;
+    const result = await startCanonicalLeaseOccupancy({
+      ...inputBase,
+      operationKind: "explicit_start",
+      trigger: "explicit_start",
+      idempotencyKey: "onboarding-lineage-explicit-start",
+      expectedStateToken: context.expectedStateToken,
+      actorId: "landlord-1",
+      source: "test",
+      firestore: fake.firestore,
+    });
+
+    const tenantAfter = fake.read("tenants", tenantId);
+    const unitAfter = fake.read("units", unitId);
+    const leaseAfter = fake.read("leases", leaseId);
+    const activeTenancies = fake.list("tenancies").filter((tenancy) => tenancy.status === "active");
+    const afterProjection = buildCanonicalLeaseOccupancyProjection({
+      leases: [{ id: leaseId, ...leaseAfter }],
+      context: { landlordId: "landlord-1", propertyId: "property-onboarded", unitId, tenantId, asOfDate: evaluationInstant },
+      persistedUnitOccupancy: unitAfter.occupancyStatus,
+      persistedTenancyStatus: activeTenancies[0]?.status,
+      persistedTenantStatus: tenantAfter.status,
+      currentLeasePointerId: tenantAfter.currentLeaseId,
+      tenantId,
+    });
+    expect(result).toMatchObject({ outcome: "occupancy_effective", occupancyEffective: true });
+    expect(afterProjection).toMatchObject({ tenantRelationshipState: "current_occupant", occupancyState: "occupied", supportingLeaseId: leaseId });
+    expect(activeTenancies).toEqual([expect.objectContaining({ tenantId, leaseId, status: "active" })]);
+    expect(unitAfter).toMatchObject({ status: "occupied", occupancyStatus: "occupied", currentTenantId: tenantId, currentLeaseId: leaseId });
+    expect(fake.list("canonicalEvents")).toHaveLength(auditCountBefore + 1);
+    expect(fake.list("canonicalEvents").filter((event) => event.type === "lease.occupancy_started")).toHaveLength(1);
   });
 
   it("rejects an archived tenant inside the authoritative start transaction with zero writes", async () => {
