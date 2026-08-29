@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { getOccupancyReviewWorkspace, type OccupancyReviewItem, type OccupancyReviewReason, type OccupancyReviewWorkspace } from "@/api/occupancyReviewApi";
 import { getOccupancyStartContext } from "@/api/occupancyStartApi";
+import { submitStaleTenantRelationshipResolution } from "@/api/occupancyResolutionApi";
 import { ResolveOccupancyDrawer } from "@/components/occupancy/ResolveOccupancyDrawer";
 import { StartOccupancyDrawer } from "@/components/occupancy/StartOccupancyDrawer";
 import "./ReviewNeededPage.css";
@@ -40,6 +41,9 @@ export default function ReviewNeededPage() {
   const [resolving, setResolving] = useState<OccupancyReviewItem | null>(null);
   const [starting, setStarting] = useState<OccupancyReviewItem | null>(null);
   const [startEligibility, setStartEligibility] = useState<Record<string, boolean>>({});
+  const [relationshipResolution, setRelationshipResolution] = useState<OccupancyReviewItem | null>(null);
+  const [relationshipSubmitting, setRelationshipSubmitting] = useState(false);
+  const [relationshipError, setRelationshipError] = useState<string | null>(null);
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
@@ -74,15 +78,28 @@ export default function ReviewNeededPage() {
         const isExplicitStartCandidate = item.reasons.length === 1 && item.reasons[0] === "VACANT_WITH_CURRENT_LEASE" && Boolean(item.supportingLeaseId);
         const canStart = Boolean(isExplicitStartCandidate && item.supportingLeaseId && startEligibility[item.supportingLeaseId] === true);
         const canResolve = !isExplicitStartCandidate && (item.action === "resolve_multiple_current" || item.action === "resolve_occupancy") && item.propertyId && item.unitId;
+        const canReconcileRelationship = item.scope === "tenant" && item.resolutionAvailable && item.resolutionType === "reconcile_stale_tenant_relationship_status" && Boolean(item.tenantId && item.expectedStateToken);
         return <article key={item.id} className={`review-needed-card review-needed-card--${item.severity}`}>
           <div className="review-needed-card-heading"><AlertTriangle size={20} /><div><h2>{primary.title}</h2><p>{[item.propertyName, item.unitLabel, item.tenantName].filter(Boolean).join(" · ") || "Canonical occupancy context"}</p></div><span>{item.canonicalState.occupancyState.replace("_", " ")}</span></div>
           <p>{primary.explanation}</p>
           {item.reasons.length > 1 ? <ul>{item.reasons.slice(1).map((reason) => <li key={reason}><strong>{reasonPresentation(reason).title}:</strong> {reasonPresentation(reason).explanation}</li>)}</ul> : null}
-          <div className="review-needed-actions">{canStart ? <button type="button" onClick={() => setStarting(item)}>Start Occupancy</button> : isExplicitStartCandidate ? <span>Start Occupancy is unavailable under the current authoritative context.</span> : canResolve ? <button type="button" onClick={() => setResolving(item)}>{ACTION_COPY[item.action]}</button> : item.actionTarget ? <Link to={item.actionTarget}>{ACTION_COPY[item.action]}</Link> : <span>Review the linked records before making changes.</span>}</div>
+          <div className="review-needed-actions">{canStart ? <button type="button" onClick={() => setStarting(item)}>Start Occupancy</button> : isExplicitStartCandidate ? <span>Start Occupancy is unavailable under the current authoritative context.</span> : canResolve ? <button type="button" onClick={() => setResolving(item)}>{ACTION_COPY[item.action]}</button> : canReconcileRelationship ? <button type="button" onClick={() => { setRelationshipError(null); setRelationshipResolution(item); }}>Reconcile tenant relationship</button> : item.actionTarget ? <Link to={item.actionTarget}>{ACTION_COPY[item.action]}</Link> : <span>Review the linked records before making changes.</span>}</div>
         </article>;
       })}</section>
     </> : null}
     {resolving?.propertyId && resolving.unitId ? <ResolveOccupancyDrawer open propertyId={resolving.propertyId} unitId={resolving.unitId} tenantId={resolving.tenantId} onClose={() => setResolving(null)} onResolved={() => { setResolving(null); void load(); }} /> : null}
     {starting?.supportingLeaseId ? <StartOccupancyDrawer leaseId={starting.supportingLeaseId} propertyLabel={starting.propertyName} unitLabel={starting.unitLabel} onClose={() => setStarting(null)} onStarted={() => { setStarting(null); void load(); }} /> : null}
+    {relationshipResolution?.tenantId && relationshipResolution.expectedStateToken ? <div role="dialog" aria-modal="true" aria-labelledby="relationship-resolution-title" className="review-needed-state">
+      <h2 id="relationship-resolution-title">Reconcile tenant relationship</h2>
+      <p>RentChain found explicit prior move-out or End Lease evidence and no active occupancy relationship. This action updates the stale tenant relationship status to Past. It does not change lease facts or archive the tenant.</p>
+      {relationshipResolution.supportingEvidence[0] ? <p>Evidence: {relationshipResolution.supportingEvidence[0].evidenceType.replaceAll("_", " ")} · {new Date(relationshipResolution.supportingEvidence[0].effectiveDate).toLocaleDateString()}</p> : null}
+      {relationshipError ? <p role="alert">{relationshipError}</p> : null}
+      <div className="review-needed-actions"><button type="button" disabled={relationshipSubmitting} onClick={() => { setRelationshipError(null); setRelationshipResolution(null); }}>Cancel</button><button type="button" disabled={relationshipSubmitting} onClick={async () => {
+        setRelationshipSubmitting(true); setRelationshipError(null);
+        try { await submitStaleTenantRelationshipResolution({ tenantId: relationshipResolution.tenantId!, expectedStateToken: relationshipResolution.expectedStateToken!, idempotencyKey: crypto.randomUUID() }); setRelationshipResolution(null); await load(); }
+        catch { setRelationshipError("The relationship could not be reconciled because the authoritative state changed or is no longer eligible."); }
+        finally { setRelationshipSubmitting(false); }
+      }}>{relationshipSubmitting ? "Reconciling…" : "Confirm reconciliation"}</button></div>
+    </div> : null}
   </main>;
 }

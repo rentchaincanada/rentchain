@@ -98,6 +98,22 @@ describe("occupancyReviewWorkspaceService", () => {
     expect(authoritative.tenancies).toEqual(before.tenancies);
     expect(authoritative.units[0].status).toBe(before.units[0].status);
     expect(authoritative.canonicalEvents).toHaveLength(before.canonicalEvents.length);
+    expect(result.items[0]).toMatchObject({ resolutionAvailable: false, diagnosticCategory: "explicit_end_evidence_missing", supportingEvidence: [] });
+  });
+
+  it("exposes only server-authoritative safe metadata for the strict status-only subtype", () => {
+    const records = baseRecords();
+    records.units[0] = { ...records.units[0], status: "vacant", occupancyStatus: "vacant", currentTenantId: null, currentLeaseId: null, tenantId: null, leaseId: null };
+    records.properties[0].units = [{ id: "unit-1", status: "vacant", occupancyStatus: "vacant", currentTenantId: null, currentLeaseId: null, tenantId: null, leaseId: null }];
+    records.tenants[0] = { ...records.tenants[0], status: "current", currentLeaseId: null };
+    records.tenancies = [{ id: "tenancy-ended", landlordId, propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "inactive", moveOutAt: "2026-08-01T00:00:00.000Z", moveOutReason: "LEASE_TERM_END" }];
+    const before = structuredClone(records);
+    const result = aggregateOccupancyReviewWorkspace(landlordId, records);
+    expect(result.items[0]).toMatchObject({ resolutionAvailable: true, remediationSubtype: "status_only_stale_after_explicit_ended_occupancy", resolutionType: "reconcile_stale_tenant_relationship_status", expectedStateToken: expect.any(String), supportingEvidence: [expect.objectContaining({ evidenceType: "explicit_inactive_tenancy", attributionStatus: "attributed" })] });
+    expect(JSON.stringify(result.items[0].supportingEvidence)).not.toContain("moveOutReason");
+    expect(records).toEqual(before);
+    records.tenants[0].status = "Past";
+    expect(aggregateOccupancyReviewWorkspace(landlordId, records).items).toEqual([]);
   });
 
   it("omits coherent occupied and vacant units", () => {

@@ -12,13 +12,20 @@ import {
   selectCanonicalCurrentLease,
 } from "../lib/leases/canonicalLeaseOccupancyState";
 import { resolveUnitReference, toCanonicalLeaseRecord, toCanonicalUnitRecord } from "./leaseCanonicalizationService";
+export {
+  getTenantRelationshipResolutionContext,
+  resolveStaleTenantRelationshipStatus,
+  STALE_TENANT_RESOLUTION_TYPE,
+  TenantRelationshipResolutionError,
+} from "./tenantRelationshipStatusResolutionService";
 
 export type OccupancyResolutionType =
   | "record_operational_move_out"
   | "clear_stale_occupancy_record"
   | "link_existing_lease"
   | "resolve_multiple_current_leases"
-  | "reconcile_stale_occupancy_linkage";
+  | "reconcile_stale_occupancy_linkage"
+  | "reconcile_stale_tenant_relationship_status";
 
 export type ContextMismatchRemediationClassification =
   | "stale_occupancy_linkage_with_unique_authoritative_lease"
