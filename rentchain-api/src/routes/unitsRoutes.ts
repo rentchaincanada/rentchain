@@ -6,6 +6,7 @@ import { requireCapability } from "../services/capabilityGuard";
 import { uploadBufferToGcs } from "../lib/gcs";
 import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
 import { applyGovernedUnitUpdate, GovernedUnitUpdateError } from "../services/governedUnitUpdateService";
+import { isUnsupportedInitialOccupancyStatus } from "../imports/unitCsv.schema";
 
 const router = Router();
 const leaseDocumentUpload = multer({
@@ -393,6 +394,14 @@ router.post(
 
     const units = Array.isArray(req.body?.units) ? req.body.units : [];
     if (!units.length) return res.status(400).json({ ok: false, error: "No units provided" });
+    if (units.some((unit: any) => isUnsupportedInitialOccupancyStatus(unit?.status, unit?.occupancyStatus))) {
+      return res.status(400).json({
+        ok: false,
+        error: "UNSUPPORTED_INITIAL_OCCUPANCY",
+        code: "UNSUPPORTED_INITIAL_OCCUPANCY",
+        message: "Occupied units must be created as vacant and started through the occupancy workflow.",
+      });
+    }
 
     let created = 0;
     const batch = db.batch();

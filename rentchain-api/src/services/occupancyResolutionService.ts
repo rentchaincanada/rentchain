@@ -131,6 +131,26 @@ function matchesTenancyUnitContext(row: any, propertyId: string, unitId: string,
   return rowUnitId === unitId || (Boolean(unitLabel) && rowUnitLabel === unitLabel);
 }
 
+function hasUniqueOperationalMoveOutAttribution(input: {
+  landlordId: string;
+  requestedTenantId: string | null;
+  unit: any;
+  embeddedUnitMatches: any[];
+  diagnosticLeases: any[];
+  diagnosticTenancies: any[];
+}): boolean {
+  if (!input.requestedTenantId || input.embeddedUnitMatches.length !== 1) return false;
+  if (input.diagnosticTenancies.some((row: any) => text(row.landlordId) !== input.landlordId)) return false;
+
+  const tenantIds = new Set([
+    ...pointerValues(input.unit, ["tenantId", "currentTenantId"]),
+    ...pointerValues(input.embeddedUnitMatches[0], ["tenantId", "currentTenantId"]),
+    ...input.diagnosticLeases.flatMap(participantTenantIds),
+    ...input.diagnosticTenancies.map((row: any) => text(row.tenantId)).filter(Boolean),
+  ]);
+  return tenantIds.size === 1 && tenantIds.has(input.requestedTenantId);
+}
+
 function classifyContextMismatch(input: {
   landlordId: string;
   propertyId: string;
@@ -380,12 +400,23 @@ async function readResolutionContext(
   });
   const activeLeaseRequiresEndWorkflow = reviewNeeded && candidates.length === 1 && canonicalState.supportingLeaseId === candidates[0].id;
   const eligibleResolutionTypes: OccupancyResolutionType[] = [];
+  const uniquelyAttributedOperationalMoveOut = hasUniqueOperationalMoveOutAttribution({
+    landlordId: input.landlordId,
+    requestedTenantId: tenantId,
+    unit,
+    embeddedUnitMatches,
+    diagnosticLeases,
+    diagnosticTenancies,
+  });
   if (reviewNeeded && !mutationBlocked) {
     if (canonicalState.reasons.includes("MULTIPLE_CURRENT_LEASES") && candidates.length >= 2) {
       eligibleResolutionTypes.push("resolve_multiple_current_leases");
     }
     if (!canonicalState.supportingLeaseId && !canonicalState.reasons.includes("MULTIPLE_CURRENT_LEASES")) {
-      eligibleResolutionTypes.push("record_operational_move_out", "clear_stale_occupancy_record");
+      if (uniquelyAttributedOperationalMoveOut) eligibleResolutionTypes.push("record_operational_move_out");
+      if (!canonicalState.reasons.includes("OCCUPIED_WITHOUT_CURRENT_LEASE")) {
+        eligibleResolutionTypes.push("clear_stale_occupancy_record");
+      }
     }
     if (candidates.length === 1 && canonicalState.reasons.includes("STALE_CURRENT_LEASE_POINTER")) {
       eligibleResolutionTypes.push("link_existing_lease");

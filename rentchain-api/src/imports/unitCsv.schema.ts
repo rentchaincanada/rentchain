@@ -125,6 +125,10 @@ function normalizeStatus(value: any) {
   return text;
 }
 
+export function isUnsupportedInitialOccupancyStatus(...values: any[]): boolean {
+  return values.some((value) => ["occupied", "leased", "rented"].includes(String(value || "").trim().toLowerCase()));
+}
+
 function hasManualUnitValue(unit: any) {
   if (!unit || typeof unit !== "object") return false;
   const values = [
@@ -226,6 +230,16 @@ export function validateManualUnitInputs(units: any[]): ManualUnitValidationResu
 
   (Array.isArray(units) ? units : []).forEach((unit, index) => {
     if (!hasManualUnitValue(unit)) return;
+
+    if (isUnsupportedInitialOccupancyStatus(unit?.status, unit?.occupancyStatus)) {
+      issues.push({
+        index,
+        position: index + 1,
+        field: "status",
+        message: "Occupied units must be created as vacant and started through the occupancy workflow.",
+      });
+      return;
+    }
 
     const mapped = {
       unitNumber: cleanCell(unit?.unitNumber ?? unit?.unit ?? unit?.label),

@@ -103,18 +103,14 @@ describe("unit CSV preview routes", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body.ok).toBe(true);
+    expect(res.body.ok).toBe(false);
     expect(res.body.preview.rows).toEqual([
       expect.objectContaining({
         row: 2,
         status: "valid",
         data: expect.objectContaining({ unitNumber: "101", rent: 1850, status: "vacant" }),
       }),
-      expect.objectContaining({
-        row: 3,
-        status: "valid",
-        data: expect.objectContaining({ unitNumber: "102", rent: 1650, status: "occupied" }),
-      }),
+      expect.objectContaining({ row: 3, status: "invalid", issues: [expect.objectContaining({ code: "UNSUPPORTED_INITIAL_OCCUPANCY" })] }),
     ]);
   });
 
@@ -134,7 +130,7 @@ describe("unit CSV preview routes", () => {
     ]);
   });
 
-  it("accepts occupied metadata headers through the property-scoped route", async () => {
+  it("rejects occupied rows through the property-scoped route", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1" });
     const app = await createUnitImportApp();
 
@@ -143,15 +139,15 @@ describe("unit CSV preview routes", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body.ok).toBe(true);
+    expect(res.body.ok).toBe(false);
     expect(res.body.headers.unknown).toEqual([]);
     expect(res.body.headers.expected).toEqual(
       expect.arrayContaining(["unitNumber", "marketRent", "beds", "baths", "sqft", "status", "occupantName", "leaseEndDate"])
     );
-    expect(res.body.preview.errors).toEqual([]);
+    expect(res.body.preview.errors).toEqual([expect.objectContaining({ code: "UNSUPPORTED_INITIAL_OCCUPANCY", field: "status" })]);
     expect(res.body.preview.rows[0]).toMatchObject({
       row: 2,
-      status: "valid",
+      status: "invalid",
       data: expect.objectContaining({
         unitNumber: "301",
         status: "occupied",
