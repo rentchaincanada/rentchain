@@ -306,9 +306,9 @@ describe("Preview backend proxy", () => {
     expect(target).toEqual({
       key: "pr1582-occupied-without-lease-containment-cert",
       cloudRunServiceUrl:
-        "https://rentchain-pr1582-qa-occupied-without-lease-containment-501298948635.northamerica-northeast1.run.app",
+        "https://rentchain-pr1582-qa-occupied-without-lease-contai-glistw4pya-nn.a.run.app",
       cloudRunIdTokenAudience:
-        "https://rentchain-pr1582-qa-occupied-without-lease-containment-501298948635.northamerica-northeast1.run.app",
+        "https://rentchain-pr1582-qa-occupied-without-lease-contai-glistw4pya-nn.a.run.app",
       temporary: true,
     });
   });
