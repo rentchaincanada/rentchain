@@ -298,6 +298,21 @@ describe("Preview backend proxy", () => {
     });
   });
 
+  it("couples the authorized PR #1582 service URL and audience internally", () => {
+    const target = resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: PREVIEW_BACKEND_TARGET_KEYS.pr1582,
+    });
+    expect(target).toEqual({
+      key: "pr1582-occupied-without-lease-containment-cert",
+      cloudRunServiceUrl:
+        "https://rentchain-pr1582-qa-occupied-without-lease-containment-501298948635.northamerica-northeast1.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1582-qa-occupied-without-lease-containment-501298948635.northamerica-northeast1.run.app",
+      temporary: true,
+    });
+  });
+
   it.each([
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
@@ -323,6 +338,8 @@ describe("Preview backend proxy", () => {
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1578],
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1580],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1580],
+    ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1582],
+    ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1582],
     ["preview", ""],
     ["preview", "   "],
     ["preview", "unknown"],
