@@ -7,6 +7,7 @@ import {
 } from "../lib/leases/canonicalLeaseOccupancyProjection";
 import type { CanonicalLeaseConflictReason } from "../lib/leases/canonicalLeaseOccupancyState";
 import { resolveUnitReference, toCanonicalLeaseRecord, toCanonicalUnitRecord } from "./leaseCanonicalizationService";
+import { classifyStaleTenantRelationship, type SafeEndedEvidence, type TenantRelationshipResolutionBlocker } from "./tenantRelationshipStatusResolutionService";
 
 export type OccupancyReviewCategory = "occupancy" | "lease" | "signing" | "tenant_relationship";
 export type OccupancyReviewAction =
@@ -37,6 +38,12 @@ export type OccupancyReviewItem = {
   action: OccupancyReviewAction;
   actionTarget: string | null;
   stableSortKey: string;
+  remediationSubtype: "status_only_stale_after_explicit_ended_occupancy" | null;
+  resolutionAvailable: boolean;
+  resolutionType: "reconcile_stale_tenant_relationship_status" | null;
+  diagnosticCategory: TenantRelationshipResolutionBlocker | "status_only_reconciliation_available" | null;
+  supportingEvidence: SafeEndedEvidence[];
+  expectedStateToken: string | null;
 };
 
 export type OccupancyReviewWorkspace = {
@@ -50,6 +57,7 @@ export type OccupancyReviewRecords = {
   leases: Array<Record<string, any>>;
   tenants: Array<Record<string, any>>;
   tenancies: Array<Record<string, any>>;
+  canonicalEvents?: Array<Record<string, any>>;
 };
 
 const OCCUPANCY_REASONS = new Set<CanonicalLeaseConflictReason>([
@@ -131,7 +139,7 @@ export function aggregateOccupancyReviewWorkspace(landlordId: string, records: O
     const guidance = classifyOccupancyReviewAction(reasons, { propertyId, unitId, tenantId, supportingLeaseId: canonicalState.supportingLeaseId });
     const propertyName = text(property.name || property.addressLine1) || "Property";
     const unitLabel = text(unit.unitNumber || unit.label) || "Unit";
-    items.push({ id: stableId(landlordId, "unit", `${propertyId}:${unitId}`), scope: "unit", landlordId, propertyId, propertyName, unitId, unitLabel, tenantId, tenantName: tenantName(tenant), supportingLeaseId: canonicalState.supportingLeaseId, candidateLeaseIds: candidates, canonicalState, reasons, ...guidance, stableSortKey: `${guidance.severity}:${propertyName.toLowerCase()}:${unitLabel.toLowerCase()}:${unitId}` });
+    items.push({ id: stableId(landlordId, "unit", `${propertyId}:${unitId}`), scope: "unit", landlordId, propertyId, propertyName, unitId, unitLabel, tenantId, tenantName: tenantName(tenant), supportingLeaseId: canonicalState.supportingLeaseId, candidateLeaseIds: candidates, canonicalState, reasons, ...guidance, stableSortKey: `${guidance.severity}:${propertyName.toLowerCase()}:${unitLabel.toLowerCase()}:${unitId}`, remediationSubtype: null, resolutionAvailable: false, resolutionType: null, diagnosticCategory: null, supportingEvidence: [], expectedStateToken: null });
   }
 
   const representedTenants = new Set(items.map((item) => item.tenantId).filter(Boolean));
@@ -142,8 +150,9 @@ export function aggregateOccupancyReviewWorkspace(landlordId: string, records: O
     const canonicalState = buildCanonicalLeaseOccupancyProjection({ leases: tenantLeases, context: { landlordId, tenantId }, persistedTenantStatus: tenant.status, currentLeasePointerId: tenant.currentLeaseId, tenantId });
     if (!canonicalState.reasons.includes("TENANT_CURRENT_WITHOUT_CURRENT_LEASE")) continue;
     const guidance = classifyOccupancyReviewAction(canonicalState.reasons, { tenantId, supportingLeaseId: canonicalState.supportingLeaseId });
+    const remediation = classifyStaleTenantRelationship({ landlordId, tenantId, records: { tenant, leases: records.leases, tenancies: records.tenancies, units: records.units, properties: records.properties, canonicalEvents: records.canonicalEvents || [] } });
     const name = tenantName(tenant) || "Tenant record";
-    items.push({ id: stableId(landlordId, "tenant", tenantId), scope: "tenant", landlordId, propertyId: null, propertyName: null, unitId: null, unitLabel: null, tenantId, tenantName: name, supportingLeaseId: canonicalState.supportingLeaseId, candidateLeaseIds: [], canonicalState, reasons: canonicalState.reasons, ...guidance, stableSortKey: `${guidance.severity}:tenant:${name.toLowerCase()}:${tenantId}` });
+    items.push({ id: stableId(landlordId, "tenant", tenantId), scope: "tenant", landlordId, propertyId: null, propertyName: null, unitId: null, unitLabel: null, tenantId, tenantName: name, supportingLeaseId: canonicalState.supportingLeaseId, candidateLeaseIds: [], canonicalState, reasons: canonicalState.reasons, ...guidance, stableSortKey: `${guidance.severity}:tenant:${name.toLowerCase()}:${tenantId}`, remediationSubtype: remediation.remediationSubtype, resolutionAvailable: remediation.resolutionAvailable, resolutionType: remediation.resolutionAvailable ? remediation.resolutionType : null, diagnosticCategory: remediation.diagnosticCategory, supportingEvidence: remediation.supportingEvidence, expectedStateToken: remediation.expectedStateToken });
   }
 
   const severityRank = { high: 0, medium: 1, low: 2 };
@@ -156,9 +165,15 @@ async function landlordRows(collection: string, landlordId: string) {
   return (snap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }));
 }
 
+async function allRows(collection: string) {
+  const snap = await db.collection(collection).get();
+  return (snap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }));
+}
+
 export async function getOccupancyReviewWorkspace(landlordId: string): Promise<OccupancyReviewWorkspace> {
-  const [properties, units, leases, tenants, tenancies] = await Promise.all([
-    landlordRows("properties", landlordId), landlordRows("units", landlordId), landlordRows("leases", landlordId), landlordRows("tenants", landlordId), landlordRows("tenancies", landlordId),
+  const [properties, units, leases, tenants, tenancies, canonicalEventsSnap] = await Promise.all([
+    allRows("properties"), allRows("units"), allRows("leases"), landlordRows("tenants", landlordId), allRows("tenancies"), db.collection("canonicalEvents").get(),
   ]);
-  return aggregateOccupancyReviewWorkspace(landlordId, { properties, units, leases, tenants, tenancies });
+  const canonicalEvents = (canonicalEventsSnap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }));
+  return aggregateOccupancyReviewWorkspace(landlordId, { properties, units, leases, tenants, tenancies, canonicalEvents });
 }

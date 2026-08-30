@@ -16,6 +16,12 @@ export type OccupancyReviewItem = {
   category: "occupancy" | "lease" | "signing" | "tenant_relationship";
   action: "resolve_multiple_current" | "resolve_occupancy" | "continue_signing" | "review_lease_dates" | "review_lease" | "review_tenant_relationship" | "review_only";
   actionTarget: string | null; stableSortKey: string;
+  remediationSubtype: "status_only_stale_after_explicit_ended_occupancy" | null;
+  resolutionAvailable: boolean;
+  resolutionType: "reconcile_stale_tenant_relationship_status" | null;
+  diagnosticCategory: string | null;
+  supportingEvidence: Array<{ evidenceType: "canonical_end_lease" | "canonical_operational_move_out" | "explicit_inactive_tenancy"; effectiveDate: string; safeEvidenceRef: string; attributionStatus: "attributed" }>;
+  expectedStateToken: string | null;
 };
 
 export type OccupancyReviewWorkspace = {

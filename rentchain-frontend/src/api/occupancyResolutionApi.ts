@@ -6,7 +6,8 @@ export type OccupancyResolutionType =
   | "clear_stale_occupancy_record"
   | "link_existing_lease"
   | "resolve_multiple_current_leases"
-  | "reconcile_stale_occupancy_linkage";
+  | "reconcile_stale_occupancy_linkage"
+  | "reconcile_stale_tenant_relationship_status";
 
 export type OccupancyResolutionContext = {
   propertyId: string;
@@ -33,6 +34,14 @@ export async function getOccupancyResolutionContext(input: { propertyId: string;
   const query = new URLSearchParams({ propertyId: input.propertyId, unitId: input.unitId });
   if (input.tenantId) query.set("tenantId", input.tenantId);
   return apiJson<{ ok: true; context: OccupancyResolutionContext }>(`/occupancy-resolutions/context?${query.toString()}`);
+}
+
+export async function submitStaleTenantRelationshipResolution(input: { tenantId: string; expectedStateToken: string; idempotencyKey: string }) {
+  return apiJson<{ ok: true; auditEventId: string | null; idempotent: boolean; outcome: "resolved" | "already_resolved"; context: { postRepairLifecycle: "Past" | null } }>("/occupancy-resolutions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": input.idempotencyKey },
+    body: JSON.stringify({ tenantId: input.tenantId, expectedStateToken: input.expectedStateToken, type: "reconcile_stale_tenant_relationship_status", confirmation: true }),
+  });
 }
 
 export async function submitOccupancyResolution(input: {

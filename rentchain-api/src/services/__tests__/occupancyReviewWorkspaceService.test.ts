@@ -10,6 +10,14 @@ const baseRecords = (): OccupancyReviewRecords => ({
   leases: [], tenancies: [],
 });
 const activeLease = (id: string, overrides: Record<string, unknown> = {}) => ({ id, landlordId, propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "active", startDate: "2026-01-01", endDate: "2027-01-01", executionStatus: "fully_executed", ...overrides });
+const safeStatusOnlyRecords = (): OccupancyReviewRecords => {
+  const records = baseRecords();
+  records.units[0] = { ...records.units[0], status: "vacant", occupancyStatus: "vacant", currentTenantId: null, currentLeaseId: null, tenantId: null, leaseId: null };
+  records.properties[0].units = [{ id: "unit-1", status: "vacant", occupancyStatus: "vacant", currentTenantId: null, currentLeaseId: null, tenantId: null, leaseId: null }];
+  records.tenants[0] = { ...records.tenants[0], status: "current", currentLeaseId: null };
+  records.tenancies = [{ id: "tenancy-ended", landlordId, propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "inactive", moveOutAt: "2026-08-01T00:00:00.000Z", moveOutReason: "LEASE_TERM_END" }];
+  return records;
+};
 
 describe("occupancyReviewWorkspaceService", () => {
   it("returns one stable, high-priority item for a multiple-current unit", () => {
@@ -98,6 +106,62 @@ describe("occupancyReviewWorkspaceService", () => {
     expect(authoritative.tenancies).toEqual(before.tenancies);
     expect(authoritative.units[0].status).toBe(before.units[0].status);
     expect(authoritative.canonicalEvents).toHaveLength(before.canonicalEvents.length);
+    expect(result.items[0]).toMatchObject({ resolutionAvailable: false, diagnosticCategory: "explicit_end_evidence_missing", supportingEvidence: [] });
+  });
+
+  it("exposes only server-authoritative safe metadata for the strict status-only subtype", () => {
+    const records = safeStatusOnlyRecords();
+    const before = structuredClone(records);
+    const result = aggregateOccupancyReviewWorkspace(landlordId, records);
+    expect(result.items[0]).toMatchObject({ resolutionAvailable: true, remediationSubtype: "status_only_stale_after_explicit_ended_occupancy", resolutionType: "reconcile_stale_tenant_relationship_status", expectedStateToken: expect.any(String), supportingEvidence: [expect.objectContaining({ evidenceType: "explicit_inactive_tenancy", attributionStatus: "attributed" })] });
+    expect(JSON.stringify(result.items[0].supportingEvidence)).not.toContain("moveOutReason");
+    expect(records).toEqual(before);
+    records.tenants[0].status = "Past";
+    expect(aggregateOccupancyReviewWorkspace(landlordId, records).items).toEqual([]);
+  });
+
+  it("fails closed when authoritative context contains a foreign active tenancy for the tenant", () => {
+    const records = safeStatusOnlyRecords();
+    records.tenancies.push({ id: "foreign-active", landlordId: "landlord-2", propertyId: "foreign-property", unitId: "foreign-unit", tenantId: "tenant-1", status: "active" });
+
+    const result = aggregateOccupancyReviewWorkspace(landlordId, records);
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ scope: "tenant", resolutionAvailable: false, diagnosticCategory: "ownership_mismatch", supportingEvidence: [] });
+    expect(JSON.stringify(result)).not.toContain("foreign-active");
+    expect(JSON.stringify(result)).not.toContain("landlord-2");
+  });
+
+  it("fails closed when authoritative context contains a foreign inactive tenancy", () => {
+    const records = safeStatusOnlyRecords();
+    records.tenancies.push({ id: "foreign-inactive", landlordId: "landlord-2", propertyId: "foreign-property", unitId: "foreign-unit", tenantId: "tenant-1", status: "inactive", moveOutAt: "2026-07-01T00:00:00.000Z", moveOutReason: "LEASE_TERM_END" });
+
+    const result = aggregateOccupancyReviewWorkspace(landlordId, records);
+
+    expect(result.items[0]).toMatchObject({ resolutionAvailable: false, diagnosticCategory: "ownership_mismatch", supportingEvidence: [] });
+    expect(JSON.stringify(result)).not.toContain("foreign-inactive");
+  });
+
+  it("fails closed when authoritative context contains a foreign unit linkage for the tenant", () => {
+    const records = safeStatusOnlyRecords();
+    records.properties.push({ id: "foreign-property", landlordId: "landlord-2", name: "Foreign Property" });
+    records.units.push({ id: "foreign-unit", landlordId: "landlord-2", propertyId: "foreign-property", status: "occupied", occupancyStatus: "occupied", tenantId: "tenant-1", currentTenantId: "tenant-1" });
+
+    const result = aggregateOccupancyReviewWorkspace(landlordId, records);
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ scope: "tenant", resolutionAvailable: false, diagnosticCategory: "ownership_mismatch", supportingEvidence: [] });
+    expect(JSON.stringify(result)).not.toContain("foreign-unit");
+    expect(JSON.stringify(result)).not.toContain("Foreign Property");
+  });
+
+  it("keeps participant ambiguity visible to the eligibility classifier at the aggregation boundary", () => {
+    const records = safeStatusOnlyRecords();
+    records.leases.push({ id: "ambiguous-lease", landlordId, propertyId: "missing-property", unitId: "missing-unit", tenantId: "tenant-1", tenantIds: ["tenant-1", "tenant-2"], status: "ended", endedAt: "2026-08-01T00:00:00.000Z" });
+
+    const result = aggregateOccupancyReviewWorkspace(landlordId, records);
+
+    expect(result.items[0]).toMatchObject({ resolutionAvailable: false, diagnosticCategory: "participant_ambiguous", supportingEvidence: [] });
   });
 
   it("omits coherent occupied and vacant units", () => {
