@@ -146,9 +146,9 @@ const PREVIEW_BACKEND_TARGETS: Record<string, PreviewBackendTarget> = {
   [PREVIEW_BACKEND_TARGET_KEYS.pr1582]: {
     key: PREVIEW_BACKEND_TARGET_KEYS.pr1582,
     cloudRunServiceUrl:
-      "https://rentchain-pr1582-qa-occupied-without-lease-containment-501298948635.northamerica-northeast1.run.app",
+      "https://rentchain-pr1582-qa-occupied-without-lease-contai-glistw4pya-nn.a.run.app",
     cloudRunIdTokenAudience:
-      "https://rentchain-pr1582-qa-occupied-without-lease-containment-501298948635.northamerica-northeast1.run.app",
+      "https://rentchain-pr1582-qa-occupied-without-lease-contai-glistw4pya-nn.a.run.app",
     temporary: true,
   },
 };
