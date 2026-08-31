@@ -12,6 +12,7 @@ import {
   selectCanonicalCurrentLease,
 } from "../lib/leases/canonicalLeaseOccupancyState";
 import { resolveUnitReference, toCanonicalLeaseRecord, toCanonicalUnitRecord } from "./leaseCanonicalizationService";
+import { leaseStartDeterministicId } from "./leaseStart/leaseStartExpectedState";
 export {
   getTenantRelationshipResolutionContext,
   resolveStaleTenantRelationshipStatus,
@@ -25,7 +26,23 @@ export type OccupancyResolutionType =
   | "link_existing_lease"
   | "resolve_multiple_current_leases"
   | "reconcile_stale_occupancy_linkage"
+  | "reconcile_ended_occupancy_to_vacant"
   | "reconcile_stale_tenant_relationship_status";
+
+export const ENDED_OCCUPANCY_REMEDIATION_SUBTYPE = "ended_occupancy_evidence_with_stale_unit_occupancy" as const;
+
+export type EndedOccupancyEvidence = {
+  evidenceType: "canonical_end_occupancy" | "explicit_inactive_tenancy";
+  safeEvidenceRef: string;
+  effectiveAt: string;
+};
+
+export type EndedOccupancyRemediation = {
+  classification: typeof ENDED_OCCUPANCY_REMEDIATION_SUBTYPE | "not_applicable";
+  repairEligible: boolean;
+  blockedReason: string | null;
+  supportingEvidence: EndedOccupancyEvidence[];
+};
 
 export type ContextMismatchRemediationClassification =
   | "stale_occupancy_linkage_with_unique_authoritative_lease"
@@ -76,6 +93,7 @@ export type OccupancyResolutionContext = {
   }>;
   activeLeaseRequiresEndWorkflow: boolean;
   contextMismatchRemediation: ContextMismatchRemediation;
+  endedOccupancyRemediation: EndedOccupancyRemediation;
 };
 
 export class OccupancyResolutionError extends Error {
@@ -105,6 +123,84 @@ function hash(value: unknown): string {
 
 function safeRef(prefix: string, value: unknown): string {
   return `${prefix}:${hash([prefix, text(value)]).slice(0, 32)}`;
+}
+
+function normalizedState(value: unknown): string {
+  return text(value).toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+function iso(value: unknown): string | null {
+  if (!value) return null;
+  const parsed = typeof (value as any)?.toDate === "function" ? (value as any).toDate() : new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function canonicalRefs(prefix: string, value: string): Set<string> {
+  return new Set([safeRef(prefix, value), leaseStartDeterministicId(prefix, [value])]);
+}
+
+function classifyEndedOccupancyRemediation(input: {
+  landlordId: string; propertyId: string; unitId: string; tenantId: string | null;
+  unit: any; embeddedUnitMatches: any[]; diagnosticLeases: any[]; diagnosticTenancies: any[];
+  canonicalEvents: any[]; canonicalState: CanonicalLeaseOccupancyProjection;
+}): EndedOccupancyRemediation {
+  const blocked = (reason: string): EndedOccupancyRemediation => ({ classification: "not_applicable", repairEligible: false, blockedReason: reason, supportingEvidence: [] });
+  if (!input.canonicalState.reasons.includes("OCCUPIED_WITHOUT_CURRENT_LEASE")) return blocked("The canonical occupied-without-current-lease reason is not present.");
+  if (input.canonicalState.reasons.includes("MULTIPLE_CURRENT_LEASES")) return blocked("Multiple current leases require their dedicated resolution.");
+  if (input.canonicalState.reasons.includes("CURRENT_LEASE_CONTEXT_MISMATCH")) return blocked("Current lease context mismatch requires its dedicated resolution.");
+  if (!input.tenantId || input.embeddedUnitMatches.length !== 1) return blocked("The stale occupancy context is not uniquely attributable.");
+  if (input.diagnosticTenancies.some((row) => text(row.landlordId) !== input.landlordId)) return blocked("A tenancy record is outside the authorized landlord context.");
+
+  const attributedTenantIds = new Set([
+    ...pointerValues(input.unit, ["tenantId", "currentTenantId"]),
+    ...pointerValues(input.embeddedUnitMatches[0], ["tenantId", "currentTenantId"]),
+    ...input.diagnosticLeases.flatMap(participantTenantIds),
+    ...input.diagnosticTenancies.map((row) => text(row.tenantId)).filter(Boolean),
+  ]);
+  if (attributedTenantIds.size !== 1 || !attributedTenantIds.has(input.tenantId)) return blocked("The stale occupancy context is not uniquely attributable.");
+  if (input.diagnosticTenancies.some((row) => ["active", "current", "occupied"].includes(normalizedState(row.status)) && !row.moveOutAt)) return blocked("An active tenancy still supports occupancy.");
+  if (input.diagnosticLeases.some((lease) => deriveCanonicalLeaseTermState(toCanonicalLeaseStateInput(lease)).state === "upcoming")) return blocked("An upcoming lease requires preservation.");
+
+  const landlordRefs = canonicalRefs("landlord", input.landlordId);
+  const propertyRefs = canonicalRefs("property", input.propertyId);
+  const unitRefs = canonicalRefs("unit", input.unitId);
+  const unitLabel = text(input.unit.unitNumber || input.unit.label);
+  if (unitLabel) unitRefs.add(leaseStartDeterministicId("unit", [unitLabel]));
+  const tenantRefs = canonicalRefs("tenant", input.tenantId);
+  const relevantEvents = input.canonicalEvents.filter((event) => {
+    const metadata = event.metadata || {};
+    const eventTenantRefs = [metadata.tenantRef, ...(Array.isArray(metadata.tenantRefs) ? metadata.tenantRefs : [])].map(text);
+    return landlordRefs.has(text(metadata.landlordRef)) &&
+      (propertyRefs.has(text(event.resource?.parentId)) || propertyRefs.has(text(metadata.propertyRef))) &&
+      unitRefs.has(text(metadata.unitRef)) && eventTenantRefs.some((ref) => tenantRefs.has(ref));
+  });
+  const evidence: EndedOccupancyEvidence[] = [];
+  for (const event of relevantEvents) {
+    if (event.immutable !== true || event.appendOnly !== true || event.status !== "succeeded") continue;
+    if (event.type !== "lease.occupancy_ended" || event.action !== "occupancy_ended") continue;
+    const effectiveAt = iso(event.metadata?.effectiveDate || event.occurredAt);
+    if (effectiveAt) evidence.push({ evidenceType: "canonical_end_occupancy", safeEvidenceRef: safeRef("evidence", event.id || event.eventId), effectiveAt });
+  }
+  const inactive = input.diagnosticTenancies.filter((row) =>
+    text(row.landlordId) === input.landlordId && text(row.propertyId) === input.propertyId &&
+    matchesTenancyUnitContext(row, input.propertyId, input.unitId, unitLabel) && text(row.tenantId) === input.tenantId &&
+    ["inactive", "past", "ended"].includes(normalizedState(row.status)) && row.moveOutAt && text(row.moveOutReason)
+  );
+  if (inactive.length > 1) return blocked("More than one inactive tenancy evidence record is attributable to this context.");
+  if (inactive.length === 1) {
+    const effectiveAt = iso(inactive[0].moveOutAt);
+    if (effectiveAt) evidence.push({ evidenceType: "explicit_inactive_tenancy", safeEvidenceRef: safeRef("tenancy_evidence", inactive[0].id), effectiveAt });
+  }
+  if (!evidence.length) return blocked("Explicit authoritative end evidence is missing.");
+  const latestEnd = evidence.map((item) => item.effectiveAt).sort().at(-1)!;
+  const laterOccupancyAuthority = relevantEvents.some((event) => {
+    const occurredAt = iso(event.occurredAt);
+    if (!occurredAt || occurredAt <= latestEnd || event.status !== "succeeded" || event.immutable !== true || event.appendOnly !== true) return false;
+    return (event.type === "lease.occupancy_started" && event.action === "occupancy_started") ||
+      event.metadata?.resultingCanonicalOccupancyState === "occupied" || event.metadata?.after?.occupancyState === "occupied";
+  });
+  if (laterOccupancyAuthority) return blocked("Later occupancy authority supersedes the end evidence.");
+  return { classification: ENDED_OCCUPANCY_REMEDIATION_SUBTYPE, repairEligible: true, blockedReason: null, supportingEvidence: evidence.sort((a, b) => a.safeEvidenceRef.localeCompare(b.safeEvidenceRef)) };
 }
 
 function participantTenantIds(lease: any): string[] {
@@ -263,6 +359,7 @@ function stateToken(input: {
   tenants: any[];
   leases: any[];
   tenancies: any[];
+  canonicalEvents: any[];
 }): string {
   return hash({
     canonicalState: { ...input.canonicalState, reasons: [...input.canonicalState.reasons].sort() },
@@ -292,8 +389,9 @@ function stateToken(input: {
       occupancyEffective: lease.occupancyEffective === true,
       occupancyDisposition: lease.occupancyDisposition || null,
     })).sort((a, b) => a.id.localeCompare(b.id)),
-    tenancies: input.tenancies.map((row) => ({ id: row.id, landlordId: row.landlordId, propertyId: row.propertyId, unitId: row.unitId, unitLabel: row.unitLabel, tenantId: row.tenantId, leaseId: row.leaseId, status: row.status, moveOutAt: row.moveOutAt, updatedAt: row.updatedAt }))
+    tenancies: input.tenancies.map((row) => ({ id: row.id, landlordId: row.landlordId, propertyId: row.propertyId, unitId: row.unitId, unitLabel: row.unitLabel, tenantId: row.tenantId, leaseId: row.leaseId, status: row.status, moveOutAt: row.moveOutAt, moveOutReason: row.moveOutReason, updatedAt: row.updatedAt }))
       .sort((a, b) => a.id.localeCompare(b.id)),
+    canonicalEvents: input.canonicalEvents.map((event) => ({ id: event.id, type: event.type, action: event.action, status: event.status, occurredAt: event.occurredAt, immutable: event.immutable, appendOnly: event.appendOnly, resource: event.resource, metadata: event.metadata })).sort((a, b) => text(a.id).localeCompare(text(b.id))),
   });
 }
 
@@ -306,13 +404,15 @@ async function readResolutionContext(
   const unitsQuery = db.collection("units").where("propertyId", "==", input.propertyId).where("landlordId", "==", input.landlordId);
   const leasesQuery = db.collection("leases").where("landlordId", "==", input.landlordId);
   const tenanciesQuery = db.collection("tenancies").where("propertyId", "==", input.propertyId);
+  const canonicalEventsQuery = db.collection("canonicalEvents");
   const get = (target: any) => typeof reader.get === "function" ? reader.get(target) : target.get();
-  const [propertySnap, unitSnap, unitsSnap, leaseSnap, tenancySnap] = await Promise.all([
+  const [propertySnap, unitSnap, unitsSnap, leaseSnap, tenancySnap, canonicalEventsSnap] = await Promise.all([
     get(propertyRef),
     get(unitRef),
     get(unitsQuery),
     get(leasesQuery),
     get(tenanciesQuery),
+    get(canonicalEventsQuery),
   ]);
   if (!propertySnap.exists) throw new OccupancyResolutionError("property_not_found", 404);
   if (!unitSnap.exists) throw new OccupancyResolutionError("unit_not_found", 404);
@@ -398,6 +498,8 @@ async function readResolutionContext(
     tenancies: diagnosticTenancies,
     canonicalState,
   });
+  const canonicalEvents = (canonicalEventsSnap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }));
+  const endedOccupancyRemediation = classifyEndedOccupancyRemediation({ landlordId: input.landlordId, propertyId: input.propertyId, unitId: input.unitId, tenantId, unit, embeddedUnitMatches, diagnosticLeases, diagnosticTenancies, canonicalEvents, canonicalState });
   const activeLeaseRequiresEndWorkflow = reviewNeeded && candidates.length === 1 && canonicalState.supportingLeaseId === candidates[0].id;
   const eligibleResolutionTypes: OccupancyResolutionType[] = [];
   const uniquelyAttributedOperationalMoveOut = hasUniqueOperationalMoveOutAttribution({
@@ -423,6 +525,7 @@ async function readResolutionContext(
     }
   }
   if (contextMismatchRemediation.repairEligible) eligibleResolutionTypes.push("reconcile_stale_occupancy_linkage");
+  if (endedOccupancyRemediation.repairEligible) eligibleResolutionTypes.push("reconcile_ended_occupancy_to_vacant");
   const context: OccupancyResolutionContext = {
     propertyId: input.propertyId,
     unitId: input.unitId,
@@ -452,9 +555,10 @@ async function readResolutionContext(
     })),
     activeLeaseRequiresEndWorkflow,
     contextMismatchRemediation,
+    endedOccupancyRemediation,
   };
-  context.expectedStateToken = stateToken({ canonicalState, property, unit, tenants, leases: diagnosticLeases, tenancies: diagnosticTenancies });
-  return { context, records: { propertyRef, unitRef, property, unit, tenant, tenants, tenantsById, tenantRefs, leases: relatedLeases, diagnosticLeases, diagnosticTenancies, tenancies } };
+  context.expectedStateToken = stateToken({ canonicalState, property, unit, tenants, leases: diagnosticLeases, tenancies: diagnosticTenancies, canonicalEvents });
+  return { context, records: { propertyRef, unitRef, property, unit, tenant, tenants, tenantsById, tenantRefs, leases: relatedLeases, diagnosticLeases, diagnosticTenancies, tenancies, canonicalEvents } };
 }
 
 export async function getOccupancyResolutionContext(input: ResolutionContextInput): Promise<OccupancyResolutionContext> {
@@ -698,6 +802,12 @@ export async function resolveOccupancy(input: ResolutionContextInput & {
       if (nextTenant) nextTenant.currentLeaseId = selectedLease.id;
       ["status", "occupancyStatus", "tenantId", "currentTenantId", "leaseId", "currentLeaseId"].forEach((field) => changedFields.add(`unit.${field}`));
       changedFields.add("tenant.currentLeaseId");
+    } else if (input.type === "reconcile_ended_occupancy_to_vacant") {
+      if (loaded.context.endedOccupancyRemediation.classification !== ENDED_OCCUPANCY_REMEDIATION_SUBTYPE || !loaded.context.endedOccupancyRemediation.repairEligible) {
+        throw new OccupancyResolutionError("ended_occupancy_classification_changed", 409, loaded.context);
+      }
+      nextUnit = { ...nextUnit, status: "vacant", occupancyStatus: "vacant", tenantId: null, currentTenantId: null, leaseId: null, currentLeaseId: null, occupancySource: "ended_occupancy_evidence_reconciliation", occupancyUpdatedAt: now, updatedAt: now };
+      ["status", "occupancyStatus", "tenantId", "currentTenantId", "leaseId", "currentLeaseId"].forEach((field) => changedFields.add(`unit.${field}`));
     } else {
       nextUnit = { ...nextUnit, status: "vacant", occupancyStatus: "vacant", tenantId: null, currentTenantId: null, leaseId: null, currentLeaseId: null, occupancySource: "occupancy_resolution", occupancyUpdatedAt: now, updatedAt: now };
       if (nextTenant) {
@@ -789,7 +899,7 @@ export async function resolveOccupancy(input: ResolutionContextInput & {
       if (nextTenantRef && Object.keys(tenantUpdates).length) transaction.set(nextTenantRef, { ...tenantUpdates, updatedAt: now }, { merge: true });
     } else {
       transaction.set(records.unitRef, nextUnit, { merge: true });
-      if (input.type !== "resolve_multiple_current_leases" && records.tenant?.ref && nextTenant) transaction.set(records.tenant.ref, { currentLeaseId: nextTenant.currentLeaseId, ...(input.type === "link_existing_lease" ? {} : { status: nextTenant.status }), updatedAt: now }, { merge: true });
+      if (input.type !== "resolve_multiple_current_leases" && input.type !== "reconcile_ended_occupancy_to_vacant" && records.tenant?.ref && nextTenant) transaction.set(records.tenant.ref, { currentLeaseId: nextTenant.currentLeaseId, ...(input.type === "link_existing_lease" ? {} : { status: nextTenant.status }), updatedAt: now }, { merge: true });
     }
 
     const auditEventId = `occupancy_resolution:${requestId}`;
@@ -797,9 +907,9 @@ export async function resolveOccupancy(input: ResolutionContextInput & {
     transaction.create(auditRef, {
       id: auditEventId,
       version: "v1",
-      type: input.type === "resolve_multiple_current_leases" ? "occupancy.multiple_current_resolved" : input.type === "reconcile_stale_occupancy_linkage" ? "occupancy.stale_linkage_reconciled" : "lease.occupancy_resolution_recorded",
+      type: input.type === "resolve_multiple_current_leases" ? "occupancy.multiple_current_resolved" : input.type === "reconcile_stale_occupancy_linkage" ? "occupancy.stale_linkage_reconciled" : input.type === "reconcile_ended_occupancy_to_vacant" ? "occupancy.ended_evidence_reconciled" : "lease.occupancy_resolution_recorded",
       domain: "lease",
-      action: input.type === "resolve_multiple_current_leases" ? "multiple_current_resolved" : input.type === "reconcile_stale_occupancy_linkage" ? "stale_occupancy_linkage_reconciled" : "occupancy_resolution_recorded",
+      action: input.type === "resolve_multiple_current_leases" ? "multiple_current_resolved" : input.type === "reconcile_stale_occupancy_linkage" ? "stale_occupancy_linkage_reconciled" : input.type === "reconcile_ended_occupancy_to_vacant" ? "ended_occupancy_to_vacant_reconciled" : "occupancy_resolution_recorded",
       status: "succeeded",
       actor: { type: "landlord", id: safeRef("actor", input.actorId), role: "landlord", displayName: null },
       resource: { type: "unit", id: safeRef("unit", input.unitId), parentType: "property", parentId: safeRef("property", input.propertyId) },
@@ -821,8 +931,10 @@ export async function resolveOccupancy(input: ResolutionContextInput & {
         originalReasons: [...loaded.context.canonicalState.reasons].sort(),
         resultingReasons: [...resultingCanonicalState.reasons].sort(),
         resolutionType: input.type,
-        landlordAssertion: input.type === "record_operational_move_out" ? "operational_occupancy_ended" : input.type === "link_existing_lease" ? "selected_lease_supports_current_occupancy" : input.type === "resolve_multiple_current_leases" ? "selected_lease_supports_current_occupancy_without_legal_determination" : input.type === "reconcile_stale_occupancy_linkage" ? "authoritative_lease_occupancy_linkage_confirmed" : "occupancy_projection_is_stale",
+        landlordAssertion: input.type === "record_operational_move_out" ? "operational_occupancy_ended" : input.type === "link_existing_lease" ? "selected_lease_supports_current_occupancy" : input.type === "resolve_multiple_current_leases" ? "selected_lease_supports_current_occupancy_without_legal_determination" : input.type === "reconcile_stale_occupancy_linkage" ? "authoritative_lease_occupancy_linkage_confirmed" : input.type === "reconcile_ended_occupancy_to_vacant" ? "authoritative_end_evidence_proves_prior_occupancy_ended" : "occupancy_projection_is_stale",
         effectiveDate: input.effectiveDate || null,
+        remediationSubtype: input.type === "reconcile_ended_occupancy_to_vacant" ? ENDED_OCCUPANCY_REMEDIATION_SUBTYPE : null,
+        supportingEndedEvidence: input.type === "reconcile_ended_occupancy_to_vacant" ? loaded.context.endedOccupancyRemediation.supportingEvidence : [],
         changedFields: [...changedFields].sort(),
         before: { occupancyState: loaded.context.canonicalState.occupancyState, tenantRelationshipState: loaded.context.canonicalState.tenantRelationshipState, supportingLeaseRef: loaded.context.canonicalState.supportingLeaseId ? safeRef("lease", loaded.context.canonicalState.supportingLeaseId) : null },
         after: { occupancyState: resultingCanonicalState.occupancyState, tenantRelationshipState: resultingCanonicalState.tenantRelationshipState, supportingLeaseRef: resultingCanonicalState.supportingLeaseId ? safeRef("lease", resultingCanonicalState.supportingLeaseId) : null },
@@ -850,6 +962,12 @@ export async function resolveOccupancy(input: ResolutionContextInput & {
         blockedReason: "The prior mismatch was re-evaluated after reconciliation.",
         mismatchedComponents: [],
         staleLinkageFields: [],
+      },
+      endedOccupancyRemediation: {
+        classification: "not_applicable",
+        repairEligible: false,
+        blockedReason: "The stale occupied projection was reconciled from authoritative end evidence.",
+        supportingEvidence: [],
       },
     };
     transaction.create(requestRef, { landlordId: input.landlordId, payloadHash, auditEventId, createdAt: now, resultContext });
