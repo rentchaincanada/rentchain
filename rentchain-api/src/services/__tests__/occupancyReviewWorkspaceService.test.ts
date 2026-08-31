@@ -42,6 +42,58 @@ describe("occupancyReviewWorkspaceService", () => {
     expect(result.items[0].reasons).toContain("OCCUPIED_WITHOUT_CURRENT_LEASE");
   });
 
+  it("discovers an identifiable embedded-only occupied unit without materializing a standalone unit", () => {
+    const records = baseRecords();
+    records.units = [];
+    records.properties[0].units = [{ id: "embedded-1", unitNumber: "E1", status: "occupied", currentTenantId: "tenant-1" }];
+    const before = structuredClone(records);
+
+    const result = aggregateOccupancyReviewWorkspace(landlordId, records);
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ propertyId: "property-1", unitId: "embedded-1", unitLabel: "E1", reasons: expect.arrayContaining(["OCCUPIED_WITHOUT_CURRENT_LEASE"]), action: "review_only", actionTarget: null });
+    expect(records).toEqual(before);
+  });
+
+  it("fails closed for an embedded-only unit without stable identity", () => {
+    const records = baseRecords();
+    records.units = [];
+    records.properties[0].units = [{ status: "occupied" }];
+    records.tenants[0].status = "former";
+    expect(aggregateOccupancyReviewWorkspace(landlordId, records).items).toEqual([]);
+  });
+
+  it("surfaces standalone and embedded disagreement through canonical evaluation once", () => {
+    const records = baseRecords();
+    records.units[0] = { ...records.units[0], status: "vacant", currentTenantId: null };
+    records.properties[0].units = [{ id: "unit-1", unitNumber: "1", status: "occupied", currentTenantId: "tenant-1" }];
+
+    const result = aggregateOccupancyReviewWorkspace(landlordId, records);
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].reasons).toContain("OCCUPIED_WITHOUT_CURRENT_LEASE");
+  });
+
+  it("discovers a standalone unit missing landlordId through its owned property", () => {
+    const records = baseRecords();
+    delete records.units[0].landlordId;
+    expect(aggregateOccupancyReviewWorkspace(landlordId, records).items[0].reasons).toContain("OCCUPIED_WITHOUT_CURRENT_LEASE");
+  });
+
+  it("discovers a supported legacy embedded unit identity by unit number", () => {
+    const records = baseRecords();
+    records.units = [];
+    records.properties[0].units = [{ unitNumber: "LEGACY-7", occupancyStatus: "occupied", tenantId: "tenant-1" }];
+    expect(aggregateOccupancyReviewWorkspace(landlordId, records).items[0]).toMatchObject({ unitId: "LEGACY-7", reasons: expect.arrayContaining(["OCCUPIED_WITHOUT_CURRENT_LEASE"]) });
+  });
+
+  it("uses a landlord-owned tenancy lacking landlordId as canonical context input", () => {
+    const records = baseRecords();
+    records.units[0].status = "vacant";
+    records.tenancies = [{ id: "legacy-tenancy", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "active" }];
+    expect(aggregateOccupancyReviewWorkspace(landlordId, records).items[0].reasons).toContain("OCCUPIED_WITHOUT_CURRENT_LEASE");
+  });
+
   it("reports vacant with a current lease", () => {
     const records = baseRecords(); records.units[0].status = "vacant"; records.units[0].currentLeaseId = "lease-a"; records.leases = [activeLease("lease-a")];
     expect(aggregateOccupancyReviewWorkspace(landlordId, records).items[0].reasons).toContain("VACANT_WITH_CURRENT_LEASE");
@@ -172,8 +224,19 @@ describe("occupancyReviewWorkspaceService", () => {
   });
 
   it("excludes every cross-landlord record", () => {
-    const records = baseRecords(); records.properties.push({ id: "other-property", landlordId: "other", name: "Other" }); records.units.push({ id: "other-unit", landlordId: "other", propertyId: "other-property", status: "occupied" });
-    expect(aggregateOccupancyReviewWorkspace(landlordId, records).items.every((item) => item.landlordId === landlordId)).toBe(true);
+    const records = baseRecords(); records.properties.push({ id: "other-property", landlordId: "other", name: "Other", units: [{ id: "other-embedded", status: "occupied" }] }); records.units.push({ id: "other-unit", landlordId: "other", propertyId: "other-property", status: "occupied" });
+    const result = aggregateOccupancyReviewWorkspace(landlordId, records);
+    expect(result.items.every((item) => item.landlordId === landlordId)).toBe(true);
+    expect(JSON.stringify(result)).not.toContain("other-property");
+    expect(JSON.stringify(result)).not.toContain("other-embedded");
+  });
+
+  it("deduplicates one logical conflict discovered from standalone, embedded, lease, and tenancy sources", () => {
+    const records = baseRecords();
+    records.properties[0].units = [{ unitId: "unit-1", unitNumber: "1", status: "occupied", currentTenantId: "tenant-1" }];
+    records.leases = [activeLease("ended-lease", { status: "ended", endedAt: "2026-07-01" })];
+    records.tenancies = [{ id: "ended-tenancy", landlordId, propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "inactive", moveOutAt: "2026-07-01", moveOutReason: "LEASE_TERM_END" }];
+    expect(aggregateOccupancyReviewWorkspace(landlordId, records).items.filter((item) => item.scope === "unit")).toHaveLength(1);
   });
 
   it("uses deterministic precedence and safely classifies every canonical reason", () => {
