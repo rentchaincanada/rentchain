@@ -32,6 +32,7 @@ export const PREVIEW_BACKEND_TARGET_KEYS = {
   pr1580: "pr1580-tenant-status-reconcile-cert",
   pr1582: "pr1582-occupied-without-lease-containment-cert",
   pr1585: "pr1585-ended-occupancy-remediation-cert",
+  pr1587: "pr1587-review-needed-discovery-cert",
 } as const;
 
 export type PreviewBackendTarget = {
@@ -158,6 +159,14 @@ const PREVIEW_BACKEND_TARGETS: Record<string, PreviewBackendTarget> = {
       "https://rentchain-pr1585-qa-n2-glistw4pya-nn.a.run.app",
     cloudRunIdTokenAudience:
       "https://rentchain-pr1585-qa-n2-glistw4pya-nn.a.run.app",
+    temporary: true,
+  },
+  [PREVIEW_BACKEND_TARGET_KEYS.pr1587]: {
+    key: PREVIEW_BACKEND_TARGET_KEYS.pr1587,
+    cloudRunServiceUrl:
+      "https://rentchain-pr1587-qa-n3-glistw4pya-nn.a.run.app",
+    cloudRunIdTokenAudience:
+      "https://rentchain-pr1587-qa-n3-glistw4pya-nn.a.run.app",
     temporary: true,
   },
 };
