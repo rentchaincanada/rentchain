@@ -29,6 +29,7 @@ const LABELS: Record<OccupancyResolutionType, string> = {
   link_existing_lease: "Link an existing valid lease",
   resolve_multiple_current_leases: "Select the lease that supports current occupancy",
   reconcile_stale_occupancy_linkage: "Correct occupancy links",
+  reconcile_ended_occupancy_to_vacant: "Mark proven-ended occupancy vacant",
 };
 
 const OCCUPANCY_ERROR_COPY: Record<string, string> = {

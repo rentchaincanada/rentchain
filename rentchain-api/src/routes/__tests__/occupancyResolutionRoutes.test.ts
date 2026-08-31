@@ -58,6 +58,12 @@ describe("occupancyResolutionRoutes", () => {
     expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ landlordId: "landlord-1", selectedLeaseId: "lease-a", expectedStateToken: "state-1", idempotencyKey: "multiple-current-resolution-1" }));
   });
 
+  it("accepts the bounded ended-evidence vacancy action on the existing route", async () => {
+    const response = await request(await app()).post("/").set("Idempotency-Key", "ended-evidence-1").send({ propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", type: "reconcile_ended_occupancy_to_vacant", expectedStateToken: "state-1", confirmation: true });
+    expect(response.status).toBe(200);
+    expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ type: "reconcile_ended_occupancy_to_vacant", tenantId: "tenant-1", idempotencyKey: "ended-evidence-1" }));
+  });
+
   it("returns and submits the tenant-scoped status-only resolution without unit context", async () => {
     const instance = await app();
     const get = await request(instance).get("/context?tenantId=tenant-1");

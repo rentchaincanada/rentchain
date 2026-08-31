@@ -27,7 +27,7 @@ const { fakeDb, seed, read, remove, list, failAudit, reset } = vi.hoisted(() => 
         get: (target: any) => target.get(),
         set: (ref: any, value: any, options?: any) => writes.push(() => ref.set(value, options)),
         create: (ref: any, value: any) => writes.push(() => {
-          if (rejectAudit && ["occupancy_resolution_recorded", "multiple_current_resolved", "stale_occupancy_linkage_reconciled"].includes(String(value?.action))) throw new Error("audit_failed");
+          if (rejectAudit && ["occupancy_resolution_recorded", "multiple_current_resolved", "stale_occupancy_linkage_reconciled", "ended_occupancy_to_vacant_reconciled"].includes(String(value?.action))) throw new Error("audit_failed");
           return ref.create(value);
         }),
       });
@@ -60,6 +60,7 @@ const { fakeDb, seed, read, remove, list, failAudit, reset } = vi.hoisted(() => 
 vi.mock("../../firebase", () => ({ db: fakeDb }));
 
 import { getOccupancyResolutionContext, resolveOccupancy } from "../occupancyResolutionService";
+import { leaseStartDeterministicId } from "../leaseStart/leaseStartExpectedState";
 
 const base = { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1" };
 
@@ -69,6 +70,23 @@ function seedExpiredReview() {
   seed("tenants", "tenant-1", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", status: "Current", currentLeaseId: "lease-past" });
   seed("tenancies", "tenancy-1", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "active" });
   seed("leases", "lease-past", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "active", executionStatus: "fully_executed", startDate: "2025-05-01", endDate: "2026-04-30" });
+}
+
+function seedProvenEndedOccupancy(evidence: "event" | "tenancy" = "event") {
+  seed("properties", "property-1", { landlordId: "landlord-1", name: "Harbour House", units: [{ id: "unit-1", unitNumber: "1A", status: "occupied", occupancyStatus: "occupied", currentLeaseId: "lease-ended", currentTenantId: "tenant-1" }] });
+  seed("units", "unit-1", { landlordId: "landlord-1", propertyId: "property-1", unitNumber: "1A", status: "occupied", occupancyStatus: "occupied", currentLeaseId: "lease-ended", currentTenantId: "tenant-1" });
+  seed("tenants", "tenant-1", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", status: "Past", currentLeaseId: null, marker: "tenant-unchanged" });
+  seed("leases", "lease-ended", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "ended", executionStatus: "fully_executed", occupancyEffective: false, startDate: "2025-05-01", endDate: "2026-04-30", endedAt: "2026-08-01T00:00:00.000Z", marker: "lease-unchanged" });
+  if (evidence === "tenancy") {
+    seed("tenancies", "tenancy-ended", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", leaseId: "lease-ended", status: "inactive", moveOutAt: "2026-08-01T00:00:00.000Z", moveOutReason: "LEASE_TERM_END", marker: "tenancy-unchanged" });
+  } else {
+    seed("canonicalEvents", "end-event", {
+      type: "lease.occupancy_ended", action: "occupancy_ended", status: "succeeded", immutable: true, appendOnly: true,
+      occurredAt: "2026-08-01T00:00:00.000Z",
+      resource: { type: "lease", parentId: leaseStartDeterministicId("property", ["property-1"]) },
+      metadata: { landlordRef: leaseStartDeterministicId("landlord", ["landlord-1"]), unitRef: leaseStartDeterministicId("unit", ["unit-1"]), tenantRef: leaseStartDeterministicId("tenant", ["tenant-1"]), effectiveDate: "2026-08-01T00:00:00.000Z" },
+    });
+  }
 }
 
 function seedMultipleCurrent() {
@@ -97,6 +115,60 @@ function seedRepairableContextMismatch(overrides: { unit?: any; embedded?: any; 
 
 describe("occupancyResolutionService", () => {
   beforeEach(() => reset());
+
+  it.each(["event", "tenancy"] as const)("reconciles stale occupied projection from explicit %s end evidence only", async (evidence) => {
+    seedProvenEndedOccupancy(evidence);
+    const beforeTenant = structuredClone(read("tenants", "tenant-1"));
+    const beforeLease = structuredClone(read("leases", "lease-ended"));
+    const beforeTenancies = structuredClone(list("tenancies"));
+    const context = await getOccupancyResolutionContext(base);
+    expect(context.canonicalState.reasons).toContain("OCCUPIED_WITHOUT_CURRENT_LEASE");
+    expect(context.endedOccupancyRemediation).toMatchObject({ classification: "ended_occupancy_evidence_with_stale_unit_occupancy", repairEligible: true, supportingEvidence: [expect.objectContaining({ evidenceType: evidence === "event" ? "canonical_end_occupancy" : "explicit_inactive_tenancy" })] });
+    expect(context.eligibleResolutionTypes).toContain("reconcile_ended_occupancy_to_vacant");
+    expect(context.eligibleResolutionTypes).not.toContain("clear_stale_occupancy_record");
+    const input = { ...base, actorId: "landlord-1", type: "reconcile_ended_occupancy_to_vacant" as const, expectedStateToken: context.expectedStateToken, idempotencyKey: `ended-${evidence}`, confirmation: true };
+    const result = await resolveOccupancy(input);
+    expect(read("units", "unit-1")).toMatchObject({ status: "vacant", occupancyStatus: "vacant", currentLeaseId: null, currentTenantId: null });
+    expect(read("properties", "property-1").units[0]).toMatchObject({ status: "vacant", occupancyStatus: "vacant", currentLeaseId: null, currentTenantId: null });
+    expect(read("tenants", "tenant-1")).toEqual(beforeTenant);
+    expect(read("leases", "lease-ended")).toEqual(beforeLease);
+    expect(list("tenancies")).toEqual(beforeTenancies);
+    expect(read("canonicalEvents", result.auditEventId)).toMatchObject({ action: "ended_occupancy_to_vacant_reconciled", immutable: true, appendOnly: true, metadata: { remediationSubtype: "ended_occupancy_evidence_with_stale_unit_occupancy", supportingEndedEvidence: [expect.objectContaining({ safeEvidenceRef: expect.any(String), effectiveAt: "2026-08-01T00:00:00.000Z" })], changedFields: expect.arrayContaining(["unit.status", "unit.currentLeaseId"]) } });
+    const replay = await resolveOccupancy(input);
+    expect(replay).toMatchObject({ idempotent: true, auditEventId: result.auditEventId });
+    expect(list("canonicalEvents").filter((row: any) => row.action === "ended_occupancy_to_vacant_reconciled")).toHaveLength(1);
+  });
+
+  it("fails closed on later start authority, stale tokens, and audit failure", async () => {
+    seedProvenEndedOccupancy("event");
+    seed("canonicalEvents", "later-start", { type: "lease.occupancy_started", action: "occupancy_started", status: "succeeded", immutable: true, appendOnly: true, occurredAt: "2026-08-02T00:00:00.000Z", resource: { parentId: leaseStartDeterministicId("property", ["property-1"]) }, metadata: { landlordRef: leaseStartDeterministicId("landlord", ["landlord-1"]), unitRef: leaseStartDeterministicId("unit", ["unit-1"]), tenantRef: leaseStartDeterministicId("tenant", ["tenant-1"]) } });
+    const blocked = await getOccupancyResolutionContext(base);
+    expect(blocked.endedOccupancyRemediation).toMatchObject({ repairEligible: false, blockedReason: "Later occupancy authority supersedes the end evidence." });
+    remove("canonicalEvents", "later-start");
+    const initial = await getOccupancyResolutionContext(base);
+    seed("canonicalEvents", "later-start", { type: "lease.occupancy_started", action: "occupancy_started", status: "succeeded", immutable: true, appendOnly: true, occurredAt: "2026-08-02T00:00:00.000Z", resource: { parentId: leaseStartDeterministicId("property", ["property-1"]) }, metadata: { landlordRef: leaseStartDeterministicId("landlord", ["landlord-1"]), unitRef: leaseStartDeterministicId("unit", ["unit-1"]), tenantRef: leaseStartDeterministicId("tenant", ["tenant-1"]) } });
+    await expect(resolveOccupancy({ ...base, actorId: "landlord-1", type: "reconcile_ended_occupancy_to_vacant", expectedStateToken: initial.expectedStateToken, idempotencyKey: "ended-stale", confirmation: true })).rejects.toMatchObject({ code: "occupancy_state_stale" });
+    remove("canonicalEvents", "later-start");
+    const fresh = await getOccupancyResolutionContext(base);
+    failAudit(true);
+    await expect(resolveOccupancy({ ...base, actorId: "landlord-1", type: "reconcile_ended_occupancy_to_vacant", expectedStateToken: fresh.expectedStateToken, idempotencyKey: "ended-audit", confirmation: true })).rejects.toThrow("audit_failed");
+    expect(read("units", "unit-1")).toMatchObject({ status: "occupied", currentTenantId: "tenant-1" });
+  });
+
+  it.each([
+    ["missing evidence", () => {}],
+    ["passive expiry only", () => { remove("leases", "lease-ended"); seed("leases", "lease-ended", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "active", executionStatus: "fully_executed", startDate: "2025-01-01", endDate: "2026-01-01" }); }],
+    ["inactive tenancy missing reason", () => seed("tenancies", "tenancy-ended", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "inactive", moveOutAt: "2026-08-01T00:00:00.000Z" })],
+    ["active tenancy", () => seed("tenancies", "tenancy-active", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "active" })],
+    ["foreign tenancy", () => seed("tenancies", "tenancy-foreign", { landlordId: "landlord-2", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "inactive", moveOutAt: "2026-08-01T00:00:00.000Z", moveOutReason: "OTHER" })],
+    ["ambiguous tenant", () => seed("tenancies", "tenancy-other", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-2", status: "inactive", moveOutAt: "2026-08-01T00:00:00.000Z", moveOutReason: "OTHER" })],
+  ] as const)("does not offer ended-evidence remediation for %s", async (_label, arrange) => {
+    seedProvenEndedOccupancy("tenancy");
+    remove("tenancies", "tenancy-ended");
+    arrange();
+    const context = await getOccupancyResolutionContext(base);
+    expect(context.eligibleResolutionTypes).not.toContain("reconcile_ended_occupancy_to_vacant");
+  });
 
   it("classifies and reconciles only stale occupancy linkage around one authoritative lease", async () => {
     seedRepairableContextMismatch();
