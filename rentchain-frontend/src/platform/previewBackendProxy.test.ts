@@ -313,6 +313,21 @@ describe("Preview backend proxy", () => {
     });
   });
 
+  it("couples the authorized PR #1585 service URL and audience internally", () => {
+    const target = resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: PREVIEW_BACKEND_TARGET_KEYS.pr1585,
+    });
+    expect(target).toEqual({
+      key: "pr1585-ended-occupancy-remediation-cert",
+      cloudRunServiceUrl:
+        "https://rentchain-pr1585-qa-n2-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1585-qa-n2-glistw4pya-nn.a.run.app",
+      temporary: true,
+    });
+  });
+
   it.each([
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
@@ -340,6 +355,8 @@ describe("Preview backend proxy", () => {
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1580],
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1582],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1582],
+    ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1585],
+    ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1585],
     ["preview", ""],
     ["preview", "   "],
     ["preview", "unknown"],
@@ -361,6 +378,9 @@ describe("Preview backend proxy", () => {
     ["preview", "PR1569-ONBOARDING-OCCUPANCY-CERT"],
     ["preview", "rentchain-pr1569-qa-onboarding"],
     ["preview", "https://rentchain-pr1569-qa-onboarding-glistw4pya-nn.a.run.app"],
+    ["preview", "pr1585-ended-occupancy-remediation-cert-evil"],
+    ["preview", "PR1585-ENDED-OCCUPANCY-REMEDIATION-CERT"],
+    ["preview", "https://rentchain-pr1585-qa-n2-glistw4pya-nn.a.run.app"],
   ])("rejects unsafe target selection for %s / %s", (vercelEnvironment, targetKey) => {
     expect(() => resolvePreviewBackendTarget({ vercelEnvironment, targetKey })).toThrow(
       "PREVIEW_PROXY_TARGET_REJECTED",
