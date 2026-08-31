@@ -97,7 +97,6 @@ import type { LeaseEvent, LeaseLifecycleState } from "../services/stateMachines/
 import {
   cancelLeaseSigning,
   downloadSignedLease,
-  getSignedLeaseDocumentDownload,
   loadLeaseSigningSnapshot,
   sendLeaseForSignature,
   signingErrorCode,
@@ -1449,74 +1448,35 @@ function normalizeProjectionStatus(value: unknown): string {
     .replace(/[\s-]+/g, "_");
 }
 
-function latestTimestampMillis(data: any, keys: string[]) {
-  return Math.max(...keys.map((key) => toMillis(data?.[key])).filter((value) => Number.isFinite(value)), 0);
-}
-
-async function loadLatestLeaseSigningRequestForProjection(leaseId: string, landlordId: string | null) {
-  const normalizedLeaseId = String(leaseId || "").trim();
-  const normalizedLandlordId = String(landlordId || "").trim();
-  if (!normalizedLeaseId || !normalizedLandlordId) return null;
-  try {
-    const snap = await db
-      .collection("leaseSigningRequests")
-      .where("leaseId", "==", normalizedLeaseId)
-      .where("landlordId", "==", normalizedLandlordId)
-      .get();
-    return (snap.docs || [])
-      .map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }))
-      .sort(
-        (a: any, b: any) =>
-          latestTimestampMillis(b, ["currentStatusAt", "signedAt", "sentAt", "updatedAt", "createdAt"]) -
-          latestTimestampMillis(a, ["currentStatusAt", "signedAt", "sentAt", "updatedAt", "createdAt"])
-      )[0] || null;
-  } catch (err) {
-    console.error("[leaseRoutes] loadLatestLeaseSigningRequestForProjection error", err);
-    return null;
-  }
-}
-
-async function loadLatestSigningSignedEventForProjection(leaseId: string) {
-  const normalizedLeaseId = String(leaseId || "").trim();
-  if (!normalizedLeaseId) return null;
-  try {
-    const snap = await db.collection("canonicalEvents").where("action", "==", "signing_signed").limit(100).get();
-    return (snap.docs || [])
-      .map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }))
-      .filter((event: any) => String(event?.resource?.type || "") === "lease")
-      .filter((event: any) => String(event?.resource?.id || "") === normalizedLeaseId)
-      .sort((a: any, b: any) => latestTimestampMillis(b, ["occurredAt", "recordedAt"]) - latestTimestampMillis(a, ["occurredAt", "recordedAt"]))[0] || null;
-  } catch {
-    return null;
-  }
-}
-
 function buildLeaseProjectionRaw(input: {
   raw: any;
-  signingRequest: any | null;
-  signingSignedEvent: any | null;
+  signingSnapshot: any | null;
   primaryDocument: any | null;
 }) {
-  const signingStatus = normalizeProjectionStatus(input.signingRequest?.currentSigningStatus);
-  const signedByRequest = ["signed", "completed", "complete"].includes(signingStatus);
-  const signedByEvent = Boolean(input.signingSignedEvent);
-  const currentStatusAt =
-    String(input.signingRequest?.currentStatusAt || input.signingSignedEvent?.occurredAt || input.signingSignedEvent?.recordedAt || "").trim() || null;
-  const documentStatus = String(input.primaryDocument?.status || input.signingRequest?.documentStatus || "").trim() || null;
+  const signingStatus = normalizeProjectionStatus(input.signingSnapshot?.signingLifecycleState || input.signingSnapshot?.signingStatus);
+  const currentStatusAt = String(input.signingSnapshot?.currentStatusAt || "").trim() || null;
+  const documentStatus = String(input.primaryDocument?.status || "").trim() || null;
   return {
     ...input.raw,
-    currentSigningStatus: signedByRequest || signedByEvent ? "signed" : signingStatus || input.raw?.currentSigningStatus,
+    currentSigningStatus: signingStatus || input.raw?.currentSigningStatus,
     currentStatusAt: currentStatusAt || input.raw?.currentStatusAt || null,
-    signingStatus: signedByRequest || signedByEvent ? "signed" : signingStatus || input.raw?.signingStatus,
-    sentAt: input.signingRequest?.sentAt || input.raw?.sentAt || null,
+    signingStatus: signingStatus || input.raw?.signingStatus,
+    signingLifecycleState: signingStatus || null,
+    signingExecutionState: input.signingSnapshot?.executionState || null,
+    signedDocumentState: input.signingSnapshot?.signedDocumentState || "not_expected",
+    signedDocumentAvailable: input.signingSnapshot?.signedDocumentAvailable === true,
+    signedDocumentRecoveryAction: input.signingSnapshot?.signedDocumentRecoveryAction || "none",
+    reminderEligible: input.signingSnapshot?.reminderEligible === true,
+    viewSignedDocumentAllowed: input.signingSnapshot?.viewSignedDocumentAllowed === true,
+    sentAt: input.signingSnapshot?.sentAt || input.raw?.sentAt || null,
     documentStatus: documentStatus || input.raw?.documentStatus || null,
     leaseDocumentStatus: documentStatus || input.raw?.leaseDocumentStatus || null,
     documentGeneratedAt: input.primaryDocument?.generatedAt || input.raw?.documentGeneratedAt || null,
-    documentId: input.signingRequest?.documentId || input.primaryDocument?.id || input.raw?.documentId || null,
-    documentHash: input.signingRequest?.documentHash || input.primaryDocument?.documentHash || input.raw?.documentHash || null,
-    manifestHash: input.signingRequest?.manifestHash || input.primaryDocument?.manifestHash || input.raw?.manifestHash || null,
-    jurisdictionCode: input.signingRequest?.jurisdictionCode || input.primaryDocument?.jurisdictionCode || input.raw?.jurisdictionCode || null,
-    templateVersion: input.signingRequest?.templateVersion || input.primaryDocument?.templateVersion || input.raw?.templateVersion || null,
+    documentId: input.primaryDocument?.id || input.raw?.documentId || null,
+    documentHash: input.primaryDocument?.documentHash || input.raw?.documentHash || null,
+    manifestHash: input.primaryDocument?.manifestHash || input.raw?.manifestHash || null,
+    jurisdictionCode: input.primaryDocument?.jurisdictionCode || input.raw?.jurisdictionCode || null,
+    templateVersion: input.primaryDocument?.templateVersion || input.raw?.templateVersion || null,
     formPFields: input.raw?.formPFields || input.primaryDocument?.formPFields || null,
     leaseReadiness: input.raw?.leaseReadiness || input.primaryDocument?.leaseReadiness || null,
   };
@@ -1548,7 +1508,7 @@ async function enrichLeaseRow(raw: any) {
   const tenantId =
     String(lease.primaryTenantId || lease.tenantId || lease.tenantIds?.[0] || "").trim() || null;
 
-  const [propertySnap, tenantSnap, legacyDocumentUrl, scheduleAUrl, primaryDocument, signingRequest, signingSignedEvent] = await Promise.all([
+  const [propertySnap, tenantSnap, legacyDocumentUrl, scheduleAUrl, primaryDocument, signingSnapshot] = await Promise.all([
     propertyId ? db.collection("properties").doc(propertyId).get().catch(() => null) : Promise.resolve(null),
     tenantId ? db.collection("tenants").doc(tenantId).get().catch(() => null) : Promise.resolve(null),
     loadLeaseDocumentUrlForLease(raw),
@@ -1556,11 +1516,10 @@ async function enrichLeaseRow(raw: any) {
     landlordId
       ? getPrimaryLeaseDocumentSummary({ leaseId: lease.id, landlordId, includePreviewUrl: true }).catch(() => null)
       : Promise.resolve(null),
-    loadLatestLeaseSigningRequestForProjection(lease.id, landlordId),
-    loadLatestSigningSignedEventForProjection(lease.id),
+    loadLeaseSigningSnapshot({ leaseId: lease.id, landlordId, lease: raw }).catch(() => null),
   ]);
   const documentUrl = legacyDocumentUrl || String(primaryDocument?.previewUrl || "").trim() || null;
-  const projectionRaw = buildLeaseProjectionRaw({ raw, signingRequest, signingSignedEvent, primaryDocument });
+  const projectionRaw = buildLeaseProjectionRaw({ raw, signingSnapshot, primaryDocument });
 
   const propertyData = propertySnap?.exists ? propertySnap.data() : null;
   const propertyName =
@@ -1636,6 +1595,13 @@ async function enrichLeaseRow(raw: any) {
     documentUrl,
     scheduleAUrl,
     ...leaseReadiness,
+    signingLifecycleState: projectionRaw.signingLifecycleState || null,
+    signingExecutionState: projectionRaw.signingExecutionState || null,
+    signedDocumentState: projectionRaw.signedDocumentState || "not_expected",
+    signedDocumentAvailable: projectionRaw.signedDocumentAvailable === true,
+    signedDocumentRecoveryAction: projectionRaw.signedDocumentRecoveryAction || "none",
+    reminderEligible: projectionRaw.reminderEligible === true,
+    viewSignedDocumentAllowed: projectionRaw.viewSignedDocumentAllowed === true,
     paymentReadiness,
     rentPaymentSummary,
     stateCoherence: coherence,
@@ -3283,19 +3249,26 @@ export async function handleLeaseDocumentUrl(req: any, res: Response) {
     const leaseCheck = await getLeaseEntityForLandlord(leaseId, landlordId);
     if (!leaseCheck.ok) return res.status(leaseCheck.status).json({ ok: false, error: leaseCheck.error });
 
+    const signingProjection = !wantsScheduleA
+      ? await loadLeaseSigningSnapshot({ leaseId, landlordId, lease: leaseCheck.lease as any })
+      : null;
     if (!wantsScheduleA) {
-      const signedDocument = await getSignedLeaseDocumentDownload({ leaseId, landlordId });
-      if (signedDocument.documentUrl) {
+      if (signingProjection?.documentUrl) {
         return res.status(200).json({
           ok: true,
-          documentUrl: signedDocument.documentUrl,
+          documentUrl: signingProjection.documentUrl,
           refreshMode: "signed_url",
-          expiresInSeconds: signedDocument.expiresInSeconds,
+          expiresInSeconds: 1800,
           documentKind: "signed-lease",
-          documentHash: signedDocument.documentHash,
-          signedDocumentStoredAt: signedDocument.signedDocumentStoredAt,
+          documentHash: signingProjection.signedDocumentHash,
+          signedDocumentStoredAt: signingProjection.signedDocumentStoredAt,
+          signingLifecycleState: signingProjection?.signingLifecycleState,
+          signedDocumentState: signingProjection?.signedDocumentState,
+          signedDocumentAvailable: signingProjection?.signedDocumentAvailable,
+          signedDocumentRecoveryAction: signingProjection?.signedDocumentRecoveryAction,
+          viewSignedDocumentAllowed: signingProjection?.viewSignedDocumentAllowed,
           documentRef: {
-            source: signedDocument.source,
+            source: signingProjection.signedDocumentSource,
             internalReferenceOnly: true,
           },
         });
@@ -3316,6 +3289,13 @@ export async function handleLeaseDocumentUrl(req: any, res: Response) {
         refreshMode: "legacy_url",
         expiresInSeconds: null,
         documentKind: wantsScheduleA ? "schedule-a" : "lease",
+        ...(!wantsScheduleA ? {
+          signingLifecycleState: signingProjection?.signingLifecycleState,
+          signedDocumentState: signingProjection?.signedDocumentState,
+          signedDocumentAvailable: signingProjection?.signedDocumentAvailable,
+          signedDocumentRecoveryAction: signingProjection?.signedDocumentRecoveryAction,
+          viewSignedDocumentAllowed: signingProjection?.viewSignedDocumentAllowed,
+        } : {}),
       });
     }
 
@@ -3331,6 +3311,13 @@ export async function handleLeaseDocumentUrl(req: any, res: Response) {
       refreshMode: "signed_url",
       expiresInSeconds: expiresMinutes * 60,
       documentKind: wantsScheduleA ? "schedule-a" : "lease",
+      ...(!wantsScheduleA ? {
+        signingLifecycleState: signingProjection?.signingLifecycleState,
+        signedDocumentState: signingProjection?.signedDocumentState,
+        signedDocumentAvailable: signingProjection?.signedDocumentAvailable,
+        signedDocumentRecoveryAction: signingProjection?.signedDocumentRecoveryAction,
+        viewSignedDocumentAllowed: signingProjection?.viewSignedDocumentAllowed,
+      } : {}),
       documentRef: {
         source: storageRef.source,
         bucket: storageRef.bucket,
@@ -3510,6 +3497,11 @@ router.post("/:leaseId/download-signed", requireLandlord, async (req: any, res: 
         documentUrl: snapshot.documentUrl,
         signingStatus: snapshot.signingStatus,
         signedAt: snapshot.signedAt,
+        documentKind: "signed-lease",
+        signedDocumentState: snapshot.signedDocumentState,
+        signedDocumentAvailable: snapshot.signedDocumentAvailable,
+        signedDocumentRecoveryAction: snapshot.signedDocumentRecoveryAction,
+        viewSignedDocumentAllowed: snapshot.viewSignedDocumentAllowed,
       },
     });
   } catch (error: any) {

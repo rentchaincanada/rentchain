@@ -28,7 +28,21 @@ export type LeaseSigningEvent = {
   providerTestMode?: boolean | null;
 };
 
-export type LeaseSigningSnapshot = {
+export type SignedDocumentState = "available" | "pending_persistence" | "persistence_failed" | "unavailable" | "not_expected";
+export type SignedDocumentRecoveryAction = "none" | "retry_download" | "admin_review";
+
+export type LeaseSigningDocumentProjection = {
+  signingLifecycleState: LeaseSigningStatus;
+  executionState: DerivedLeaseSigningState;
+  hasEverBeenSigned: boolean;
+  signedDocumentState: SignedDocumentState;
+  signedDocumentAvailable: boolean;
+  signedDocumentRecoveryAction: SignedDocumentRecoveryAction;
+  reminderEligible: boolean;
+  viewSignedDocumentAllowed: boolean;
+};
+
+export type LeaseSigningSnapshot = LeaseSigningDocumentProjection & {
   signingStatus: LeaseSigningStatus;
   derivedLeaseState: DerivedLeaseSigningState;
   signingProviderId: string | null;
@@ -39,7 +53,11 @@ export type LeaseSigningSnapshot = {
   providerDispatchMessage: string | null;
   sentAt: string | null;
   signedAt: string | null;
+  currentStatusAt: string | null;
   documentUrl: string | null;
+  signedDocumentHash: string | null;
+  signedDocumentStoredAt: string | null;
+  signedDocumentSource: "signedDocument" | "legacySignedDocumentUrl" | null;
   events: LeaseSigningEvent[];
 };
 
@@ -127,15 +145,18 @@ function parseGcsUrlStorageRef(value: unknown): { bucket: string; path: string; 
   if (!raw) return null;
   try {
     const parsed = new URL(raw);
+    if (parsed.protocol !== "https:") return null;
     if (parsed.hostname === "storage.googleapis.com") {
       const [bucket, ...pathParts] = parsed.pathname.replace(/^\/+/, "").split("/");
       const path = pathParts.join("/");
-      if (bucket && path) return { bucket, path: decodeURIComponent(path), source: "legacySignedDocumentUrl" };
+      const decodedPath = decodeURIComponent(path);
+      if (bucket && /^lease-signing\/.+\.pdf$/i.test(decodedPath)) return { bucket, path: decodedPath, source: "legacySignedDocumentUrl" };
     }
     if (parsed.hostname.endsWith(".storage.googleapis.com")) {
       const bucket = parsed.hostname.replace(/\.storage\.googleapis\.com$/, "");
       const path = parsed.pathname.replace(/^\/+/, "");
-      if (bucket && path) return { bucket, path: decodeURIComponent(path), source: "legacySignedDocumentUrl" };
+      const decodedPath = decodeURIComponent(path);
+      if (bucket && /^lease-signing\/.+\.pdf$/i.test(decodedPath)) return { bucket, path: decodedPath, source: "legacySignedDocumentUrl" };
     }
   } catch {
     return null;
@@ -157,6 +178,11 @@ function collapseEventsForProjection(events: LeaseSigningEvent[]) {
     if (event.type === "signed") latestSigned = event;
   }
   return events.filter((event) => event.type !== "signed").concat(latestSigned ? [latestSigned] : []).sort((a, b) => asDateMillis(a.occurredAt) - asDateMillis(b.occurredAt));
+}
+
+function compareEvents(a: LeaseSigningEvent, b: LeaseSigningEvent) {
+  const timeDelta = asDateMillis(a.occurredAt) - asDateMillis(b.occurredAt);
+  return timeDelta || a.id.localeCompare(b.id);
 }
 
 async function signedDocumentDownloadFromRequest(data: any): Promise<SignedLeaseDocumentDownload> {
@@ -182,8 +208,9 @@ async function signedDocumentDownloadFromRequest(data: any): Promise<SignedLease
 }
 
 function statusFromEvents(events: LeaseSigningEvent[]): LeaseSigningStatus {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const type = events[index]?.type;
+  const chronological = [...events].sort(compareEvents);
+  for (let index = chronological.length - 1; index >= 0; index -= 1) {
+    const type = chronological[index]?.type;
     if (type === "signed") return "signed";
     if (type === "cancelled") return "cancelled";
     if (type === "failed") return "failed";
@@ -194,14 +221,33 @@ function statusFromEvents(events: LeaseSigningEvent[]): LeaseSigningStatus {
   return "not_started";
 }
 
-function statusFromEventType(type: SigningProviderEventType): LeaseSigningStatus | null {
-  if (type === "signed") return "signed";
-  if (type === "cancelled") return "cancelled";
-  if (type === "failed") return "failed";
-  if (type === "rejected") return "rejected";
-  if (type === "expired") return "expired";
-  if (type === "sent" || type === "viewed") return "pending_signature";
-  return null;
+function buildSigningDocumentProjection(input: {
+  signingStatus: LeaseSigningStatus;
+  derivedLeaseState: DerivedLeaseSigningState;
+  events: LeaseSigningEvent[];
+  requestData?: any;
+}): LeaseSigningDocumentProjection {
+  const hasEverBeenSigned = input.events.some((event) => event.type === "signed");
+  const hasDurableDocument = Boolean(signedDocumentStorageRefFromRequest(input.requestData));
+  const persistenceStatus = String(input.requestData?.signedDocumentPersistenceStatus || "").trim();
+  let signedDocumentState: SignedDocumentState = "not_expected";
+  let signedDocumentRecoveryAction: SignedDocumentRecoveryAction = "none";
+  if (hasDurableDocument) {
+    signedDocumentState = "available";
+  } else if (hasEverBeenSigned) {
+    signedDocumentState = persistenceStatus === "failed" ? "persistence_failed" : input.signingStatus === "signed" ? "pending_persistence" : "unavailable";
+    signedDocumentRecoveryAction = input.signingStatus === "signed" ? "retry_download" : "admin_review";
+  }
+  return {
+    signingLifecycleState: input.signingStatus,
+    executionState: input.derivedLeaseState,
+    hasEverBeenSigned,
+    signedDocumentState,
+    signedDocumentAvailable: hasDurableDocument,
+    signedDocumentRecoveryAction,
+    reminderEligible: input.signingStatus === "pending_signature",
+    viewSignedDocumentAllowed: hasDurableDocument,
+  };
 }
 
 function normalizeStoredStatus(value: unknown): LeaseSigningStatus | null {
@@ -240,7 +286,7 @@ async function loadEvents(requestId: string): Promise<LeaseSigningEvent[]> {
   return (snap.docs || [])
     .map(projectEvent)
     .filter((event) => event.id && event.type && event.occurredAt)
-    .sort((a, b) => asDateMillis(a.occurredAt) - asDateMillis(b.occurredAt));
+    .sort(compareEvents);
 }
 
 async function appendSigningEvent(input: {
@@ -297,8 +343,8 @@ async function appendSigningEvent(input: {
     rawIdsIncluded: false,
     payloadIncluded: false,
   });
-  const currentSigningStatus = statusFromEventType(input.type);
-  if (currentSigningStatus) {
+  const currentSigningStatus = statusFromEvents(await loadEvents(input.requestId));
+  if (currentSigningStatus !== "not_started") {
     await db.collection(REQUESTS).doc(input.requestId).set(
       {
         currentSigningStatus,
@@ -353,9 +399,11 @@ export async function loadLeaseSigningSnapshot(input: {
 }): Promise<LeaseSigningSnapshot> {
   const request = await loadLatestRequest(input.leaseId, input.landlordId || null);
   if (!request) {
+    const derivedLeaseState = deriveLeaseSigningState({ lease: input.lease || {}, signingStatus: "not_started" });
     return {
+      ...buildSigningDocumentProjection({ signingStatus: "not_started", derivedLeaseState, events: [] }),
       signingStatus: "not_started",
-      derivedLeaseState: deriveLeaseSigningState({ lease: input.lease || {}, signingStatus: "not_started" }),
+      derivedLeaseState,
       signingProviderId: null,
       signingRequestId: null,
       providerRequestRef: null,
@@ -364,21 +412,29 @@ export async function loadLeaseSigningSnapshot(input: {
       providerDispatchMessage: null,
       sentAt: null,
       signedAt: null,
+      currentStatusAt: null,
       documentUrl: null,
+      signedDocumentHash: null,
+      signedDocumentStoredAt: null,
+      signedDocumentSource: null,
       events: [],
     };
   }
   const events = await loadEvents(request.id);
-  const signingStatus = normalizeStoredStatus(request.data?.currentSigningStatus) || statusFromEvents(events);
+  const signingStatus = events.length ? statusFromEvents(events) : normalizeStoredStatus(request.data?.currentSigningStatus) || "not_started";
   const signedAt = [...events].reverse().find((event) => event.type === "signed")?.occurredAt || null;
   const sentAt = [...events].reverse().find((event) => event.type === "sent")?.occurredAt || String(request.data?.sentAt || "") || null;
+  const currentStatusAt = events.at(-1)?.occurredAt || String(request.data?.currentStatusAt || "") || null;
   const providerId = String(request.data?.providerId || "");
   const providerDispatchMode = String(request.data?.providerDispatchMode || (providerId === "mock" ? "mock" : "")).trim() || null;
   const providerDispatchStatus = String(request.data?.providerDispatchStatus || (providerId === "mock" ? "mocked_no_email" : "")).trim() || null;
-  const signedDocument = signingStatus === "signed" ? await signedDocumentDownloadFromRequest(request.data) : null;
+  const derivedLeaseState = deriveLeaseSigningState({ lease: input.lease || {}, signingStatus });
+  const documentProjection = buildSigningDocumentProjection({ signingStatus, derivedLeaseState, events, requestData: request.data });
+  const signedDocument = documentProjection.signedDocumentAvailable ? await signedDocumentDownloadFromRequest(request.data) : null;
   return {
+    ...documentProjection,
     signingStatus,
-    derivedLeaseState: deriveLeaseSigningState({ lease: input.lease || {}, signingStatus }),
+    derivedLeaseState,
     signingProviderId: providerId,
     signingRequestId: request.id,
     providerRequestRef: String(request.data?.providerRequestRef || ""),
@@ -387,7 +443,11 @@ export async function loadLeaseSigningSnapshot(input: {
     providerDispatchMessage: String(request.data?.providerDispatchMessage || (providerId === "mock" ? "Mock signing provider recorded the request without sending email." : "")).trim() || null,
     sentAt,
     signedAt,
+    currentStatusAt,
     documentUrl: signedDocument?.documentUrl || null,
+    signedDocumentHash: signedDocument?.documentHash || null,
+    signedDocumentStoredAt: signedDocument?.signedDocumentStoredAt || null,
+    signedDocumentSource: signedDocument?.source || null,
     events: collapseEventsForProjection(events),
   };
 }
@@ -407,8 +467,14 @@ export async function getSignedLeaseDocumentDownload(input: {
     };
   }
   const events = await loadEvents(request.id);
-  const signingStatus = normalizeStoredStatus(request.data?.currentSigningStatus) || statusFromEvents(events);
-  if (signingStatus !== "signed") {
+  const signingStatus = events.length ? statusFromEvents(events) : normalizeStoredStatus(request.data?.currentSigningStatus) || "not_started";
+  const projection = buildSigningDocumentProjection({
+    signingStatus,
+    derivedLeaseState: deriveLeaseSigningState({ lease: {}, signingStatus }),
+    events,
+    requestData: request.data,
+  });
+  if (!projection.signedDocumentAvailable) {
     return {
       documentUrl: null,
       expiresInSeconds: null,
@@ -574,8 +640,7 @@ export async function downloadSignedLease(input: { leaseId: string; lease: Recor
   const request = await loadLatestRequest(input.leaseId, input.landlordId);
   if (!request) throw Object.assign(new Error("lease_not_found"), { status: 404 });
   const events = await loadEvents(request.id);
-  const signingStatus = normalizeStoredStatus(request.data?.currentSigningStatus) || statusFromEvents(events);
-  if (signingStatus !== "signed") throw Object.assign(new Error("signed_document_not_found"), { status: 404 });
+  const signingStatus = events.length ? statusFromEvents(events) : normalizeStoredStatus(request.data?.currentSigningStatus) || "not_started";
   const existingSignedDocumentRef = signedDocumentStorageRefFromRequest(request.data);
   if (existingSignedDocumentRef) {
     if (existingSignedDocumentRef.source === "legacySignedDocumentUrl") {
@@ -593,32 +658,64 @@ export async function downloadSignedLease(input: { leaseId: string; lease: Recor
     }
     return loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
   }
+  if (signingStatus !== "signed" || !events.some((event) => event.type === "signed")) {
+    throw Object.assign(new Error("signed_document_not_found"), { status: 404 });
+  }
   const provider = signingProviderRegistry.getProvider(String(request.data?.providerId || ""));
   if (!provider?.isConfigured()) throw Object.assign(new Error("provider_unavailable"), { status: 503 });
-  const doc = await provider.downloadSignedDocument(String(request.data?.providerRequestId || ""));
-  if (!doc) throw Object.assign(new Error("signed_document_not_found"), { status: 404 });
+  let doc;
+  try {
+    doc = await provider.downloadSignedDocument(String(request.data?.providerRequestId || ""));
+  } catch {
+    await db.collection(REQUESTS).doc(request.id).set({
+      signedDocumentPersistenceStatus: "failed",
+      signedDocumentPersistenceFailureCode: "provider_download_failed",
+      signedDocumentPersistenceFailedAt: nowIso(),
+    }, { merge: true });
+    throw Object.assign(new Error("signed_document_persistence_failed"), { status: 503 });
+  }
+  if (!doc) {
+    await db.collection(REQUESTS).doc(request.id).set({
+      signedDocumentPersistenceStatus: "failed",
+      signedDocumentPersistenceFailureCode: "provider_document_unavailable",
+      signedDocumentPersistenceFailedAt: nowIso(),
+    }, { merge: true });
+    throw Object.assign(new Error("signed_document_persistence_failed"), { status: 503 });
+  }
   const storagePath = `lease-signing/${digest(input.landlordId, 12)}/${request.id}/${doc.fileName.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
-  const uploaded = await uploadBufferToGcs({
-    path: storagePath,
-    contentType: doc.contentType,
-    buffer: doc.buffer,
-    metadata: { leaseSigningRequestId: request.id },
-  });
-  await db.collection(REQUESTS).doc(request.id).set(
-    {
-      signedDocument: {
-        bucket: uploaded.bucket,
-        path: uploaded.path,
-        contentType: doc.contentType,
-        fileName: doc.fileName,
-        internalReferenceOnly: true,
+  try {
+    const uploaded = await uploadBufferToGcs({
+      path: storagePath,
+      contentType: doc.contentType,
+      buffer: doc.buffer,
+      metadata: { leaseSigningRequestId: request.id },
+    });
+    await db.collection(REQUESTS).doc(request.id).set(
+      {
+        signedDocument: {
+          bucket: uploaded.bucket,
+          path: uploaded.path,
+          contentType: doc.contentType,
+          fileName: doc.fileName,
+          internalReferenceOnly: true,
+        },
+        signedDocumentUrl: null,
+        signedDocumentHash: createHash("sha256").update(doc.buffer).digest("hex"),
+        signedDocumentStoredAt: nowIso(),
+        signedDocumentPersistenceStatus: "available",
+        signedDocumentPersistenceFailureCode: null,
+        signedDocumentPersistenceFailedAt: null,
       },
-      signedDocumentUrl: null,
-      signedDocumentHash: createHash("sha256").update(doc.buffer).digest("hex"),
-      signedDocumentStoredAt: nowIso(),
-    },
-    { merge: true }
-  );
+      { merge: true }
+    );
+  } catch {
+    await db.collection(REQUESTS).doc(request.id).set({
+      signedDocumentPersistenceStatus: "failed",
+      signedDocumentPersistenceFailureCode: "canonical_persistence_failed",
+      signedDocumentPersistenceFailedAt: nowIso(),
+    }, { merge: true }).catch(() => undefined);
+    throw Object.assign(new Error("signed_document_persistence_failed"), { status: 503 });
+  }
   await appendSigningEvent({
     requestId: request.id,
     leaseId: input.leaseId,

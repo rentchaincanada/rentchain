@@ -238,14 +238,19 @@ export class DropboxSignProvider implements ISigningProvider {
     const event = body?.event || body?.event_data || body || {};
     const request = body?.signature_request || body?.signatureRequest || {};
     const eventType = String(event?.event_type || event?.type || "").toLowerCase();
-    const mapped =
-      eventType.includes("fail") || eventType.includes("error") ? "failed" :
-      eventType.includes("view") ? "viewed" :
-      eventType.includes("decline") || eventType.includes("reject") ? "rejected" :
-      eventType.includes("expire") ? "expired" :
-      eventType.includes("cancel") ? "cancelled" :
-      eventType.includes("complete") || eventType.includes("all_signed") || eventType.includes("sign") ? "signed" :
-      "sent";
+    const eventMap: Record<string, SigningProviderParsedWebhook["type"]> = {
+      signature_request_sent: "sent",
+      signature_request_viewed: "viewed",
+      signature_request_signed: "signed",
+      signature_request_all_signed: "signed",
+      signature_request_declined: "rejected",
+      signature_request_rejected: "rejected",
+      signature_request_expired: "expired",
+      signature_request_canceled: "cancelled",
+      signature_request_cancelled: "cancelled",
+      signature_request_error: "failed",
+      signature_request_failed: "failed",
+    };
     const providerRequestId = String(request?.signature_request_id || body?.signature_request_id || body?.providerRequestId || "").trim();
     const providerEventId = String(event?.event_hash || event?.event_id || sha(JSON.stringify(body))).trim();
     if (!providerRequestId) {
@@ -261,10 +266,12 @@ export class DropboxSignProvider implements ISigningProvider {
       }
       throw new Error("signing_webhook_request_missing");
     }
+    const mapped = eventMap[eventType];
+    if (!mapped) throw new Error("signing_webhook_event_unsupported");
     return {
       providerRequestId,
       providerEventId,
-      type: mapped as any,
+      type: mapped,
       signerEmail: String(body?.signature?.signer_email_address || body?.signerEmail || "").trim().toLowerCase() || null,
       occurredAt: eventTimeToIso(event?.event_time || event?.time || event?.created_at),
       providerEventType: eventType || null,

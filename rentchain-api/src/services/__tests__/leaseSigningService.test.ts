@@ -4,6 +4,7 @@ const collections = new Map<string, Map<string, any>>();
 const writeCanonicalEventMock = vi.fn(async () => undefined);
 const getCanonicalLeaseStartContextMock = vi.fn(async () => ({ expectedStateToken: "state-1" }));
 const startCanonicalLeaseOccupancyMock = vi.fn(async () => ({ canonicalOutcome: "occupancy_effective", occupancyEffective: true, reasons: [] }));
+const uploadBufferToGcsMock = vi.fn(async ({ path }: { path: string }) => ({ bucket: "bucket", path }));
 
 function ensureCollection(name: string) {
   if (!collections.has(name)) collections.set(name, new Map());
@@ -66,7 +67,7 @@ vi.mock("../leaseStart/leaseStartService", () => ({
 }));
 
 vi.mock("../../lib/gcs", () => ({
-  uploadBufferToGcs: vi.fn(async ({ path }: { path: string }) => ({ bucket: "bucket", path })),
+  uploadBufferToGcs: uploadBufferToGcsMock,
 }));
 
 vi.mock("../../lib/gcsSignedUrl", () => ({
@@ -79,6 +80,7 @@ describe("leaseSigningService", () => {
     writeCanonicalEventMock.mockClear();
     getCanonicalLeaseStartContextMock.mockClear();
     startCanonicalLeaseOccupancyMock.mockClear();
+    uploadBufferToGcsMock.mockClear();
     process.env.SIGNING_PROVIDER = "mock";
     process.env.PUBLIC_APP_URL = "http://localhost:5173";
     delete process.env.SIGNING_PROVIDER_API_KEY;
@@ -179,6 +181,10 @@ describe("leaseSigningService", () => {
     });
 
     expect(snapshot.signingStatus).toBe("pending_signature");
+    expect(snapshot.signingLifecycleState).toBe("pending_signature");
+    expect(snapshot.signedDocumentState).toBe("not_expected");
+    expect(snapshot.reminderEligible).toBe(true);
+    expect(snapshot.viewSignedDocumentAllowed).toBe(false);
     expect(snapshot.signingRequestId).toMatch(/^lsr_/);
     expect(snapshot.providerRequestRef).toMatch(/^mock_ref_/);
     expect(snapshot.providerRequestRef).not.toContain("lease-1");
@@ -191,6 +197,7 @@ describe("leaseSigningService", () => {
         providerDispatchStatus: "mocked_no_email",
       })
     );
+    expect(ensureCollection("leases").size).toBe(0);
     expect(writeCanonicalEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "signing_sent",
@@ -232,7 +239,7 @@ describe("leaseSigningService", () => {
         eventId: "evt_signed",
         type: "signed",
         signerEmail: "tenant@example.com",
-        occurredAt: "2026-01-02T00:00:00.000Z",
+        occurredAt: "2027-01-02T00:00:00.000Z",
       },
     });
 
@@ -243,6 +250,10 @@ describe("leaseSigningService", () => {
     });
     expect(initial.signingStatus).toBe("pending_signature");
     expect(snapshot.signingStatus).toBe("signed");
+    expect(snapshot.signedDocumentState).toBe("pending_persistence");
+    expect(snapshot.signedDocumentRecoveryAction).toBe("retry_download");
+    expect(snapshot.viewSignedDocumentAllowed).toBe(false);
+    expect(snapshot.reminderEligible).toBe(false);
     expect(snapshot.derivedLeaseState).toBe("active");
     expect(snapshot.events.map((event) => event.type)).toContain("signed");
     expect(writeCanonicalEventMock).toHaveBeenCalledWith(
@@ -516,7 +527,7 @@ describe("leaseSigningService", () => {
           eventId: `evt_${type}`,
           type,
           signerEmail: "tenant@example.com",
-          occurredAt: `2026-01-02T00:00:0${["rejected", "expired", "cancelled", "failed"].indexOf(type)}.000Z`,
+          occurredAt: `2027-01-02T00:00:0${["rejected", "expired", "cancelled", "failed"].indexOf(type)}.000Z`,
         },
       });
       await processSigningWebhook({
@@ -527,7 +538,7 @@ describe("leaseSigningService", () => {
           eventId: `evt_${type}`,
           type,
           signerEmail: "tenant@example.com",
-          occurredAt: `2026-01-02T00:00:0${["rejected", "expired", "cancelled", "failed"].indexOf(type)}.000Z`,
+          occurredAt: `2027-01-02T00:00:0${["rejected", "expired", "cancelled", "failed"].indexOf(type)}.000Z`,
         },
       });
     }
@@ -585,13 +596,16 @@ describe("leaseSigningService", () => {
       providerRequestRef: "boldsign_ref_safe",
       type: "signed",
       actorRole: "provider",
-      occurredAt: "2026-01-02T00:00:00.000Z",
+      occurredAt: "2027-01-02T00:00:00.000Z",
     });
 
     const snapshot = await downloadSignedLease({ leaseId: "lease-1", landlordId: "landlord-1", lease: { startDate: "2026-01-01" } });
+    const replay = await downloadSignedLease({ leaseId: "lease-1", landlordId: "landlord-1", lease: { startDate: "2026-01-01" } });
     const storedRequest = Array.from(ensureCollection("leaseSigningRequests").values())[0];
 
     expect(snapshot.documentUrl).toContain("https://signed.example/lease-signing/");
+    expect(replay.documentUrl).toBe(snapshot.documentUrl);
+    expect(uploadBufferToGcsMock).toHaveBeenCalledTimes(1);
     expect(storedRequest.signedDocument).toEqual(
       expect.objectContaining({
         bucket: "bucket",
@@ -699,6 +713,22 @@ describe("leaseSigningService", () => {
     expect(JSON.stringify(storedRequest)).not.toContain("X-Goog-Signature=expired");
   });
 
+  it("rejects generic application and non-signing URLs as legacy signed-document proof", async () => {
+    const { getSignedLeaseDocumentDownload, loadLeaseSigningSnapshot } = await import("../signing/leaseSigningService");
+    ensureCollection("leaseSigningRequests").set("request-invalid-legacy", {
+      leaseId: "lease-invalid-legacy", landlordId: "landlord-1", providerId: "mock",
+      currentSigningStatus: "signed", signedDocumentUrl: "https://app.rentchain.ai/leases",
+    });
+    ensureCollection("leaseSigningEvents").set("event-invalid-legacy", {
+      requestId: "request-invalid-legacy", type: "signed", actorRole: "provider", occurredAt: "2027-01-02T00:00:00.000Z",
+    });
+    const snapshot = await loadLeaseSigningSnapshot({ leaseId: "lease-invalid-legacy", landlordId: "landlord-1", lease: {} });
+    const download = await getSignedLeaseDocumentDownload({ leaseId: "lease-invalid-legacy", landlordId: "landlord-1" });
+    expect(snapshot.signedDocumentAvailable).toBe(false);
+    expect(snapshot.viewSignedDocumentAllowed).toBe(false);
+    expect(download.documentUrl).toBeNull();
+  });
+
   it("resolves current state to pending after resending a cancelled signing request", async () => {
     const { cancelLeaseSigning, loadLeaseSigningSnapshot, sendLeaseForSignature } = await import("../signing/leaseSigningService");
     const lease = { startDate: "2026-01-01", documentUrl: "https://example.com/lease.pdf" };
@@ -740,5 +770,102 @@ describe("leaseSigningService", () => {
         currentSigningStatus: "pending_signature",
       })
     );
+  });
+
+  it("uses event chronology so an older arrival cannot regress current lifecycle state", async () => {
+    const { processSigningWebhook, sendLeaseForSignature, loadLeaseSigningSnapshot } = await import("../signing/leaseSigningService");
+    const sent = await sendLeaseForSignature({
+      leaseId: "lease-order",
+      landlordId: "landlord-1",
+      lease: { startDate: "2026-01-01" },
+      tenantEmails: ["tenant@example.com"],
+    });
+    const request = ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId));
+    await processSigningWebhook({ providerId: "mock", headers: {}, body: {
+      providerRequestId: request.providerRequestId, eventId: "evt_failed_newer", type: "failed", occurredAt: "2027-02-02T00:00:00.000Z",
+    } });
+    await processSigningWebhook({ providerId: "mock", headers: {}, body: {
+      providerRequestId: request.providerRequestId, eventId: "evt_signed_older", type: "signed", occurredAt: "2027-02-01T00:00:00.000Z",
+    } });
+
+    const snapshot = await loadLeaseSigningSnapshot({ leaseId: "lease-order", landlordId: "landlord-1", lease: {} });
+    expect(snapshot.signingStatus).toBe("failed");
+    expect(snapshot.hasEverBeenSigned).toBe(true);
+    expect(snapshot.signedDocumentState).toBe("unavailable");
+    expect(snapshot.signedDocumentRecoveryAction).toBe("admin_review");
+    expect(snapshot.reminderEligible).toBe(false);
+    expect(ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId)).currentSigningStatus).toBe("failed");
+
+    const second = await sendLeaseForSignature({
+      leaseId: "lease-order-signed", landlordId: "landlord-1", lease: {}, tenantEmails: ["tenant@example.com"],
+    });
+    const secondRequest = ensureCollection("leaseSigningRequests").get(String(second.signingRequestId));
+    await processSigningWebhook({ providerId: "mock", headers: {}, body: {
+      providerRequestId: secondRequest.providerRequestId, eventId: "evt_signed_newer", type: "signed", occurredAt: "2027-04-02T00:00:00.000Z",
+    } });
+    await processSigningWebhook({ providerId: "mock", headers: {}, body: {
+      providerRequestId: secondRequest.providerRequestId, eventId: "evt_viewed_older", type: "viewed", occurredAt: "2027-04-01T00:00:00.000Z",
+    } });
+    const signedSnapshot = await loadLeaseSigningSnapshot({ leaseId: "lease-order-signed", landlordId: "landlord-1", lease: {} });
+    expect(signedSnapshot.signingStatus).toBe("signed");
+    expect(signedSnapshot.reminderEligible).toBe(false);
+  });
+
+  it("keeps a durable signed artifact retrievable after a later terminal anomaly", async () => {
+    const { downloadSignedLease, getSignedLeaseDocumentDownload, loadLeaseSigningSnapshot } = await import("../signing/leaseSigningService");
+    ensureCollection("leaseSigningRequests").set("request-terminal", {
+      leaseId: "lease-terminal", landlordId: "landlord-1", providerId: "mock", providerRequestId: "raw-terminal",
+      providerRequestRef: "mock_ref_safe", currentSigningStatus: "cancelled",
+      signedDocument: { bucket: "bucket", path: "lease-signing/safe/request-terminal/signed.pdf", internalReferenceOnly: true },
+    });
+    ensureCollection("leaseSigningEvents").set("terminal-signed", {
+      requestId: "request-terminal", type: "signed", actorRole: "provider", occurredAt: "2027-01-01T00:00:00.000Z",
+    });
+    ensureCollection("leaseSigningEvents").set("terminal-cancelled", {
+      requestId: "request-terminal", type: "cancelled", actorRole: "provider", occurredAt: "2027-01-02T00:00:00.000Z",
+    });
+
+    const snapshot = await loadLeaseSigningSnapshot({ leaseId: "lease-terminal", landlordId: "landlord-1", lease: {} });
+    const getDownload = await getSignedLeaseDocumentDownload({ leaseId: "lease-terminal", landlordId: "landlord-1" });
+    const postDownload = await downloadSignedLease({ leaseId: "lease-terminal", landlordId: "landlord-1", lease: {} });
+    expect(snapshot.signingStatus).toBe("cancelled");
+    expect(snapshot.signedDocumentState).toBe("available");
+    expect(snapshot.viewSignedDocumentAllowed).toBe(true);
+    expect(getDownload.documentUrl).toContain("request-terminal/signed.pdf");
+    expect(postDownload.documentUrl).toContain("request-terminal/signed.pdf");
+    expect(uploadBufferToGcsMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces provider persistence failure with deterministic recovery state", async () => {
+    const { signingProviderRegistry } = await import("../signing/providers");
+    signingProviderRegistry.register("boldsign", {
+      getProviderId: () => "boldsign", getName: () => "Unavailable document provider", isConfigured: () => true,
+      sendForSignature: async () => ({ providerRequestId: "raw-failure", dispatchStatus: "accepted" }),
+      getSigningUrl: async () => null, cancelRequest: async () => true, downloadSignedDocument: async () => null,
+      verifyWebhookSignature: async () => true,
+      parseWebhookPayload: async () => ({ providerRequestId: "raw-failure", providerEventId: "evt-failure-signed", type: "signed", occurredAt: "2027-03-01T00:00:00.000Z" }),
+    });
+    process.env.SIGNING_PROVIDER = "boldsign";
+    const { downloadSignedLease, processSigningWebhook, sendLeaseForSignature, loadLeaseSigningSnapshot } = await import("../signing/leaseSigningService");
+    await sendLeaseForSignature({ leaseId: "lease-failure", landlordId: "landlord-1", lease: {}, providerDocumentUrl: "https://example.com/lease.pdf", tenantEmails: ["tenant@example.com"] });
+    await processSigningWebhook({ providerId: "boldsign", headers: {}, body: {} });
+    await expect(downloadSignedLease({ leaseId: "lease-failure", landlordId: "landlord-1", lease: {} }))
+      .rejects.toMatchObject({ message: "signed_document_persistence_failed", status: 503 });
+    const snapshot = await loadLeaseSigningSnapshot({ leaseId: "lease-failure", landlordId: "landlord-1", lease: {} });
+    expect(snapshot.signedDocumentState).toBe("persistence_failed");
+    expect(snapshot.signedDocumentRecoveryAction).toBe("retry_download");
+    expect(snapshot.viewSignedDocumentAllowed).toBe(false);
+  });
+
+  it("makes reminder eligibility provider-neutral and pending-only", async () => {
+    const { loadLeaseSigningSnapshot } = await import("../signing/leaseSigningService");
+    for (const status of ["pending_signature", "signed", "cancelled", "expired", "rejected", "failed"] as const) {
+      const leaseId = `lease-reminder-${status}`;
+      ensureCollection("leaseSigningRequests").set(`request-reminder-${status}`, {
+        leaseId, landlordId: "landlord-1", providerId: "mock", currentSigningStatus: status,
+      });
+      const snapshot = await loadLeaseSigningSnapshot({ leaseId, landlordId: "landlord-1", lease: {} });
+      expect(snapshot.reminderEligible).toBe(status === "pending_signature");
+    }
   });
 });
