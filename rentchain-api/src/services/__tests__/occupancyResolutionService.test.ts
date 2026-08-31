@@ -210,31 +210,75 @@ describe("occupancyResolutionService", () => {
     expect(read("canonicalEvents", result.auditEventId)).toMatchObject({ action: "occupancy_resolution_recorded", immutable: true });
   });
 
-  it("preserves stale occupied-without-lease recovery for a requested tenant", async () => {
+  it("removes generic vacancy clearing but preserves uniquely attributed operational move-out", async () => {
     seed("properties", "property-1", { landlordId: "landlord-1", name: "Harbour House", units: [{ id: "unit-1", unitNumber: "1A", status: "occupied", currentTenantId: "tenant-1" }] });
     seed("units", "unit-1", { landlordId: "landlord-1", propertyId: "property-1", unitNumber: "1A", status: "occupied", currentTenantId: "tenant-1" });
     seed("tenants", "tenant-1", { landlordId: "landlord-1", status: "Current", currentLeaseId: null });
     const context = await getOccupancyResolutionContext(base);
     expect(context.canonicalState.reasons).toContain("OCCUPIED_WITHOUT_CURRENT_LEASE");
-    expect(context.eligibleResolutionTypes).toEqual(expect.arrayContaining(["record_operational_move_out", "clear_stale_occupancy_record"]));
+    expect(context.eligibleResolutionTypes).toEqual(["record_operational_move_out"]);
+  });
+
+  it.each([
+    ["occupied marker only", () => {}],
+    ["tenant current", () => seed("tenants", "tenant-1", { landlordId: "landlord-1", status: "Current" })],
+    ["active tenancy", () => seed("tenancies", "tenancy-1", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "active" })],
+    ["missing referenced lease", () => seed("units", "unit-1", { ...read("units", "unit-1"), currentLeaseId: "missing-lease" })],
+    ["past lease", () => seed("leases", "lease-1", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "active", executionStatus: "fully_executed", startDate: "2025-01-01", endDate: "2025-12-31" })],
+    ["upcoming lease", () => seed("leases", "lease-1", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "active", executionStatus: "fully_executed", startDate: "2027-01-01", endDate: "2027-12-31" })],
+    ["draft lease", () => seed("leases", "lease-1", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "draft", executionStatus: "draft", startDate: "2026-01-01", endDate: "2027-01-01" })],
+    ["foreign tenancy", () => seed("tenancies", "tenancy-foreign", { landlordId: "landlord-2", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-2", status: "active" })],
+  ] as const)("does not offer generic stale occupancy clearing for %s", async (_label, arrange) => {
+    seed("properties", "property-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitNumber: "1A", status: "occupied", currentTenantId: "tenant-1" }] });
+    seed("units", "unit-1", { landlordId: "landlord-1", propertyId: "property-1", unitNumber: "1A", status: "occupied", currentTenantId: "tenant-1" });
+    seed("tenants", "tenant-1", { landlordId: "landlord-1", status: "Current" });
+    arrange();
+    const context = await getOccupancyResolutionContext(base);
+    expect(context.eligibleResolutionTypes).not.toContain("clear_stale_occupancy_record");
+  });
+
+  it.each([
+    ["no attributable tenant", () => {
+      seed("properties", "property-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitNumber: "1A", status: "occupied" }] });
+      seed("units", "unit-1", { landlordId: "landlord-1", propertyId: "property-1", unitNumber: "1A", status: "occupied" });
+    }],
+    ["multiple candidate tenants", () => {
+      seed("properties", "property-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitNumber: "1A", status: "occupied", currentTenantId: "tenant-1" }] });
+      seed("units", "unit-1", { landlordId: "landlord-1", propertyId: "property-1", unitNumber: "1A", status: "occupied", currentTenantId: "tenant-1" });
+      seed("tenancies", "tenancy-2", { landlordId: "landlord-1", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-2", status: "active" });
+    }],
+    ["foreign tenancy", () => {
+      seed("properties", "property-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitNumber: "1A", status: "occupied", currentTenantId: "tenant-1" }] });
+      seed("units", "unit-1", { landlordId: "landlord-1", propertyId: "property-1", unitNumber: "1A", status: "occupied", currentTenantId: "tenant-1" });
+      seed("tenancies", "tenancy-foreign", { landlordId: "landlord-2", propertyId: "property-1", unitId: "unit-1", tenantId: "tenant-1", status: "active" });
+    }],
+    ["conflicting unit linkage", () => {
+      seed("properties", "property-1", { landlordId: "landlord-1", units: [{ id: "unit-1", unitNumber: "1A", status: "occupied", currentTenantId: "tenant-2" }] });
+      seed("units", "unit-1", { landlordId: "landlord-1", propertyId: "property-1", unitNumber: "1A", status: "occupied", currentTenantId: "tenant-1" });
+    }],
+  ] as const)("fails closed for operational move-out with %s", async (_label, arrange) => {
+    arrange();
+    seed("tenants", "tenant-1", { landlordId: "landlord-1", status: "Current" });
+    const context = await getOccupancyResolutionContext(base);
+    expect(context.eligibleResolutionTypes).not.toContain("record_operational_move_out");
   });
 
   it("returns the committed result for an identical idempotent retry and rejects changed payload", async () => {
     seedExpiredReview();
     const context = await getOccupancyResolutionContext(base);
-    const input = { ...base, actorId: "landlord-1", type: "clear_stale_occupancy_record" as const, expectedStateToken: context.expectedStateToken, idempotencyKey: "retry-1", confirmation: true };
+    const input = { ...base, actorId: "landlord-1", type: "record_operational_move_out" as const, effectiveDate: "2026-08-18", expectedStateToken: context.expectedStateToken, idempotencyKey: "retry-1", confirmation: true };
     const first = await resolveOccupancy(input);
     const second = await resolveOccupancy(input);
     expect(second.idempotent).toBe(true);
     expect(second.auditEventId).toBe(first.auditEventId);
-    await expect(resolveOccupancy({ ...input, type: "record_operational_move_out", effectiveDate: "2026-08-18" })).rejects.toMatchObject({ code: "idempotency_key_reused" });
+    await expect(resolveOccupancy({ ...input, effectiveDate: "2026-08-19" })).rejects.toMatchObject({ code: "idempotency_key_reused" });
   });
 
   it("rolls back operational writes when immutable audit creation fails", async () => {
     seedExpiredReview();
     const context = await getOccupancyResolutionContext(base);
     failAudit(true);
-    await expect(resolveOccupancy({ ...base, actorId: "landlord-1", type: "clear_stale_occupancy_record", expectedStateToken: context.expectedStateToken, idempotencyKey: "audit-fail", confirmation: true })).rejects.toThrow("audit_failed");
+    await expect(resolveOccupancy({ ...base, actorId: "landlord-1", type: "record_operational_move_out", effectiveDate: "2026-08-18", expectedStateToken: context.expectedStateToken, idempotencyKey: "audit-fail", confirmation: true })).rejects.toThrow("audit_failed");
     expect(read("units", "unit-1")).toMatchObject({ occupancyStatus: "occupied", currentLeaseId: "lease-past" });
     expect(read("occupancyResolutionRequests", "6f04eb5f")).toBeUndefined();
   });

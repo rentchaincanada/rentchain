@@ -293,7 +293,7 @@ describe("unitsRoutes PATCH aliases", () => {
     });
   });
 
-  it("returns persisted IDs when creating units for a property", async () => {
+  it("returns persisted IDs when creating vacant units for a property", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1" });
     const app = await createApp();
 
@@ -302,22 +302,12 @@ describe("unitsRoutes PATCH aliases", () => {
       .send({
         units: [
           { unitNumber: "101", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
-          {
-            unitNumber: "102",
-            beds: 2,
-            baths: 1,
-            sqft: 700,
-            marketRent: 1900,
-            status: "occupied",
-            occupantName: "Jane Tenant",
-            leaseEndDate: "2027-06-10",
-          },
         ],
       });
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ ok: true, created: 2 });
-    expect(res.body.units).toHaveLength(2);
+    expect(res.body).toMatchObject({ ok: true, created: 1 });
+    expect(res.body.units).toHaveLength(1);
     expect(res.body.units[0]).toMatchObject({
       id: "units-auto-1",
       unitNumber: "101",
@@ -334,26 +324,10 @@ describe("unitsRoutes PATCH aliases", () => {
       tenantName: null,
       leaseEndDate: null,
     });
-    expect(res.body.units[1]).toMatchObject({
-      id: "units-auto-2",
-      unitNumber: "102",
-      propertyId: "prop-1",
-      rent: 1900,
-      marketRent: 1900,
-      beds: 2,
-      bedrooms: 2,
-      baths: 1,
-      bathrooms: 1,
-      status: "occupied",
-      occupancyStatus: "occupied",
-      occupantName: "Jane Tenant",
-      tenantName: "Jane Tenant",
-      leaseEndDate: "2027-06-10",
-    });
     expect(res.body.items).toEqual(res.body.units);
     expect(getDoc("properties", "prop-1")).toMatchObject({
-      unitCount: 2,
-      unitsCount: 2,
+      unitCount: 1,
+      unitsCount: 1,
       units: [
         expect.objectContaining({
           id: "units-auto-1",
@@ -362,16 +336,18 @@ describe("unitsRoutes PATCH aliases", () => {
           occupantName: null,
           leaseEndDate: null,
         }),
-        expect.objectContaining({
-          id: "units-auto-2",
-          unitNumber: "102",
-          status: "occupied",
-          occupancyStatus: "occupied",
-          occupantName: "Jane Tenant",
-          tenantName: "Jane Tenant",
-          leaseEndDate: "2027-06-10",
-        }),
       ],
     });
+  });
+
+  it.each(["occupied", "leased", "rented", " OCCUPIED "])("rejects unsupported standalone unit status %s without writes", async (status) => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1" });
+    const app = await createApp();
+    const res = await request(app).post("/api/properties/prop-1/units").send({ units: [{ unitNumber: "101", status }] });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: "UNSUPPORTED_INITIAL_OCCUPANCY" });
+    expect(getDoc("units", "units-auto-1")).toBeUndefined();
+    expect(getDoc("properties", "prop-1")).toEqual({ landlordId: "landlord-1" });
   });
 });

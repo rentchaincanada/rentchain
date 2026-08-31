@@ -8,8 +8,8 @@ describe("parseUnitsCsv", () => {
     const result = parseUnitsCsv(csv);
 
     expect(result.headers).toMatchObject({ valid: true, missing: [], unknown: [] });
-    expect(result.preview.errors).toEqual([]);
-    expect(result.candidates).toHaveLength(2);
+    expect(result.preview.errors).toEqual([expect.objectContaining({ row: 3, code: "UNSUPPORTED_INITIAL_OCCUPANCY", field: "status" })]);
+    expect(result.candidates).toHaveLength(1);
     expect(result.candidates[0].data).toMatchObject({
       unitNumber: "101",
       rent: 1850,
@@ -31,8 +31,8 @@ describe("parseUnitsCsv", () => {
     const result = parseUnitsCsv(csv);
 
     expect(result.headers).toMatchObject({ valid: true, missing: [], unknown: [] });
-    expect(result.preview.errors).toEqual([]);
-    expect(result.candidates).toHaveLength(2);
+    expect(result.preview.errors).toEqual([expect.objectContaining({ row: 3, code: "UNSUPPORTED_INITIAL_OCCUPANCY", field: "status" })]);
+    expect(result.candidates).toHaveLength(1);
     expect(result.candidates[0].data).toMatchObject({
       unitNumber: "101",
       rent: 1850,
@@ -41,32 +41,16 @@ describe("parseUnitsCsv", () => {
       sqft: 610,
       status: "vacant",
     });
-    expect(result.candidates[1].data).toMatchObject({
-      unitNumber: "102",
-      rent: 1650,
-      bedrooms: 0,
-      bathrooms: 1,
-      sqft: 450,
-      status: "occupied",
-    });
   });
 
-  it("parses occupied metadata aliases for CSV imports", () => {
-    const csv = "unitNumber,marketRent,beds,baths,status,tenantName,leaseEndDate\n301,2100,2,1,occupied,Jane Tenant,2027-06-10";
+  it.each(["occupied", "leased", "rented", " OCCUPIED "])("rejects unsupported initial occupancy status %s", (status) => {
+    const csv = `unitNumber,marketRent,beds,baths,status,tenantName,leaseEndDate\n301,2100,2,1,${status},Jane Tenant,2027-06-10`;
 
     const result = parseUnitsCsv(csv);
 
     expect(result.headers).toMatchObject({ valid: true, missing: [], unknown: [] });
-    expect(result.preview.errors).toEqual([]);
-    expect(result.candidates[0].data).toMatchObject({
-      unitNumber: "301",
-      rent: 2100,
-      bedrooms: 2,
-      bathrooms: 1,
-      status: "occupied",
-      occupantName: "Jane Tenant",
-      leaseEndDate: "2027-06-10",
-    });
+    expect(result.preview.errors).toEqual([expect.objectContaining({ code: "UNSUPPORTED_INITIAL_OCCUPANCY", field: "status" })]);
+    expect(result.candidates).toEqual([]);
   });
 
   it("accepts the public template occupantName and leaseEndDate headers", () => {
@@ -80,17 +64,8 @@ describe("parseUnitsCsv", () => {
       unknown: [],
       expected: expect.arrayContaining(["occupantName", "leaseEndDate"]),
     });
-    expect(result.preview.errors).toEqual([]);
-    expect(result.candidates[0].data).toMatchObject({
-      unitNumber: "301",
-      rent: 2100,
-      bedrooms: 2,
-      bathrooms: 1,
-      sqft: 850,
-      status: "occupied",
-      occupantName: "Jane Tenant",
-      leaseEndDate: "2027-06-10",
-    });
+    expect(result.preview.errors).toEqual([expect.objectContaining({ code: "UNSUPPORTED_INITIAL_OCCUPANCY", field: "status" })]);
+    expect(result.candidates).toEqual([]);
   });
 
   it("recovers UTF-16 BOM text when upload decoding leaves null bytes", () => {

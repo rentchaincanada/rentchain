@@ -4,6 +4,7 @@ import {
   UNIT_CSV_FIELD_MAP,
   UnitCsvRowSchema,
   cleanText,
+  isUnsupportedInitialOccupancyStatus,
   mapRow,
   resolveUnitCsvField,
 } from "./unitCsv.schema";
@@ -96,6 +97,18 @@ export function parseUnitsCsv(csvText: string): ParsedUnitsCsv {
     }
 
     const mapped = mapRow(raw);
+    if (isUnsupportedInitialOccupancyStatus(mapped.status)) {
+      const issue = {
+        row: rowNum,
+        code: "UNSUPPORTED_INITIAL_OCCUPANCY",
+        field: "status",
+        message: `Row ${rowNum}: status - occupied units must be created as vacant and started through the occupancy workflow`,
+        unitNumber: mapped.unitNumber ? String(mapped.unitNumber).trim() : undefined,
+      };
+      invalid.push(issue);
+      rows.push({ row: rowNum, status: "invalid", unitNumber: mapped.unitNumber, data: mapped, issues: [issue] });
+      return;
+    }
     const v = UnitCsvRowSchema.safeParse(mapped);
     if (!v.success) {
       const issues = v.error.issues.map((issue) => {

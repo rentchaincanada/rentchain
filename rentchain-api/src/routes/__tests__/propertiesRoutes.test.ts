@@ -445,6 +445,22 @@ describe("properties routes publish + defaults", () => {
     });
   });
 
+  it.each(["occupied", "leased", "rented", " OCCUPIED "])("rejects unsupported initial property unit status %s without writes", async (status) => {
+    const app = await createApp();
+    const res = await request(app).post("/api/properties").send({
+      addressLine1: "102 Unit St",
+      city: "Halifax",
+      province: "NS",
+      units: [{ unitNumber: "101", rent: 1850, status }],
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: "manual_unit_validation_failed" });
+    expect(res.body.unitErrors).toEqual([expect.objectContaining({ field: "status" })]);
+    expect(listDocs("properties")).toEqual([]);
+    expect(listDocs("units")).toEqual([]);
+  });
+
   it("rejects invalid manually entered units before creating records", async () => {
     const app = await createApp();
     const res = await request(app)
