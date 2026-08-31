@@ -20,9 +20,11 @@ const { clearWriteLog, fakeDb, listDocs, resetFakeDb, seedDoc, writeLog } = vi.h
 
   function matches(doc: any, filters: Array<{ field: string; op: string; value: any }>) {
     return filters.every(({ field, op, value }) => {
-      const actual = doc?.data?.[field];
+      const actual = field.split(".").reduce((current: any, part) => current?.[part], doc?.data);
       if (op === "==") return actual === value;
       if (op === "array-contains") return Array.isArray(actual) && actual.includes(value);
+      if (op === "in") return Array.isArray(value) && value.includes(actual);
+      if (op === "array-contains-any") return Array.isArray(actual) && Array.isArray(value) && actual.some((entry) => value.includes(entry));
       return false;
     });
   }
