@@ -5,6 +5,7 @@ const writeCanonicalEventMock = vi.fn(async () => undefined);
 const getCanonicalLeaseStartContextMock = vi.fn(async () => ({ expectedStateToken: "state-1" }));
 const startCanonicalLeaseOccupancyMock = vi.fn(async () => ({ canonicalOutcome: "occupancy_effective", occupancyEffective: true, reasons: [] }));
 const uploadBufferToGcsMock = vi.fn(async ({ path }: { path: string }) => ({ bucket: "bucket", path }));
+let transactionTail = Promise.resolve();
 
 function ensureCollection(name: string) {
   if (!collections.has(name)) collections.set(name, new Map());
@@ -45,8 +46,29 @@ function makeQuery(name: string, filters: Array<{ field: string; value: any }> =
   };
 }
 
+async function runTransaction<T>(callback: (transaction: any) => Promise<T>): Promise<T> {
+  let release = () => undefined;
+  const previous = transactionTail;
+  transactionTail = new Promise<void>((resolve) => { release = resolve; });
+  await previous;
+  const writes: Array<() => Promise<void>> = [];
+  try {
+    const result = await callback({
+      get: (target: any) => target.get(),
+      set: (target: any, value: any, options?: { merge?: boolean }) => {
+        writes.push(() => target.set(value, options));
+      },
+    });
+    for (const write of writes) await write();
+    return result;
+  } finally {
+    release();
+  }
+}
+
 vi.mock("../../firebase", () => ({
   db: {
+    runTransaction,
     collection: (name: string) => ({
       doc: (id: string) => makeDoc(name, id),
       where: (field: string, _op: string, value: any) => makeQuery(name, [{ field, value }]),
@@ -110,7 +132,7 @@ describe("leaseSigningService", () => {
       providerRequestId: request.providerRequestId,
       eventId: "provider-event-stable-1",
       type: "signed",
-      occurredAt: "2026-08-19T12:00:00.000Z",
+      occurredAt: "2027-08-19T12:00:00.000Z",
     };
     await processSigningWebhook({ providerId: "mock", headers: {}, body });
     await processSigningWebhook({ providerId: "mock", headers: {}, body });
@@ -132,7 +154,7 @@ describe("leaseSigningService", () => {
     });
     const sent = await sendLeaseForSignature({ leaseId: "lease-conflict", landlordId: "landlord-1", lease: { startDate: "2026-01-01" }, tenantEmails: ["tenant@example.com"] });
     const signingRequest = ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId));
-    await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-conflict-1", type: "signed", occurredAt: "2026-08-19T12:00:00.000Z" } });
+    await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-conflict-1", type: "signed", occurredAt: "2027-08-19T12:00:00.000Z" } });
     expect(ensureCollection("leases").get("lease-conflict")).toEqual(expect.objectContaining({ executionStatus: "fully_executed" }));
     expect(ensureCollection("leases").get("lease-conflict")).not.toHaveProperty("occupancyStartReview");
     expect(startCanonicalLeaseOccupancyMock).not.toHaveBeenCalled();
@@ -146,8 +168,8 @@ describe("leaseSigningService", () => {
     });
     const sent = await sendLeaseForSignature({ leaseId: "lease-future", landlordId: "landlord-1", lease: { startDate: "2027-01-01" }, tenantEmails: ["tenant@example.com"] });
     const signingRequest = ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId));
-    await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-future-1", type: "signed", occurredAt: "2026-08-19T12:00:00.000Z" } });
-    await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-future-1", type: "signed", occurredAt: "2026-08-19T12:00:00.000Z" } });
+    await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-future-1", type: "signed", occurredAt: "2027-08-19T12:00:00.000Z" } });
+    await processSigningWebhook({ providerId: "mock", headers: {}, body: { providerRequestId: signingRequest.providerRequestId, eventId: "provider-future-1", type: "signed", occurredAt: "2027-08-19T12:00:00.000Z" } });
     expect(ensureCollection("leases").get("lease-future")).toEqual(expect.objectContaining({ executionStatus: "fully_executed", status: "pending" }));
     expect(ensureCollection("leases").get("lease-future")).not.toHaveProperty("occupancyStartReview");
     expect(startCanonicalLeaseOccupancyMock).not.toHaveBeenCalled();
@@ -866,6 +888,84 @@ describe("leaseSigningService", () => {
       });
       const snapshot = await loadLeaseSigningSnapshot({ leaseId, landlordId: "landlord-1", lease: {} });
       expect(snapshot.reminderEligible).toBe(status === "pending_signature");
+    }
+  });
+
+  it("keeps the newer lifecycle authoritative for both concurrent delivery orders", async () => {
+    const { loadLeaseSigningSnapshot, processSigningWebhook, sendLeaseForSignature } = await import("../signing/leaseSigningService");
+    for (const newerFirst of [false, true]) {
+      const leaseId = `lease-concurrent-${newerFirst}`;
+      ensureCollection("leases").set(leaseId, { landlordId: "landlord-1" });
+      const sent = await sendLeaseForSignature({ leaseId, landlordId: "landlord-1", lease: {}, tenantEmails: ["tenant@example.com"] });
+      const request = ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId));
+      const newerBody = {
+        providerRequestId: request.providerRequestId, eventId: `evt-newer-${newerFirst}`, type: "failed", occurredAt: "2027-06-02T00:00:00.000Z",
+      } as const;
+      const olderBody = {
+        providerRequestId: request.providerRequestId, eventId: `evt-older-${newerFirst}`, type: "signed", occurredAt: "2027-06-01T00:00:00.000Z",
+      } as const;
+      await Promise.all(newerFirst
+        ? [processSigningWebhook({ providerId: "mock", headers: {}, body: newerBody }), processSigningWebhook({ providerId: "mock", headers: {}, body: olderBody })]
+        : [processSigningWebhook({ providerId: "mock", headers: {}, body: olderBody }), processSigningWebhook({ providerId: "mock", headers: {}, body: newerBody })]);
+      const snapshot = await loadLeaseSigningSnapshot({ leaseId, landlordId: "landlord-1", lease: {} });
+      expect(snapshot.signingStatus).toBe("failed");
+      expect(ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId)).currentSigningStatus).toBe("failed");
+      if (newerFirst) expect(ensureCollection("leases").get(leaseId)).not.toHaveProperty("executionStatus", "fully_executed");
+    }
+  });
+
+  it("deduplicates concurrent identical provider events atomically", async () => {
+    const { processSigningWebhook, sendLeaseForSignature } = await import("../signing/leaseSigningService");
+    const sent = await sendLeaseForSignature({ leaseId: "lease-concurrent-duplicate", landlordId: "landlord-1", lease: {}, tenantEmails: ["tenant@example.com"] });
+    const request = ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId));
+    const body = { providerRequestId: request.providerRequestId, eventId: "evt-concurrent-duplicate", type: "signed", occurredAt: "2027-07-01T00:00:00.000Z" };
+    await Promise.all([
+      processSigningWebhook({ providerId: "mock", headers: {}, body }),
+      processSigningWebhook({ providerId: "mock", headers: {}, body }),
+    ]);
+    const matchingEvents = Array.from(ensureCollection("leaseSigningEvents").values()).filter((event) => event.type === "signed");
+    expect(matchingEvents).toHaveLength(1);
+    expect(ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId)).currentSigningStatus).toBe("signed");
+    expect(writeCanonicalEventMock.mock.calls.filter(([event]) => event.action === "signing_signed")).toHaveLength(1);
+  });
+
+  it("uses explicit fail-closed equal-timestamp lifecycle precedence independent of event hashes", async () => {
+    const { loadLeaseSigningSnapshot, processSigningWebhook, sendLeaseForSignature } = await import("../signing/leaseSigningService");
+    const cases = [
+      { first: "sent", second: "signed", expected: "signed" },
+      { first: "signed", second: "cancelled", expected: "ambiguous_terminal_state" },
+      { first: "signed", second: "expired", expected: "ambiguous_terminal_state" },
+      { first: "signed", second: "rejected", expected: "ambiguous_terminal_state" },
+      { first: "signed", second: "failed", expected: "ambiguous_terminal_state" },
+      { first: "cancelled", second: "failed", expected: "ambiguous_terminal_state" },
+    ] as const;
+    for (const [index, testCase] of cases.entries()) {
+      for (const reverseIds of [false, true]) {
+        const leaseId = `lease-equal-${index}-${reverseIds}`;
+        ensureCollection("leases").set(leaseId, { landlordId: "landlord-1" });
+        const sent = await sendLeaseForSignature({ leaseId, landlordId: "landlord-1", lease: {}, tenantEmails: ["tenant@example.com"] });
+        const request = ensureCollection("leaseSigningRequests").get(String(sent.signingRequestId));
+        for (const [eventIndex, type] of [testCase.first, testCase.second].entries()) {
+          await processSigningWebhook({ providerId: "mock", headers: {}, body: {
+            providerRequestId: request.providerRequestId,
+            eventId: reverseIds ? `zzz-${1 - eventIndex}` : `aaa-${eventIndex}`,
+            type,
+            occurredAt: "2027-08-01T00:00:00.000Z",
+          } });
+        }
+        const snapshot = await loadLeaseSigningSnapshot({ leaseId, landlordId: "landlord-1", lease: {} });
+        expect(snapshot.signingStatus).toBe(testCase.expected);
+        expect(snapshot.reminderEligible).toBe(false);
+        if (testCase.expected === "ambiguous_terminal_state") {
+          expect(snapshot.derivedLeaseState).toBe("failed");
+          expect(snapshot.viewSignedDocumentAllowed).toBe(false);
+          expect(snapshot.signedDocumentRecoveryAction).toBe(
+            testCase.first === "signed" || testCase.second === "signed" ? "admin_review" : "none"
+          );
+          await expect(sendLeaseForSignature({ leaseId, landlordId: "landlord-1", lease: {}, tenantEmails: ["tenant@example.com"] }))
+            .rejects.toMatchObject({ message: "signing_state_ambiguous", status: 409 });
+        }
+      }
     }
   });
 });

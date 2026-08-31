@@ -16,6 +16,7 @@ export function deriveLeaseSigningState(input: {
   now?: Date;
 }): DerivedLeaseSigningState {
   const status = String(input.signingStatus || "").trim();
+  if (status === "ambiguous_terminal_state") return "failed";
   if (status === "rejected" || status === "expired" || status === "cancelled" || status === "failed") return status as DerivedLeaseSigningState;
   if (status !== "signed") return status === "pending_signature" ? "pending_signature" : "not_started";
 

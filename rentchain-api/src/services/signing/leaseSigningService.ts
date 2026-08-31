@@ -14,7 +14,8 @@ export type LeaseSigningStatus =
   | "rejected"
   | "expired"
   | "cancelled"
-  | "failed";
+  | "failed"
+  | "ambiguous_terminal_state";
 
 export type LeaseSigningEvent = {
   id: string;
@@ -185,6 +186,12 @@ function compareEvents(a: LeaseSigningEvent, b: LeaseSigningEvent) {
   return timeDelta || a.id.localeCompare(b.id);
 }
 
+function lifecycleStatusForEvent(type: SigningProviderEventType): LeaseSigningStatus | null {
+  if (type === "sent" || type === "viewed") return "pending_signature";
+  if (type === "signed" || type === "cancelled" || type === "expired" || type === "rejected" || type === "failed") return type;
+  return null;
+}
+
 async function signedDocumentDownloadFromRequest(data: any): Promise<SignedLeaseDocumentDownload> {
   const ref = signedDocumentStorageRefFromRequest(data);
   if (!ref) {
@@ -208,17 +215,18 @@ async function signedDocumentDownloadFromRequest(data: any): Promise<SignedLease
 }
 
 function statusFromEvents(events: LeaseSigningEvent[]): LeaseSigningStatus {
-  const chronological = [...events].sort(compareEvents);
-  for (let index = chronological.length - 1; index >= 0; index -= 1) {
-    const type = chronological[index]?.type;
-    if (type === "signed") return "signed";
-    if (type === "cancelled") return "cancelled";
-    if (type === "failed") return "failed";
-    if (type === "rejected") return "rejected";
-    if (type === "expired") return "expired";
-    if (type === "sent" || type === "viewed") return "pending_signature";
-  }
-  return "not_started";
+  const lifecycleEvents = events
+    .map((event) => ({ event, status: lifecycleStatusForEvent(event.type) }))
+    .filter((entry): entry is { event: LeaseSigningEvent; status: LeaseSigningStatus } => Boolean(entry.status));
+  if (!lifecycleEvents.length) return "not_started";
+  const latestTime = Math.max(...lifecycleEvents.map(({ event }) => asDateMillis(event.occurredAt)));
+  const latestStatuses = new Set(
+    lifecycleEvents.filter(({ event }) => asDateMillis(event.occurredAt) === latestTime).map(({ status }) => status)
+  );
+  const terminalStatuses = [...latestStatuses].filter((status) => status !== "pending_signature");
+  if (!terminalStatuses.length) return "pending_signature";
+  if (new Set(terminalStatuses).size === 1) return terminalStatuses[0];
+  return "ambiguous_terminal_state";
 }
 
 function buildSigningDocumentProjection(input: {
@@ -259,7 +267,8 @@ function normalizeStoredStatus(value: unknown): LeaseSigningStatus | null {
     status === "rejected" ||
     status === "expired" ||
     status === "cancelled" ||
-    status === "failed"
+    status === "failed" ||
+    status === "ambiguous_terminal_state"
   ) {
     return status;
   }
@@ -317,9 +326,7 @@ async function appendSigningEvent(input: {
   const occurredAt = input.occurredAt || nowIso();
   const id = eventIdFor(input.requestId, input.type, occurredAt, input.providerEventId || "");
   const ref = db.collection(EVENTS).doc(id);
-  const existing = await ref.get();
-  if (existing.exists) return id;
-  await ref.set({
+  const eventData = {
     requestId: input.requestId,
     leaseId: input.leaseId,
     landlordId: input.landlordId,
@@ -342,18 +349,44 @@ async function appendSigningEvent(input: {
     createdAt: FieldValue.serverTimestamp(),
     rawIdsIncluded: false,
     payloadIncluded: false,
+  };
+  const transactionResult = await db.runTransaction(async (transaction: FirebaseFirestore.Transaction) => {
+    const eventQuery = db.collection(EVENTS).where("requestId", "==", input.requestId);
+    const leaseRef = input.type === "signed" ? db.collection("leases").doc(input.leaseId) : null;
+    const [existing, eventSnap, leaseSnap] = await Promise.all([
+      transaction.get(ref),
+      transaction.get(eventQuery),
+      leaseRef ? transaction.get(leaseRef) : Promise.resolve(null),
+    ]);
+    if (existing.exists) return { created: false, currentSigningStatus: null as LeaseSigningStatus | null };
+    const events = (eventSnap.docs || [])
+      .map(projectEvent)
+      .filter((event) => event.id && event.type && event.occurredAt)
+      .concat({ id, type: input.type, occurredAt, actorRole: input.actorRole });
+    const currentSigningStatus = statusFromEvents(events);
+    transaction.set(ref, eventData);
+    transaction.set(db.collection(REQUESTS).doc(input.requestId), {
+      currentSigningStatus,
+      currentStatusAt: [...events].sort(compareEvents).at(-1)?.occurredAt || occurredAt,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    const lease = leaseSnap?.exists ? leaseSnap.data() as any : null;
+    if (
+      leaseRef &&
+      currentSigningStatus === "signed" &&
+      lease &&
+      String(lease.landlordId || "").trim() === input.landlordId
+    ) {
+      transaction.set(leaseRef, {
+        executionStatus: "fully_executed",
+        executionState: "fully_executed",
+        fullyExecutedAt: occurredAt,
+        updatedAt: occurredAt,
+      }, { merge: true });
+    }
+    return { created: true, currentSigningStatus };
   });
-  const currentSigningStatus = statusFromEvents(await loadEvents(input.requestId));
-  if (currentSigningStatus !== "not_started") {
-    await db.collection(REQUESTS).doc(input.requestId).set(
-      {
-        currentSigningStatus,
-        currentStatusAt: occurredAt,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-  }
+  if (!transactionResult.created) return { id, ...transactionResult };
   await writeCanonicalEvent({
     domain: "lease",
     action: `signing_${input.type}`,
@@ -380,7 +413,7 @@ async function appendSigningEvent(input: {
       jurisdictionCode: input.documentMetadata?.jurisdictionCode || null,
     },
   }).catch(() => undefined);
-  return id;
+  return { id, ...transactionResult };
 }
 
 async function loadLatestRequest(leaseId: string, landlordId?: string | null) {
@@ -506,6 +539,9 @@ export async function sendLeaseForSignature(input: {
   const provider = getConfiguredSigningProvider();
   if (!provider?.isConfigured()) throw Object.assign(new Error("provider_unavailable"), { status: 503 });
   const current = await loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
+  if (current.signingStatus === "ambiguous_terminal_state") {
+    throw Object.assign(new Error("signing_state_ambiguous"), { status: 409 });
+  }
   if (current.signingStatus === "signed") throw Object.assign(new Error("signing_already_complete"), { status: 400 });
   if (current.signingStatus === "pending_signature") throw Object.assign(new Error("signing_already_pending"), { status: 400 });
   const emails = input.tenantEmails.map(normalizeEmail).filter(Boolean);
@@ -791,6 +827,15 @@ export async function processSigningWebhook(input: { providerId: string; headers
     return {};
   }
   const data = requestDoc.data() as any;
+  if (parsed.type === "signed") {
+    const leaseId = String(data?.leaseId || "").trim();
+    const landlordId = String(data?.landlordId || "").trim();
+    const occurredAt = String(parsed.occurredAt || "").trim();
+    const eventIdentity = String(parsed.providerEventId || "").trim();
+    if (!leaseId || !landlordId || !occurredAt || !eventIdentity) {
+      throw Object.assign(new Error("signing_completion_identity_incomplete"), { status: 409 });
+    }
+  }
   await appendSigningEvent({
     requestId: requestDoc.id,
     leaseId: String(data?.leaseId || ""),
@@ -805,26 +850,6 @@ export async function processSigningWebhook(input: { providerId: string; headers
     ...safeProviderMetadataFromRequest(data),
     documentMetadata: safeDocumentMetadataFromRequest(data),
   });
-  if (parsed.type === "signed") {
-    const leaseId = String(data?.leaseId || "").trim();
-    const landlordId = String(data?.landlordId || "").trim();
-    const occurredAt = String(parsed.occurredAt || "").trim();
-    const eventIdentity = String(parsed.providerEventId || "").trim();
-    if (!leaseId || !landlordId || !occurredAt || !eventIdentity) {
-      throw Object.assign(new Error("signing_completion_identity_incomplete"), { status: 409 });
-    }
-    const leaseRef = db.collection("leases").doc(leaseId);
-    const leaseSnap = await leaseRef.get();
-    const lease = leaseSnap.exists ? leaseSnap.data() as any : null;
-    if (lease && String(lease.landlordId || "").trim() === landlordId) {
-      await leaseRef.set({
-        executionStatus: "fully_executed",
-        executionState: "fully_executed",
-        fullyExecutedAt: occurredAt,
-        updatedAt: occurredAt,
-      }, { merge: true });
-    }
-  }
   return {};
 }
 
