@@ -343,6 +343,21 @@ describe("Preview backend proxy", () => {
     });
   });
 
+  it("couples the authorized PR #1589 service URL and audience internally", () => {
+    const target = resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: PREVIEW_BACKEND_TARGET_KEYS.pr1589,
+    });
+    expect(target).toEqual({
+      key: "pr1589-signing-document-contract-cert",
+      cloudRunServiceUrl:
+        "https://rentchain-pr1589-qa-signing-a-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1589-qa-signing-a-glistw4pya-nn.a.run.app",
+      temporary: true,
+    });
+  });
+
   it.each([
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
@@ -374,6 +389,8 @@ describe("Preview backend proxy", () => {
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1585],
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1587],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1587],
+    ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1589],
+    ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1589],
     ["preview", ""],
     ["preview", "   "],
     ["preview", "unknown"],
@@ -401,6 +418,10 @@ describe("Preview backend proxy", () => {
     ["preview", "pr1587-review-needed-discovery-cert-evil"],
     ["preview", "PR1587-REVIEW-NEEDED-DISCOVERY-CERT"],
     ["preview", "https://rentchain-pr1587-qa-n3-glistw4pya-nn.a.run.app"],
+    ["preview", "pr1589-signing-document-contract-cert-evil"],
+    ["preview", "PR1589-SIGNING-DOCUMENT-CONTRACT-CERT"],
+    ["preview", "https://rentchain-pr1589-qa-signing-a-glistw4pya-nn.a.run.app"],
+    ["preview", "*.rentchain-pr1589-qa-signing-a-glistw4pya-nn.a.run.app"],
   ])("rejects unsafe target selection for %s / %s", (vercelEnvironment, targetKey) => {
     expect(() => resolvePreviewBackendTarget({ vercelEnvironment, targetKey })).toThrow(
       "PREVIEW_PROXY_TARGET_REJECTED",
