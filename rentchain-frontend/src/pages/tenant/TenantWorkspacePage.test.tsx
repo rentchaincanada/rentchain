@@ -8,6 +8,7 @@ import TenantLeasePage from "./TenantLeasePage";
 import TenantMaintenanceRequestsPage from "./TenantMaintenanceRequestsPage";
 import TenantInviteRedeemPage from "./TenantInviteRedeemPage";
 import { TenantNav } from "../../components/layout/TenantNav";
+import type { TenantWorkspaceLease } from "../../api/tenantPortal";
 
 const tenantPortalApi = vi.hoisted(() => ({
   getTenantWorkspace: vi.fn(),
@@ -1378,6 +1379,158 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/1 document in your vault, 1 ready to share, and 0 still needing attention/i)).toBeInTheDocument();
     expect(screen.queryByText(/schedule-a-doc/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/tenant-1/i)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      name: "canonical signed without a durable document",
+      lease: {
+        signingLifecycleState: "signed",
+        signingExecutionState: "active",
+        signedDocumentState: "pending_persistence",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
+        documentUrl: null,
+      },
+      expected: "Signing complete; signed copy pending",
+      signedDocumentAction: false,
+    },
+    {
+      name: "canonical signed with a durable signed document",
+      lease: {
+        signingLifecycleState: "signed",
+        signingExecutionState: "active",
+        signedDocumentState: "available",
+        signedDocumentAvailable: true,
+        viewSignedDocumentAllowed: true,
+        documentUrl: "https://example.com/signed.pdf",
+        leaseDocumentContext: {
+          documentStatus: "signed",
+          documentUrl: "https://example.com/signed.pdf",
+          displayLabel: "Signed lease document",
+          source: "lease_signed_document",
+          confidence: "high",
+          warnings: [],
+        },
+      },
+      expected: "Signed lease document",
+      signedDocumentAction: true,
+    },
+    {
+      name: "legacy execution complete only",
+      lease: {
+        signingLifecycleState: "not_started",
+        leaseExecution: {
+          executionStatus: "fully_executed",
+          executionLabel: "Lease fully executed",
+        },
+      },
+      expected: "No lease document available yet",
+      signedDocumentAction: false,
+    },
+    {
+      name: "provider signed only",
+      lease: {
+        signingLifecycleState: "not_started",
+        providerSigningStatus: "signed",
+        providerSignedAt: "2026-07-03T10:00:00.000Z",
+      },
+      expected: "No lease document available yet",
+      signedDocumentAction: false,
+    },
+    {
+      name: "generic document URL only",
+      lease: {
+        signingLifecycleState: "not_started",
+        documentUrl: "https://example.com/generic.pdf",
+      },
+      expected: "Lease document available",
+      signedDocumentAction: false,
+    },
+    {
+      name: "generic storage context only",
+      lease: {
+        signingLifecycleState: "not_started",
+        leaseDocumentContext: {
+          documentStatus: "generated",
+          documentUrl: "https://storage.googleapis.com/example/generated.pdf",
+          displayLabel: "Signed lease document",
+          source: "lease.documentUrl",
+          confidence: "low",
+          warnings: [],
+        },
+      },
+      expected: "Lease document available",
+      signedDocumentAction: false,
+    },
+    {
+      name: "canonical signed-without-document over misleading legacy fields",
+      lease: {
+        signingLifecycleState: "signed",
+        signedDocumentState: "pending_persistence",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
+        documentUrl: "https://example.com/legacy.pdf",
+        leasePdfLabel: "Signed lease document",
+        leaseDocumentContext: {
+          documentStatus: "signed",
+          documentUrl: "https://example.com/legacy.pdf",
+          displayLabel: "Signed lease document",
+          source: "legacy_projection",
+          confidence: "low",
+          warnings: [],
+        },
+      },
+      expected: "Signing complete; signed copy pending",
+      signedDocumentAction: false,
+    },
+    {
+      name: "unknown canonical document state",
+      lease: {
+        signingLifecycleState: "signed",
+        signedDocumentState: "unknown",
+        signedDocumentAvailable: true,
+        viewSignedDocumentAllowed: true,
+        documentUrl: "https://example.com/unknown.pdf",
+        leaseDocumentContext: {
+          documentStatus: "signed",
+          documentUrl: "https://example.com/unknown.pdf",
+          displayLabel: "Signed lease document",
+          source: "lease_signed_document",
+          confidence: "high",
+          warnings: [],
+        },
+      },
+      expected: "Signing complete; signed copy pending",
+      signedDocumentAction: false,
+    },
+  ])("derives the dashboard lease document status from $name", async ({ lease, expected, signedDocumentAction }) => {
+    const workspace = await tenantPortalApi.getTenantWorkspace();
+    tenantPortalApi.getTenantWorkspace.mockResolvedValue({
+      ...workspace,
+      lease: {
+        leaseId: "lease-authority-matrix",
+        startDate: null,
+        endDate: null,
+        monthlyRent: null,
+        status: "active",
+        documentUrl: null,
+        ...lease,
+      } as TenantWorkspaceLease,
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(expected)).toBeInTheDocument();
+    if (signedDocumentAction) {
+      expect(screen.getByRole("link", { name: "View signed document" })).toHaveAttribute("href", "/tenant/lease");
+    } else {
+      expect(screen.queryByRole("link", { name: "View signed document" })).not.toBeInTheDocument();
+    }
   });
 
   it("starts tenant checkout from the workspace when rent collection is enabled", async () => {
