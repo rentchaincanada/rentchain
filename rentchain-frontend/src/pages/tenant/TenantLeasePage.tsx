@@ -155,6 +155,21 @@ export default function TenantLeasePage() {
     let primaryRefreshReturnedScheduleA = false;
     setOpeningDocument(true);
     setDocumentOpenError(null);
+    const reservedWindow = window.open("", "_blank", "noreferrer");
+    if (!reservedWindow) {
+      setOpeningDocument(false);
+      setDocumentOpenError("Your browser blocked the document window. Allow pop-ups for RentChain and try again.");
+      return;
+    }
+
+    const closeReservedWindow = () => {
+      try {
+        reservedWindow.close();
+      } catch {
+        // The reserved context may already have been closed by the browser.
+      }
+    };
+
     try {
       const refreshed =
         documentKind === "schedule-a"
@@ -166,7 +181,7 @@ export default function TenantLeasePage() {
         throw new Error("Primary lease document unavailable. Use Open Schedule A for the supplemental form.");
       }
       if (!nextUrl) throw new Error("Lease document is not available.");
-      window.open(nextUrl, "_blank", "noreferrer");
+      reservedWindow.location.replace(nextUrl);
     } catch (err: any) {
       const canUseProjectedFallback =
         Boolean(fallbackUrl) &&
@@ -177,9 +192,16 @@ export default function TenantLeasePage() {
         !primaryRefreshReturnedScheduleA &&
         canUseProjectedFallback
       ) {
-        window.open(fallbackUrl, "_blank", "noreferrer");
-        return;
+        try {
+          reservedWindow.location.replace(fallbackUrl);
+          return;
+        } catch (navigationError) {
+          closeReservedWindow();
+          setDocumentOpenError(tenantDocumentOpenErrorMessage(navigationError, documentKind));
+          return;
+        }
       }
+      closeReservedWindow();
       setDocumentOpenError(tenantDocumentOpenErrorMessage(err, documentKind));
     } finally {
       setOpeningDocument(false);
