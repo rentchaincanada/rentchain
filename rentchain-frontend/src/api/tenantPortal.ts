@@ -141,6 +141,12 @@ export type TenantWorkspaceLease = TenantSafeProjectionMetadata & {
   providerSignedAt?: string | null;
   providerDerivedLeaseState?: "not_started" | "pending_signature" | "signed_future" | "active" | "rejected" | "expired" | "cancelled";
   providerSigningAvailable?: boolean;
+  signingLifecycleState?: string;
+  signingExecutionState?: string;
+  signedDocumentState?: string;
+  signedDocumentAvailable?: boolean;
+  reminderEligible?: boolean;
+  viewSignedDocumentAllowed?: boolean;
 };
 
 export type TenantLeaseDocumentContext = {
@@ -150,6 +156,12 @@ export type TenantLeaseDocumentContext = {
   unitId?: string | null;
   leaseStatus?: string | null;
   signingStatus?: string | null;
+  signingLifecycleState?: string | null;
+  signingExecutionState?: string | null;
+  signedDocumentState?: string | null;
+  signedDocumentAvailable?: boolean;
+  reminderEligible?: boolean;
+  viewSignedDocumentAllowed?: boolean;
   documentStatus: "signed" | "generated" | "pending" | "missing";
   documentId?: string | null;
   documentUrl?: string | null;

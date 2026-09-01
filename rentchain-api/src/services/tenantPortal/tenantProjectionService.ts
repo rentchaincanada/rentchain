@@ -34,6 +34,12 @@ type TenantLeaseProjection = TenantProjectionMetadataFields & {
   dueDay?: number | null;
   status: string | null;
   documentUrl: string | null;
+  signingLifecycleState: string;
+  signingExecutionState: string;
+  signedDocumentState: string;
+  signedDocumentAvailable: boolean;
+  reminderEligible: boolean;
+  viewSignedDocumentAllowed: boolean;
   signatureStatus:
     | "not_started"
     | "awaiting_tenant_signature"
@@ -290,29 +296,9 @@ export function deriveTenantSafeLeaseReadinessMetadata(
   options?: { documentUrl?: string | null; leaseId?: string | null }
 ): TenantSafeLeaseReadinessMetadata {
   const documentUrl = asString(options?.documentUrl) ?? asString(data?.documentUrl) ?? asString(data?.approvedDocumentUrl) ?? asString(data?.documentRef);
-  const normalizedLeaseStatus = normalizeStatus(data?.status);
   const tenantSignedAt =
     firstIso(data?.tenantSignature, ["signedAt"]) ||
     firstIso(data, ["tenantSignedAt", "tenantSignatureCompletedAt"]);
-  const landlordSignedAt =
-    firstIso(data?.landlordSignature, ["signedAt"]) ||
-    firstIso(data, ["landlordSignedAt", "landlordSignatureCompletedAt"]);
-  const fullyExecutedAt = firstIso(data, ["fullyExecutedAt"]);
-  const signatureWorkflowStartedAt = firstIso(data, [
-    "sentAt",
-    "sharedAt",
-    "leaseSentAt",
-    "leaseSharedAt",
-    "signatureRequestedAt",
-    "tenantSignatureRequestedAt",
-  ]);
-  const statusImpliesReadyForTenant = [
-    "sent",
-    "awaiting_tenant_signature",
-    "pending_tenant_signature",
-    "ready_for_signature",
-    "signature_requested",
-  ].includes(normalizedLeaseStatus);
   const tenantSignatureMethod =
     normalizeSignatureMethod(data?.tenantSignature?.signatureMethod) ||
     normalizeSignatureMethod(data?.tenantSignature?.type) ||
@@ -331,9 +317,7 @@ export function deriveTenantSafeLeaseReadinessMetadata(
   const normalizedDocumentStatus = normalizeStatus(
     data?.documentStatus || data?.leaseDocumentStatus || data?.pdfStatus || data?.generationStatus
   );
-  const normalizedSigningStatus = normalizeStatus(
-    data?.currentSigningStatus || data?.signingStatus || data?.leaseSigningStatus || data?.providerSigningStatus
-  );
+  const normalizedSigningStatus = normalizeStatus(data?.signingLifecycleState);
   const documentWorkflowPending =
     Boolean(documentWorkflowStartedAt) ||
     ["pending", "preparing", "generating", "generated", "ready_for_review", "review_pending"].includes(
@@ -369,36 +353,15 @@ export function deriveTenantSafeLeaseReadinessMetadata(
       : "No approved lease document link is available in this workspace yet.";
 
   const signatureStatus: TenantLeaseProjection["signatureStatus"] = (() => {
-    if (["signed", "completed", "complete"].includes(normalizedSigningStatus)) {
-      return "signed";
-    }
-    if (["sent", "viewed", "pending", "pending_signature"].includes(normalizedSigningStatus)) {
-      return "awaiting_tenant_signature";
-    }
-    if (tenantSignedAt && landlordSignedAt) {
-      return "signed";
-    }
-    if (tenantSignedAt) return "awaiting_landlord_signature";
-    if (landlordSignedAt) return "awaiting_tenant_signature";
-    if (
-      ["tenant_signed", "signed_by_tenant", "awaiting_landlord_signature", "pending_landlord_signature"].includes(
-        normalizedLeaseStatus
-      )
-    ) {
-      return "awaiting_landlord_signature";
-    }
-    if (documentUrl && statusImpliesReadyForTenant && (signatureWorkflowStartedAt || statusImpliesReadyForTenant)) {
-      return "awaiting_tenant_signature";
-    }
-    if (normalizedLeaseStatus) return "not_started";
-    return "unavailable";
+    if (normalizedSigningStatus === "signed") return "signed";
+    if (normalizedSigningStatus === "pending_signature") return "awaiting_tenant_signature";
+    if (normalizedSigningStatus === "not_started") return "not_started";
+    return normalizedSigningStatus ? "unavailable" : "not_started";
   })();
 
   const signatureReadinessLabel =
     signatureStatus === "signed"
       ? "Lease signing complete"
-      : signatureStatus === "awaiting_landlord_signature"
-      ? "Awaiting landlord signature"
       : signatureStatus === "awaiting_tenant_signature"
       ? "Awaiting tenant signature"
       : signatureStatus === "not_started"
@@ -408,8 +371,6 @@ export function deriveTenantSafeLeaseReadinessMetadata(
   const signatureReadinessDescription =
     signatureStatus === "signed"
       ? "The visible lease record shows the current signing stage as complete."
-      : signatureStatus === "awaiting_landlord_signature"
-      ? "Tenant review appears complete, and the next visible signing step belongs to the landlord."
       : signatureStatus === "awaiting_tenant_signature"
       ? "A tenant-safe lease document is available, and the next visible signing step belongs to the tenant."
       : signatureStatus === "not_started"
@@ -530,6 +491,12 @@ export function projectTenantLease(recordId: string, data: any): TenantLeaseProj
     dueDay,
     status: asString(data?.status),
     documentUrl,
+    signingLifecycleState: asString(data?.signingLifecycleState) || "not_started",
+    signingExecutionState: asString(data?.signingExecutionState) || "not_started",
+    signedDocumentState: asString(data?.signedDocumentState) || "not_expected",
+    signedDocumentAvailable: data?.signedDocumentAvailable === true,
+    reminderEligible: data?.reminderEligible === true,
+    viewSignedDocumentAllowed: data?.viewSignedDocumentAllowed === true,
     ...leaseReadiness,
     paymentReadiness: derivePaymentReadiness({
       leaseId: recordId,

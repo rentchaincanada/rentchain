@@ -160,7 +160,7 @@ export default function TenantLeasePage() {
         documentKind === "schedule-a"
           ? await refreshTenantLeaseDocumentUrl({ document: "schedule-a" })
           : await refreshTenantLeaseDocumentUrl();
-      const nextUrl = String(refreshed?.documentUrl || "").trim() || fallbackUrl;
+      const nextUrl = String(refreshed?.documentUrl || "").trim() || (documentKind === "lease" && signedDocumentComplete ? "" : fallbackUrl);
       if (documentKind === "lease" && isScheduleADocumentUrl(nextUrl)) {
         primaryRefreshReturnedScheduleA = true;
         throw new Error("Primary lease document unavailable. Use Open Schedule A for the supplemental form.");
@@ -170,6 +170,7 @@ export default function TenantLeasePage() {
     } catch (err: any) {
       const canUseProjectedFallback =
         Boolean(fallbackUrl) &&
+        (documentKind === "schedule-a" || !signedDocumentComplete) &&
         (documentKind === "schedule-a" || !isScheduleADocumentUrl(fallbackUrl)) &&
         (canUseLegacyDocumentFallback(fallbackUrl) || isMissingTenantDocumentRefreshError(err));
       if (
@@ -205,18 +206,27 @@ export default function TenantLeasePage() {
 
   const execution = data?.leaseExecution || null;
   const providerSigningStatus = String(data?.providerSigningStatus || "not_started");
-  const providerSigningComplete = providerSigningStatus === "signed";
-  const signedDocumentComplete = providerSigningComplete || data?.signatureStatus === "signed";
-  const providerSigningAvailable = data?.providerSigningAvailable === true || providerSigningStatus === "pending_signature";
+  const signingLifecycleState = String(data?.signingLifecycleState || "not_started");
+  const signingComplete = signingLifecycleState === "signed";
+  const providerSigningAvailable = data?.reminderEligible === true && signingLifecycleState === "pending_signature";
   const leaseDocumentContext = data?.leaseDocumentContext || null;
   const scheduleADocumentContext = data?.scheduleADocumentContext || null;
   const rawLeaseDocumentUrl = String(leaseDocumentContext?.documentUrl || data?.documentUrl || "").trim();
   const rawScheduleAUrl = String(scheduleADocumentContext?.documentUrl || "").trim();
   const leaseDocumentUrl = rawLeaseDocumentUrl && !isScheduleADocumentUrl(rawLeaseDocumentUrl) ? rawLeaseDocumentUrl : null;
+  const signedDocumentComplete =
+    data?.signedDocumentAvailable === true &&
+    data?.viewSignedDocumentAllowed === true &&
+    leaseDocumentContext?.documentStatus === "signed" &&
+    Boolean(leaseDocumentUrl);
   const scheduleAUrl = rawScheduleAUrl || (isScheduleADocumentUrl(rawLeaseDocumentUrl) ? rawLeaseDocumentUrl : null);
-  const signedCopyPending = providerSigningComplete && !leaseDocumentUrl;
+  const signedCopyPending = signingComplete && !signedDocumentComplete;
   const leaseDocumentLabel = leaseDocumentUrl
-    ? leaseDocumentContext?.displayLabel || data?.leasePdfLabel || null
+    ? signedDocumentComplete
+      ? leaseDocumentContext?.displayLabel || "Signed lease document"
+      : leaseDocumentContext?.documentStatus === "generated"
+      ? leaseDocumentContext?.displayLabel || "Generated lease package"
+      : "Generated lease package"
     : scheduleAUrl
     ? "Primary lease document unavailable"
     : leaseDocumentContext?.displayLabel || data?.leasePdfLabel || null;
@@ -238,7 +248,8 @@ export default function TenantLeasePage() {
   });
   const executionStatus = String(execution?.executionStatus || "").trim();
   const signatureWorkflowVisible =
-    providerSigningComplete ||
+    signingComplete ||
+    providerSigningAvailable ||
     Boolean(data?.tenantSignature?.signedAt) ||
     ["ready_for_tenant_signature", "tenant_signed", "ready_for_landlord_signature", "landlord_signed", "fully_executed"].includes(
       executionStatus
@@ -431,21 +442,22 @@ export default function TenantLeasePage() {
 
           <SignedDocumentWorkspace
             audience="tenant"
-            title="Signed lease document workspace"
+            title="Lease document workspace"
+            documentKind={signedDocumentComplete ? "signed" : "generic"}
             statusLabel={
-              leaseDocumentUrl
-                ? signedDocumentComplete
-                  ? "Signed document available"
-                  : "Lease document available"
+              signedDocumentComplete
+                ? "Signed document available"
+                : leaseDocumentUrl
+                ? "Lease document available"
                 : signedCopyPending
                 ? "Signed copy pending"
                 : "Document unavailable"
             }
-            documentLabel={leaseDocumentLabel || "Signed lease document"}
+            documentLabel={leaseDocumentLabel || "Lease document"}
             documentUrl={leaseDocumentUrl}
             signedAt={data.providerSignedAt || data.tenantSignature?.signedAt || null}
             completedAt={execution?.completedAt || null}
-            evidenceLabel={signedDocumentComplete && leaseDocumentUrl ? "Lease record ready" : "Tenant-safe document access pending"}
+            evidenceLabel={signedDocumentComplete ? "Lease record ready" : leaseDocumentUrl ? "Source lease document" : "Tenant-safe document access pending"}
             warnings={leaseDocumentWarnings}
             opening={openingDocument}
             openError={documentOpenError}
@@ -483,16 +495,16 @@ export default function TenantLeasePage() {
                 <div style={{ fontWeight: 800 }}>
                   {providerSigningAvailable
                     ? "Ready for signature"
-                    : providerSigningStatus === "signed"
+                    : signingComplete
                     ? "Lease signature complete"
                     : data.signatureReadinessLabel || "Lease signing unavailable"}
                 </div>
                 <div style={{ color: "var(--text-muted, #64748b)" }}>
                   {providerSigningAvailable
                     ? "Open the secure signing session to review and sign the lease."
-                    : providerSigningComplete && signedCopyPending
+                    : signingComplete && signedCopyPending
                     ? "The provider-backed signing workflow is complete. The signed copy is still being prepared for this tenant workspace."
-                    : providerSigningComplete
+                    : signingComplete
                     ? "The provider-backed signing workflow is complete."
                     : data.signatureReadinessDescription || "Lease signing details are not available in this workspace yet."}
                 </div>

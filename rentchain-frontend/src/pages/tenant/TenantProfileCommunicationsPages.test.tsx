@@ -541,6 +541,11 @@ describe("tenant profile and communications pages", () => {
         monthlyRent: 1500,
         documentUrl: null,
         providerSigningStatus: "signed",
+        signingLifecycleState: "signed",
+        signingExecutionState: "active",
+        signedDocumentState: "pending_persistence",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
         providerRequestId: "raw-provider-envelope-123456789",
         leaseDocumentContext: {
           documentStatus: "pending",
@@ -677,6 +682,11 @@ describe("tenant profile and communications pages", () => {
         monthlyRent: 1800,
         documentUrl: "https://tenant-safe.example/signed-lease.pdf",
         providerSigningStatus: "signed",
+        signingLifecycleState: "signed",
+        signingExecutionState: "active",
+        signedDocumentState: "available",
+        signedDocumentAvailable: true,
+        viewSignedDocumentAllowed: true,
         leaseDocumentContext: {
           documentStatus: "signed",
           documentUrl: "https://tenant-safe.example/signed-lease.pdf",

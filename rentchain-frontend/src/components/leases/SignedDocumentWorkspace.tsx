@@ -30,6 +30,7 @@ export type SignedDocumentWorkspaceProps = {
   onOpenDocument?: () => void;
   unavailableMessage?: string;
   providerMetadataVisible?: boolean;
+  documentKind?: "signed" | "generic";
 };
 
 function formatWorkspaceDate(value?: string | number | null) {
@@ -70,17 +71,19 @@ export function SignedDocumentWorkspace({
   onOpenDocument,
   unavailableMessage,
   providerMetadataVisible = true,
+  documentKind = "signed",
 }: SignedDocumentWorkspaceProps) {
   const safeDocumentUrl = normalizedDocumentUrl(documentUrl);
   const hasDocument = Boolean(safeDocumentUrl);
   const embedAllowed = canEmbedPdf(safeDocumentUrl);
   const signedDate = formatWorkspaceDate(signedAt) || formatWorkspaceDate(completedAt);
+  const signedDocument = documentKind === "signed";
   const heading = title || (audience === "tenant" ? "Signed document workspace" : "Signed Document Workspace");
   const fallbackMessage =
     unavailableMessage ||
     (hasDocument
-      ? "This signed document is available through a secure external source. Open it in a new tab if the preview cannot be embedded safely."
-      : "No signed document is available in this workspace yet.");
+      ? `This ${signedDocument ? "signed " : ""}document is available through a secure external source. Open it in a new tab if the preview cannot be embedded safely.`
+      : `No ${signedDocument ? "signed " : ""}document is available in this workspace yet.`);
 
   return (
     <section
@@ -106,7 +109,9 @@ export function SignedDocumentWorkspace({
           </h2>
           <div style={{ color: signedDocumentWorkspaceTheme.muted, lineHeight: 1.5 }}>
             {audience === "tenant"
-              ? "Review your tenant-safe signed lease access without exposing landlord-only workflow metadata."
+              ? signedDocument
+                ? "Review your tenant-safe signed lease access without exposing landlord-only workflow metadata."
+                : "Review this tenant-safe source lease document separately from signing completion."
               : "Review the executed lease document alongside landlord lease context and evidence package readiness."}
           </div>
         </div>
@@ -135,7 +140,7 @@ export function SignedDocumentWorkspace({
           gap: 10,
         }}
       >
-        <WorkspaceFact label="Document" value={documentLabel || (hasDocument ? "Signed lease document" : "Unavailable")} />
+        <WorkspaceFact label="Document" value={documentLabel || (hasDocument ? (signedDocument ? "Signed lease document" : "Lease document") : "Unavailable")} />
         <WorkspaceFact label="Signed" value={signedDate || "Pending"} />
         {providerMetadataVisible ? <WorkspaceFact label="Source" value={sourceLabel || (hasDocument ? "Secure document source" : "Pending")} /> : null}
         <WorkspaceFact label="Evidence" value={evidenceLabel || (hasDocument ? "Ready for lease evidence package" : "Awaiting signed document")} />
@@ -154,7 +159,7 @@ export function SignedDocumentWorkspace({
           <object
             data={safeDocumentUrl}
             type="application/pdf"
-            title="Signed lease document preview"
+            title={signedDocument ? "Signed lease document preview" : "Lease document preview"}
             style={{ width: "100%", minHeight: 420, display: "block" }}
           >
             <div style={{ padding: 16, color: signedDocumentWorkspaceTheme.muted }}>{fallbackMessage}</div>
@@ -188,7 +193,7 @@ export function SignedDocumentWorkspace({
             disabled={opening}
             style={workspaceActionStyle("primary")}
           >
-            {opening ? "Opening..." : "View signed document"}
+            {opening ? "Opening..." : signedDocument ? "View signed document" : "View lease document"}
           </button>
         ) : null}
         {hasDocument ? (
@@ -196,7 +201,7 @@ export function SignedDocumentWorkspace({
             href={safeDocumentUrl}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="Open signed document in a new tab"
+            aria-label={`Open ${signedDocument ? "signed " : ""}document in a new tab`}
             style={workspaceActionStyle("secondary")}
           >
             Open in new tab

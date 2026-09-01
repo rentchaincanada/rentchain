@@ -119,6 +119,7 @@ import {
   loadLeaseSigningSnapshot,
   signingErrorCode,
   signingErrorStatus,
+  type LeaseSigningSnapshot,
 } from "../services/signing/leaseSigningService";
 
 const router = Router();
@@ -2558,6 +2559,15 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
               : leaseDoc.data?.signingCompletedAt || null,
         }
       : leaseDoc?.data;
+  const canonicalSigningProjection = tenantCanonicalSigningProjection(leaseSigning);
+  const leaseDataWithCanonicalSigning = leaseDataWithProviderSigning
+    ? {
+        ...leaseDataWithProviderSigning,
+        ...canonicalSigningProjection,
+        canonicalSigningCurrentStatusAt: leaseSigning?.currentStatusAt || null,
+        canonicalSignedAt: leaseSigning?.signedAt || null,
+      }
+    : leaseDataWithProviderSigning;
 
   const leaseDocumentContext = leaseDoc
     ? await getTenantLeaseDocumentContext({
@@ -2566,7 +2576,8 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
         tenantEmail: context.invitedEmail,
         propertyId: String(leaseDoc.data?.propertyId || context.propertyId || "").trim() || null,
         unitId: String(leaseDoc.data?.unitId || context.unitId || "").trim() || null,
-        leaseData: leaseDataWithProviderSigning,
+        leaseData: leaseDataWithCanonicalSigning,
+        signingSnapshot: leaseSigning,
       })
     : null;
   const scheduleADocumentContext = leaseDoc
@@ -2576,25 +2587,26 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
         tenantEmail: context.invitedEmail,
         propertyId: String(leaseDoc.data?.propertyId || context.propertyId || "").trim() || null,
         unitId: String(leaseDoc.data?.unitId || context.unitId || "").trim() || null,
-        leaseData: leaseDataWithProviderSigning,
+        leaseData: leaseDataWithCanonicalSigning,
+        signingSnapshot: leaseSigning,
         documentKind: "schedule-a",
       })
     : null;
   const leaseProjectionData =
     leaseDoc && leaseDocumentContext?.documentUrl
       ? {
-          ...leaseDataWithProviderSigning,
+          ...leaseDataWithCanonicalSigning,
           documentUrl: leaseDocumentContext.documentUrl,
           approvedDocumentUrl: leaseDocumentContext.documentUrl,
           leaseDocumentStatus: leaseDocumentContext.documentStatus,
         }
       : leaseDocumentContext?.documentStatus === "pending"
       ? {
-          ...leaseDataWithProviderSigning,
+          ...leaseDataWithCanonicalSigning,
           leaseDocumentStatus: leaseDocumentContext.documentStatus,
           documentStatus: leaseDocumentContext.documentStatus,
         }
-      : leaseDataWithProviderSigning;
+      : leaseDataWithCanonicalSigning;
   const lease = leaseDoc
     ? {
         ...projectTenantLease(leaseDoc.id, leaseProjectionData),
@@ -3124,10 +3136,11 @@ async function withTenantLeaseDocumentContext(profile: Awaited<ReturnType<typeof
   const nextLease = leaseDocumentContext.documentUrl
     ? projectTenantLease(leaseId, {
         ...leaseData,
+        ...leaseDocumentContext,
         documentUrl: leaseDocumentContext.documentUrl,
         approvedDocumentUrl: leaseDocumentContext.documentUrl,
       })
-    : lease;
+    : projectTenantLease(leaseId, { ...leaseData, ...leaseDocumentContext });
   return {
     ...profile,
     profile: {
@@ -3280,6 +3293,12 @@ type TenantLeaseDocumentContext = {
   unitId?: string;
   leaseStatus?: string;
   signingStatus?: string;
+  signingLifecycleState?: string;
+  signingExecutionState?: string;
+  signedDocumentState?: string;
+  signedDocumentAvailable?: boolean;
+  reminderEligible?: boolean;
+  viewSignedDocumentAllowed?: boolean;
   documentStatus: "signed" | "generated" | "pending" | "missing";
   documentId?: string;
   documentUrl?: string;
@@ -3288,6 +3307,17 @@ type TenantLeaseDocumentContext = {
   confidence: "high" | "medium" | "low";
   warnings: string[];
 };
+
+function tenantCanonicalSigningProjection(snapshot: LeaseSigningSnapshot | null) {
+  return {
+    signingLifecycleState: snapshot?.signingLifecycleState || "not_started",
+    signingExecutionState: snapshot?.executionState || "not_started",
+    signedDocumentState: snapshot?.signedDocumentState || "not_expected",
+    signedDocumentAvailable: snapshot?.signedDocumentAvailable === true,
+    reminderEligible: snapshot?.reminderEligible === true,
+    viewSignedDocumentAllowed: snapshot?.viewSignedDocumentAllowed === true,
+  };
+}
 
 function isScheduleADocumentValue(value: unknown): boolean {
   const normalized = String(value || "").trim().toLowerCase();
@@ -3354,26 +3384,6 @@ function leaseMatchesTenantIdentity(raw: any, tenantId?: string | null, tenantEm
     .map((value) => String(value || "").trim().toLowerCase())
     .filter(Boolean);
   return emails.includes(normalizedEmail);
-}
-
-function isLeaseSigned(raw: any): boolean {
-  const status = String(raw?.status || "").trim().toLowerCase();
-  return Boolean(
-    raw?.fullyExecutedAt ||
-      raw?.fullySignedAt ||
-      raw?.signatureCompletedAt ||
-      (raw?.tenantSignature?.signedAt && raw?.landlordSignature?.signedAt) ||
-      (raw?.tenantSignedAt && raw?.landlordSignedAt) ||
-      isProviderSigningComplete(raw) ||
-      ["signed", "executed", "fully_executed"].includes(status)
-  );
-}
-
-function isProviderSigningComplete(raw: any): boolean {
-  const signingStatus = String(raw?.currentSigningStatus || raw?.signingStatus || raw?.leaseSigningStatus || raw?.providerSigningStatus || "")
-    .trim()
-    .toLowerCase();
-  return ["signed", "completed", "complete"].includes(signingStatus);
 }
 
 function isLeaseDocumentWorkflowPending(raw: any): boolean {
@@ -3630,6 +3640,7 @@ async function getTenantLeaseDocumentContext(params: {
   leaseData: any;
   attachments?: any[];
   documentKind?: "lease" | "schedule-a";
+  signingSnapshot?: LeaseSigningSnapshot | null;
 }): Promise<TenantLeaseDocumentContext> {
   const leaseId = String(params.leaseId || "").trim();
   const tenantId = String(params.tenantId || "").trim();
@@ -3668,8 +3679,16 @@ async function getTenantLeaseDocumentContext(params: {
     };
   }
 
-  const signed = isLeaseSigned(params.leaseData);
-  const providerSigningComplete = isProviderSigningComplete(params.leaseData);
+  const signingSnapshot =
+    params.signingSnapshot !== undefined
+      ? params.signingSnapshot
+      : await loadLeaseSigningSnapshot({
+          leaseId,
+          landlordId: String(params.leaseData?.landlordId || "").trim() || null,
+          lease: params.leaseData,
+        }).catch(() => null);
+  const canonicalSigning = tenantCanonicalSigningProjection(signingSnapshot);
+  const signingComplete = canonicalSigning.signingLifecycleState === "signed";
 
   if (params.documentKind === "schedule-a") {
     const directScheduleRef = tenantScheduleAStorageRef({ leaseData: params.leaseData });
@@ -3690,7 +3709,8 @@ async function getTenantLeaseDocumentContext(params: {
         propertyId: propertyId || undefined,
         unitId: unitId || undefined,
         leaseStatus,
-        signingStatus: signed ? "signed" : "unsigned",
+        signingStatus: signingComplete ? "signed" : "unsigned",
+        ...canonicalSigning,
         documentStatus: "generated",
         documentId: String(params.leaseData?.scheduleADocumentId || params.leaseData?.latestLeaseSnapshotId || "").trim() || undefined,
         documentUrl: refreshedUrl || scheduleUrl || undefined,
@@ -3714,7 +3734,7 @@ async function getTenantLeaseDocumentContext(params: {
     };
   }
 
-  if (providerSigningComplete) {
+  if (canonicalSigning.signedDocumentAvailable && canonicalSigning.viewSignedDocumentAllowed) {
     const signedDocumentFromSigning = await tenantSignedLeaseDocumentFromSigningRequest({
       leaseId,
       leaseData: params.leaseData,
@@ -3727,6 +3747,7 @@ async function getTenantLeaseDocumentContext(params: {
         unitId: unitId || undefined,
         leaseStatus,
         signingStatus: "signed",
+        ...canonicalSigning,
         documentStatus: "signed",
         documentId:
           String(
@@ -3742,40 +3763,26 @@ async function getTenantLeaseDocumentContext(params: {
         warnings,
       };
     }
-  }
-
-  const directStorageRef =
-    tenantLeaseDocumentStorageRef({ leaseData: params.leaseData }) ||
-    (await loadTenantGeneratedDocumentStorageRef(params.leaseData));
-  const refreshedDirectUrl = await refreshTenantLeaseSignedUrl(directStorageRef);
-  const signedUrl = firstLeaseDocumentUrl(params.leaseData, [
-    "signedDocumentUrl",
-    "signedLeaseDocumentUrl",
-    "executedDocumentUrl",
-    "finalDocumentUrl",
-    "fullyExecutedDocumentUrl",
-    "documentUrl",
-    "approvedDocumentUrl",
-    "documentRef",
-  ]);
-  if (signed && (refreshedDirectUrl || (!directStorageRef && signedUrl))) {
     return {
       leaseId,
       tenantId: tenantId || undefined,
       propertyId: propertyId || undefined,
       unitId: unitId || undefined,
       leaseStatus,
-      signingStatus: "signed",
-      documentStatus: "signed",
-      documentId: String(params.leaseData?.signedDocumentId || params.leaseData?.documentId || params.leaseData?.latestLeaseSnapshotId || "").trim() || undefined,
-      documentUrl: refreshedDirectUrl || signedUrl || undefined,
-      displayLabel: "Signed lease document",
-      source: refreshedDirectUrl ? directStorageRef?.source || "lease_signed_document" : "lease_signed_document",
-      confidence: "high",
-      warnings,
+      signingStatus: signingComplete ? "signed" : "unsigned",
+      ...canonicalSigning,
+      documentStatus: "pending",
+      displayLabel: "Signed lease document temporarily unavailable",
+      source: "canonical_signed_document_download_unavailable",
+      confidence: "medium",
+      warnings: ["A canonical signed document exists, but a tenant-safe download link is temporarily unavailable."],
     };
   }
 
+  const directStorageRef =
+    tenantLeaseDocumentStorageRef({ leaseData: params.leaseData }) ||
+    (await loadTenantGeneratedDocumentStorageRef(params.leaseData));
+  const refreshedDirectUrl = await refreshTenantLeaseSignedUrl(directStorageRef);
   const generatedUrl = firstLeaseDocumentUrl(params.leaseData, ["documentUrl", "approvedDocumentUrl", "documentRef"]);
   if (refreshedDirectUrl || (!directStorageRef && generatedUrl)) {
     return {
@@ -3784,11 +3791,12 @@ async function getTenantLeaseDocumentContext(params: {
       propertyId: propertyId || undefined,
       unitId: unitId || undefined,
       leaseStatus,
-      signingStatus: signed ? "signed" : "unsigned",
-      documentStatus: signed ? "signed" : "generated",
+      signingStatus: signingComplete ? "signed" : "unsigned",
+      ...canonicalSigning,
+      documentStatus: "generated",
       documentId: String(params.leaseData?.documentId || params.leaseData?.latestLeaseSnapshotId || "").trim() || undefined,
       documentUrl: refreshedDirectUrl || generatedUrl || undefined,
-      displayLabel: signed ? "Signed lease document" : "Generated lease package",
+      displayLabel: "Generated lease package",
       source: refreshedDirectUrl ? directStorageRef?.source || "lease_document_fields" : "lease_document_fields",
       confidence: "high",
       warnings,
@@ -3808,11 +3816,12 @@ async function getTenantLeaseDocumentContext(params: {
         propertyId: propertyId || undefined,
         unitId: unitId || undefined,
         leaseStatus,
-        signingStatus: signed ? "signed" : "unsigned",
-        documentStatus: signed ? "signed" : "generated",
+        signingStatus: signingComplete ? "signed" : "unsigned",
+        ...canonicalSigning,
+        documentStatus: "generated",
         documentId: String(attachment?.id || "").trim() || undefined,
         documentUrl: attachmentUrl,
-        displayLabel: signed ? "Signed lease document" : "Generated lease package",
+        displayLabel: "Generated lease package",
         source: refreshedAttachmentUrl ? attachmentStorageRef?.source || "ledgerAttachments" : "ledgerAttachments",
         confidence: "high",
         warnings,
@@ -3827,7 +3836,8 @@ async function getTenantLeaseDocumentContext(params: {
       propertyId: propertyId || undefined,
       unitId: unitId || undefined,
       leaseStatus,
-      signingStatus: signed ? "signed" : "unsigned",
+      signingStatus: signingComplete ? "signed" : "unsigned",
+      ...canonicalSigning,
       documentStatus: "pending",
       displayLabel: "Lease document pending",
       source: "lease_document_workflow",
@@ -3836,7 +3846,7 @@ async function getTenantLeaseDocumentContext(params: {
     };
   }
 
-  if (providerSigningComplete) {
+  if (signingComplete) {
     return {
       leaseId,
       tenantId: tenantId || undefined,
@@ -3844,6 +3854,7 @@ async function getTenantLeaseDocumentContext(params: {
       unitId: unitId || undefined,
       leaseStatus,
       signingStatus: "signed",
+      ...canonicalSigning,
       documentStatus: "pending",
       displayLabel: "Signed lease document pending",
       source: "lease_signing_signed_without_document",
@@ -3858,7 +3869,8 @@ async function getTenantLeaseDocumentContext(params: {
     propertyId: propertyId || undefined,
     unitId: unitId || undefined,
     leaseStatus,
-    signingStatus: signed ? "signed" : "unsigned",
+    signingStatus: signingComplete ? "signed" : "unsigned",
+    ...canonicalSigning,
     documentStatus: "missing",
     displayLabel: "No lease document available yet",
     source: "missing_document",
@@ -5730,6 +5742,12 @@ router.get("/lease/document-url", requireTenantWorkspaceIdentity, async (req: an
         documentUrl: documentContext.documentUrl,
         displayLabel: documentContext.displayLabel,
         documentStatus: documentContext.documentStatus,
+        signingLifecycleState: documentContext.signingLifecycleState,
+        signingExecutionState: documentContext.signingExecutionState,
+        signedDocumentState: documentContext.signedDocumentState,
+        signedDocumentAvailable: documentContext.signedDocumentAvailable === true,
+        reminderEligible: documentContext.reminderEligible === true,
+        viewSignedDocumentAllowed: documentContext.viewSignedDocumentAllowed === true,
         source: documentContext.source,
         expiresInSeconds: 30 * 60,
       },
@@ -5921,16 +5939,21 @@ router.get("/leases/:leaseId", requireTenantWorkspaceIdentity, async (req: any, 
     if (!leaseMatchesTenantIdentity(leaseData, context.tenantId, context.invitedEmail || req.user?.email)) {
       return res.status(403).json({ ok: false, error: "lease_not_owned_by_tenant" });
     }
-    const projectedLease = projectTenantLease(leaseId, leaseData);
     const signing = await loadLeaseSigningSnapshot({
       leaseId,
       landlordId: String(leaseData?.landlordId || "").trim() || null,
       lease: leaseData,
     });
+    const canonicalProjectedLease = projectTenantLease(leaseId, {
+      ...leaseData,
+      ...tenantCanonicalSigningProjection(signing),
+      canonicalSigningCurrentStatusAt: signing.currentStatusAt,
+      canonicalSignedAt: signing.signedAt,
+    });
     return res.json({
       ok: true,
       data: {
-        leaseData: projectedLease,
+        leaseData: canonicalProjectedLease,
         signingStatus: signing.signingStatus,
         signedAt: signing.signedAt,
         derivedLeaseState: signing.derivedLeaseState,

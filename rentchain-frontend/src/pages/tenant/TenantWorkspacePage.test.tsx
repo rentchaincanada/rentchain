@@ -2280,6 +2280,11 @@ describe("tenant workspace frontend shell", () => {
         warnings: [],
       },
       signatureStatus: "signed",
+      signingLifecycleState: "signed",
+      signingExecutionState: "active",
+      signedDocumentState: "available",
+      signedDocumentAvailable: true,
+      viewSignedDocumentAllowed: true,
       signatureReadinessLabel: "Lease signing complete",
       signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
       tenantSignature: {
@@ -2338,9 +2343,9 @@ describe("tenant workspace frontend shell", () => {
 
     expect(await screen.findByText(/^Lease Summary$/i)).toBeInTheDocument();
     expect(screen.getByText(/\$1,800/i)).toBeInTheDocument();
-    expect(screen.getByText(/^Lease signing complete$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Lease signature complete$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Signed lease document$/i)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Signed lease document workspace/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Lease document workspace/i })).toBeInTheDocument();
     expect(screen.getByText(/^Signed document available$/i)).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("https://example.com/lease.pdf");
     expect(screen.getByText(/^Lease fully executed$/i)).toBeInTheDocument();
@@ -2428,7 +2433,7 @@ describe("tenant workspace frontend shell", () => {
     expect(await screen.findByText("refresh failed")).toBeInTheDocument();
   });
 
-  it("uses the projected signed document fallback when tenant refresh returns 404", async () => {
+  it("keeps a legacy projected document generic when canonical authority is absent", async () => {
     const missingDocumentError = Object.assign(new Error("lease_document_not_found"), {
       status: 404,
       payload: { ok: false, error: "lease_document_not_found" },
@@ -2456,6 +2461,11 @@ describe("tenant workspace frontend shell", () => {
       signatureReadinessLabel: "Lease signing complete",
       signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
       providerSigningStatus: "signed",
+      signingLifecycleState: "not_started",
+      signingExecutionState: "not_started",
+      signedDocumentState: "not_expected",
+      signedDocumentAvailable: false,
+      viewSignedDocumentAllowed: false,
       tenantSignature: {
         signedAt: "2026-03-02T12:00:00.000Z",
         signatureMethod: "typed",
@@ -2482,14 +2492,14 @@ describe("tenant workspace frontend shell", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/^Signed document available$/i)).toBeInTheDocument();
-    const newTabLink = screen.getByRole("link", { name: "Open signed document in a new tab" });
+    expect(await screen.findByText(/^Lease document available$/i)).toBeInTheDocument();
+    const newTabLink = screen.getByRole("link", { name: "Open document in a new tab" });
     expect(newTabLink).toHaveAttribute("href", fallbackUrl);
     expect(newTabLink).toHaveAttribute("target", "_blank");
     expect(newTabLink).toHaveAttribute("rel", "noopener noreferrer");
 
     vi.mocked(window.open).mockClear();
-    fireEvent.click(await screen.findByRole("button", { name: /View signed document/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /View lease document/i }));
     await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith());
     expect(window.open).toHaveBeenCalledWith(fallbackUrl, "_blank", "noreferrer");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -2517,6 +2527,11 @@ describe("tenant workspace frontend shell", () => {
       signatureReadinessLabel: "Lease signing complete",
       signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
       providerSigningStatus: "signed",
+      signingLifecycleState: "signed",
+      signingExecutionState: "active",
+      signedDocumentState: "pending_persistence",
+      signedDocumentAvailable: false,
+      viewSignedDocumentAllowed: false,
       providerSignedAt: "2026-07-03T10:00:00.000Z",
       providerDerivedLeaseState: "active",
       providerSigningAvailable: false,
@@ -2586,6 +2601,11 @@ describe("tenant workspace frontend shell", () => {
         warnings: [],
       },
       signatureStatus: "signed",
+      signingLifecycleState: "signed",
+      signingExecutionState: "active",
+      signedDocumentState: "available",
+      signedDocumentAvailable: true,
+      viewSignedDocumentAllowed: true,
       signatureReadinessLabel: "Lease signing complete",
       leaseExecution: {
         executionStatus: "fully_executed",

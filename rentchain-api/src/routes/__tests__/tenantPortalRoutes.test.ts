@@ -609,8 +609,9 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.application?.sin).toBeUndefined();
     expect(res.body?.data?.lease?.monthlyRent).toBe(1800);
     expect(res.body?.data?.lease?.confidentialNotes).toBeUndefined();
-    expect(res.body?.data?.lease?.signatureStatus).toBe("signed");
-    expect(res.body?.data?.lease?.signatureReadinessLabel).toBe("Lease signing complete");
+    expect(res.body?.data?.lease?.signatureStatus).toBe("not_started");
+    expect(res.body?.data?.lease?.signatureReadinessLabel).toBe("Lease signing not started");
+    expect(res.body?.data?.lease?.signedDocumentAvailable).toBe(false);
     expect(res.body?.data?.lease?.tenantSignature).toEqual({
       signedAt: "2026-02-01T10:00:00.000Z",
       signatureMethod: "drawn",
@@ -729,8 +730,9 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.projectionProfile?.projectionName).toBe("tenant_safe_workspace_projection");
     expect(res.body?.data?.projectionProfile?.scopeType).toBe("tenant_current_lease");
     expect(res.body?.data?.redactionSummary?.redactedFieldGroups).toContain("payment_account_details");
-    expect(res.body?.data?.signatureStatus).toBe("signed");
-    expect(res.body?.data?.signatureReadinessDescription).toMatch(/current signing stage as complete/i);
+    expect(res.body?.data?.signatureStatus).toBe("not_started");
+    expect(res.body?.data?.signatureReadinessDescription).toMatch(/signing has not started/i);
+    expect(res.body?.data?.signedDocumentAvailable).toBe(false);
     expect(res.body?.data?.tenantSignature).toEqual({
       signedAt: "2026-02-01T10:00:00.000Z",
       signatureMethod: "drawn",
@@ -1410,8 +1412,10 @@ describe("tenantPortalRoutes foundation", () => {
           redactedFieldGroups: expect.arrayContaining(["storage_paths", "provider_delivery_payloads"]),
         }),
         documentUrl: "https://signed.example/leases/landlord-1/lease-1/lease-v1.pdf",
-        displayLabel: "Signed lease document",
-        documentStatus: "signed",
+        displayLabel: "Generated lease package",
+        documentStatus: "generated",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
         source: "leaseDocument",
         expiresInSeconds: 1800,
       })
@@ -1456,8 +1460,10 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data).toEqual(
       expect.objectContaining({
         documentUrl: "https://signed.example/leases/landlord-1/lease-1/lease-v1.pdf",
-        displayLabel: "Signed lease document",
-        documentStatus: "signed",
+        displayLabel: "Generated lease package",
+        documentStatus: "generated",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
         source: "lease.documentUrl",
         expiresInSeconds: 1800,
       })
@@ -1468,6 +1474,51 @@ describe("tenantPortalRoutes foundation", () => {
       path: "leases/landlord-1/lease-1/lease-v1.pdf",
       expiresMinutes: 30,
     });
+  });
+
+  it.each([
+    ["documentUrl", { documentUrl: "https://example.com/source-lease.pdf", status: "fully_executed" }],
+    ["approvedDocumentUrl", { approvedDocumentUrl: "https://example.com/approved-source.pdf", executionStatus: "executed" }],
+    ["documentRef", { documentRef: "https://example.com/legacy-reference.pdf", signatureStatus: "signed" }],
+    ["provider status", { documentUrl: "https://example.com/provider-source.pdf", providerSigningStatus: "signed" }],
+  ])("keeps generic %s evidence non-signed without canonical durable metadata", async (_label, legacyFields) => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      documentUrl: undefined,
+      approvedDocumentUrl: undefined,
+      documentRef: undefined,
+      leaseDocument: undefined,
+      signedDocument: undefined,
+      ...legacyFields,
+    });
+
+    const eventsBefore = ensureCollection("leaseSigningEvents").size;
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.leaseDocumentContext).toEqual(
+      expect.objectContaining({
+        documentStatus: "generated",
+        displayLabel: "Generated lease package",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
+      })
+    );
+    expect(res.body?.data?.signedDocumentAvailable).toBe(false);
+    expect(res.body?.data?.viewSignedDocumentAllowed).toBe(false);
+    expect(ensureCollection("leaseSigningEvents").size).toBe(eventsBefore);
   });
 
   it("does not treat Schedule A as the tenant primary lease document", async () => {
@@ -1601,7 +1652,9 @@ describe("tenantPortalRoutes foundation", () => {
     );
     expect(res.body?.data?.leaseDocumentContext).toEqual(
       expect.objectContaining({
-        documentStatus: "signed",
+        documentStatus: "generated",
+        displayLabel: "Generated lease package",
+        signedDocumentAvailable: false,
         source: "lease.documentUrl",
       })
     );
@@ -4070,7 +4123,8 @@ describe("tenantPortalRoutes foundation", () => {
         expect.objectContaining({
           label: "LEASE — Lease",
           category: "Lease",
-          fileName: "signed-lease.pdf",
+          fileName: "lease-package.pdf",
+          title: "Generated lease package",
           url: "https://example.com/lease.pdf",
         }),
       ])
@@ -4845,8 +4899,10 @@ describe("tenantPortalRoutes foundation", () => {
         startDate: "2026-09-01",
         endDate: "2027-08-31",
         leaseDocumentContext: expect.objectContaining({
-          documentStatus: "missing",
-          displayLabel: "No lease document available yet",
+          documentStatus: "pending",
+          displayLabel: "Signed lease document pending",
+          signedDocumentAvailable: false,
+          viewSignedDocumentAllowed: false,
         }),
       })
     );
