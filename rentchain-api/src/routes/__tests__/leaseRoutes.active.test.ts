@@ -813,6 +813,32 @@ describe("leaseRoutes GET /active", () => {
     );
   });
 
+  it("does not let historical signing_signed audit evidence override a current terminal lifecycle", async () => {
+    seedDoc("leases", "lease-terminal-signing", {
+      landlordId: "landlord-1", propertyId: "prop-1", tenantId: "tenant-1", unitId: "unit-1",
+      monthlyRent: 1850, startDate: "2026-01-01", endDate: "2099-12-31", status: "active",
+    });
+    seedDoc("leaseSigningRequests", "request-terminal-signing", {
+      leaseId: "lease-terminal-signing", landlordId: "landlord-1", currentSigningStatus: "cancelled",
+      currentStatusAt: "2026-01-04T12:00:00.000Z", sentAt: "2026-01-02T12:00:00.000Z",
+    });
+    seedDoc("canonicalEvents", "historical-signed", {
+      action: "signing_signed", resource: { type: "lease", id: "lease-terminal-signing" },
+      occurredAt: "2026-01-03T12:00:00.000Z",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/active" });
+    const lease = res.body?.leases?.find((entry: any) => entry.id === "lease-terminal-signing");
+    expect(res.status).toBe(200);
+    expect(lease).toEqual(expect.objectContaining({
+      signingLifecycleState: "cancelled",
+      reminderEligible: false,
+      viewSignedDocumentAllowed: false,
+    }));
+    expect(lease.signatureStatus).not.toBe("signed");
+  });
+
   it("refreshes storage-backed lease document URLs for landlord lease responses and explicit refresh requests", async () => {
     getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/fresh-list.pdf");
     getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/fresh-click.pdf");
@@ -3715,7 +3741,7 @@ describe("leaseRoutes GET /active", () => {
     const { processSigningWebhook, sendLeaseForSignature } = await import("../../services/signing/leaseSigningService");
     const sent = await sendLeaseForSignature({ leaseId, landlordId: "landlord-1", lease: { startDate: "2026-08-01" }, tenantEmails: ["signed@example.com"] });
     const signingRequest = listDocs("leaseSigningRequests").find((doc) => doc.id === sent.signingRequestId)?.data;
-    const body = { providerRequestId: signingRequest.providerRequestId, eventId: "provider-execution-only-1", type: "signed", occurredAt: "2026-08-24T12:00:00.000Z" };
+    const body = { providerRequestId: signingRequest.providerRequestId, eventId: "provider-execution-only-1", type: "signed", occurredAt: "2026-09-24T12:00:00.000Z" };
     await processSigningWebhook({ providerId: "mock", headers: {}, body });
     await processSigningWebhook({ providerId: "mock", headers: {}, body });
 

@@ -266,49 +266,23 @@ async function loadLatestLeaseSigningRequest(leaseId: string | null | undefined,
   }
 }
 
-async function loadLatestSigningSignedEvent(leaseId: string | null | undefined) {
-  const normalizedLeaseId = String(leaseId || "").trim();
-  if (!normalizedLeaseId) return null;
-  try {
-    const snap = await db.collection("canonicalEvents").where("action", "==", "signing_signed").limit(100).get();
-    return (
-      (snap.docs || [])
-        .map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }))
-        .filter((event: any) => String(event?.resource?.type || "") === "lease")
-        .filter((event: any) => String(event?.resource?.id || "") === normalizedLeaseId)
-        .sort(
-          (a: any, b: any) =>
-            latestTimestampMillis(b, ["occurredAt", "recordedAt", "createdAt"]) -
-            latestTimestampMillis(a, ["occurredAt", "recordedAt", "createdAt"])
-        )[0] || null
-    );
-  } catch (err) {
-    console.error("[tenantDetailsService] loadLatestSigningSignedEvent error", err);
-    return null;
-  }
-}
-
 function buildTenantProfileLeaseRawProjection(params: {
   raw: Record<string, unknown> | null;
   signingRequest: any | null;
-  signingSignedEvent: any | null;
 }): Record<string, unknown> | null {
   if (!params.raw) return null;
   const signingStatus = normalizeIdentityString(params.signingRequest?.currentSigningStatus);
   const signedByRequest = ["signed", "completed", "complete"].includes(signingStatus);
-  const signedByEvent = Boolean(params.signingSignedEvent);
-  const currentStatusAt =
-    pickString(params.signingRequest?.currentStatusAt, params.signingSignedEvent?.occurredAt, params.signingSignedEvent?.recordedAt) ||
-    null;
+  const currentStatusAt = pickString(params.signingRequest?.currentStatusAt) || null;
 
   return {
     ...params.raw,
     currentSigningStatus:
-      signedByRequest || signedByEvent
+      signedByRequest
         ? "signed"
         : signingStatus || (params.raw as any)?.currentSigningStatus || null,
     signingStatus:
-      signedByRequest || signedByEvent
+      signedByRequest
         ? "signed"
         : signingStatus || (params.raw as any)?.signingStatus || null,
     currentStatusAt: currentStatusAt || (params.raw as any)?.currentStatusAt || null,
@@ -804,7 +778,7 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
   const leaseResolution = await loadTenantLeaseResolution(tenant, landlordId);
   const currentLeaseRecord = leaseResolution.displayLease;
   const baseCurrentLeaseRaw = await loadLeaseRawById(currentLeaseRecord?.id || null);
-  const [tenantInviteState, tenantTenancies, applicationRaw, latestSigningRequest, latestSigningSignedEvent] = await Promise.all([
+  const [tenantInviteState, tenantTenancies, applicationRaw, latestSigningRequest] = await Promise.all([
     loadLatestTenantInviteState(tenant, landlordId),
     tenant ? listTenanciesByTenantId(tenant.id, { landlordId }).catch((err) => {
       console.error("[tenantDetailsService] listTenanciesByTenantId error", err);
@@ -812,12 +786,10 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     }) : Promise.resolve([]),
     loadApplicationRawById(tenant?.applicationId || null),
     loadLatestLeaseSigningRequest(currentLeaseRecord?.id || null, landlordId),
-    loadLatestSigningSignedEvent(currentLeaseRecord?.id || null),
   ]);
   const currentLeaseRaw = buildTenantProfileLeaseRawProjection({
     raw: baseCurrentLeaseRaw,
     signingRequest: latestSigningRequest,
-    signingSignedEvent: latestSigningSignedEvent,
   });
   const currentTenancy = tenantTenancies[0] || buildDerivedTenancyFromTenant(tenant);
   const property = await loadPropertyRecord(currentLeaseRecord?.propertyId || tenant?.propertyId || null);

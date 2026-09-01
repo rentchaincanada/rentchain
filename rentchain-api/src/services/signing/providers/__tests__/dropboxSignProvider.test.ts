@@ -224,6 +224,19 @@ describe("DropboxSignProvider", () => {
     });
   });
 
+  it("maps signature_request_sent exactly and rejects unknown lifecycle events", async () => {
+    const provider = new DropboxSignProvider();
+    const sent = {
+      event: { event_type: "signature_request_sent", event_hash: "evt_sent", event_time: 1780000000 },
+      signature_request: { signature_request_id: "raw_provider_request_123" },
+    };
+    await expect(provider.parseWebhookPayload(sent)).resolves.toEqual(expect.objectContaining({ type: "sent" }));
+    await expect(provider.parseWebhookPayload({
+      ...sent,
+      event: { ...sent.event, event_type: "signature_request_unknown_future_event" },
+    })).rejects.toThrow("signing_webhook_event_unsupported");
+  });
+
   it("acknowledges verified Dropbox Sign account callback tests without a signature request", async () => {
     const provider = new DropboxSignProvider();
     const eventHash = createHmac("sha256", "dropbox-key").update("1780000000callback_test").digest("hex");
