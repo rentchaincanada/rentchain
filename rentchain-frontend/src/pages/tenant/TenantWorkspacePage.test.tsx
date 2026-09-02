@@ -113,13 +113,52 @@ vi.mock("../../api/maintenanceWorkflowApi", async () => {
 
 describe("tenant workspace frontend shell", () => {
   function createReservedDocumentWindow() {
-    const replace = vi.fn();
     const close = vi.fn();
+    const click = vi.fn();
+    const remove = vi.fn();
+    const removeAttribute = vi.fn();
+    const setAttribute = vi.fn();
+    const navigationLink = {
+      click,
+      hidden: false,
+      referrerPolicy: "",
+      rel: "",
+      remove,
+      removeAttribute,
+      setAttribute,
+      target: "",
+    } as unknown as HTMLAnchorElement;
+    const appendChild = vi.fn((node: Node) => node);
+    const createElement = vi.fn(() => navigationLink);
+    let opener: Window | null = window;
+    const setOpener = vi.fn((value: Window | null) => {
+      opener = value;
+    });
     const reservedWindow = {
       close,
-      location: { replace },
+      document: {
+        body: { appendChild },
+        createElement,
+        documentElement: { appendChild },
+      },
     } as unknown as Window;
-    return { reservedWindow, replace, close };
+    Object.defineProperty(reservedWindow, "opener", {
+      configurable: true,
+      get: () => opener,
+      set: setOpener,
+    });
+    return {
+      appendChild,
+      click,
+      close,
+      createElement,
+      navigationLink,
+      remove,
+      removeAttribute,
+      reservedWindow,
+      setAttribute,
+      setOpener,
+    };
   }
 
   beforeEach(() => {
@@ -2520,7 +2559,11 @@ describe("tenant workspace frontend shell", () => {
     const openLeaseButton = screen.getByRole("button", { name: /View signed document/i });
     expect(openLeaseButton).toBeInTheDocument();
     const leaseWindow = createReservedDocumentWindow();
-    vi.mocked(window.open).mockReturnValueOnce(leaseWindow.reservedWindow);
+    const actionOrder: string[] = [];
+    vi.mocked(window.open).mockImplementationOnce(() => {
+      actionOrder.push("reserve");
+      return leaseWindow.reservedWindow;
+    });
     let resolveAuthorization!: (value: {
       documentUrl: string;
       displayLabel: string;
@@ -2528,16 +2571,25 @@ describe("tenant workspace frontend shell", () => {
       source: string;
       expiresInSeconds: number;
     }) => void;
-    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockReturnValueOnce(
-      new Promise((resolve) => {
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockImplementationOnce(() => {
+      actionOrder.push("authorize");
+      return new Promise((resolve) => {
         resolveAuthorization = resolve;
-      })
-    );
+      });
+    });
     const consoleLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const consoleDebug = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+    const storageSetItem = vi.spyOn(Storage.prototype, "setItem");
     fireEvent.click(openLeaseButton);
-    expect(window.open).toHaveBeenCalledWith("", "_blank", "noreferrer");
+    expect(window.open).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(window.open).toHaveBeenCalledOnce();
+    expect(actionOrder).toEqual(["reserve", "authorize"]);
+    expect(leaseWindow.setOpener).toHaveBeenCalledWith(null);
     expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalled();
-    expect(leaseWindow.replace).not.toHaveBeenCalled();
+    expect(leaseWindow.click).not.toHaveBeenCalled();
     resolveAuthorization({
       documentUrl: "https://example.com/refreshed-lease.pdf",
       displayLabel: "Signed lease document",
@@ -2545,8 +2597,16 @@ describe("tenant workspace frontend shell", () => {
       source: "leaseDocument",
       expiresInSeconds: 1800,
     });
-    await waitFor(() => expect(leaseWindow.replace).toHaveBeenCalledOnce());
-    expect(leaseWindow.replace).toHaveBeenCalledWith("https://example.com/refreshed-lease.pdf");
+    await waitFor(() => expect(leaseWindow.click).toHaveBeenCalledOnce());
+    expect(window.open).toHaveBeenCalledOnce();
+    expect(leaseWindow.createElement).toHaveBeenCalledWith("a");
+    expect(leaseWindow.navigationLink.target).toBe("_self");
+    expect(leaseWindow.navigationLink.rel).toBe("noopener noreferrer");
+    expect(leaseWindow.navigationLink.referrerPolicy).toBe("no-referrer");
+    expect(leaseWindow.setAttribute).toHaveBeenCalledWith("href", "https://example.com/refreshed-lease.pdf");
+    expect(leaseWindow.appendChild).toHaveBeenCalledWith(leaseWindow.navigationLink);
+    expect(leaseWindow.removeAttribute).toHaveBeenCalledWith("href");
+    expect(leaseWindow.remove).toHaveBeenCalledOnce();
     tenantPortalApi.refreshTenantLeaseDocumentUrl.mockResolvedValueOnce({
       documentUrl: "https://example.com/refreshed-schedule-a.pdf",
       displayLabel: "Schedule A",
@@ -2560,15 +2620,15 @@ describe("tenant workspace frontend shell", () => {
     await waitFor(() =>
       expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith({ document: "schedule-a" })
     );
-    expect(scheduleAWindow.replace).toHaveBeenCalledOnce();
-    expect(scheduleAWindow.replace).toHaveBeenCalledWith("https://example.com/refreshed-schedule-a.pdf");
+    expect(scheduleAWindow.click).toHaveBeenCalledOnce();
+    expect(scheduleAWindow.setAttribute).toHaveBeenCalledWith("href", "https://example.com/refreshed-schedule-a.pdf");
 
     const authorizationFailureWindow = createReservedDocumentWindow();
     vi.mocked(window.open).mockReturnValueOnce(authorizationFailureWindow.reservedWindow);
     tenantPortalApi.refreshTenantLeaseDocumentUrl.mockRejectedValueOnce(new Error("Authorization failed safely."));
     fireEvent.click(openLeaseButton);
     await waitFor(() => expect(authorizationFailureWindow.close).toHaveBeenCalledOnce());
-    expect(authorizationFailureWindow.replace).not.toHaveBeenCalled();
+    expect(authorizationFailureWindow.click).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("Authorization failed safely.");
 
     const unavailableWindow = createReservedDocumentWindow();
@@ -2582,12 +2642,12 @@ describe("tenant workspace frontend shell", () => {
     });
     fireEvent.click(openLeaseButton);
     await waitFor(() => expect(unavailableWindow.close).toHaveBeenCalledOnce());
-    expect(unavailableWindow.replace).not.toHaveBeenCalled();
+    expect(unavailableWindow.click).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("Lease document is not available.");
 
     const navigationFailureWindow = createReservedDocumentWindow();
-    navigationFailureWindow.replace.mockImplementationOnce(() => {
-      throw new Error("Document navigation failed safely.");
+    navigationFailureWindow.click.mockImplementationOnce(() => {
+      throw new Error("Document navigation failed for https://example.com/refreshed-lease.pdf");
     });
     vi.mocked(window.open).mockReturnValueOnce(navigationFailureWindow.reservedWindow);
     tenantPortalApi.refreshTenantLeaseDocumentUrl.mockResolvedValueOnce({
@@ -2599,7 +2659,37 @@ describe("tenant workspace frontend shell", () => {
     });
     fireEvent.click(openLeaseButton);
     await waitFor(() => expect(navigationFailureWindow.close).toHaveBeenCalledOnce());
-    expect(screen.getByRole("alert")).toHaveTextContent("Document navigation failed safely.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Unable to open the authorized document securely. Please try again.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("https://example.com/refreshed-lease.pdf");
+
+    const isolationFailureWindow = createReservedDocumentWindow();
+    const rejectedOpenerIsolation = vi.fn();
+    Object.defineProperty(isolationFailureWindow.reservedWindow, "opener", {
+      configurable: true,
+      get: () => window,
+      set: rejectedOpenerIsolation,
+    });
+    vi.mocked(window.open).mockReturnValueOnce(isolationFailureWindow.reservedWindow);
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockClear();
+    fireEvent.click(openLeaseButton);
+    expect(rejectedOpenerIsolation).toHaveBeenCalledWith(null);
+    expect(isolationFailureWindow.close).toHaveBeenCalledOnce();
+    expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to open the authorized document securely. Please try again.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/browser blocked the document window/i);
+
+    const closedReservationWindow = createReservedDocumentWindow();
+    Object.defineProperty(closedReservationWindow.reservedWindow, "closed", {
+      configurable: true,
+      value: true,
+    });
+    vi.mocked(window.open).mockReturnValueOnce(closedReservationWindow.reservedWindow);
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockClear();
+    fireEvent.click(openLeaseButton);
+    expect(closedReservationWindow.close).toHaveBeenCalledOnce();
+    expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to open the authorized document securely. Please try again.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/browser blocked the document window/i);
 
     vi.mocked(window.open).mockReturnValueOnce(null);
     tenantPortalApi.refreshTenantLeaseDocumentUrl.mockClear();
@@ -2607,7 +2697,18 @@ describe("tenant workspace frontend shell", () => {
     expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).not.toHaveBeenCalled();
     expect(await screen.findByRole("alert")).toHaveTextContent(/browser blocked the document window/i);
     expect(consoleLog).not.toHaveBeenCalled();
+    expect(consoleWarn).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleInfo).not.toHaveBeenCalled();
+    expect(consoleDebug).not.toHaveBeenCalled();
+    expect(storageSetItem).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent("https://example.com/refreshed-lease.pdf");
     consoleLog.mockRestore();
+    consoleWarn.mockRestore();
+    consoleError.mockRestore();
+    consoleInfo.mockRestore();
+    consoleDebug.mockRestore();
+    storageSetItem.mockRestore();
   });
 
   it("does not open stale tenant GCS lease URLs when refresh fails", async () => {
@@ -2668,7 +2769,7 @@ describe("tenant workspace frontend shell", () => {
       expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith({ document: "schedule-a" })
     );
     expect(window.open).toHaveBeenCalledOnce();
-    expect(reservedWindow.replace).not.toHaveBeenCalled();
+    expect(reservedWindow.click).not.toHaveBeenCalled();
     expect(reservedWindow.close).toHaveBeenCalledOnce();
     expect(await screen.findByText("refresh failed")).toBeInTheDocument();
   });
@@ -2742,8 +2843,9 @@ describe("tenant workspace frontend shell", () => {
     vi.mocked(window.open).mockReset().mockReturnValue(reservedWindow.reservedWindow);
     fireEvent.click(await screen.findByRole("button", { name: /View lease document/i }));
     await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith());
-    expect(window.open).toHaveBeenCalledWith("", "_blank", "noreferrer");
-    expect(reservedWindow.replace).toHaveBeenCalledWith(fallbackUrl);
+    expect(window.open).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(reservedWindow.setAttribute).toHaveBeenCalledWith("href", fallbackUrl);
+    expect(reservedWindow.click).toHaveBeenCalledOnce();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("lease_document_not_found");
     expect(document.body).not.toHaveTextContent("X-Goog-Expires");
@@ -2872,7 +2974,7 @@ describe("tenant workspace frontend shell", () => {
     fireEvent.click(await screen.findByRole("button", { name: /View signed document/i }));
     await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith());
     expect(window.open).toHaveBeenCalledOnce();
-    expect(reservedWindow.replace).not.toHaveBeenCalled();
+    expect(reservedWindow.click).not.toHaveBeenCalled();
     expect(reservedWindow.close).toHaveBeenCalledOnce();
   });
 

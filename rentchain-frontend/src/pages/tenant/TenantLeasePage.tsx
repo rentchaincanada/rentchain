@@ -78,6 +78,39 @@ function isScheduleADocumentUrl(value: unknown) {
   return Boolean(normalized) && (normalized.includes("schedule-a") || normalized.includes("schedule_a"));
 }
 
+const secureDocumentWindowError = "Unable to open the authorized document securely. Please try again.";
+
+function closeReservedDocumentWindow(reservedWindow: Window) {
+  try {
+    reservedWindow.close();
+  } catch {
+    // The reserved context may already have been closed by the browser.
+  }
+}
+
+function navigateReservedDocumentWindowWithoutReferrer(reservedWindow: Window, documentUrl: string) {
+  let navigationLink: HTMLAnchorElement | null = null;
+  try {
+    navigationLink = reservedWindow.document.createElement("a");
+    navigationLink.hidden = true;
+    navigationLink.target = "_self";
+    navigationLink.rel = "noopener noreferrer";
+    navigationLink.referrerPolicy = "no-referrer";
+    navigationLink.setAttribute("href", documentUrl);
+
+    const navigationRoot = reservedWindow.document.body || reservedWindow.document.documentElement;
+    if (!navigationRoot) throw new Error("reserved_document_context_unavailable");
+
+    navigationRoot.appendChild(navigationLink);
+    navigationLink.click();
+  } catch {
+    throw new Error(secureDocumentWindowError);
+  } finally {
+    navigationLink?.removeAttribute("href");
+    navigationLink?.remove();
+  }
+}
+
 export default function TenantLeasePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantLeaseWorkspace>>>(null);
   const [rentPaymentDetails, setRentPaymentDetails] = React.useState<Awaited<
@@ -155,20 +188,29 @@ export default function TenantLeasePage() {
     let primaryRefreshReturnedScheduleA = false;
     setOpeningDocument(true);
     setDocumentOpenError(null);
-    const reservedWindow = window.open("", "_blank", "noreferrer");
+    let reservedWindow: Window | null = null;
+    try {
+      reservedWindow = window.open("about:blank", "_blank");
+      if (reservedWindow) {
+        reservedWindow.opener = null;
+        if (reservedWindow.opener !== null || reservedWindow.closed) {
+          closeReservedDocumentWindow(reservedWindow);
+          setOpeningDocument(false);
+          setDocumentOpenError(secureDocumentWindowError);
+          return;
+        }
+      }
+    } catch {
+      if (reservedWindow) closeReservedDocumentWindow(reservedWindow);
+      setOpeningDocument(false);
+      setDocumentOpenError(secureDocumentWindowError);
+      return;
+    }
     if (!reservedWindow) {
       setOpeningDocument(false);
       setDocumentOpenError("Your browser blocked the document window. Allow pop-ups for RentChain and try again.");
       return;
     }
-
-    const closeReservedWindow = () => {
-      try {
-        reservedWindow.close();
-      } catch {
-        // The reserved context may already have been closed by the browser.
-      }
-    };
 
     try {
       const refreshed =
@@ -181,7 +223,7 @@ export default function TenantLeasePage() {
         throw new Error("Primary lease document unavailable. Use Open Schedule A for the supplemental form.");
       }
       if (!nextUrl) throw new Error("Lease document is not available.");
-      reservedWindow.location.replace(nextUrl);
+      navigateReservedDocumentWindowWithoutReferrer(reservedWindow, nextUrl);
     } catch (err: any) {
       const canUseProjectedFallback =
         Boolean(fallbackUrl) &&
@@ -193,15 +235,15 @@ export default function TenantLeasePage() {
         canUseProjectedFallback
       ) {
         try {
-          reservedWindow.location.replace(fallbackUrl);
+          navigateReservedDocumentWindowWithoutReferrer(reservedWindow, fallbackUrl);
           return;
         } catch (navigationError) {
-          closeReservedWindow();
+          closeReservedDocumentWindow(reservedWindow);
           setDocumentOpenError(tenantDocumentOpenErrorMessage(navigationError, documentKind));
           return;
         }
       }
-      closeReservedWindow();
+      closeReservedDocumentWindow(reservedWindow);
       setDocumentOpenError(tenantDocumentOpenErrorMessage(err, documentKind));
     } finally {
       setOpeningDocument(false);
