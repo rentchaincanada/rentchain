@@ -39,7 +39,6 @@ describe("activeTenancyWorkspaceState", () => {
         endDate: "2027-04-30",
         monthlyRent: 1800,
         status: "signed",
-        documentUrl: null,
       },
     });
 
@@ -65,13 +64,60 @@ describe("activeTenancyWorkspaceState", () => {
         endDate: "2027-04-30",
         monthlyRent: 1800,
         status: "active",
-        documentUrl: "https://example.com/lease.pdf",
+        leaseDocumentContext: {
+          documentStatus: "generated",
+          displayLabel: "Generated lease package",
+          source: "lease_snapshot",
+          confidence: "high",
+          warnings: [],
+        },
         paymentCompletedAt: "2026-04-01T00:00:00.000Z",
       },
     });
 
     expect(view.tenancyState).toBe("active_tenancy");
     expect(view.summaryItems.join(" ")).toMatch(/tenant workspace access is active/i);
+    expect(view.summaryItems.join(" ")).toMatch(/lease document is available/i);
+  });
+
+  it("does not treat a signed lease without an available canonical document as document-ready", () => {
+    const view = buildActiveTenancyWorkspaceState({
+      context: {
+        authority: "active_tenant",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: "app-1",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        unitId: "unit-1",
+        invitedEmail: "tenant@example.com",
+      },
+      lease: {
+        leaseId: "lease-1",
+        startDate: "2026-05-01",
+        endDate: "2027-04-30",
+        monthlyRent: 1800,
+        status: "signed",
+        signingLifecycleState: "signed",
+        signedDocumentState: "missing",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
+        leaseDocumentContext: {
+          documentStatus: "signed",
+          signingLifecycleState: "signed",
+          signedDocumentState: "missing",
+          signedDocumentAvailable: false,
+          viewSignedDocumentAllowed: false,
+          displayLabel: "Signed lease document",
+          source: "lease_signed_document",
+          confidence: "high",
+          warnings: [],
+        },
+      },
+    });
+
+    expect(view.tenancyState).toBe("transitioning_to_active");
+    expect(view.summaryItems.join(" ")).not.toMatch(/lease document is available/i);
   });
 
   it("surfaces attention state when an active tenancy has a payment issue", () => {
@@ -92,7 +138,13 @@ describe("activeTenancyWorkspaceState", () => {
         endDate: "2027-04-30",
         monthlyRent: 1800,
         status: "active",
-        documentUrl: "https://example.com/lease.pdf",
+        leaseDocumentContext: {
+          documentStatus: "signed",
+          displayLabel: "Signed lease document",
+          source: "lease_signed_document",
+          confidence: "high",
+          warnings: [],
+        },
         paymentStatus: "failed",
       },
     });

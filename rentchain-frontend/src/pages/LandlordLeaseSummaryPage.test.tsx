@@ -202,14 +202,9 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(screen.getByText("Signed document available")).toBeInTheDocument();
     expect(screen.getByText("Included in lease evidence package")).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("X-Goog-Signature");
-
-    const fallbackLink = screen.getByRole("link", { name: "Open signed document in a new tab" });
-    expect(fallbackLink).toHaveAttribute(
-      "href",
-      "https://storage.googleapis.com/rentchain-documents-prod/signed.pdf?X-Goog-Signature=hidden"
-    );
-    expect(fallbackLink).toHaveAttribute("target", "_blank");
-    expect(fallbackLink).toHaveAttribute("rel", "noopener noreferrer");
+    expect(mocks.downloadSignedLease).not.toHaveBeenCalled();
+    expect(screen.queryByRole("link", { name: /Open signed document in a new tab/i })).not.toBeInTheDocument();
+    expect(document.querySelector("a[href*='X-Goog-'], object[data*='X-Goog-']")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "View signed document" }));
 

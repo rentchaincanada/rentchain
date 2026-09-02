@@ -94,7 +94,17 @@ describe("leaseExecutionWorkspace", () => {
         endDate: "2027-04-30",
         monthlyRent: 180000,
         status: "draft",
-        documentUrl: "https://example.com/lease.pdf",
+        signingLifecycleState: "signed",
+        signedDocumentState: "available",
+        signedDocumentAvailable: true,
+        viewSignedDocumentAllowed: true,
+        leaseDocumentContext: {
+          documentStatus: "signed",
+          displayLabel: "Signed lease document",
+          source: "lease_signed_document",
+          confidence: "high",
+          warnings: [],
+        },
       },
     });
 

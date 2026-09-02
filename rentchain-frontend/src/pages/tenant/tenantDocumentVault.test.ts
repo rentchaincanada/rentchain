@@ -103,7 +103,6 @@ describe("buildTenantDocumentVaultView", () => {
         purpose: "LEASE",
         purposeLabel: "Lease",
         fileName: "schedule-a-v1.pdf",
-        url: "https://example.com/lease-draft.pdf",
         status: "uploaded" as const,
         uploadedAt: 100,
       },
@@ -119,7 +118,6 @@ describe("buildTenantDocumentVaultView", () => {
         purpose: "LEASE",
         purposeLabel: "Lease",
         fileName: "schedule-a-v1.pdf",
-        url: "https://example.com/lease-old.pdf",
         status: "uploaded" as const,
         uploadedAt: 200,
       },
@@ -135,12 +133,11 @@ describe("buildTenantDocumentVaultView", () => {
         purpose: "LEASE",
         purposeLabel: "Lease",
         fileName: "schedule-a-v1.pdf",
-        url: "https://example.com/lease-new.pdf",
         status: "uploaded" as const,
         uploadedAt: 300,
       },
       {
-        id: "lease-generated-url",
+        id: "lease-generated-current",
         tenantId: "tenant-1",
         leaseId: "lease-1",
         label: "LEASE — Lease",
@@ -149,7 +146,6 @@ describe("buildTenantDocumentVaultView", () => {
         purpose: "LEASE",
         purposeLabel: "Lease",
         fileName: "schedule-a-v1.pdf",
-        url: "https://example.com/lease-url.pdf",
         status: "uploaded" as const,
         uploadedAt: 400,
       },
@@ -162,7 +158,6 @@ describe("buildTenantDocumentVaultView", () => {
         purpose: "identity",
         purposeLabel: "Upload Id",
         fileName: "id-card.pdf",
-        url: "https://example.com/id-card.pdf",
         status: "uploaded" as const,
         uploadedAt: 250,
       },
@@ -182,13 +177,13 @@ describe("buildTenantDocumentVaultView", () => {
 
     expect(sourceItems).toHaveLength(5);
     expect(result.metrics.map((item) => item.value).slice(0, 3)).toEqual([2, 2, 0]);
-    expect(result.readyItems.map((item) => item.id)).toEqual(["lease-generated-url", "identity-doc"]);
+    expect(result.readyItems.map((item) => item.id)).toEqual(["lease-generated-current", "identity-doc"]);
     expect(result.groupedItems.find((group) => group.category === "Lease documents")?.items).toHaveLength(1);
     expect(result.groupedItems.find((group) => group.category === "Identity")?.items).toHaveLength(1);
-    expect(result.recentItems.map((item) => item.id)).toEqual(["lease-generated-url", "identity-doc"]);
+    expect(result.recentItems.map((item) => item.id)).toEqual(["lease-generated-current", "identity-doc"]);
   });
 
-  it("collapses generated Lease rows that only differ by URL when lease metadata is absent", () => {
+  it("collapses duplicate generated Lease rows when lease references are absent", () => {
     const result = buildTenantDocumentVaultView({
       items: [
         {
@@ -199,7 +194,6 @@ describe("buildTenantDocumentVaultView", () => {
           purpose: "LEASE",
           purposeLabel: "Lease",
           fileName: "schedule-a-v1.pdf",
-          url: "https://example.com/snapshot-1.pdf",
           status: "uploaded",
           uploadedAt: 100,
         },
@@ -211,7 +205,6 @@ describe("buildTenantDocumentVaultView", () => {
           purpose: "LEASE",
           purposeLabel: "Lease",
           fileName: "schedule-a-v1.pdf",
-          url: "https://example.com/snapshot-2.pdf",
           status: "uploaded",
           uploadedAt: 200,
         },
@@ -223,7 +216,6 @@ describe("buildTenantDocumentVaultView", () => {
           purpose: "LEASE",
           purposeLabel: "Lease",
           fileName: "schedule-a-v1.pdf",
-          url: "https://example.com/snapshot-3.pdf",
           status: "uploaded",
           uploadedAt: 300,
         },
@@ -235,7 +227,6 @@ describe("buildTenantDocumentVaultView", () => {
           purpose: "LEASE",
           purposeLabel: "Lease",
           fileName: "schedule-a-v1.pdf",
-          url: "https://example.com/snapshot-4.pdf",
           status: "uploaded",
           uploadedAt: 400,
         },
@@ -260,7 +251,6 @@ describe("buildTenantDocumentVaultView", () => {
           purpose: "SCHEDULE_A",
           purposeLabel: "Schedule A",
           fileName: "schedule-a.pdf",
-          url: "https://example.com/schedule-from-attachments.pdf",
           status: "uploaded",
           uploadedAt: 200,
         },
@@ -272,7 +262,6 @@ describe("buildTenantDocumentVaultView", () => {
           purpose: "SCHEDULE_A",
           purposeLabel: "Schedule A",
           fileName: "schedule-a.pdf",
-          url: "https://example.com/schedule-from-lease-context.pdf",
           status: "uploaded",
           uploadedAt: 100,
         },

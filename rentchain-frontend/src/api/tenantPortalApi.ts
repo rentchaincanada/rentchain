@@ -51,7 +51,6 @@ export interface TenantLease extends TenantSafeProjectionMetadata {
   leaseStart: string | null;
   leaseEnd: string | null;
   status: string | null;
-  documentUrl?: string | null;
   leaseDocumentContext?: TenantLeaseDocumentContext | null;
   scheduleADocumentContext?: TenantLeaseDocumentContext | null;
   signatureStatus?: "not_started" | "awaiting_tenant_signature" | "awaiting_landlord_signature" | "signed" | "unavailable";
@@ -128,7 +127,6 @@ export interface TenantLeaseDocumentContext {
   viewSignedDocumentAllowed?: boolean;
   documentStatus: "signed" | "generated" | "pending" | "missing";
   documentId?: string | null;
-  documentUrl?: string | null;
   displayLabel: string;
   source: string;
   confidence: "high" | "medium" | "low";

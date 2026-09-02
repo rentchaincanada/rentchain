@@ -67,22 +67,16 @@ function firstSafeValue(...values: Array<unknown>) {
   return null;
 }
 
-function hasTenantSafeDocumentUrl(lease: any) {
-  const contextUrl = String(lease?.leaseDocumentContext?.documentUrl || "").trim();
-  const documentUrl = String(lease?.documentUrl || "").trim();
-  return Boolean(contextUrl || documentUrl);
-}
-
 function buildRentalDocumentSummary(lease: any) {
   const context = lease?.leaseDocumentContext || null;
   const contextStatus = String(context?.documentStatus || "").trim();
   const signingComplete = String(lease?.signingLifecycleState || "").trim() === "signed";
-  const hasDocumentUrl = hasTenantSafeDocumentUrl(lease);
   const signedDocumentAvailable =
+    signingComplete &&
+    lease?.signedDocumentState === "available" &&
     lease?.signedDocumentAvailable === true &&
     lease?.viewSignedDocumentAllowed === true &&
-    contextStatus === "signed" &&
-    hasDocumentUrl;
+    contextStatus === "signed";
   const displayLabel = String(context?.displayLabel || lease?.leasePdfLabel || "").trim();
 
   if (signingComplete && !signedDocumentAvailable) {
@@ -99,9 +93,9 @@ function buildRentalDocumentSummary(lease: any) {
     };
   }
 
-  if (contextStatus === "generated" || hasDocumentUrl) {
+  if (!signingComplete && contextStatus === "generated") {
     return {
-      label: contextStatus === "signed" && !signedDocumentAvailable ? "Generated lease package" : displayLabel || "Lease document available",
+      label: displayLabel || "Lease document available",
       detail: "A tenant-safe lease document is available. Signing or final execution may still be tracked separately.",
     };
   }
@@ -124,10 +118,11 @@ function buildRentalSigningSummary(lease: any) {
   const signingLifecycleState = String(lease?.signingLifecycleState || "not_started").trim();
   const signingComplete = signingLifecycleState === "signed";
   const signedDocumentAvailable =
+    signingComplete &&
+    lease?.signedDocumentState === "available" &&
     lease?.signedDocumentAvailable === true &&
     lease?.viewSignedDocumentAllowed === true &&
-    lease?.leaseDocumentContext?.documentStatus === "signed" &&
-    hasTenantSafeDocumentUrl(lease);
+    lease?.leaseDocumentContext?.documentStatus === "signed";
   const documentSummary = buildRentalDocumentSummary(lease);
 
   if (signingComplete && documentSummary.label === "Signed copy pending") {

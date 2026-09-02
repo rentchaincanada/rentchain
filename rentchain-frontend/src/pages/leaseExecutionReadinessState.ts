@@ -85,7 +85,18 @@ function visibleLease(lease: TenantWorkspaceLease | null | undefined): boolean {
 }
 
 function visibleLeaseDocument(lease: TenantWorkspaceLease | null | undefined): boolean {
-  return Boolean(String(lease?.documentUrl || "").trim());
+  const context = lease?.leaseDocumentContext;
+  const documentStatus = String(context?.documentStatus || "").trim().toLowerCase();
+  const signingLifecycleState = String(lease?.signingLifecycleState || context?.signingLifecycleState || "")
+    .trim()
+    .toLowerCase();
+  if (signingLifecycleState !== "signed") return documentStatus === "generated";
+  return (
+    documentStatus === "signed" &&
+    String(lease?.signedDocumentState || context?.signedDocumentState || "").trim().toLowerCase() === "available" &&
+    (lease?.signedDocumentAvailable ?? context?.signedDocumentAvailable) === true &&
+    (lease?.viewSignedDocumentAllowed ?? context?.viewSignedDocumentAllowed) === true
+  );
 }
 
 function completedCategoryItems(

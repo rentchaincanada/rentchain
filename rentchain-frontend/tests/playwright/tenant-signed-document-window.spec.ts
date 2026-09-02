@@ -1,7 +1,8 @@
 import { expect, test, type Route } from "@playwright/test";
 
 const localApiOrigin = "https://local-api.rentchain.test";
-const signedDocumentUrl = "https://signed-document.test/authorized-document";
+const signedDocumentCredentialMarker = "synthetic-credential-marker";
+const signedDocumentUrl = `https://signed-document.test/authorized-document?X-Goog-Signature=${signedDocumentCredentialMarker}`;
 
 const syntheticTenantToken = [
   "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0",
@@ -42,10 +43,8 @@ const leaseProjection = {
   endDate: "2026-12-31",
   monthlyRent: 1800,
   status: "active",
-  documentUrl: "https://signed-document.test/projected-document",
   leaseDocumentContext: {
     leaseId: "window-contract-lease",
-    documentUrl: "https://signed-document.test/projected-document",
     displayLabel: "Signed lease document",
     documentStatus: "signed",
     source: "leaseDocument",
@@ -113,11 +112,29 @@ test.describe("tenant signed-document window contract", () => {
     });
 
     await page.addInitScript((token) => {
+      window.localStorage.setItem("dev_auth_unlocked", "1");
       window.localStorage.setItem("rentchain_token", token);
       window.sessionStorage.setItem("rentchain_token", token);
       window.localStorage.setItem("rentchain_tenant_token", token);
       window.sessionStorage.setItem("rentchain_tenant_token", token);
     }, syntheticTenantToken);
+
+    await page.route("**/src/api/baseUrl.ts", async (route) => {
+      const response = await route.fetch();
+      const body = (await response.text())
+        .replace("import.meta?.env?.VITE_API_BASE_URL", JSON.stringify(localApiOrigin))
+        .replace("import.meta?.env?.VITE_DEPLOY_ENV", '"development"')
+        .replace("import.meta?.env?.DEV", "true");
+      await route.fulfill({ response, body });
+    });
+    await page.route("**/src/App.tsx", async (route) => {
+      const response = await route.fetch();
+      const body = (await response.text()).replace(
+        "import.meta.env.VITE_TENANT_PORTAL_ENABLED",
+        '"true"'
+      );
+      await route.fulfill({ response, body });
+    });
 
     await context.route("**/*", async (route) => {
       const requestUrl = new URL(route.request().url());
@@ -206,6 +223,12 @@ test.describe("tenant signed-document window contract", () => {
     await page.goto("/tenant/lease", { waitUntil: "domcontentloaded" });
     const openDocument = page.getByRole("button", { name: "View signed document" });
     await expect(openDocument).toBeVisible();
+    expect(authorizationRequestCount).toBe(0);
+    await expect(page.locator(`a[href*="${signedDocumentCredentialMarker}"]`)).toHaveCount(0);
+    await expect(page.locator(`object[data*="${signedDocumentCredentialMarker}"]`)).toHaveCount(0);
+    await expect(page.locator(`[data-document-url*="${signedDocumentCredentialMarker}"]`)).toHaveCount(0);
+    expect(await page.locator("html").textContent()).not.toContain(signedDocumentCredentialMarker);
+    expect(await page.content()).not.toContain(signedDocumentCredentialMarker);
 
     let popupCount = 0;
     page.on("popup", () => {
@@ -228,5 +251,6 @@ test.describe("tenant signed-document window contract", () => {
     expect(await reservedPage.evaluate(() => window.opener === null)).toBe(true);
     expect(popupCount).toBe(1);
     expect(context.pages()).toHaveLength(2);
+    expect(await page.content()).not.toContain(signedDocumentCredentialMarker);
   });
 });

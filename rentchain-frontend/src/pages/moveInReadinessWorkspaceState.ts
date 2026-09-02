@@ -136,7 +136,18 @@ export function buildMoveInReadinessWorkspaceState(input: {
   const categoryOutstanding = outstandingCategoryItems(input.packageCategories);
   const leaseDetails = visibleLeaseDetailsItem(lease);
   const leaseVisible = Boolean(String(lease?.leaseId || "").trim() || String(lease?.status || "").trim());
-  const leaseDocumentVisible = Boolean(String(lease?.documentUrl || "").trim());
+  const documentContext = lease?.leaseDocumentContext;
+  const documentStatus = String(documentContext?.documentStatus || "").trim().toLowerCase();
+  const signingLifecycleState = String(lease?.signingLifecycleState || documentContext?.signingLifecycleState || "")
+    .trim()
+    .toLowerCase();
+  const leaseDocumentVisible =
+    signingLifecycleState !== "signed"
+      ? documentStatus === "generated"
+      : documentStatus === "signed" &&
+        String(lease?.signedDocumentState || documentContext?.signedDocumentState || "").trim().toLowerCase() === "available" &&
+        (lease?.signedDocumentAvailable ?? documentContext?.signedDocumentAvailable) === true &&
+        (lease?.viewSignedDocumentAllowed ?? documentContext?.viewSignedDocumentAllowed) === true;
 
   const completedItems: MoveInReadinessWorkspaceItem[] = [
     ...categoryCompleted,

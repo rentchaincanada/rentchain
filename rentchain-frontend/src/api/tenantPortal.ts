@@ -74,7 +74,6 @@ export type TenantWorkspaceLease = TenantSafeProjectionMetadata & {
   monthlyRent: number | null;
   dueDay?: number | null;
   status: string | null;
-  documentUrl: string | null;
   leaseDocumentContext?: TenantLeaseDocumentContext | null;
   scheduleADocumentContext?: TenantLeaseDocumentContext | null;
   signatureStatus?: "not_started" | "awaiting_tenant_signature" | "awaiting_landlord_signature" | "signed" | "unavailable";
@@ -164,7 +163,6 @@ export type TenantLeaseDocumentContext = {
   viewSignedDocumentAllowed?: boolean;
   documentStatus: "signed" | "generated" | "pending" | "missing";
   documentId?: string | null;
-  documentUrl?: string | null;
   displayLabel: string;
   source: string;
   confidence: "high" | "medium" | "low";
@@ -672,7 +670,7 @@ export async function refreshTenantLeaseDocumentUrl(options?: { document?: "leas
       source: string;
       expiresInSeconds: number;
     } & TenantSafeProjectionMetadata;
-  }>(`/tenant/lease/document-url${query}`);
+  }>(`/tenant/lease/document-url${query}`, { cache: "no-store" });
   return res.data;
 }
 

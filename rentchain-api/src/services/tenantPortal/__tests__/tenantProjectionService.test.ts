@@ -106,7 +106,9 @@ describe("tenantProjectionService", () => {
 
     expect(projected.leaseId).toBe("lease-sensitive");
     expect(projected.status).toBe("active");
-    expect(projected.documentUrl).toBe("https://example.test/tenant-safe-lease.pdf");
+    expect(projected).not.toHaveProperty("documentUrl");
+    expect(projected.leasePdfStatus).toBe("available");
+    expect(projected.leaseExecution.pdfStatus).toBe("generated");
     expect(projected.sourceRefs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sourceCollection: "leases", sourceId: "lease-sensitive" }),

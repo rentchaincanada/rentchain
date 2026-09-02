@@ -101,14 +101,12 @@ function buildTenantWorkspaceLeaseDocumentPresentation(
 ) {
   const signingComplete = String(lease?.signingLifecycleState || "").trim() === "signed";
   const context = lease?.leaseDocumentContext || null;
-  const hasDocumentUrl = Boolean(String(context?.documentUrl || lease?.documentUrl || "").trim());
   const signedDocumentAvailable =
     signingComplete &&
     lease?.signedDocumentState === "available" &&
     lease?.signedDocumentAvailable === true &&
     lease?.viewSignedDocumentAllowed === true &&
-    context?.documentStatus === "signed" &&
-    hasDocumentUrl;
+    context?.documentStatus === "signed";
 
   if (signedDocumentAvailable) {
     return { label: context?.displayLabel || "Signed lease document", canViewSignedDocument: true };
@@ -118,7 +116,7 @@ function buildTenantWorkspaceLeaseDocumentPresentation(
     return { label: "Signing complete; signed copy pending", canViewSignedDocument: false };
   }
 
-  if (hasDocumentUrl) {
+  if (!signingComplete && context?.documentStatus === "generated") {
     return { label: "Lease document available", canViewSignedDocument: false };
   }
 

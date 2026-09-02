@@ -17,7 +17,10 @@ import {
 } from "./TenantWorkspaceShared";
 import { spacing, text as textTokens } from "../../styles/tokens";
 import { buildTenantDocumentVaultView } from "./tenantDocumentVault";
-import { mergeTenantAttachments, tenantLeaseWorkspaceAttachments } from "./tenantLeaseDocumentAttachments";
+import {
+  mergeTenantAttachments,
+  tenantLeaseWorkspaceAttachments,
+} from "./tenantLeaseDocumentAttachments";
 
 function statusTone(status?: TenantAttachment["status"]) {
   switch (status) {
@@ -378,16 +381,6 @@ export default function TenantAttachmentsPage() {
                       </div>
 
                       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                        {item.url ? (
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ fontWeight: 700, textDecoration: "none" }}
-                          >
-                            Open file
-                          </a>
-                        ) : null}
                         {item.helpPath && item.helpLabel ? (
                           <Link to={item.helpPath} style={{ fontWeight: 700 }}>
                             {item.helpLabel}

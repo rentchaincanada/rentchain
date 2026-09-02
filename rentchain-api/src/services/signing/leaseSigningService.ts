@@ -55,7 +55,6 @@ export type LeaseSigningSnapshot = LeaseSigningDocumentProjection & {
   sentAt: string | null;
   signedAt: string | null;
   currentStatusAt: string | null;
-  documentUrl: string | null;
   signedDocumentHash: string | null;
   signedDocumentStoredAt: string | null;
   signedDocumentSource: "signedDocument" | "legacySignedDocumentUrl" | null;
@@ -446,7 +445,6 @@ export async function loadLeaseSigningSnapshot(input: {
       sentAt: null,
       signedAt: null,
       currentStatusAt: null,
-      documentUrl: null,
       signedDocumentHash: null,
       signedDocumentStoredAt: null,
       signedDocumentSource: null,
@@ -463,7 +461,9 @@ export async function loadLeaseSigningSnapshot(input: {
   const providerDispatchStatus = String(request.data?.providerDispatchStatus || (providerId === "mock" ? "mocked_no_email" : "")).trim() || null;
   const derivedLeaseState = deriveLeaseSigningState({ lease: input.lease || {}, signingStatus });
   const documentProjection = buildSigningDocumentProjection({ signingStatus, derivedLeaseState, events, requestData: request.data });
-  const signedDocument = documentProjection.signedDocumentAvailable ? await signedDocumentDownloadFromRequest(request.data) : null;
+  const signedDocumentRef = documentProjection.signedDocumentAvailable
+    ? signedDocumentStorageRefFromRequest(request.data)
+    : null;
   return {
     ...documentProjection,
     signingStatus,
@@ -477,10 +477,9 @@ export async function loadLeaseSigningSnapshot(input: {
     sentAt,
     signedAt,
     currentStatusAt,
-    documentUrl: signedDocument?.documentUrl || null,
-    signedDocumentHash: signedDocument?.documentHash || null,
-    signedDocumentStoredAt: signedDocument?.signedDocumentStoredAt || null,
-    signedDocumentSource: signedDocument?.source || null,
+    signedDocumentHash: String(request.data?.signedDocumentHash || "") || null,
+    signedDocumentStoredAt: String(request.data?.signedDocumentStoredAt || "") || null,
+    signedDocumentSource: signedDocumentRef?.source || null,
     events: collapseEventsForProjection(events),
   };
 }
@@ -692,7 +691,9 @@ export async function downloadSignedLease(input: { leaseId: string; lease: Recor
         { merge: true }
       );
     }
-    return loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
+    const snapshot = await loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
+    const download = await getSignedLeaseDocumentDownload({ leaseId: input.leaseId, landlordId: input.landlordId });
+    return { ...snapshot, ...download };
   }
   if (signingStatus !== "signed" || !events.some((event) => event.type === "signed")) {
     throw Object.assign(new Error("signed_document_not_found"), { status: 404 });
@@ -763,7 +764,9 @@ export async function downloadSignedLease(input: { leaseId: string; lease: Recor
     ...safeProviderMetadataFromRequest(request.data),
     documentMetadata: safeDocumentMetadataFromRequest(request.data),
   });
-  return loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
+  const snapshot = await loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
+  const download = await getSignedLeaseDocumentDownload({ leaseId: input.leaseId, landlordId: input.landlordId });
+  return { ...snapshot, ...download };
 }
 
 export type SigningWebhookProcessResult = {

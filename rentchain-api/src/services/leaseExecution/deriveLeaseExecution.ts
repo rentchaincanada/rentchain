@@ -82,6 +82,7 @@ function firstIso(input: any, keys: string[]): string | null {
 type DeriveLeaseExecutionInput = {
   leaseId?: string | null;
   documentUrl?: string | null;
+  documentAvailable?: boolean;
   startDate?: string | null;
   monthlyRent?: number | null;
   status?: string | null;
@@ -96,6 +97,7 @@ export function deriveLeaseExecution(input: DeriveLeaseExecutionInput): LeaseExe
     asString(raw?.documentUrl) ||
     asString(raw?.approvedDocumentUrl) ||
     asString(raw?.documentRef);
+  const documentAvailable = input.documentAvailable ?? Boolean(documentUrl);
   const startDate =
     asString(input.startDate) || asString(raw?.startDate) || asString(raw?.leaseStart) || asString(raw?.leaseStartDate);
   const monthlyRent =
@@ -176,13 +178,13 @@ export function deriveLeaseExecution(input: DeriveLeaseExecutionInput): LeaseExe
       !landlordSigned &&
       !readyForLandlord &&
       !tenantSigned &&
-      documentUrl &&
+      documentAvailable &&
       statusImpliesReadyForTenant &&
       hasExplicitSignatureWorkflow
   );
 
   const pdfStatus: LeaseExecutionPdfStatus = (() => {
-    if (documentUrl) return "generated";
+    if (documentAvailable) return "generated";
     if (!leaseId) return "blocked";
     if (tenantSigned || readyForLandlord || landlordSigned || executed) return "blocked";
     if (hasCoreLeaseDetails) return "ready";
