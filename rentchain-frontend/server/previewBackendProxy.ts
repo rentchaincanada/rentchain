@@ -34,6 +34,7 @@ export const PREVIEW_BACKEND_TARGET_KEYS = {
   pr1585: "pr1585-ended-occupancy-remediation-cert",
   pr1587: "pr1587-review-needed-discovery-cert",
   pr1589: "pr1589-signing-document-contract-cert",
+  pr1592: "pr1592-tenant-doc-authority-cert",
 } as const;
 
 export type PreviewBackendTarget = {
@@ -178,6 +179,14 @@ const PREVIEW_BACKEND_TARGETS: Record<string, PreviewBackendTarget> = {
       "https://rentchain-pr1589-qa-signing-a-glistw4pya-nn.a.run.app",
     temporary: true,
   },
+  [PREVIEW_BACKEND_TARGET_KEYS.pr1592]: {
+    key: PREVIEW_BACKEND_TARGET_KEYS.pr1592,
+    cloudRunServiceUrl:
+      "https://rentchain-pr1592-qa-tenant-doc-authority-glistw4pya-nn.a.run.app",
+    cloudRunIdTokenAudience:
+      "https://rentchain-pr1592-qa-tenant-doc-authority-glistw4pya-nn.a.run.app",
+    temporary: true,
+  },
 };
 
 export function assertPreviewBackendTarget(
@@ -200,11 +209,18 @@ export function assertPreviewBackendTarget(
 export function resolvePreviewBackendTarget(input: {
   vercelEnvironment: unknown;
   targetKey: unknown;
+  certificationMode?: unknown;
 }): PreviewBackendTarget {
   const environment = typeof input.vercelEnvironment === "string"
     ? input.vercelEnvironment.trim()
     : "";
   const hasExplicitTarget = input.targetKey !== undefined && input.targetKey !== null;
+  const certificationMode = typeof input.certificationMode === "string"
+    ? input.certificationMode.trim().toLowerCase() === "true"
+    : input.certificationMode === true;
+  if (certificationMode && (!hasExplicitTarget || environment !== "preview")) {
+    throw new Error("PREVIEW_PROXY_TARGET_REJECTED");
+  }
   const key = hasExplicitTarget && typeof input.targetKey === "string"
     ? input.targetKey.trim()
     : PREVIEW_BACKEND_TARGET_KEYS.permanent;
@@ -214,6 +230,9 @@ export function resolvePreviewBackendTarget(input: {
     throw new Error("PREVIEW_PROXY_TARGET_REJECTED");
   }
   assertPreviewBackendTarget(target, environment);
+  if (certificationMode && !target.temporary) {
+    throw new Error("PREVIEW_PROXY_TARGET_REJECTED");
+  }
   return target;
 }
 
@@ -466,6 +485,7 @@ export async function handlePreviewBackendProxy(
     target = resolvePreviewBackendTarget({
       vercelEnvironment: process.env.VERCEL_ENV,
       targetKey: process.env.PREVIEW_BACKEND_TARGET,
+      certificationMode: process.env.PREVIEW_BACKEND_CERTIFICATION_MODE,
     });
   } catch {
     return jsonError(res, 502, "PREVIEW_PROXY_TARGET_REJECTED");

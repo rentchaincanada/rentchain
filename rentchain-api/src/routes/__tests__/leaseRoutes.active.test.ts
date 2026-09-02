@@ -944,6 +944,20 @@ describe("leaseRoutes GET /active", () => {
     });
 
     const router = (await import("../leaseRoutes")).default;
+    const statusRes = await invokeRouter(router, { method: "GET", url: "/lease-signed/signing-status" });
+    expect(statusRes.status).toBe(200);
+    expect(statusRes.body?.data).toEqual(
+      expect.objectContaining({
+        signingStatus: "signed",
+        signedDocumentAvailable: true,
+        viewSignedDocumentAllowed: true,
+        signedDocumentHash: "signed_doc_hash",
+        signedDocumentStoredAt: "2026-01-02T00:10:00.000Z",
+      })
+    );
+    expect(statusRes.body?.data).not.toHaveProperty("documentUrl");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
+
     const refreshRes = await invokeRouter(router, { method: "GET", url: "/lease-signed/document-url" });
 
     expect(refreshRes.status).toBe(200);
@@ -967,6 +981,7 @@ describe("leaseRoutes GET /active", () => {
       path: "lease-signing/landlord-1/request-signed/signed.pdf",
       expiresMinutes: 30,
     });
+    expect(getSignedDownloadUrlMock).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(refreshRes.body)).not.toContain("signed-lease-documents");
     expect(JSON.stringify(refreshRes.body)).not.toContain("lease-signing/landlord-1");
     expect(JSON.stringify(refreshRes.body)).not.toContain("raw-provider-request-id");

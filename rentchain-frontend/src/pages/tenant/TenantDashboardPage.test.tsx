@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import TenantDashboardPage from "./TenantDashboardPage";
 import { TENANT_TOKEN_KEY } from "../../lib/authKeys";
+import { projectTenantAttachmentsResponse } from "../../api/tenantAttachmentsApi";
 
 const tenantApiFetchApi = vi.hoisted(() => ({
   tenantApiFetch: vi.fn(),
@@ -76,5 +77,67 @@ describe("TenantDashboardPage", () => {
     expect(await screen.findByText("Lease Snapshot")).toBeInTheDocument();
     expect(screen.getByText("Unit 4B")).toBeInTheDocument();
     expect(screen.queryByText("unit-raw-1")).not.toBeInTheDocument();
+  });
+
+  it("keeps credential-bearing attachment URLs out of dashboard state and rendered output", async () => {
+    const credentialMarker = "synthetic-dashboard-credential";
+    const credentialUrl = `https://signed.example/document.pdf?X-Goog-Signature=${credentialMarker}`;
+    const rawAttachments = {
+      ok: true,
+      data: [
+        {
+          id: "attachment-1",
+          title: "Lease receipt",
+          fileName: "lease-receipt.pdf",
+          category: "Lease",
+          status: "uploaded",
+          url: credentialUrl,
+          documentUrl: credentialUrl,
+          downloadUrl: credentialUrl,
+          signedUrl: credentialUrl,
+        },
+      ],
+    };
+    const projected = projectTenantAttachmentsResponse(rawAttachments);
+    expect(JSON.stringify(projected)).not.toContain(credentialMarker);
+
+    tenantApiFetchApi.tenantApiFetch.mockImplementation(async (path: string) => {
+      if (path === "/tenant/me") {
+        return {
+          ok: true,
+          data: {
+            tenant: {
+              id: "tenant-1",
+              shortId: "tenant-1",
+              name: "Taylor Tenant",
+              email: "tenant@example.com",
+              joinedAt: null,
+              status: "Active",
+            },
+            landlord: { name: "Harbour Homes" },
+            property: { name: "Harbour View" },
+            unit: { label: "Unit 4B" },
+            lease: {
+              status: "Active",
+              startDate: null,
+              endDate: null,
+              rentCents: null,
+              currency: "CAD",
+            },
+          },
+        };
+      }
+      if (path === "/tenant/attachments") return rawAttachments;
+      if (path === "/tenant/messages") return { ok: true, items: [] };
+      return { ok: true, data: [] };
+    });
+
+    render(<TenantDashboardPage />);
+
+    expect(await screen.findByText("Lease receipt")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(credentialMarker);
+    expect(document.querySelector(`a[href*="${credentialMarker}"], object[data*="${credentialMarker}"]`)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "View receipt" })).not.toBeInTheDocument();
   });
 });

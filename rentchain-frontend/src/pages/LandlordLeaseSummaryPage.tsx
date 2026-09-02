@@ -292,7 +292,7 @@ export default function LandlordLeaseSummaryPage() {
             audience="landlord"
             statusLabel={signedDocumentStatusLabel(lease)}
             documentLabel={isSignedLeaseSummaryRecord(lease) ? "Signed lease document" : lease.leasePdfLabel || "Lease document"}
-            documentUrl={signedDocumentUrl || lease.documentUrl || null}
+            documentAvailable={Boolean(signedDocumentUrl || lease.documentUrl)}
             sourceLabel={signedDocumentSourceLabel(lease)}
             signedAt={(lease as any).providerSignedAt || lease.leaseExecution?.completedAt || lease.tenantSignature?.signedAt || null}
             completedAt={lease.leaseExecution?.completedAt || null}

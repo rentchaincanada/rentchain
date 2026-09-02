@@ -19,7 +19,7 @@ export type SignedDocumentWorkspaceProps = {
   title?: string;
   statusLabel: string;
   documentLabel?: string | null;
-  documentUrl?: string | null;
+  documentAvailable: boolean;
   sourceLabel?: string | null;
   signedAt?: string | number | null;
   completedAt?: string | number | null;
@@ -30,6 +30,7 @@ export type SignedDocumentWorkspaceProps = {
   onOpenDocument?: () => void;
   unavailableMessage?: string;
   providerMetadataVisible?: boolean;
+  documentKind?: "signed" | "generic";
 };
 
 function formatWorkspaceDate(value?: string | number | null) {
@@ -39,27 +40,12 @@ function formatWorkspaceDate(value?: string | number | null) {
   return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
-function canEmbedPdf(value: string | null | undefined) {
-  const raw = String(value || "").trim();
-  if (!raw || typeof window === "undefined") return false;
-  try {
-    const url = new URL(raw, window.location.origin);
-    return url.origin === window.location.origin && /\.pdf$/i.test(url.pathname);
-  } catch {
-    return /^\/[^?#]+\.pdf(?:$|[?#])/i.test(raw);
-  }
-}
-
-function normalizedDocumentUrl(value?: string | null) {
-  return String(value || "").trim();
-}
-
 export function SignedDocumentWorkspace({
   audience,
   title,
   statusLabel,
   documentLabel,
-  documentUrl,
+  documentAvailable,
   sourceLabel,
   signedAt,
   completedAt,
@@ -70,17 +56,17 @@ export function SignedDocumentWorkspace({
   onOpenDocument,
   unavailableMessage,
   providerMetadataVisible = true,
+  documentKind = "signed",
 }: SignedDocumentWorkspaceProps) {
-  const safeDocumentUrl = normalizedDocumentUrl(documentUrl);
-  const hasDocument = Boolean(safeDocumentUrl);
-  const embedAllowed = canEmbedPdf(safeDocumentUrl);
+  const hasDocument = documentAvailable === true;
   const signedDate = formatWorkspaceDate(signedAt) || formatWorkspaceDate(completedAt);
+  const signedDocument = documentKind === "signed";
   const heading = title || (audience === "tenant" ? "Signed document workspace" : "Signed Document Workspace");
   const fallbackMessage =
     unavailableMessage ||
     (hasDocument
-      ? "This signed document is available through a secure external source. Open it in a new tab if the preview cannot be embedded safely."
-      : "No signed document is available in this workspace yet.");
+      ? `This ${signedDocument ? "signed " : ""}document is available. Use the authorized action below to open a fresh secure copy.`
+      : `No ${signedDocument ? "signed " : ""}document is available in this workspace yet.`);
 
   return (
     <section
@@ -106,7 +92,9 @@ export function SignedDocumentWorkspace({
           </h2>
           <div style={{ color: signedDocumentWorkspaceTheme.muted, lineHeight: 1.5 }}>
             {audience === "tenant"
-              ? "Review your tenant-safe signed lease access without exposing landlord-only workflow metadata."
+              ? signedDocument
+                ? "Review your tenant-safe signed lease access without exposing landlord-only workflow metadata."
+                : "Review this tenant-safe source lease document separately from signing completion."
               : "Review the executed lease document alongside landlord lease context and evidence package readiness."}
           </div>
         </div>
@@ -135,72 +123,40 @@ export function SignedDocumentWorkspace({
           gap: 10,
         }}
       >
-        <WorkspaceFact label="Document" value={documentLabel || (hasDocument ? "Signed lease document" : "Unavailable")} />
+        <WorkspaceFact label="Document" value={documentLabel || (hasDocument ? (signedDocument ? "Signed lease document" : "Lease document") : "Unavailable")} />
         <WorkspaceFact label="Signed" value={signedDate || "Pending"} />
         {providerMetadataVisible ? <WorkspaceFact label="Source" value={sourceLabel || (hasDocument ? "Secure document source" : "Pending")} /> : null}
         <WorkspaceFact label="Evidence" value={evidenceLabel || (hasDocument ? "Ready for lease evidence package" : "Awaiting signed document")} />
       </div>
 
-      {embedAllowed ? (
-        <div
-          style={{
-            border: `1px solid ${signedDocumentWorkspaceTheme.border}`,
-            borderRadius: 12,
-            overflow: "hidden",
-            background: "#ffffff",
-            minHeight: 420,
-          }}
-        >
-          <object
-            data={safeDocumentUrl}
-            type="application/pdf"
-            title="Signed lease document preview"
-            style={{ width: "100%", minHeight: 420, display: "block" }}
-          >
-            <div style={{ padding: 16, color: signedDocumentWorkspaceTheme.muted }}>{fallbackMessage}</div>
-          </object>
+      <div
+        style={{
+          border: `1px solid ${signedDocumentWorkspaceTheme.border}`,
+          borderRadius: 12,
+          background: "#fffdf8",
+          padding: 14,
+          display: "grid",
+          gap: 6,
+          color: signedDocumentWorkspaceTheme.muted,
+        }}
+      >
+        <div style={{ fontWeight: 800, color: signedDocumentWorkspaceTheme.charcoal }}>
+          {hasDocument ? "Secure access available" : "Document unavailable"}
         </div>
-      ) : (
-        <div
-          style={{
-            border: `1px solid ${signedDocumentWorkspaceTheme.border}`,
-            borderRadius: 12,
-            background: "#fffdf8",
-            padding: 14,
-            display: "grid",
-            gap: 6,
-            color: signedDocumentWorkspaceTheme.muted,
-          }}
-        >
-          <div style={{ fontWeight: 800, color: signedDocumentWorkspaceTheme.charcoal }}>
-            {hasDocument ? "External preview fallback" : "Document unavailable"}
-          </div>
-          <div>{fallbackMessage}</div>
-          {warnings.length ? <div>{warnings[0]}</div> : null}
-        </div>
-      )}
+        <div>{fallbackMessage}</div>
+        {warnings.length ? <div>{warnings[0]}</div> : null}
+      </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        {onOpenDocument ? (
+        {onOpenDocument && (audience === "landlord" || hasDocument) ? (
           <button
             type="button"
             onClick={onOpenDocument}
             disabled={opening}
             style={workspaceActionStyle("primary")}
           >
-            {opening ? "Opening..." : "View signed document"}
+            {opening ? "Opening..." : signedDocument ? "View signed document" : "View lease document"}
           </button>
-        ) : null}
-        {hasDocument ? (
-          <a
-            href={safeDocumentUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Open signed document in a new tab"
-            style={workspaceActionStyle("secondary")}
-          >
-            Open in new tab
-          </a>
         ) : null}
       </div>
 

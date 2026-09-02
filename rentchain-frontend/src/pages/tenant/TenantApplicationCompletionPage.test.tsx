@@ -247,7 +247,6 @@ describe("tenant application completion page", () => {
       endDate: "2027-04-30",
       monthlyRent: 180000,
       status: "draft",
-      documentUrl: null,
     });
     tenantApplicationCompletionApi.getTenantApplicationCompletion.mockResolvedValue({
       status: "completed",
@@ -277,7 +276,13 @@ describe("tenant application completion page", () => {
       endDate: "2027-04-30",
       monthlyRent: 180000,
       status: "draft",
-      documentUrl: "https://example.com/lease.pdf",
+      leaseDocumentContext: {
+        documentStatus: "generated",
+        displayLabel: "Generated lease package",
+        source: "lease_snapshot",
+        confidence: "high",
+        warnings: [],
+      },
     });
     tenantApplicationCompletionApi.getTenantApplicationCompletion.mockResolvedValue({
       status: "completed",
@@ -311,7 +316,6 @@ describe("tenant application completion page", () => {
       endDate: "2027-04-30",
       monthlyRent: 1800,
       status: "signed",
-      documentUrl: "https://example.com/lease.pdf",
       depositCents: 150000,
       depositRequired: true,
     });

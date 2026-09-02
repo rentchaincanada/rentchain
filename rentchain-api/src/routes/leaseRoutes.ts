@@ -97,6 +97,7 @@ import type { LeaseEvent, LeaseLifecycleState } from "../services/stateMachines/
 import {
   cancelLeaseSigning,
   downloadSignedLease,
+  getSignedLeaseDocumentDownload,
   loadLeaseSigningSnapshot,
   sendLeaseForSignature,
   signingErrorCode,
@@ -3253,22 +3254,25 @@ export async function handleLeaseDocumentUrl(req: any, res: Response) {
       ? await loadLeaseSigningSnapshot({ leaseId, landlordId, lease: leaseCheck.lease as any })
       : null;
     if (!wantsScheduleA) {
-      if (signingProjection?.documentUrl) {
+      const signedDocument = signingProjection?.viewSignedDocumentAllowed
+        ? await getSignedLeaseDocumentDownload({ leaseId, landlordId })
+        : null;
+      if (signedDocument?.documentUrl) {
         return res.status(200).json({
           ok: true,
-          documentUrl: signingProjection.documentUrl,
+          documentUrl: signedDocument.documentUrl,
           refreshMode: "signed_url",
           expiresInSeconds: 1800,
           documentKind: "signed-lease",
-          documentHash: signingProjection.signedDocumentHash,
-          signedDocumentStoredAt: signingProjection.signedDocumentStoredAt,
+          documentHash: signedDocument.documentHash,
+          signedDocumentStoredAt: signedDocument.signedDocumentStoredAt,
           signingLifecycleState: signingProjection?.signingLifecycleState,
           signedDocumentState: signingProjection?.signedDocumentState,
           signedDocumentAvailable: signingProjection?.signedDocumentAvailable,
           signedDocumentRecoveryAction: signingProjection?.signedDocumentRecoveryAction,
           viewSignedDocumentAllowed: signingProjection?.viewSignedDocumentAllowed,
           documentRef: {
-            source: signingProjection.signedDocumentSource,
+            source: signedDocument.source,
             internalReferenceOnly: true,
           },
         });

@@ -5,6 +5,7 @@ const writeCanonicalEventMock = vi.fn(async () => undefined);
 const getCanonicalLeaseStartContextMock = vi.fn(async () => ({ expectedStateToken: "state-1" }));
 const startCanonicalLeaseOccupancyMock = vi.fn(async () => ({ canonicalOutcome: "occupancy_effective", occupancyEffective: true, reasons: [] }));
 const uploadBufferToGcsMock = vi.fn(async ({ path }: { path: string }) => ({ bucket: "bucket", path }));
+const getSignedDownloadUrlMock = vi.fn(async ({ path }: { path: string }) => `https://signed.example/${path}`);
 let transactionTail = Promise.resolve();
 
 function ensureCollection(name: string) {
@@ -93,7 +94,7 @@ vi.mock("../../lib/gcs", () => ({
 }));
 
 vi.mock("../../lib/gcsSignedUrl", () => ({
-  getSignedDownloadUrl: vi.fn(async ({ path }: { path: string }) => `https://signed.example/${path}`),
+  getSignedDownloadUrl: getSignedDownloadUrlMock,
 }));
 
 describe("leaseSigningService", () => {
@@ -103,6 +104,7 @@ describe("leaseSigningService", () => {
     getCanonicalLeaseStartContextMock.mockClear();
     startCanonicalLeaseOccupancyMock.mockClear();
     uploadBufferToGcsMock.mockClear();
+    getSignedDownloadUrlMock.mockClear();
     process.env.SIGNING_PROVIDER = "mock";
     process.env.PUBLIC_APP_URL = "http://localhost:5173";
     delete process.env.SIGNING_PROVIDER_API_KEY;
@@ -643,8 +645,8 @@ describe("leaseSigningService", () => {
     expect(JSON.stringify(snapshot)).not.toContain("raw-provider-request-download");
   });
 
-  it("returns fresh signed document URLs from stored metadata and collapses duplicate signed events in projections", async () => {
-    const { loadLeaseSigningSnapshot } = await import("../signing/leaseSigningService");
+  it("keeps signing snapshots credential-free while explicit downloads mint from stored metadata", async () => {
+    const { getSignedLeaseDocumentDownload, loadLeaseSigningSnapshot } = await import("../signing/leaseSigningService");
     ensureCollection("leaseSigningRequests").set("request-1", {
       leaseId: "lease-1",
       landlordId: "landlord-1",
@@ -689,12 +691,24 @@ describe("leaseSigningService", () => {
 
     const snapshot = await loadLeaseSigningSnapshot({ leaseId: "lease-1", landlordId: "landlord-1", lease: { startDate: "2026-01-01" } });
 
-    expect(snapshot.documentUrl).toBe("https://signed.example/lease-signing/landlord/request-1/signed.pdf");
+    expect(snapshot).not.toHaveProperty("documentUrl");
+    expect(snapshot.signedDocumentAvailable).toBe(true);
+    expect(snapshot.viewSignedDocumentAllowed).toBe(true);
+    expect(snapshot.signedDocumentHash).toBe("signed_hash");
+    expect(snapshot.signedDocumentStoredAt).toBe("2026-01-02T00:10:00.000Z");
+    expect(snapshot.signedDocumentSource).toBe("signedDocument");
     expect(snapshot.signedAt).toBe("2026-01-02T00:05:00.000Z");
     expect(snapshot.events.map((event) => event.type)).toEqual(["sent", "signed"]);
     expect(snapshot.events.find((event) => event.type === "signed")?.occurredAt).toBe("2026-01-02T00:05:00.000Z");
     expect(JSON.stringify(snapshot)).not.toContain("X-Goog-Signature");
     expect(JSON.stringify(snapshot)).not.toContain("raw-provider-request-duplicate");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
+
+    const download = await getSignedLeaseDocumentDownload({ leaseId: "lease-1", landlordId: "landlord-1" });
+
+    expect(download.documentUrl).toMatch(/^https:\/\/signed\.example\//);
+    expect(download.source).toBe("signedDocument");
+    expect(getSignedDownloadUrlMock).toHaveBeenCalledTimes(1);
   });
 
   it("converts legacy persisted signed URLs into internal signed document metadata on download", async () => {

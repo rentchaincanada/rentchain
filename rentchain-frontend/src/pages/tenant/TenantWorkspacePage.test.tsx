@@ -8,6 +8,7 @@ import TenantLeasePage from "./TenantLeasePage";
 import TenantMaintenanceRequestsPage from "./TenantMaintenanceRequestsPage";
 import TenantInviteRedeemPage from "./TenantInviteRedeemPage";
 import { TenantNav } from "../../components/layout/TenantNav";
+import type { TenantWorkspaceLease } from "../../api/tenantPortal";
 
 const tenantPortalApi = vi.hoisted(() => ({
   getTenantWorkspace: vi.fn(),
@@ -111,6 +112,55 @@ vi.mock("../../api/maintenanceWorkflowApi", async () => {
 });
 
 describe("tenant workspace frontend shell", () => {
+  function createReservedDocumentWindow() {
+    const close = vi.fn();
+    const click = vi.fn();
+    const remove = vi.fn();
+    const removeAttribute = vi.fn();
+    const setAttribute = vi.fn();
+    const navigationLink = {
+      click,
+      hidden: false,
+      referrerPolicy: "",
+      rel: "",
+      remove,
+      removeAttribute,
+      setAttribute,
+      target: "",
+    } as unknown as HTMLAnchorElement;
+    const appendChild = vi.fn((node: Node) => node);
+    const createElement = vi.fn(() => navigationLink);
+    let opener: Window | null = window;
+    const setOpener = vi.fn((value: Window | null) => {
+      opener = value;
+    });
+    const reservedWindow = {
+      close,
+      document: {
+        body: { appendChild },
+        createElement,
+        documentElement: { appendChild },
+      },
+    } as unknown as Window;
+    Object.defineProperty(reservedWindow, "opener", {
+      configurable: true,
+      get: () => opener,
+      set: setOpener,
+    });
+    return {
+      appendChild,
+      click,
+      close,
+      createElement,
+      navigationLink,
+      remove,
+      removeAttribute,
+      reservedWindow,
+      setAttribute,
+      setOpener,
+    };
+  }
+
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -542,7 +592,6 @@ describe("tenant workspace frontend shell", () => {
           endDate: "2027-01-31",
           monthlyRent: 1800,
           status: "active",
-          documentUrl: null,
         },
       },
       identity: {
@@ -1169,7 +1218,6 @@ describe("tenant workspace frontend shell", () => {
         endDate: "2027-01-31",
         monthlyRent: 1800,
         status: "active",
-        documentUrl: null,
         paymentReadiness: {
           readinessStatus: "ready_to_configure",
           readinessLabel: "Rent terms ready for future setup",
@@ -1326,7 +1374,6 @@ describe("tenant workspace frontend shell", () => {
         endDate: null,
         monthlyRent: null,
         status: "active",
-        documentUrl: null,
         leaseDocumentContext: null,
         scheduleADocumentContext: {
           leaseId: "lease-1",
@@ -1337,7 +1384,6 @@ describe("tenant workspace frontend shell", () => {
           signingStatus: null,
           documentStatus: "generated",
           documentId: "schedule-a-doc",
-          documentUrl: "https://signed.example/schedule-a.pdf",
           displayLabel: "Schedule A",
           source: "tenant-safe-lease-workspace",
           confidence: "high",
@@ -1380,6 +1426,148 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.queryByText(/tenant-1/i)).not.toBeInTheDocument();
   });
 
+  it.each([
+    {
+      name: "canonical signed without a durable document",
+      lease: {
+        signingLifecycleState: "signed",
+        signingExecutionState: "active",
+        signedDocumentState: "pending_persistence",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
+      },
+      expected: "Signing complete; signed copy pending",
+      signedDocumentAction: false,
+    },
+    {
+      name: "canonical signed with a durable signed document",
+      lease: {
+        signingLifecycleState: "signed",
+        signingExecutionState: "active",
+        signedDocumentState: "available",
+        signedDocumentAvailable: true,
+        viewSignedDocumentAllowed: true,
+        leaseDocumentContext: {
+          documentStatus: "signed",
+          displayLabel: "Signed lease document",
+          source: "lease_signed_document",
+          confidence: "high",
+          warnings: [],
+        },
+      },
+      expected: "Signed lease document",
+      signedDocumentAction: true,
+    },
+    {
+      name: "legacy execution complete only",
+      lease: {
+        signingLifecycleState: "not_started",
+        leaseExecution: {
+          executionStatus: "fully_executed",
+          executionLabel: "Lease fully executed",
+        },
+      },
+      expected: "No lease document available yet",
+      signedDocumentAction: false,
+    },
+    {
+      name: "provider signed only",
+      lease: {
+        signingLifecycleState: "not_started",
+        providerSigningStatus: "signed",
+        providerSignedAt: "2026-07-03T10:00:00.000Z",
+      },
+      expected: "No lease document available yet",
+      signedDocumentAction: false,
+    },
+    {
+      name: "generic document metadata absent",
+      lease: {
+        signingLifecycleState: "not_started",
+      },
+      expected: "No lease document available yet",
+      signedDocumentAction: false,
+    },
+    {
+      name: "generic storage context only",
+      lease: {
+        signingLifecycleState: "not_started",
+        leaseDocumentContext: {
+          documentStatus: "generated",
+          displayLabel: "Generated lease package",
+          source: "lease_snapshot",
+          confidence: "low",
+          warnings: [],
+        },
+      },
+      expected: "Lease document available",
+      signedDocumentAction: false,
+    },
+    {
+      name: "canonical signed-without-document over misleading legacy fields",
+      lease: {
+        signingLifecycleState: "signed",
+        signedDocumentState: "pending_persistence",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
+        leasePdfLabel: "Signed lease document",
+        leaseDocumentContext: {
+          documentStatus: "signed",
+          displayLabel: "Signed lease document",
+          source: "legacy_projection",
+          confidence: "low",
+          warnings: [],
+        },
+      },
+      expected: "Signing complete; signed copy pending",
+      signedDocumentAction: false,
+    },
+    {
+      name: "unknown canonical document state",
+      lease: {
+        signingLifecycleState: "signed",
+        signedDocumentState: "unknown",
+        signedDocumentAvailable: true,
+        viewSignedDocumentAllowed: true,
+        leaseDocumentContext: {
+          documentStatus: "signed",
+          displayLabel: "Signed lease document",
+          source: "lease_signed_document",
+          confidence: "high",
+          warnings: [],
+        },
+      },
+      expected: "Signing complete; signed copy pending",
+      signedDocumentAction: false,
+    },
+  ])("derives the dashboard lease document status from $name", async ({ lease, expected, signedDocumentAction }) => {
+    const workspace = await tenantPortalApi.getTenantWorkspace();
+    tenantPortalApi.getTenantWorkspace.mockResolvedValue({
+      ...workspace,
+      lease: {
+        leaseId: "lease-authority-matrix",
+        startDate: null,
+        endDate: null,
+        monthlyRent: null,
+        status: "active",
+        ...lease,
+      } as TenantWorkspaceLease,
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(expected)).toBeInTheDocument();
+    if (signedDocumentAction) {
+      expect(screen.getByRole("link", { name: "View signed document" })).toHaveAttribute("href", "/tenant/lease");
+    } else {
+      expect(screen.queryByRole("link", { name: "View signed document" })).not.toBeInTheDocument();
+    }
+  });
+
   it("starts tenant checkout from the workspace when rent collection is enabled", async () => {
     tenantPortalApi.getTenantWorkspace.mockResolvedValue({
       context: {
@@ -1400,7 +1588,6 @@ describe("tenant workspace frontend shell", () => {
         endDate: "2027-01-31",
         monthlyRent: 1800,
         status: "active",
-        documentUrl: null,
         paymentReadiness: {
           readinessStatus: "ready_to_configure",
           readinessLabel: "Rent terms ready for future setup",
@@ -1468,7 +1655,6 @@ describe("tenant workspace frontend shell", () => {
         endDate: "2027-01-31",
         monthlyRent: 1800,
         status: "active",
-        documentUrl: null,
         paymentReadiness: {
           readinessStatus: "ready_to_configure",
           readinessLabel: "Rent terms ready for future setup",
@@ -2113,7 +2299,6 @@ describe("tenant workspace frontend shell", () => {
         endDate: "2027-01-31",
         monthlyRent: 1800,
         status: "signed",
-        documentUrl: null,
       },
       maintenance: [],
     });
@@ -2242,13 +2427,14 @@ describe("tenant workspace frontend shell", () => {
   });
 
   it("renders lease page with safe projected fields", async () => {
+    const authorizedDocumentUrl =
+      "https://signed.example/signed-lease.pdf?X-Goog-Algorithm=unit-test&X-Goog-Signature=unit-test";
     tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
       leaseId: "lease-1",
       startDate: "2026-02-01",
       endDate: "2027-01-31",
       monthlyRent: 1800,
       status: "active",
-      documentUrl: "https://example.com/lease.pdf",
       leaseDocumentContext: {
         leaseId: "lease-1",
         tenantId: "tenant-1",
@@ -2258,7 +2444,6 @@ describe("tenant workspace frontend shell", () => {
         signingStatus: "signed",
         documentStatus: "signed",
         documentId: "snapshot-1",
-        documentUrl: "https://example.com/lease.pdf",
         displayLabel: "Signed lease document",
         source: "lease_signed_document",
         confidence: "high",
@@ -2273,13 +2458,17 @@ describe("tenant workspace frontend shell", () => {
         signingStatus: "signed",
         documentStatus: "generated",
         documentId: "snapshot-schedule-a",
-        documentUrl: "https://example.com/schedule-a.pdf",
         displayLabel: "Schedule A",
         source: "leaseSnapshots/snapshot-schedule-a",
         confidence: "medium",
         warnings: [],
       },
       signatureStatus: "signed",
+      signingLifecycleState: "signed",
+      signingExecutionState: "active",
+      signedDocumentState: "available",
+      signedDocumentAvailable: true,
+      viewSignedDocumentAllowed: true,
       signatureReadinessLabel: "Lease signing complete",
       signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
       tenantSignature: {
@@ -2337,12 +2526,17 @@ describe("tenant workspace frontend shell", () => {
     );
 
     expect(await screen.findByText(/^Lease Summary$/i)).toBeInTheDocument();
+    expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).not.toHaveBeenCalled();
     expect(screen.getByText(/\$1,800/i)).toBeInTheDocument();
-    expect(screen.getByText(/^Lease signing complete$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Lease signature complete$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Signed lease document$/i)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Signed lease document workspace/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Lease document workspace/i })).toBeInTheDocument();
     expect(screen.getByText(/^Signed document available$/i)).toBeInTheDocument();
-    expect(document.body).not.toHaveTextContent("https://example.com/lease.pdf");
+    expect(screen.getByText(/This signed document is available\. Use the authorized action below/i)).toBeInTheDocument();
+    expect(screen.queryByText(/No approved lease document link is available/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Open .*document in a new tab/i })).not.toBeInTheDocument();
+    expect(document.querySelector("a[href*='X-Goog-'], object[data*='X-Goog-'], [data-document-url]")).toBeNull();
+    expect(document.body).not.toHaveTextContent("X-Goog-Signature");
     expect(screen.getByText(/^Lease fully executed$/i)).toBeInTheDocument();
     expect(screen.getByText(/Rent terms ready for future setup/i)).toBeInTheDocument();
     expect(screen.getByText(/Payment processed by Stripe\. RentChain does not store card or bank payment details\./i)).toBeInTheDocument();
@@ -2351,9 +2545,55 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/^Taylor Tenant$/i)).toBeInTheDocument();
     const openLeaseButton = screen.getByRole("button", { name: /View signed document/i });
     expect(openLeaseButton).toBeInTheDocument();
+    const leaseWindow = createReservedDocumentWindow();
+    const actionOrder: string[] = [];
+    vi.mocked(window.open).mockImplementationOnce(() => {
+      actionOrder.push("reserve");
+      return leaseWindow.reservedWindow;
+    });
+    let resolveAuthorization!: (value: {
+      documentUrl: string;
+      displayLabel: string;
+      documentStatus: string;
+      source: string;
+      expiresInSeconds: number;
+    }) => void;
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockImplementationOnce(() => {
+      actionOrder.push("authorize");
+      return new Promise((resolve) => {
+        resolveAuthorization = resolve;
+      });
+    });
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const consoleDebug = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+    const storageSetItem = vi.spyOn(Storage.prototype, "setItem");
     fireEvent.click(openLeaseButton);
-    await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalled());
-    expect(window.open).toHaveBeenCalledWith("https://example.com/refreshed-lease.pdf", "_blank", "noreferrer");
+    expect(window.open).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(window.open).toHaveBeenCalledOnce();
+    expect(actionOrder).toEqual(["reserve", "authorize"]);
+    expect(leaseWindow.setOpener).toHaveBeenCalledWith(null);
+    expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalled();
+    expect(leaseWindow.click).not.toHaveBeenCalled();
+    resolveAuthorization({
+      documentUrl: authorizedDocumentUrl,
+      displayLabel: "Signed lease document",
+      documentStatus: "signed",
+      source: "leaseDocument",
+      expiresInSeconds: 1800,
+    });
+    await waitFor(() => expect(leaseWindow.click).toHaveBeenCalledOnce());
+    expect(window.open).toHaveBeenCalledOnce();
+    expect(leaseWindow.createElement).toHaveBeenCalledWith("a");
+    expect(leaseWindow.navigationLink.target).toBe("_self");
+    expect(leaseWindow.navigationLink.rel).toBe("noopener noreferrer");
+    expect(leaseWindow.navigationLink.referrerPolicy).toBe("no-referrer");
+    expect(leaseWindow.setAttribute).toHaveBeenCalledWith("href", authorizedDocumentUrl);
+    expect(leaseWindow.appendChild).toHaveBeenCalledWith(leaseWindow.navigationLink);
+    expect(leaseWindow.removeAttribute).toHaveBeenCalledWith("href");
+    expect(leaseWindow.remove).toHaveBeenCalledOnce();
     tenantPortalApi.refreshTenantLeaseDocumentUrl.mockResolvedValueOnce({
       documentUrl: "https://example.com/refreshed-schedule-a.pdf",
       displayLabel: "Schedule A",
@@ -2361,120 +2601,136 @@ describe("tenant workspace frontend shell", () => {
       source: "leaseSnapshots/snapshot-schedule-a",
       expiresInSeconds: 1800,
     });
+    const scheduleAWindow = createReservedDocumentWindow();
+    vi.mocked(window.open).mockReturnValueOnce(scheduleAWindow.reservedWindow);
     fireEvent.click(screen.getByRole("button", { name: /Open Schedule A/i }));
     await waitFor(() =>
       expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith({ document: "schedule-a" })
     );
-    expect(window.open).toHaveBeenCalledWith("https://example.com/refreshed-schedule-a.pdf", "_blank", "noreferrer");
+    expect(scheduleAWindow.click).toHaveBeenCalledOnce();
+    expect(scheduleAWindow.setAttribute).toHaveBeenCalledWith("href", "https://example.com/refreshed-schedule-a.pdf");
+
+    const authorizationFailureWindow = createReservedDocumentWindow();
+    vi.mocked(window.open).mockReturnValueOnce(authorizationFailureWindow.reservedWindow);
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockRejectedValueOnce(
+      new Error(`Authorization failed for ${authorizedDocumentUrl}`)
+    );
+    fireEvent.click(openLeaseButton);
+    await waitFor(() => expect(authorizationFailureWindow.close).toHaveBeenCalledOnce());
+    expect(authorizationFailureWindow.click).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Unable to open the authorized document securely. Please try again.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent(authorizedDocumentUrl);
+
+    const unavailableWindow = createReservedDocumentWindow();
+    vi.mocked(window.open).mockReturnValueOnce(unavailableWindow.reservedWindow);
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockResolvedValueOnce({
+      documentUrl: "",
+      displayLabel: "Signed lease document",
+      documentStatus: "pending",
+      source: "leaseDocument",
+      expiresInSeconds: 0,
+    });
+    fireEvent.click(openLeaseButton);
+    await waitFor(() => expect(unavailableWindow.close).toHaveBeenCalledOnce());
+    expect(unavailableWindow.click).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Lease document is not available.");
+
+    const navigationFailureWindow = createReservedDocumentWindow();
+    navigationFailureWindow.click.mockImplementationOnce(() => {
+      throw new Error(`Document navigation failed for ${authorizedDocumentUrl}`);
+    });
+    vi.mocked(window.open).mockReturnValueOnce(navigationFailureWindow.reservedWindow);
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockResolvedValueOnce({
+      documentUrl: authorizedDocumentUrl,
+      displayLabel: "Signed lease document",
+      documentStatus: "signed",
+      source: "leaseDocument",
+      expiresInSeconds: 1800,
+    });
+    fireEvent.click(openLeaseButton);
+    await waitFor(() => expect(navigationFailureWindow.close).toHaveBeenCalledOnce());
+    expect(screen.getByRole("alert")).toHaveTextContent("Unable to open the authorized document securely. Please try again.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent(authorizedDocumentUrl);
+
+    const isolationFailureWindow = createReservedDocumentWindow();
+    const rejectedOpenerIsolation = vi.fn();
+    Object.defineProperty(isolationFailureWindow.reservedWindow, "opener", {
+      configurable: true,
+      get: () => window,
+      set: rejectedOpenerIsolation,
+    });
+    vi.mocked(window.open).mockReturnValueOnce(isolationFailureWindow.reservedWindow);
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockClear();
+    fireEvent.click(openLeaseButton);
+    expect(rejectedOpenerIsolation).toHaveBeenCalledWith(null);
+    expect(isolationFailureWindow.close).toHaveBeenCalledOnce();
+    expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to open the authorized document securely. Please try again.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/browser blocked the document window/i);
+
+    const closedReservationWindow = createReservedDocumentWindow();
+    Object.defineProperty(closedReservationWindow.reservedWindow, "closed", {
+      configurable: true,
+      value: true,
+    });
+    vi.mocked(window.open).mockReturnValueOnce(closedReservationWindow.reservedWindow);
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockClear();
+    fireEvent.click(openLeaseButton);
+    expect(closedReservationWindow.close).toHaveBeenCalledOnce();
+    expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to open the authorized document securely. Please try again.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/browser blocked the document window/i);
+
+    vi.mocked(window.open).mockReturnValueOnce(null);
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockClear();
+    fireEvent.click(openLeaseButton);
+    expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/browser blocked the document window/i);
+    expect(consoleLog).not.toHaveBeenCalled();
+    expect(consoleWarn).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleInfo).not.toHaveBeenCalled();
+    expect(consoleDebug).not.toHaveBeenCalled();
+    expect(storageSetItem).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent(authorizedDocumentUrl);
+    expect(document.body).not.toHaveTextContent("X-Goog-Signature");
+    consoleLog.mockRestore();
+    consoleWarn.mockRestore();
+    consoleError.mockRestore();
+    consoleInfo.mockRestore();
+    consoleDebug.mockRestore();
+    storageSetItem.mockRestore();
   });
 
-  it("does not open stale tenant GCS lease URLs when refresh fails", async () => {
-    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockRejectedValueOnce(new Error("refresh failed"));
-    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
-      leaseId: "lease-stale",
-      startDate: "2026-03-01",
-      endDate: "2027-02-28",
-      monthlyRent: 1800,
-      status: "active",
-      documentUrl:
-        "https://storage.googleapis.com/lease-documents/leases/PXbRIbJdZpV2eBjzNmLaISgDa852/nkzRYxdZ49p0IGdXD3mS/schedule-a-v1.pdf?X-Goog-Expires=1",
-      leaseDocumentContext: {
-        leaseId: "lease-stale",
-        documentUrl:
-          "https://storage.googleapis.com/lease-documents/leases/PXbRIbJdZpV2eBjzNmLaISgDa852/nkzRYxdZ49p0IGdXD3mS/schedule-a-v1.pdf?X-Goog-Expires=1",
-        displayLabel: "Signed lease document",
-        documentStatus: "signed",
-        source: "lease.documentUrl",
-        confidence: "high",
-        warnings: [],
-      },
-      signatureStatus: "signed",
-      signatureReadinessLabel: "Lease signing complete",
-      signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
-      tenantSignature: {
-        signedAt: "2026-03-02T12:00:00.000Z",
-        signatureMethod: "typed",
-        signatureDisplayName: "Taylor Tenant",
-      },
-      leasePdfStatus: "available",
-      leasePdfLabel: "Lease document available",
-      leasePdfDescription: "A tenant-safe lease document is available in this workspace.",
-      leaseExecution: {
-        executionStatus: "fully_executed",
-        executionLabel: "Lease fully executed",
-        executionDescription: "The lease is fully executed.",
-        requiredNextAction: "none",
-        tenantSignatureStatus: "completed",
-        landlordSignatureStatus: "completed",
-        pdfStatus: "generated",
-        completedAt: "2026-03-02T12:00:00.000Z",
-      },
-    } as any);
-
-    render(
-      <MemoryRouter>
-        <TenantLeasePage />
-      </MemoryRouter>
-    );
-
-    vi.mocked(window.open).mockClear();
-    expect(screen.queryByRole("button", { name: /View signed document/i })).not.toBeInTheDocument();
-    expect(await screen.findByText(/Schedule A \/ attachment/i)).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("button", { name: /Open Schedule A/i }));
-    await waitFor(() =>
-      expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith({ document: "schedule-a" })
-    );
-    expect(window.open).not.toHaveBeenCalled();
-    expect(await screen.findByText("refresh failed")).toBeInTheDocument();
-  });
-
-  it("uses the projected signed document fallback when tenant refresh returns 404", async () => {
+  it("closes the reserved window when click-time authorization fails without a projected fallback", async () => {
     const missingDocumentError = Object.assign(new Error("lease_document_not_found"), {
       status: 404,
       payload: { ok: false, error: "lease_document_not_found" },
     });
-    const fallbackUrl =
-      "https://storage.googleapis.com/lease-documents/leases/landlord-1/lease-missing-document-url/signed.pdf?X-Goog-Expires=1";
     tenantPortalApi.refreshTenantLeaseDocumentUrl.mockRejectedValueOnce(missingDocumentError);
     tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
-      leaseId: "lease-missing-document-url",
+      leaseId: "lease-generated-no-projected-url",
       startDate: "2026-03-01",
       endDate: "2027-02-28",
       monthlyRent: 1800,
       status: "active",
-      documentUrl: fallbackUrl,
       leaseDocumentContext: {
-        leaseId: "lease-missing-document-url",
-        documentUrl: fallbackUrl,
-        displayLabel: "Signed lease document",
-        documentStatus: "signed",
-        source: "lease.documentUrl",
+        leaseId: "lease-generated-no-projected-url",
+        displayLabel: "Generated lease package",
+        documentStatus: "generated",
+        source: "lease_snapshot",
         confidence: "high",
         warnings: [],
       },
-      signatureStatus: "signed",
-      signatureReadinessLabel: "Lease signing complete",
-      signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
-      providerSigningStatus: "signed",
-      tenantSignature: {
-        signedAt: "2026-03-02T12:00:00.000Z",
-        signatureMethod: "typed",
-        signatureDisplayName: "Taylor Tenant",
-      },
+      signingLifecycleState: "not_started",
+      signingExecutionState: "not_started",
+      signedDocumentState: "not_expected",
+      signedDocumentAvailable: false,
+      viewSignedDocumentAllowed: false,
       leasePdfStatus: "available",
       leasePdfLabel: "Lease document available",
       leasePdfDescription: "A tenant-safe lease document is available in this workspace.",
-      leaseExecution: {
-        executionStatus: "fully_executed",
-        executionLabel: "Lease fully executed",
-        executionDescription: "The lease is fully executed.",
-        requiredNextAction: "none",
-        tenantSignatureStatus: "completed",
-        landlordSignatureStatus: "completed",
-        pdfStatus: "generated",
-        completedAt: "2026-03-02T12:00:00.000Z",
-      },
-    } as any);
+    });
 
     render(
       <MemoryRouter>
@@ -2482,19 +2738,77 @@ describe("tenant workspace frontend shell", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/^Signed document available$/i)).toBeInTheDocument();
-    const newTabLink = screen.getByRole("link", { name: "Open signed document in a new tab" });
-    expect(newTabLink).toHaveAttribute("href", fallbackUrl);
-    expect(newTabLink).toHaveAttribute("target", "_blank");
-    expect(newTabLink).toHaveAttribute("rel", "noopener noreferrer");
+    expect(await screen.findByText(/^Lease document available$/i)).toBeInTheDocument();
+    expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).not.toHaveBeenCalled();
+    expect(screen.queryByRole("link", { name: /Open .*document in a new tab/i })).not.toBeInTheDocument();
+    expect(document.querySelector("a[href*='X-Goog-'], object[data*='X-Goog-']")).toBeNull();
 
-    vi.mocked(window.open).mockClear();
-    fireEvent.click(await screen.findByRole("button", { name: /View signed document/i }));
+    const reservedWindow = createReservedDocumentWindow();
+    vi.mocked(window.open).mockReset().mockReturnValue(reservedWindow.reservedWindow);
+    fireEvent.click(await screen.findByRole("button", { name: /View lease document/i }));
     await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith());
-    expect(window.open).toHaveBeenCalledWith(fallbackUrl, "_blank", "noreferrer");
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(document.body).not.toHaveTextContent("lease_document_not_found");
-    expect(document.body).not.toHaveTextContent("X-Goog-Expires");
+    expect(window.open).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(window.open).toHaveBeenCalledOnce();
+    expect(reservedWindow.setAttribute).not.toHaveBeenCalled();
+    expect(reservedWindow.click).not.toHaveBeenCalled();
+    expect(reservedWindow.close).toHaveBeenCalledOnce();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Signed document is not available/i);
+  });
+
+  it("keeps a generated document generic and obtains its URL only from the click-time route", async () => {
+    const authorizedDocumentUrl =
+      "https://signed.example/generated-lease.pdf?X-Goog-Algorithm=unit-test&X-Goog-Signature=unit-test";
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-generated-click-only",
+      startDate: "2026-03-01",
+      endDate: "2027-02-28",
+      monthlyRent: 1800,
+      status: "active",
+      leaseDocumentContext: {
+        leaseId: "lease-generated-click-only",
+        displayLabel: "Generated lease package",
+        documentStatus: "generated",
+        source: "lease_snapshot",
+        confidence: "high",
+        warnings: [],
+      },
+      signingLifecycleState: "not_started",
+      signingExecutionState: "not_started",
+      signedDocumentState: "not_expected",
+      signedDocumentAvailable: false,
+      viewSignedDocumentAllowed: false,
+    });
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockResolvedValueOnce({
+      documentUrl: authorizedDocumentUrl,
+      displayLabel: "Generated lease package",
+      documentStatus: "generated",
+      source: "lease_snapshot",
+      expiresInSeconds: 1800,
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantLeasePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/^Lease document available$/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /View lease document/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /View signed document/i })).not.toBeInTheDocument();
+    expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent("X-Goog-Signature");
+    expect(document.querySelector("a[href*='X-Goog-'], object[data*='X-Goog-']")).toBeNull();
+
+    const reservedWindow = createReservedDocumentWindow();
+    vi.mocked(window.open).mockReset().mockReturnValue(reservedWindow.reservedWindow);
+    fireEvent.click(screen.getByRole("button", { name: /View lease document/i }));
+
+    await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith());
+    expect(window.open).toHaveBeenCalledOnce();
+    expect(reservedWindow.setAttribute).toHaveBeenCalledWith("href", authorizedDocumentUrl);
+    expect(reservedWindow.click).toHaveBeenCalledOnce();
+    expect(reservedWindow.removeAttribute).toHaveBeenCalledWith("href");
+    expect(document.body).not.toHaveTextContent(authorizedDocumentUrl);
   });
 
   it("shows provider-signed leases without documents as signed-copy pending instead of not started", async () => {
@@ -2504,7 +2818,6 @@ describe("tenant workspace frontend shell", () => {
       endDate: "2027-02-28",
       monthlyRent: 1800,
       status: "active",
-      documentUrl: null,
       leaseDocumentContext: {
         leaseId: "lease-provider-signed",
         documentStatus: "pending",
@@ -2517,6 +2830,11 @@ describe("tenant workspace frontend shell", () => {
       signatureReadinessLabel: "Lease signing complete",
       signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
       providerSigningStatus: "signed",
+      signingLifecycleState: "signed",
+      signingExecutionState: "active",
+      signedDocumentState: "pending_persistence",
+      signedDocumentAvailable: false,
+      viewSignedDocumentAllowed: false,
       providerSignedAt: "2026-07-03T10:00:00.000Z",
       providerDerivedLeaseState: "active",
       providerSigningAvailable: false,
@@ -2566,19 +2884,16 @@ describe("tenant workspace frontend shell", () => {
       endDate: "2027-02-28",
       monthlyRent: 1800,
       status: "active",
-      documentUrl: "https://example.com/lease.pdf",
       leaseDocumentContext: {
         leaseId: "lease-tenant-primary",
-        documentUrl: "https://example.com/lease.pdf",
         displayLabel: "Signed lease document",
         documentStatus: "signed",
-        source: "lease.documentUrl",
+        source: "lease_signed_document",
         confidence: "high",
         warnings: [],
       },
       scheduleADocumentContext: {
         leaseId: "lease-tenant-primary",
-        documentUrl: "https://example.com/schedule-a.pdf",
         displayLabel: "Schedule A",
         documentStatus: "generated",
         source: "leaseSnapshots/snapshot-schedule-a",
@@ -2586,6 +2901,11 @@ describe("tenant workspace frontend shell", () => {
         warnings: [],
       },
       signatureStatus: "signed",
+      signingLifecycleState: "signed",
+      signingExecutionState: "active",
+      signedDocumentState: "available",
+      signedDocumentAvailable: true,
+      viewSignedDocumentAllowed: true,
       signatureReadinessLabel: "Lease signing complete",
       leaseExecution: {
         executionStatus: "fully_executed",
@@ -2605,10 +2925,13 @@ describe("tenant workspace frontend shell", () => {
       </MemoryRouter>
     );
 
-    vi.mocked(window.open).mockClear();
+    const reservedWindow = createReservedDocumentWindow();
+    vi.mocked(window.open).mockReset().mockReturnValue(reservedWindow.reservedWindow);
     fireEvent.click(await screen.findByRole("button", { name: /View signed document/i }));
     await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith());
-    expect(window.open).not.toHaveBeenCalled();
+    expect(window.open).toHaveBeenCalledOnce();
+    expect(reservedWindow.click).not.toHaveBeenCalled();
+    expect(reservedWindow.close).toHaveBeenCalledOnce();
   });
 
   it("shows the tenant lease sign action only when backend execution metadata requires it", async () => {
@@ -2618,7 +2941,6 @@ describe("tenant workspace frontend shell", () => {
       endDate: "2027-02-28",
       monthlyRent: 1900,
       status: "ready_for_signature",
-      documentUrl: "https://example.com/sign.pdf",
       signatureStatus: "awaiting_tenant_signature",
       signatureReadinessLabel: "Awaiting tenant signature",
       signatureReadinessDescription: "A tenant-safe lease document is available, and the next visible signing step belongs to the tenant.",
@@ -2643,7 +2965,6 @@ describe("tenant workspace frontend shell", () => {
       endDate: "2027-02-28",
       monthlyRent: 1900,
       status: "ready_for_signature",
-      documentUrl: "https://example.com/sign.pdf",
       signatureStatus: "signed",
       signatureReadinessLabel: "Lease signing complete",
       signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
@@ -2687,7 +3008,6 @@ describe("tenant workspace frontend shell", () => {
       endDate: "2027-01-31",
       monthlyRent: 1800,
       status: "active",
-      documentUrl: "https://example.com/lease.pdf",
       signatureStatus: "signed",
       signatureReadinessLabel: "Lease signing complete",
       signatureReadinessDescription: "Complete.",
@@ -2771,7 +3091,6 @@ describe("tenant workspace frontend shell", () => {
         endDate: "2027-01-31",
         monthlyRent: 1800,
         status: "active",
-        documentUrl: null,
         paymentReadiness: {
           readinessStatus: "ready_to_configure",
           readinessLabel: "Rent terms ready for future setup",
@@ -2829,7 +3148,6 @@ describe("tenant workspace frontend shell", () => {
       endDate: "2027-01-31",
       monthlyRent: 1800,
       status: "active",
-      documentUrl: "https://example.com/lease.pdf",
       signatureStatus: "signed",
       signatureReadinessLabel: "Lease signing complete",
       signatureReadinessDescription: "Complete.",

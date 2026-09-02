@@ -609,8 +609,9 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.application?.sin).toBeUndefined();
     expect(res.body?.data?.lease?.monthlyRent).toBe(1800);
     expect(res.body?.data?.lease?.confidentialNotes).toBeUndefined();
-    expect(res.body?.data?.lease?.signatureStatus).toBe("signed");
-    expect(res.body?.data?.lease?.signatureReadinessLabel).toBe("Lease signing complete");
+    expect(res.body?.data?.lease?.signatureStatus).toBe("not_started");
+    expect(res.body?.data?.lease?.signatureReadinessLabel).toBe("Lease signing not started");
+    expect(res.body?.data?.lease?.signedDocumentAvailable).toBe(false);
     expect(res.body?.data?.lease?.tenantSignature).toEqual({
       signedAt: "2026-02-01T10:00:00.000Z",
       signatureMethod: "drawn",
@@ -729,8 +730,9 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.projectionProfile?.projectionName).toBe("tenant_safe_workspace_projection");
     expect(res.body?.data?.projectionProfile?.scopeType).toBe("tenant_current_lease");
     expect(res.body?.data?.redactionSummary?.redactedFieldGroups).toContain("payment_account_details");
-    expect(res.body?.data?.signatureStatus).toBe("signed");
-    expect(res.body?.data?.signatureReadinessDescription).toMatch(/current signing stage as complete/i);
+    expect(res.body?.data?.signatureStatus).toBe("not_started");
+    expect(res.body?.data?.signatureReadinessDescription).toMatch(/signing has not started/i);
+    expect(res.body?.data?.signedDocumentAvailable).toBe(false);
     expect(res.body?.data?.tenantSignature).toEqual({
       signedAt: "2026-02-01T10:00:00.000Z",
       signatureMethod: "drawn",
@@ -1082,7 +1084,7 @@ describe("tenantPortalRoutes foundation", () => {
     expect(JSON.stringify(res.body)).not.toContain("request-signed-no-document");
   });
 
-  it("surfaces provider signed-document storage metadata as a tenant-safe signed lease document and vault item", async () => {
+  it("surfaces provider signed-document metadata without minting until the authorized tenant click route", async () => {
     ensureCollection("leases").set("lease-1", {
       ...(ensureCollection("leases").get("lease-1") || {}),
       landlordId: "landlord-1",
@@ -1140,31 +1142,162 @@ describe("tenantPortalRoutes foundation", () => {
       url: "/attachments",
       headers,
     });
+    const workspaceRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/workspace",
+      headers,
+    });
+    const profileRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/profile",
+      headers,
+    });
+    const ordinaryContextResponses = [
+      await invokeRouter(router, { method: "GET", url: "/me", headers }),
+      await invokeRouter(router, { method: "GET", url: "/application-status", headers }),
+      await invokeRouter(router, { method: "GET", url: "/application-completion", headers }),
+      await invokeRouter(router, { method: "GET", url: "/maintenance-requests", headers }),
+      await invokeRouter(router, { method: "GET", url: "/leases/lease-1", headers }),
+      await invokeRouter(router, { method: "POST", url: "/identity/export", headers }),
+      await invokeRouter(router, {
+        method: "POST",
+        url: "/identity/export",
+        headers,
+        body: { schemaVersion: "2.0" },
+      }),
+    ];
 
     expect(leaseRes.status).toBe(200);
-    expect(leaseRes.body?.data?.documentUrl).toBe(
-      "https://signed.example/lease-signing/landlord-1/request-signed-document/signed.pdf"
-    );
+    expect(leaseRes.body?.data).not.toHaveProperty("documentUrl");
     expect(leaseRes.body?.data?.leaseDocumentContext).toEqual(
       expect.objectContaining({
         documentStatus: "signed",
-        documentUrl: "https://signed.example/lease-signing/landlord-1/request-signed-document/signed.pdf",
         displayLabel: "Signed lease document",
         source: "leaseSigningRequests.signedDocument",
       })
     );
+    expect(leaseRes.body?.data?.leaseDocumentContext).not.toHaveProperty("documentUrl");
     expect(attachmentsRes.status).toBe(200);
     expect(attachmentsRes.body?.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           title: "Signed lease document",
-          url: "https://signed.example/lease-signing/landlord-1/request-signed-document/signed.pdf",
+          url: null,
         }),
       ])
     );
-    const payload = JSON.stringify({ lease: leaseRes.body, attachments: attachmentsRes.body });
+    expect(workspaceRes.status).toBe(200);
+    expect(workspaceRes.body?.data?.lease).not.toHaveProperty("documentUrl");
+    expect(workspaceRes.body?.data?.lease?.leaseDocumentContext).not.toHaveProperty("documentUrl");
+    expect(profileRes.status).toBe(200);
+    expect(profileRes.body?.data?.profile?.lease).not.toHaveProperty("documentUrl");
+    expect(profileRes.body?.data?.profile?.lease?.leaseDocumentContext).not.toHaveProperty("documentUrl");
+    ordinaryContextResponses.forEach((response) => expect(response.status).toBe(200));
+    const payload = JSON.stringify({
+      lease: leaseRes.body,
+      attachments: attachmentsRes.body,
+      workspaceLease: workspaceRes.body?.data?.lease,
+      profileLease: profileRes.body?.data?.profile?.lease,
+      ordinaryContextResponses: ordinaryContextResponses.map((response) => response.body),
+    });
+    expect(payload).not.toContain('"documentUrl"');
+    expect(payload).not.toContain("signed.example");
     expect(payload).not.toContain("signed-lease-documents");
     expect(payload).not.toContain("raw-provider-request-id");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
+
+    const documentRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease/document-url",
+      headers,
+    });
+    expect(documentRes.status).toBe(200);
+    expect(documentRes.headers["cache-control"]).toBe("private, no-store");
+    expect(documentRes.body?.data).toEqual(
+      expect.objectContaining({
+        documentUrl: "https://signed.example/lease-signing/landlord-1/request-signed-document/signed.pdf",
+        documentStatus: "signed",
+        signedDocumentAvailable: true,
+        viewSignedDocumentAllowed: true,
+      })
+    );
+    expect(getSignedDownloadUrlMock).toHaveBeenCalledTimes(1);
+    expect(getSignedDownloadUrlMock).toHaveBeenCalledWith({
+      bucket: "signed-lease-documents",
+      path: "lease-signing/landlord-1/request-signed-document/signed.pdf",
+      expiresMinutes: 30,
+    });
+  });
+
+  it("rejects an unauthenticated tenant document click without minting a URL", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease/document-url",
+    });
+
+    expect(res.status).toBe(401);
+    expect(res.headers["cache-control"]).toBe("private, no-store");
+    expect(res.body?.error).toBe("UNAUTHORIZED");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a cross-tenant document click without minting a URL", async () => {
+    ensureCollection("tenants").set("tenant-2", {
+      email: "other-tenant@example.com",
+      fullName: "Other Tenant",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      leaseId: "lease-1",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease/document-url",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-2",
+          email: "other-tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-2",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body?.error).toBe("lease_not_owned_by_tenant");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
+  });
+
+  it("returns unavailable for a tenant document click with no durable artifact and does not mint", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      documentUrl: null,
+      approvedDocumentUrl: null,
+      documentRef: null,
+      leaseDocument: null,
+      signedDocument: null,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease/document-url",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.body?.error).toBe("lease_document_not_found");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
   });
 
   it("keeps tenant document vault reflection aligned with signed-document availability and Schedule A separation", async () => {
@@ -1244,7 +1377,7 @@ describe("tenantPortalRoutes foundation", () => {
           category: "Attachments",
           purpose: "SCHEDULE_A",
           purposeLabel: "Schedule A",
-          url: "https://signed.example/leases/landlord-1/draft-vault/schedule-a-v1.pdf",
+          url: null,
         }),
       ])
     );
@@ -1269,11 +1402,11 @@ describe("tenantPortalRoutes foundation", () => {
     expect(readyLeaseRes.body?.data?.leaseDocumentContext).toEqual(
       expect.objectContaining({
         documentStatus: "signed",
-        documentUrl: "https://signed.example/tenant-visible/signed-lease-copy.pdf",
         displayLabel: "Signed lease document",
         source: "leaseSigningRequests.signedDocument",
       })
     );
+    expect(readyLeaseRes.body?.data?.leaseDocumentContext).not.toHaveProperty("documentUrl");
     expect(readyLeaseRes.body?.data?.leasePdfStatus).toBe("available");
     expect(readyAttachmentsRes.status).toBe(200);
     expect(readyAttachmentsRes.body?.data).toEqual(
@@ -1284,14 +1417,14 @@ describe("tenantPortalRoutes foundation", () => {
           category: "Lease",
           purpose: "LEASE",
           purposeLabel: "Lease",
-          url: "https://signed.example/tenant-visible/signed-lease-copy.pdf",
+          url: null,
         }),
         expect.objectContaining({
           title: "Schedule A",
           category: "Attachments",
           purpose: "SCHEDULE_A",
           purposeLabel: "Schedule A",
-          url: "https://signed.example/leases/landlord-1/draft-vault/schedule-a-v1.pdf",
+          url: null,
         }),
       ])
     );
@@ -1314,6 +1447,9 @@ describe("tenantPortalRoutes foundation", () => {
     expect(serialized).not.toContain("leaseSigningEvents");
     expect(serialized).not.toContain("landlord-only.example");
     expect(serialized).not.toContain("signed_doc_hash_should_not_leak");
+    expect(serialized).not.toContain('"documentUrl"');
+    expect(serialized).not.toContain("signed.example");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
   });
 
   it("links tenant lease workspace to generated unsigned lease package attachments", async () => {
@@ -1334,7 +1470,7 @@ describe("tenantPortalRoutes foundation", () => {
       unitId: "unit-1",
       ledgerItemId: "lease-1",
       title: "Lease document",
-      fileName: "schedule-a-v1.pdf",
+      fileName: "lease-v1.pdf",
       category: "Lease",
       purpose: "LEASE",
       purposeLabel: "Lease",
@@ -1358,18 +1494,20 @@ describe("tenantPortalRoutes foundation", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body?.data?.documentUrl).toBe("https://example.com/generated-current.pdf");
+    expect(res.body?.data).not.toHaveProperty("documentUrl");
     expect(res.body?.data?.leasePdfStatus).toBe("available");
     expect(res.body?.data?.leaseDocumentContext).toEqual(
       expect.objectContaining({
         leaseId: "lease-1",
         documentStatus: "generated",
-        documentUrl: "https://example.com/generated-current.pdf",
         displayLabel: "Generated lease package",
         source: "ledgerAttachments",
         confidence: "high",
       })
     );
+    expect(res.body?.data?.leaseDocumentContext).not.toHaveProperty("documentUrl");
+    expect(JSON.stringify(res.body)).not.toContain("generated-current.pdf");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
   });
 
   it("refreshes tenant-scoped storage-backed lease document URLs without exposing other tenant documents", async () => {
@@ -1410,8 +1548,10 @@ describe("tenantPortalRoutes foundation", () => {
           redactedFieldGroups: expect.arrayContaining(["storage_paths", "provider_delivery_payloads"]),
         }),
         documentUrl: "https://signed.example/leases/landlord-1/lease-1/lease-v1.pdf",
-        displayLabel: "Signed lease document",
-        documentStatus: "signed",
+        displayLabel: "Generated lease package",
+        documentStatus: "generated",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
         source: "leaseDocument",
         expiresInSeconds: 1800,
       })
@@ -1456,8 +1596,10 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data).toEqual(
       expect.objectContaining({
         documentUrl: "https://signed.example/leases/landlord-1/lease-1/lease-v1.pdf",
-        displayLabel: "Signed lease document",
-        documentStatus: "signed",
+        displayLabel: "Generated lease package",
+        documentStatus: "generated",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
         source: "lease.documentUrl",
         expiresInSeconds: 1800,
       })
@@ -1468,6 +1610,51 @@ describe("tenantPortalRoutes foundation", () => {
       path: "leases/landlord-1/lease-1/lease-v1.pdf",
       expiresMinutes: 30,
     });
+  });
+
+  it.each([
+    ["documentUrl", { documentUrl: "https://example.com/source-lease.pdf", status: "fully_executed" }],
+    ["approvedDocumentUrl", { approvedDocumentUrl: "https://example.com/approved-source.pdf", executionStatus: "executed" }],
+    ["documentRef", { documentRef: "https://example.com/legacy-reference.pdf", signatureStatus: "signed" }],
+    ["provider status", { documentUrl: "https://example.com/provider-source.pdf", providerSigningStatus: "signed" }],
+  ])("keeps generic %s evidence non-signed without canonical durable metadata", async (_label, legacyFields) => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      documentUrl: undefined,
+      approvedDocumentUrl: undefined,
+      documentRef: undefined,
+      leaseDocument: undefined,
+      signedDocument: undefined,
+      ...legacyFields,
+    });
+
+    const eventsBefore = ensureCollection("leaseSigningEvents").size;
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.leaseDocumentContext).toEqual(
+      expect.objectContaining({
+        documentStatus: "generated",
+        displayLabel: "Generated lease package",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
+      })
+    );
+    expect(res.body?.data?.signedDocumentAvailable).toBe(false);
+    expect(res.body?.data?.viewSignedDocumentAllowed).toBe(false);
+    expect(ensureCollection("leaseSigningEvents").size).toBe(eventsBefore);
   });
 
   it("does not treat Schedule A as the tenant primary lease document", async () => {
@@ -1490,6 +1677,20 @@ describe("tenantPortalRoutes foundation", () => {
           url: "https://storage.googleapis.com/lease-documents/leases/landlord-1/draft-1/schedule-a-v1.pdf?X-Goog-Expires=1",
         },
       ],
+    });
+    ensureCollection("ledgerAttachments").set("schedule-a-opaque-path", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      ledgerItemId: "lease-1",
+      title: "Schedule A",
+      fileName: "appendix.pdf",
+      category: "Lease",
+      purpose: "LEASE",
+      url: "https://example.com/opaque-appendix.pdf",
+      createdAt: 999,
     });
 
     const router = (await import("../tenantPortalRoutes")).default;
@@ -1549,9 +1750,11 @@ describe("tenantPortalRoutes foundation", () => {
     expect(leaseRes.body?.data?.scheduleADocumentContext).toEqual(
       expect.objectContaining({
         displayLabel: "Schedule A",
-        documentUrl: "https://signed.example/leases/landlord-1/draft-1/schedule-a-v1.pdf",
+        documentStatus: "generated",
       })
     );
+    expect(leaseRes.body?.data?.scheduleADocumentContext).not.toHaveProperty("documentUrl");
+    expect(getSignedDownloadUrlMock).toHaveBeenCalledTimes(1);
   });
 
   it("derives tenant-safe lease document context from an email-linked active lease with a refreshable legacy URL", async () => {
@@ -1596,16 +1799,19 @@ describe("tenantPortalRoutes foundation", () => {
 
     expect(res.status).toBe(200);
     expect(res.body?.data?.leaseId).toBe("lease-email-linked");
-    expect(res.body?.data?.documentUrl).toBe(
-      "https://signed.example/leases/PXbRIbJdZpV2eBjzNmLaISgDa852/nkzRYxdZ49p0IGdXD3mS/lease-v1.pdf"
-    );
+    expect(res.body?.data).not.toHaveProperty("documentUrl");
     expect(res.body?.data?.leaseDocumentContext).toEqual(
       expect.objectContaining({
-        documentStatus: "signed",
+        documentStatus: "generated",
+        displayLabel: "Generated lease package",
+        signedDocumentAvailable: false,
         source: "lease.documentUrl",
       })
     );
+    expect(res.body?.data?.leaseDocumentContext).not.toHaveProperty("documentUrl");
     expect(JSON.stringify(res.body)).not.toContain(staleUrl);
+    expect(JSON.stringify(res.body)).not.toContain("signed.example");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
   });
 
   it("prefers the current active lease document over an archived tenant lease reference", async () => {
@@ -1651,8 +1857,17 @@ describe("tenantPortalRoutes foundation", () => {
 
     expect(res.status).toBe(200);
     expect(res.body?.data?.leaseId).toBe("active-lease");
-    expect(res.body?.data?.documentUrl).toBe("https://example.com/current.pdf");
-    expect(res.body?.data?.leaseDocumentContext?.documentUrl).toBe("https://example.com/current.pdf");
+    expect(res.body?.data).not.toHaveProperty("documentUrl");
+    expect(res.body?.data?.leaseDocumentContext).not.toHaveProperty("documentUrl");
+    expect(res.body?.data?.leaseDocumentContext).toEqual(
+      expect.objectContaining({
+        documentStatus: "generated",
+        source: "lease_document_fields",
+      })
+    );
+    expect(JSON.stringify(res.body)).not.toContain("current.pdf");
+    expect(JSON.stringify(res.body)).not.toContain("archived.pdf");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
   });
 
   it("does not expose another tenant's lease attachment as current lease document", async () => {
@@ -1671,7 +1886,7 @@ describe("tenantPortalRoutes foundation", () => {
       unitId: "unit-1",
       ledgerItemId: "lease-1",
       title: "Lease document",
-      fileName: "schedule-a-v1.pdf",
+      fileName: "lease-v1.pdf",
       category: "Lease",
       purpose: "LEASE",
       purposeLabel: "Lease",
@@ -4016,7 +4231,7 @@ describe("tenantPortalRoutes foundation", () => {
       unitId: "unit-1",
       ledgerItemId: "lease-1",
       title: "Lease document",
-      fileName: "schedule-a-v1.pdf",
+      fileName: "lease-v1.pdf",
       category: "Lease",
       purpose: "LEASE",
       purposeLabel: "Lease",
@@ -4070,8 +4285,9 @@ describe("tenantPortalRoutes foundation", () => {
         expect.objectContaining({
           label: "LEASE — Lease",
           category: "Lease",
-          fileName: "signed-lease.pdf",
-          url: "https://example.com/lease.pdf",
+          fileName: "lease-package.pdf",
+          title: "Generated lease package",
+          url: null,
         }),
       ])
     );
@@ -4080,10 +4296,11 @@ describe("tenantPortalRoutes foundation", () => {
         expect.objectContaining({
           title: "Government ID",
           fileName: "id-card.pdf",
-          url: "https://example.com/id-card.pdf",
+          url: null,
         }),
       ])
     );
+    expect(JSON.stringify(res.body)).not.toContain("https://example.com/id-card.pdf");
     expect(
       res.body?.data?.some((item: any) =>
         ["uploaded", "missing", "pending_review", "verified", "needs_attention", "reupload_requested"].includes(item.status)
@@ -4132,7 +4349,7 @@ describe("tenantPortalRoutes foundation", () => {
           purpose: "SCHEDULE_A",
           purposeLabel: "Schedule A",
           fileName: "schedule-a.pdf",
-          url: "https://signed.example/leases/landlord-1/draft-1/schedule-a-v1.pdf",
+          url: null,
         }),
       ])
     );
@@ -4143,6 +4360,8 @@ describe("tenantPortalRoutes foundation", () => {
     expect(payload).not.toContain("internalOnly");
     expect(payload).not.toContain("storagePath");
     expect(payload).not.toContain("test-bucket");
+    expect(payload).not.toContain("signed.example");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
   });
 
   it("dedupes duplicate visible Lease attachments in the tenant document vault", async () => {
@@ -4170,7 +4389,7 @@ describe("tenantPortalRoutes foundation", () => {
       unitId: "unit-1",
       ledgerItemId: "leaseDraft:draft-1",
       title: "Lease document",
-      fileName: "schedule-a-v1.pdf",
+      fileName: "lease-v1.pdf",
       category: "Lease",
       purpose: "LEASE",
       purposeLabel: "Lease",
@@ -4188,7 +4407,7 @@ describe("tenantPortalRoutes foundation", () => {
       unitId: "unit-1",
       ledgerItemId: "lease-1",
       title: "Lease document",
-      fileName: "schedule-a-v1.pdf",
+      fileName: "lease-v1.pdf",
       category: "Lease",
       purpose: "LEASE",
       purposeLabel: "Lease",
@@ -4206,7 +4425,7 @@ describe("tenantPortalRoutes foundation", () => {
       unitId: "unit-1",
       ledgerItemId: "lease-1",
       title: "Lease document",
-      fileName: "schedule-a-v1.pdf",
+      fileName: "lease-v1.pdf",
       category: "Lease",
       purpose: "LEASE",
       purposeLabel: "Lease",
@@ -4223,7 +4442,7 @@ describe("tenantPortalRoutes foundation", () => {
       unitId: "unit-1",
       ledgerItemId: "lease-1",
       title: "Lease document",
-      fileName: "schedule-a-v1.pdf",
+      fileName: "lease-v1.pdf",
       category: "Lease",
       purpose: "LEASE",
       purposeLabel: "Lease",
@@ -4251,8 +4470,8 @@ describe("tenantPortalRoutes foundation", () => {
     expect(visibleLeaseItems).toHaveLength(1);
     expect(visibleLeaseItems[0]).toEqual(
       expect.objectContaining({
-        fileName: "schedule-a-v1.pdf",
-        url: "https://example.com/generated-lease-current.pdf",
+        fileName: "lease-v1.pdf",
+        url: null,
       })
     );
     expect(res.body?.summary).toEqual(
@@ -4266,7 +4485,7 @@ describe("tenantPortalRoutes foundation", () => {
         expect.objectContaining({
           title: "Government ID",
           fileName: "id-card.pdf",
-          url: "https://example.com/id-card.pdf",
+          url: null,
         }),
       ])
     );
@@ -4333,11 +4552,12 @@ describe("tenantPortalRoutes foundation", () => {
           ledgerReference: expect.stringMatching(/^ledger-ref-/),
           title: "Rent receipt",
           fileName: "receipt.pdf",
-          url: "https://example.com/receipt.pdf",
+          url: null,
         }),
       ])
     );
     const payload = JSON.stringify(res.body?.data);
+    expect(payload).not.toContain("https://example.com/receipt.pdf");
     expect(payload).not.toContain("tenant-1");
     expect(payload).not.toContain("lease-1");
     expect(payload).not.toContain("draft-1");
@@ -4346,6 +4566,65 @@ describe("tenantPortalRoutes foundation", () => {
     expect(payload).not.toContain("storagePath");
     expect(payload).not.toContain("providerPayload");
     expect(payload).not.toContain("do-not-expose");
+  });
+
+  it("keeps every ordinary tenant attachment projection metadata-only across legacy document labels", async () => {
+    const attachmentVariants = [
+      { id: "lease-title", title: "Signed lease copy", fileName: "opaque-1.pdf" },
+      { id: "lease-category", title: "Document", fileName: "opaque-2.pdf", category: "Lease documents" },
+      { id: "lease-purpose", title: "Document", fileName: "opaque-3.pdf", purpose: "SIGNED_LEASE" },
+      { id: "lease-file", title: "Document", fileName: "fully-executed-lease.pdf" },
+      { id: "lease-source", title: "Document", fileName: "opaque-5.pdf", source: "lease_pdf_generation" },
+      { id: "lease-storage", title: "Document", fileName: "opaque-6.pdf", storagePath: "lease-signing/internal/document.pdf" },
+      { id: "schedule-title", title: "Schedule A", fileName: "opaque-7.pdf" },
+      { id: "schedule-label", title: "Document", fileName: "opaque-8.pdf", purposeLabel: "Schedule A" },
+      { id: "schedule-file", title: "Document", fileName: "schedule_a.pdf" },
+      { id: "generic-receipt", title: "Rent receipt", fileName: "receipt.pdf", purpose: "RENT" },
+    ];
+    attachmentVariants.forEach((variant, index) => {
+      ensureCollection("ledgerAttachments").set(variant.id, {
+        tenantId: "tenant-1",
+        landlordId: "landlord-1",
+        leaseId: "lease-1",
+        ledgerItemId: "ledger-classifier",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        createdAt: 1000 + index,
+        url: `https://files.example.test/opaque-${index}.pdf?credential=fake-${index}`,
+        ...variant,
+      });
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-1",
+        email: "tenant@example.com",
+        role: "tenant",
+        tenantId: "tenant-1",
+      }),
+    };
+    const ordinaryResponses = [
+      await invokeRouter(router, { method: "GET", url: "/attachments", headers }),
+      await invokeRouter(router, { method: "GET", url: "/ledger/ledger-classifier/attachments", headers }),
+    ];
+
+    ordinaryResponses.forEach((res) => {
+      expect(res.status).toBe(200);
+      expect(res.body?.data?.length).toBeGreaterThan(0);
+      expect(res.body?.data?.every((item: any) => item.url === null)).toBe(true);
+      const payload = JSON.stringify(res.body);
+      expect(payload).not.toContain("files.example.test");
+      expect(payload).not.toContain("credential=fake");
+    });
+    expect(ordinaryResponses[1].body?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: "Signed lease copy", fileName: "opaque-1.pdf", url: null }),
+        expect.objectContaining({ title: "Schedule A", fileName: "opaque-7.pdf", url: null }),
+        expect.objectContaining({ title: "Rent receipt", fileName: "receipt.pdf", url: null }),
+      ])
+    );
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
   });
 
   it("returns tenant-safe profile data with edit and document entry actions", async () => {
@@ -4845,8 +5124,10 @@ describe("tenantPortalRoutes foundation", () => {
         startDate: "2026-09-01",
         endDate: "2027-08-31",
         leaseDocumentContext: expect.objectContaining({
-          documentStatus: "missing",
-          displayLabel: "No lease document available yet",
+          documentStatus: "pending",
+          displayLabel: "Signed lease document pending",
+          signedDocumentAvailable: false,
+          viewSignedDocumentAllowed: false,
         }),
       })
     );

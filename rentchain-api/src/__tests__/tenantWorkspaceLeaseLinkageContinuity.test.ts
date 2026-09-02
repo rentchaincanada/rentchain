@@ -104,7 +104,7 @@ const dbMock = {
   },
 };
 
-vi.mock("../firebase", () => ({
+vi.doMock("../firebase", () => ({
   db: dbMock,
   FieldValue: {
     serverTimestamp: () => "__server_timestamp__",
@@ -348,11 +348,13 @@ describe("tenant workspace lease linkage continuity", () => {
         unitId: lifecycleContinuityIds.unit101Id,
       }),
     );
-    expect(lease.body.data.leaseDocumentContext.displayLabel).toBe("Signed lease document");
+    expect(lease.body.data.leaseDocumentContext.displayLabel).toBe("Generated lease package");
+    expect(lease.body.data).not.toHaveProperty("documentUrl");
+    expect(lease.body.data.leaseDocumentContext).not.toHaveProperty("documentUrl");
     expect(lease.body.data.leaseDocumentContext.displayLabel).not.toContain(lifecycleContinuityIds.activeLeaseId);
   });
 
-  it("prefers signed lease document fields when a generated lease package is also available", async () => {
+  it("does not elevate legacy signed URL fields without canonical signed-document authority", async () => {
     const generated = buildLifecycleContinuityLeaseDocument("generated", {
       id: "lc_generated_same_lease",
       tenantId: lifecycleContinuityIds.activeTenantId,
@@ -378,16 +380,20 @@ describe("tenant workspace lease linkage continuity", () => {
     });
 
     expect(lease.status).toBe(200);
-    expect(lease.body.data.documentUrl).toBe("https://example.test/docs/signed-active-lease.pdf");
+    expect(lease.body.data).not.toHaveProperty("documentUrl");
     expect(lease.body.data.leaseDocumentContext).toEqual(
       expect.objectContaining({
         leaseId: lifecycleContinuityIds.activeLeaseId,
-        documentStatus: "signed",
-        documentUrl: "https://example.test/docs/signed-active-lease.pdf",
-        source: "lease_signed_document",
+        documentStatus: "generated",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
+        source: "lease_document_fields",
         confidence: "high",
       }),
     );
+    expect(lease.body.data.leaseDocumentContext).not.toHaveProperty("documentUrl");
+    expect(JSON.stringify(lease.body)).not.toContain("signed-active-lease.pdf");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
   });
 
   it("uses generated unsigned lease package attachments when no signed document exists", async () => {
@@ -430,11 +436,13 @@ describe("tenant workspace lease linkage continuity", () => {
       expect.objectContaining({
         leaseId: lifecycleContinuityIds.activeLeaseId,
         documentStatus: "generated",
-        documentUrl: "https://example.test/docs/generated-active-lease.pdf",
         displayLabel: "Generated lease package",
         source: "ledgerAttachments",
       }),
     );
+    expect(lease.body.data.leaseDocumentContext).not.toHaveProperty("documentUrl");
+    expect(JSON.stringify(lease.body)).not.toContain("generated-active-lease.pdf");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
   });
 
   it("shows a safe missing document fallback when no tenant-safe lease document exists", async () => {
@@ -538,10 +546,14 @@ describe("tenant workspace lease linkage continuity", () => {
     expect(lease.status).toBe(200);
     expect(lease.body.data.leaseDocumentContext).toEqual(
       expect.objectContaining({
-        documentUrl: "https://example.test/docs/newer-generated.pdf",
+        documentId: "newer-generated",
+        documentStatus: "generated",
         source: "ledgerAttachments",
       }),
     );
+    expect(lease.body.data.leaseDocumentContext).not.toHaveProperty("documentUrl");
+    expect(JSON.stringify(lease.body)).not.toContain("newer-generated.pdf");
+    expect(getSignedDownloadUrlMock).not.toHaveBeenCalled();
   });
 
   it("does not expose another tenant's lease document through tenant workspace attachments", async () => {
@@ -614,7 +626,7 @@ describe("tenant workspace lease linkage continuity", () => {
       lease.body.data.leasePdfLabel,
     ];
 
-    expect(labels).toEqual(expect.arrayContaining(["Signed lease document"]));
+    expect(labels).toEqual(expect.arrayContaining(["Generated lease package"]));
     labels.forEach((label) => {
       expect(label).toBeTruthy();
       expect(String(label)).not.toContain(lifecycleContinuityIds.activeLeaseId);

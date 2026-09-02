@@ -51,7 +51,6 @@ export interface TenantLease extends TenantSafeProjectionMetadata {
   leaseStart: string | null;
   leaseEnd: string | null;
   status: string | null;
-  documentUrl?: string | null;
   leaseDocumentContext?: TenantLeaseDocumentContext | null;
   scheduleADocumentContext?: TenantLeaseDocumentContext | null;
   signatureStatus?: "not_started" | "awaiting_tenant_signature" | "awaiting_landlord_signature" | "signed" | "unavailable";
@@ -87,6 +86,12 @@ export interface TenantLease extends TenantSafeProjectionMetadata {
     pdfStatus: "not_ready" | "ready" | "generated" | "blocked";
     completedAt: string | null;
   } | null;
+  signingLifecycleState?: string;
+  signingExecutionState?: string;
+  signedDocumentState?: string;
+  signedDocumentAvailable?: boolean;
+  reminderEligible?: boolean;
+  viewSignedDocumentAllowed?: boolean;
   paymentReadiness?: {
     readinessStatus: "not_ready" | "ready_to_configure" | "blocked";
     readinessLabel: string;
@@ -114,9 +119,14 @@ export interface TenantLeaseDocumentContext {
   unitId?: string | null;
   leaseStatus?: string | null;
   signingStatus?: string | null;
+  signingLifecycleState?: string | null;
+  signingExecutionState?: string | null;
+  signedDocumentState?: string | null;
+  signedDocumentAvailable?: boolean;
+  reminderEligible?: boolean;
+  viewSignedDocumentAllowed?: boolean;
   documentStatus: "signed" | "generated" | "pending" | "missing";
   documentId?: string | null;
-  documentUrl?: string | null;
   displayLabel: string;
   source: string;
   confidence: "high" | "medium" | "low";

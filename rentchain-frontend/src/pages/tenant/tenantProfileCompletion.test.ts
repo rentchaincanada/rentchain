@@ -102,7 +102,6 @@ describe("buildTenantProfileCompletion", () => {
           endDate: "2027-01-31",
           monthlyRent: 1800,
           status: "active",
-          documentUrl: "https://example.com/lease.pdf",
         },
       },
       identity: {

@@ -96,11 +96,13 @@ function successfulDependencies(upstreamStatus = 200) {
 describe("Preview backend proxy", () => {
   const originalVercelEnv = process.env.VERCEL_ENV;
   const originalPreviewBackendTarget = process.env.PREVIEW_BACKEND_TARGET;
+  const originalPreviewBackendCertificationMode = process.env.PREVIEW_BACKEND_CERTIFICATION_MODE;
   const originalPreviewBackendUrl = process.env.PREVIEW_BACKEND_URL;
 
   beforeEach(() => {
     process.env.VERCEL_ENV = "preview";
     delete process.env.PREVIEW_BACKEND_TARGET;
+    delete process.env.PREVIEW_BACKEND_CERTIFICATION_MODE;
     vi.restoreAllMocks();
   });
 
@@ -109,6 +111,8 @@ describe("Preview backend proxy", () => {
     else process.env.VERCEL_ENV = originalVercelEnv;
     if (originalPreviewBackendTarget == null) delete process.env.PREVIEW_BACKEND_TARGET;
     else process.env.PREVIEW_BACKEND_TARGET = originalPreviewBackendTarget;
+    if (originalPreviewBackendCertificationMode == null) delete process.env.PREVIEW_BACKEND_CERTIFICATION_MODE;
+    else process.env.PREVIEW_BACKEND_CERTIFICATION_MODE = originalPreviewBackendCertificationMode;
     if (originalPreviewBackendUrl == null) delete process.env.PREVIEW_BACKEND_URL;
     else process.env.PREVIEW_BACKEND_URL = originalPreviewBackendUrl;
   });
@@ -358,6 +362,72 @@ describe("Preview backend proxy", () => {
     });
   });
 
+  it("couples the authorized PR #1592 service URL and audience internally", () => {
+    const target = resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: PREVIEW_BACKEND_TARGET_KEYS.pr1592,
+      certificationMode: "true",
+    });
+    expect(target).toEqual({
+      key: "pr1592-tenant-doc-authority-cert",
+      cloudRunServiceUrl:
+        "https://rentchain-pr1592-qa-tenant-doc-authority-glistw4pya-nn.a.run.app",
+      cloudRunIdTokenAudience:
+        "https://rentchain-pr1592-qa-tenant-doc-authority-glistw4pya-nn.a.run.app",
+      temporary: true,
+    });
+  });
+
+  it("fails closed when certification mode has no explicit selector", () => {
+    expect(() => resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: undefined,
+      certificationMode: "true",
+    })).toThrow("PREVIEW_PROXY_TARGET_REJECTED");
+  });
+
+  it.each([
+    "unknown",
+    "https://attacker.example",
+    "https://rentchain-landlord-api-cyaabkl54a-uc.a.run.app",
+    PREVIEW_BACKEND_TARGET_KEYS.permanent,
+  ])("rejects certification target %s", (targetKey) => {
+    expect(() => resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey,
+      certificationMode: "true",
+    })).toThrow("PREVIEW_PROXY_TARGET_REJECTED");
+  });
+
+  it("preserves the ordinary non-certification Preview default", () => {
+    expect(resolvePreviewBackendTarget({
+      vercelEnvironment: "preview",
+      targetKey: undefined,
+      certificationMode: "false",
+    })).toEqual({
+      key: "permanent",
+      cloudRunServiceUrl: PREVIEW_PROXY_CONFIG.cloudRunServiceUrl,
+      cloudRunIdTokenAudience: PREVIEW_PROXY_CONFIG.cloudRunServiceUrl,
+      temporary: false,
+    });
+  });
+
+  it("returns a closed configuration error before authentication when certification mode lacks a selector", async () => {
+    process.env.PREVIEW_BACKEND_CERTIFICATION_MODE = "true";
+    const getVercelOidcToken = vi.fn(async () => token("must-not-run"));
+    const res = responseRecorder();
+
+    await handlePreviewBackendProxy(
+      request("/api/preview-backend/api/me", "GET"),
+      res,
+      { getVercelOidcToken },
+    );
+
+    expect(res.statusCode).toBe(502);
+    expect(res.body).toEqual({ ok: false, error: "PREVIEW_PROXY_TARGET_REJECTED" });
+    expect(getVercelOidcToken).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1555],
@@ -391,6 +461,8 @@ describe("Preview backend proxy", () => {
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1587],
     ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1589],
     ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1589],
+    ["production", PREVIEW_BACKEND_TARGET_KEYS.pr1592],
+    ["development", PREVIEW_BACKEND_TARGET_KEYS.pr1592],
     ["preview", ""],
     ["preview", "   "],
     ["preview", "unknown"],
@@ -422,6 +494,10 @@ describe("Preview backend proxy", () => {
     ["preview", "PR1589-SIGNING-DOCUMENT-CONTRACT-CERT"],
     ["preview", "https://rentchain-pr1589-qa-signing-a-glistw4pya-nn.a.run.app"],
     ["preview", "*.rentchain-pr1589-qa-signing-a-glistw4pya-nn.a.run.app"],
+    ["preview", "pr1592-tenant-doc-authority-cert-evil"],
+    ["preview", "PR1592-TENANT-DOC-AUTHORITY-CERT"],
+    ["preview", "https://rentchain-pr1592-qa-tenant-doc-authority-glistw4pya-nn.a.run.app"],
+    ["preview", "*.rentchain-pr1592-qa-tenant-doc-authority-glistw4pya-nn.a.run.app"],
   ])("rejects unsafe target selection for %s / %s", (vercelEnvironment, targetKey) => {
     expect(() => resolvePreviewBackendTarget({ vercelEnvironment, targetKey })).toThrow(
       "PREVIEW_PROXY_TARGET_REJECTED",

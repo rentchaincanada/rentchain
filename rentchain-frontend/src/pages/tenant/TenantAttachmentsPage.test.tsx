@@ -148,7 +148,10 @@ describe("tenant attachments page", () => {
     expect(screen.getByText(/Some documents need attention/i)).toBeInTheDocument();
     expect(screen.getByText(/Re-upload requested/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Pending review/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: /Open file/i }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: /Open file/i })).not.toBeInTheDocument();
+    expect(document.querySelector("a[href*='example.com'], object[data*='example.com']")).toBeNull();
+    expect(document.body).not.toHaveTextContent("https://example.com/paystub.pdf");
+    expect(document.body).not.toHaveTextContent("https://example.com/id-card.pdf");
     expect(screen.getByRole("link", { name: /Message your landlord/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Review sharing/i })).toBeInTheDocument();
     expect(screen.getByText(/Direct upload is not available from this page yet/i)).toBeInTheDocument();
@@ -202,7 +205,9 @@ describe("tenant attachments page", () => {
     expect(screen.queryByText(/No documents in your vault yet/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Schedule A/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/schedule-a\.pdf/i).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /Open file/i })).toHaveAttribute("href", "https://signed.example/schedule-a.pdf");
+    expect(screen.queryByRole("link", { name: /Open file/i })).not.toBeInTheDocument();
+    expect(document.querySelector("a[href*='signed.example'], object[data*='signed.example']")).toBeNull();
+    expect(document.body).not.toHaveTextContent("https://signed.example/schedule-a.pdf");
     expect(screen.queryByText(/SCHEDULE_A/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/support-operator/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/realActorId/i)).not.toBeInTheDocument();
@@ -237,7 +242,6 @@ describe("tenant attachments page", () => {
       endDate: null,
       monthlyRent: null,
       status: "active",
-      documentUrl: null,
       leaseDocumentContext: null,
       scheduleADocumentContext: {
         leaseId: "lease-1",
@@ -248,7 +252,6 @@ describe("tenant attachments page", () => {
         signingStatus: null,
         documentStatus: "generated",
         documentId: "schedule-a-doc",
-        documentUrl: "https://signed.example/schedule-a.pdf",
         displayLabel: "Schedule A",
         source: "tenant-safe-lease-workspace",
         confidence: "high",
@@ -266,7 +269,8 @@ describe("tenant attachments page", () => {
     expect(screen.queryByText(/No documents in your vault yet/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Schedule A/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/schedule-a\.pdf/i).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /Open file/i })).toHaveAttribute("href", "https://signed.example/schedule-a.pdf");
+    expect(screen.queryByRole("link", { name: /Open file/i })).not.toBeInTheDocument();
+    expect(document.querySelector("a[href*='signed.example'], object[data*='signed.example']")).toBeNull();
     expect(screen.queryByText(/SCHEDULE_A/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Lease documents \/ attachments/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/tenant-1/i)).not.toBeInTheDocument();
@@ -302,7 +306,10 @@ describe("tenant attachments page", () => {
       endDate: null,
       monthlyRent: null,
       status: "active",
-      documentUrl: null,
+      signingLifecycleState: "signed",
+      signedDocumentState: "available",
+      signedDocumentAvailable: true,
+      viewSignedDocumentAllowed: true,
       leaseDocumentContext: {
         leaseId: "lease-1",
         tenantId: "tenant-1",
@@ -312,7 +319,6 @@ describe("tenant attachments page", () => {
         signingStatus: "signed",
         documentStatus: "signed",
         documentId: "lease-doc",
-        documentUrl: "https://signed.example/lease.pdf",
         displayLabel: "Signed lease document",
         source: "tenant-safe-lease-workspace",
         confidence: "high",
@@ -330,8 +336,64 @@ describe("tenant attachments page", () => {
     expect(await screen.findByText(/Document Vault Summary/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open lease details/i })).toHaveAttribute("href", "/tenant/lease");
     expect(screen.getAllByText(/Lease document/i).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: /Open file/i })).not.toBeInTheDocument();
+    expect(document.querySelector("a[href*='signed.example'], object[data*='signed.example']")).toBeNull();
     expect(screen.queryByText(/LEASE — Lease/i)).not.toBeInTheDocument();
     expect(screen.queryByText("lease-doc")).not.toBeInTheDocument();
+  });
+
+  it("does not surface signed-without-document metadata as an available lease attachment", async () => {
+    tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
+      ok: true,
+      data: [],
+      summary: {
+        total: 0,
+        missing: 0,
+        uploaded: 0,
+        pendingReview: 0,
+        verified: 0,
+        needsAttention: 0,
+      },
+    });
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-1",
+      startDate: null,
+      endDate: null,
+      monthlyRent: null,
+      status: "signed",
+      signingLifecycleState: "signed",
+      signedDocumentState: "pending_persistence",
+      signedDocumentAvailable: false,
+      viewSignedDocumentAllowed: false,
+      leaseDocumentContext: {
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        propertyId: "property-1",
+        unitId: "unit-1",
+        leaseStatus: "signed",
+        signingLifecycleState: "signed",
+        signedDocumentState: "pending_persistence",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
+        documentStatus: "signed",
+        documentId: "misleading-signed-document",
+        displayLabel: "Signed lease document",
+        source: "lease_signed_document",
+        confidence: "low",
+        warnings: [],
+      },
+      scheduleADocumentContext: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantAttachmentsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/No documents in your vault yet/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Open lease details|Open file/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Lease document$/i)).not.toBeInTheDocument();
   });
 
   it("renders unauthorized state safely", async () => {

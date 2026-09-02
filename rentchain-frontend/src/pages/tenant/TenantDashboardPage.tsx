@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import { Bell, CheckCircle2, Clock3, Home, Lock, MailCheck, Receipt, Sparkles, Wallet } from "lucide-react";
 import { tenantApiFetch } from "../../api/tenantApiFetch";
-import { TenantAttachment } from "../../api/tenantAttachmentsApi";
+import { getTenantAttachments, type TenantAttachment } from "../../api/tenantAttachmentsApi";
 import { TenantNoticeSummary } from "../../api/tenantNoticesApi";
 import {
   getTenantMaintenanceRequests,
@@ -350,7 +350,7 @@ export default function TenantDashboardPage() {
         tenantApiFetch<TenantMeResponse>("/tenant/me"),
         tenantApiFetch<{ ok: boolean; data: ActivityItem[] }>("/tenant/activity"),
         tenantApiFetch<{ ok: boolean; data: LedgerItem[] }>("/tenant/ledger"),
-        tenantApiFetch<{ ok: boolean; data: Attachment[] }>("/tenant/attachments"),
+        getTenantAttachments(),
         tenantApiFetch<{ ok: boolean; data: Notice[] }>("/tenant/notices"),
         getTenantMaintenanceRequests(),
         tenantApiFetch<{ ok: boolean; items: TenantCommunicationItem[] }>("/tenant/messages"),
@@ -1152,14 +1152,9 @@ export default function TenantDashboardPage() {
                       if (!atts.length) return null;
                       if (atts.length === 1) {
                         return (
-                          <a
-                            href={atts[0].url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ gridColumn: "1 / -1", color: colors.accent, fontWeight: 700, fontSize: "0.95rem" }}
-                          >
-                            View receipt
-                          </a>
+                          <div style={{ gridColumn: "1 / -1", color: colors.accent, fontWeight: 700, fontSize: "0.95rem" }}>
+                            Receipt attached
+                          </div>
                         );
                       }
                       return (
@@ -1169,15 +1164,9 @@ export default function TenantDashboardPage() {
                           </div>
                           <div style={{ display: "grid", gap: 4 }}>
                             {atts.map((att) => (
-                              <a
-                                key={att.id}
-                                href={att.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{ color: textTokens.primary, textDecoration: "none", fontSize: "0.95rem" }}
-                              >
-                                {att.title || att.url}
-                              </a>
+                              <div key={att.id} style={{ color: textTokens.primary, fontSize: "0.95rem" }}>
+                                {att.title || att.fileName || formatAttachment(att)}
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -1220,17 +1209,10 @@ export default function TenantDashboardPage() {
                         {formatAttachment(att)}
                       </div>
                       <div style={{ fontSize: "0.95rem", color: textTokens.muted }}>
-                        {att.title || att.url}
+                        {att.title || att.fileName || "Document on file"}
                       </div>
                     </div>
-                    <a
-                      href={att.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ fontWeight: 700, color: colors.accent, textDecoration: "none" }}
-                    >
-                      Open
-                    </a>
+                    <span style={{ fontWeight: 700, color: colors.accent }}>On file</span>
                   </div>
                 ))}
               </div>

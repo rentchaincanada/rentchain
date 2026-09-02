@@ -206,7 +206,7 @@ describe("tenant profile and communications pages", () => {
         },
         unit: null,
         application: { status: "submitted" },
-        lease: { status: "active", monthlyRent: 1800, startDate: "2026-02-01", endDate: "2027-01-31", documentUrl: null },
+        lease: { status: "active", monthlyRent: 1800, startDate: "2026-02-01", endDate: "2027-01-31" },
       },
       identity: {
         overallStatus: "verified",
@@ -270,7 +270,7 @@ describe("tenant profile and communications pages", () => {
         },
         unit: null,
         application: { status: "submitted" },
-        lease: { status: "active", monthlyRent: 1800, startDate: "2026-02-01", endDate: "2027-01-31", documentUrl: null },
+        lease: { status: "active", monthlyRent: 1800, startDate: "2026-02-01", endDate: "2027-01-31" },
       },
       identity: {
         overallStatus: "verified",
@@ -316,7 +316,7 @@ describe("tenant profile and communications pages", () => {
         },
         unit: { unitId: "unit-4", label: "4" },
         application: { status: "submitted" },
-        lease: { status: "active", monthlyRent: 1800, startDate: "2026-02-01", endDate: "2027-01-31", documentUrl: null },
+        lease: { status: "active", monthlyRent: 1800, startDate: "2026-02-01", endDate: "2027-01-31" },
       },
       identity: {
         overallStatus: "pending",
@@ -382,7 +382,7 @@ describe("tenant profile and communications pages", () => {
         },
         unit: { unitId: "raw-unit-id-123456789", label: "raw-unit-id-123456789" },
         application: { status: "submitted" },
-        lease: { status: "active", monthlyRent: 1800, startDate: "2026-02-01", endDate: "2027-01-31", documentUrl: null },
+        lease: { status: "active", monthlyRent: 1800, startDate: "2026-02-01", endDate: "2027-01-31" },
       },
       identity: {
         overallStatus: "verified",
@@ -434,7 +434,14 @@ describe("tenant profile and communications pages", () => {
           monthlyRent: 1800,
           startDate: "2026-05-01",
           endDate: "2027-04-30",
-          documentUrl: "https://example.com/generated-lease.pdf",
+          signingLifecycleState: "not_started",
+          leaseDocumentContext: {
+            documentStatus: "generated",
+            displayLabel: "Lease document available",
+            source: "lease_snapshot",
+            confidence: "high",
+            warnings: [],
+          },
         },
       },
       identity: {
@@ -496,7 +503,6 @@ describe("tenant profile and communications pages", () => {
           monthlyRent: 1500,
           startDate: "2025-09-01",
           endDate: "2026-08-31",
-          documentUrl: null,
         },
       },
       identity: {
@@ -539,8 +545,12 @@ describe("tenant profile and communications pages", () => {
         startDate: "2025-09-01",
         endDate: "2026-08-31",
         monthlyRent: 1500,
-        documentUrl: null,
         providerSigningStatus: "signed",
+        signingLifecycleState: "signed",
+        signingExecutionState: "active",
+        signedDocumentState: "pending_persistence",
+        signedDocumentAvailable: false,
+        viewSignedDocumentAllowed: false,
         providerRequestId: "raw-provider-envelope-123456789",
         leaseDocumentContext: {
           documentStatus: "pending",
@@ -623,7 +633,6 @@ describe("tenant profile and communications pages", () => {
           monthlyRent: 1800,
           startDate: "2026-05-01",
           endDate: "2027-04-30",
-          documentUrl: null,
         },
       },
       identity: {
@@ -675,11 +684,14 @@ describe("tenant profile and communications pages", () => {
         startDate: "2026-05-01",
         endDate: "2027-04-30",
         monthlyRent: 1800,
-        documentUrl: "https://tenant-safe.example/signed-lease.pdf",
         providerSigningStatus: "signed",
+        signingLifecycleState: "signed",
+        signingExecutionState: "active",
+        signedDocumentState: "available",
+        signedDocumentAvailable: true,
+        viewSignedDocumentAllowed: true,
         leaseDocumentContext: {
           documentStatus: "signed",
-          documentUrl: "https://tenant-safe.example/signed-lease.pdf",
           displayLabel: "Signed lease document",
           source: "leaseSigningRequests.signedDocument",
           confidence: "high",
@@ -1027,7 +1039,7 @@ describe("tenant profile and communications pages", () => {
         },
         unit: { unitId: "unit-safe", label: "6" },
         application: { status: "converted" },
-        lease: { status: "active", monthlyRent: 1800, startDate: "2026-05-01", endDate: "2027-04-30", documentUrl: null },
+        lease: { status: "active", monthlyRent: 1800, startDate: "2026-05-01", endDate: "2027-04-30" },
       },
       identity: {
         overallStatus: "pending",

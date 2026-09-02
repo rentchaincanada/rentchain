@@ -50,7 +50,6 @@ export type TenantProfileData = TenantSafeProjectionMetadata & {
       endDate: string | null;
       monthlyRent: number | null;
       status: string | null;
-      documentUrl: string | null;
     }) | null;
   };
   identity: {

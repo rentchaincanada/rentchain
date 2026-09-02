@@ -65,7 +65,14 @@ describe("leaseSigningWorkspaceState", () => {
         endDate: "2027-04-30",
         monthlyRent: 1800,
         status: "sent",
-        documentUrl: "https://example.com/lease.pdf",
+        signingLifecycleState: "pending_signature",
+        leaseDocumentContext: {
+          documentStatus: "generated",
+          displayLabel: "Generated lease package",
+          source: "lease_snapshot",
+          confidence: "high",
+          warnings: [],
+        },
       },
     });
 
@@ -96,7 +103,17 @@ describe("leaseSigningWorkspaceState", () => {
         endDate: "2027-04-30",
         monthlyRent: 1800,
         status: "signed",
-        documentUrl: "https://example.com/lease.pdf",
+        signingLifecycleState: "signed",
+        signedDocumentState: "available",
+        signedDocumentAvailable: true,
+        viewSignedDocumentAllowed: true,
+        leaseDocumentContext: {
+          documentStatus: "signed",
+          displayLabel: "Signed lease document",
+          source: "lease_signed_document",
+          confidence: "high",
+          warnings: [],
+        },
       },
     });
 
@@ -126,7 +143,14 @@ describe("leaseSigningWorkspaceState", () => {
         endDate: "2027-04-30",
         monthlyRent: 1800,
         status: "draft",
-        documentUrl: "https://example.com/lease.pdf",
+        signingLifecycleState: "pending_signature",
+        leaseDocumentContext: {
+          documentStatus: "generated",
+          displayLabel: "Generated lease package",
+          source: "lease_snapshot",
+          confidence: "high",
+          warnings: [],
+        },
         signatureStatus: "awaiting_landlord_signature",
         signatureReadinessLabel: "Awaiting landlord signature",
         signatureReadinessDescription: "Tenant review appears complete, and the next visible signing step belongs to the landlord.",
@@ -161,7 +185,14 @@ describe("leaseSigningWorkspaceState", () => {
         endDate: "2027-04-30",
         monthlyRent: 1800,
         status: "draft",
-        documentUrl: "https://example.com/lease.pdf",
+        signingLifecycleState: "pending_signature",
+        leaseDocumentContext: {
+          documentStatus: "generated",
+          displayLabel: "Generated lease package",
+          source: "lease_snapshot",
+          confidence: "high",
+          warnings: [],
+        },
         leaseExecution: {
           executionStatus: "ready_for_tenant_signature",
           executionLabel: "Waiting for tenant signature",

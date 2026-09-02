@@ -96,6 +96,33 @@ function prettyIdentityCompletionStatus(
   }
 }
 
+function buildTenantWorkspaceLeaseDocumentPresentation(
+  lease: Awaited<ReturnType<typeof getTenantWorkspace>>["lease"] | null | undefined
+) {
+  const signingComplete = String(lease?.signingLifecycleState || "").trim() === "signed";
+  const context = lease?.leaseDocumentContext || null;
+  const signedDocumentAvailable =
+    signingComplete &&
+    lease?.signedDocumentState === "available" &&
+    lease?.signedDocumentAvailable === true &&
+    lease?.viewSignedDocumentAllowed === true &&
+    context?.documentStatus === "signed";
+
+  if (signedDocumentAvailable) {
+    return { label: context?.displayLabel || "Signed lease document", canViewSignedDocument: true };
+  }
+
+  if (signingComplete) {
+    return { label: "Signing complete; signed copy pending", canViewSignedDocument: false };
+  }
+
+  if (!signingComplete && context?.documentStatus === "generated") {
+    return { label: "Lease document available", canViewSignedDocument: false };
+  }
+
+  return { label: "No lease document available yet", canViewSignedDocument: false };
+}
+
 function prettyVerificationLevel(value: "none" | "partial" | "strong" | null | undefined) {
   switch (value) {
     case "strong":
@@ -987,6 +1014,7 @@ export default function TenantWorkspacePage() {
     notificationPreferences
   );
   const paymentSummary = rentPaymentDetails || data?.lease?.rentPaymentSummary || null;
+  const leaseDocumentPresentation = buildTenantWorkspaceLeaseDocumentPresentation(data?.lease);
   const latestPaymentStatus =
     paymentSummary?.latestPayment?.status || paymentSummary?.paymentExperience?.history?.[0]?.status || null;
   const paymentExperienceStatusLabel = formatPaymentExperienceStatus({
@@ -1043,9 +1071,7 @@ export default function TenantWorkspacePage() {
               { label: "Lease status", value: prettyStatus(data?.lease?.status) },
               {
                 label: "Lease document",
-                value:
-                  data?.lease?.leaseDocumentContext?.displayLabel ||
-                  (data?.lease?.documentUrl ? "Lease document available" : "No lease document available yet"),
+                value: leaseDocumentPresentation.label,
               },
               { label: "Monthly rent", value: formatMoney(data?.lease?.monthlyRent) },
             ]}
@@ -1096,6 +1122,11 @@ export default function TenantWorkspacePage() {
           </div>
 
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+            {leaseDocumentPresentation.canViewSignedDocument ? (
+              <Link to="/tenant/lease" style={{ fontWeight: 700 }}>
+                View signed document
+              </Link>
+            ) : null}
             <Link to="/tenant/lease" style={{ fontWeight: 700 }}>
               Open lease details
             </Link>

@@ -142,7 +142,6 @@ describe("leaseExecutionReadinessState", () => {
         endDate: "2027-04-30",
         monthlyRent: 180000,
         status: "draft",
-        documentUrl: null,
       },
     });
 
@@ -195,7 +194,14 @@ describe("leaseExecutionReadinessState", () => {
         endDate: "2027-04-30",
         monthlyRent: 180000,
         status: "draft",
-        documentUrl: "https://example.com/lease.pdf",
+        signingLifecycleState: "not_started",
+        leaseDocumentContext: {
+          documentStatus: "generated",
+          displayLabel: "Generated lease package",
+          source: "lease_snapshot",
+          confidence: "high",
+          warnings: [],
+        },
       },
     });
 
